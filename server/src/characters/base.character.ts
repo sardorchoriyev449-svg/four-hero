@@ -33,17 +33,33 @@ export abstract class BaseCharacter {
         // turilsa (zarba bermasa ham), tiklanish abadiy bloklanib qolar edi.
         if (player.staminaRegenDelay > 0) {
             player.staminaRegenDelay--;
-        } else if (player.stamina < 100) {
-            player.stamina = Math.min(100, player.stamina + this.STAMINA_REGEN_PER_TICK);
+        } else if (player.stamina < (player.maxStamina || 100)) {
+            // "Stamina" ko'nikmasi tiklanishni ham tezlashtiradi: har daraja +20% (max +100%)
+            const regen = this.STAMINA_REGEN_PER_TICK * (1 + this.staminaLevelOf(player) * 0.2);
+            player.stamina = Math.min(player.maxStamina || 100, player.stamina + regen);
         }
     }
 
     // Stamina sarflanganda shu yerdan chaqiriladi - tiklanish kechikishini ham
     // avtomatik yangilaydi (haqiqiy sarflanish bo'lmasa, tiklanish bloklanmaydi)
+    // Hisobdagi "stamina" ko'nikma darajasi sarfni kamaytiradi (har daraja -10%, max -50%)
     public static spendStamina(player: PlayerState, amount: number): void {
-        player.stamina = Math.max(0, player.stamina - amount);
+        player.stamina = Math.max(0, player.stamina - this.staminaCost(player, amount));
         player.staminaRegenDelay = this.REGEN_DELAY_TICKS;
     }
+
+    private static staminaLevelOf(player: PlayerState): number {
+        return Math.max(0, Math.min(player.staminaLevel || 0, 5));
+    }
+
+    // Ko'nikma hisobga olingan HAQIQIY narx - hujumga yetadimi degan tekshiruv ham shunga qarashi
+    // kerak (aks holda yaxshilangan qahramon ham to'liq narx to'planguncha hujum qila olmasdi)
+    public static staminaCost(player: PlayerState, amount: number): number {
+        return amount * (1 - this.staminaLevelOf(player) * 0.1);
+    }
+
+    // Hujum qilish mumkinmi (masalan, drobovik qayta o'qlanayotganda - yo'q). Standart - ha
+    public canAttack(_player: PlayerState): boolean { return true; }
 
     // Har bir personaj o'zicha hujum qiladi (Abstract funksiyalar)
     abstract handleAttack(player: PlayerState, room: RoomState, angle: number): void;

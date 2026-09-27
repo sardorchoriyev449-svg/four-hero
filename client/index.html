@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multiplayer Arena - Lobby System</title>
+    <title>4 Heroes - Multiplayer Arena</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
@@ -16,8 +19,11 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            overflow: hidden;
+            min-height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 24px 12px;
+            box-sizing: border-box;
         }
 
         /* Umumiy oyna dizayni */
@@ -27,6 +33,8 @@
             border-radius: 10px;
             box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.5);
             width: 400px;
+            max-width: 92vw;
+            box-sizing: border-box;
             text-align: center;
         }
 
@@ -49,8 +57,99 @@
             transition: 0.2s;
         }
         button:hover { background: #00ccaa; }
-        
-        /* Lobbi ro'yxati */
+
+        .link-text { color: #00ffcc; cursor: pointer; text-decoration: underline; font-size: 14px; }
+        .error-text { color: #ff5c5c; font-size: 14px; min-height: 18px; }
+        .user-bar { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 8px 14px; border-radius: 6px; margin-bottom: 15px; font-size: 14px; }
+        .coin-badge { color: #ffcc00; font-weight: bold; }
+
+        /* Yashirish uchun klass */
+        .hidden { display: none !important; }
+
+        /* Orqaga qaytish tugmasi (har bir sahifada) */
+        .back-btn {
+            width: auto;
+            background: #3a3a3a;
+            color: #ccc;
+            padding: 8px 16px;
+            margin: 0 0 15px 0;
+            font-size: 13px;
+        }
+        .back-btn:hover { background: #4a4a4a; }
+
+        /* ===== BOSH MENYU (HUB): Play / My Character / Settings / Donate ===== */
+        #main-menu-panel h2 { margin-bottom: 20px; }
+        .hub-btn {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-align: left;
+            background: #222;
+            color: #fff;
+            padding: 16px 18px;
+            font-size: 17px;
+            font-weight: normal;
+        }
+        .hub-btn i { font-size: 20px; color: #00ffcc; width: 22px; text-align: center; }
+        .hub-btn:hover { background: #2a2a2a; }
+        #nav-donate-btn i { color: #ff5c8a; }
+
+        /* Daraja (level) ko'rsatkichi bosh menyuda */
+        .level-badge { color: #66aaff; font-weight: bold; }
+
+        /* PC / PHONE boshqaruv turi tanlovi */
+        .control-scheme-row { display: flex; gap: 8px; margin-bottom: 18px; }
+        .control-scheme-btn { flex: 1; margin: 0; background: #222; color: #999; font-size: 13px; padding: 10px; }
+        .control-scheme-btn.active { background: #00ffcc; color: #1a1a1a; font-weight: bold; }
+
+        /* Xona ko'rinishi: Public / Private tanlovi (Create Lobby) */
+        .visibility-row { display: flex; gap: 8px; margin: 10px 0 4px 0; }
+        .visibility-btn { flex: 1; margin: 0; background: #222; color: #999; }
+        .visibility-btn.active { background: #00ffcc; color: #1a1a1a; font-weight: bold; }
+
+        /* Mening saqlangan xonam */
+        #my-saved-room-content .saved-room-card { background: #222; border-radius: 8px; padding: 16px; text-align: left; }
+        #my-saved-room-content .saved-room-card h3 { margin-top: 0; color: #00ffcc; }
+        #my-saved-room-content .saved-room-meta { color: #999; font-size: 13px; margin-bottom: 14px; }
+        #my-saved-room-content .empty-note { color: #888; text-align: center; padding: 20px 0; }
+
+        /* Phaser o'yin konteyneri */
+        #game-wrapper { position: relative; line-height: 0; }
+        #game-container {
+            border: 4px solid #333;
+            border-radius: 8px;
+        }
+
+        /* PHONE rejimida ko'rinadigan ekrandagi virtual boshqaruv */
+        #touch-controls {
+            position: absolute;
+            left: 0; right: 0; bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 0 16px;
+            pointer-events: none; /* faqat ichidagi tugmalar bosiladi, orasidan hujum uchun bosish o'tadi */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .touch-dpad { display: flex; gap: 10px; pointer-events: auto; }
+        .touch-btn, .touch-action-btn {
+            width: 58px; height: 58px;
+            border-radius: 50%;
+            background: rgba(40, 40, 40, 0.75);
+            border: 2px solid rgba(0, 255, 204, 0.5);
+            color: #00ffcc;
+            font-size: 22px;
+            margin: 0;
+            padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: auto;
+            touch-action: none;
+        }
+        .touch-btn:active, .touch-action-btn:active { background: rgba(0, 255, 204, 0.35); }
+        .touch-action-btn { width: 68px; height: 68px; font-size: 26px; }
+
+        /* Lobbi ro'yxati (Play sahifasi) */
         #room-list {
             max-height: 150px;
             overflow-y: auto;
@@ -68,50 +167,842 @@
         }
         .room-item:hover { color: #00ffcc; }
 
-        /* Yashirish uchun klass */
-        .hidden { display: none !important; }
+        /* Xona kodi orqali qo'shilish */
+        .join-code-row { display: flex; gap: 6px; }
+        .join-code-row input { margin: 10px 0; flex: 1; }
+        .join-code-row button { width: auto; margin: 10px 0; padding: 0 16px; }
 
-        /* Phaser o'yin konteyneri */
-        #game-container {
-            border: 4px solid #333;
-            border-radius: 8px;
+        /* Mening xonalarim ro'yxati */
+        #my-rooms-list { text-align: left; background: #222; border-radius: 5px; padding: 6px; max-height: 120px; overflow-y: auto; }
+        .my-room-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-bottom: 1px solid #383838; font-size: 13px; }
+        .my-room-item:last-child { border-bottom: none; }
+        .my-room-item .room-code-tag { color: #888; font-size: 11px; letter-spacing: 1px; }
+        .my-room-item button { width: auto; margin: 0; padding: 5px 12px; font-size: 12px; }
+
+        /* ===== MENING PERSONAJIM (character-panel): yaxshilashlar + skinlar ===== */
+        #character-panel { width: 560px; }
+        .upgrade-points-banner {
+            background: linear-gradient(90deg, #1e3a34, #223d2f);
+            border: 1px solid #00ffcc55;
+            border-radius: 6px;
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+            font-size: 14px;
         }
+        .upgrade-points-banner b { color: #00ffcc; font-size: 18px; }
+        .upgrade-row {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #222; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px;
+            text-align: left;
+        }
+        .upgrade-row .upgrade-info { flex: 1; }
+        .upgrade-row .upgrade-name { font-weight: bold; }
+        .upgrade-row .upgrade-desc { color: #999; font-size: 12px; display: block; margin-top: 2px; }
+        .upgrade-dots { display: flex; gap: 4px; margin: 6px 0; }
+        .upgrade-dot { width: 14px; height: 14px; border-radius: 50%; background: #444; }
+        .upgrade-dot.filled { background: #00ffcc; }
+        .upgrade-row button { width: auto; margin: 0; padding: 8px 16px; font-size: 13px; flex-shrink: 0; }
+        .upgrade-row button:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+        .skin-section { text-align: left; margin-bottom: 15px; }
+        .skin-section h4 { color: #00ffcc; margin-bottom: 6px; }
+        .skin-row { display: flex; align-items: center; justify-content: space-between; background: #222; padding: 8px 12px; border-radius: 5px; margin-bottom: 6px; }
+        .skin-swatch { width: 20px; height: 20px; border-radius: 4px; display: inline-block; margin-right: 8px; vertical-align: middle; }
+        .skin-buy-btn, .skin-equip-btn { width: auto; padding: 6px 14px; margin: 0; font-size: 13px; }
+        .skin-equip-btn.equipped { background: #444; color: #00ffcc; cursor: default; }
+        .skin-buy-btn { background: #ffcc00; }
+
+        /* Personaj tanlash tablari (Mening Personajim ekranida) */
+        .char-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+        .char-tab-btn { flex: 1; margin: 0; padding: 10px 6px; background: #222; color: #999; font-size: 13px; }
+        .char-tab-btn.active { background: #00ffcc; color: #1a1a1a; font-weight: bold; }
+        .char-details-desc { text-align: left; color: #bbb; font-size: 13px; background: #222; border-radius: 6px; padding: 10px 14px; margin: 0 0 14px 0; }
+
+        /* ===== SOZLAMALAR (settings-panel) ===== */
+        #settings-panel .settings-row { text-align: left; margin-bottom: 22px; }
+        #settings-panel label { display: block; margin-bottom: 8px; font-weight: bold; }
+        #settings-panel input[type="range"] { padding: 0; accent-color: #00ffcc; }
+        .settings-note { color: #888; font-size: 12px; margin-top: 4px; }
+        .lang-options { display: flex; gap: 8px; }
+        .lang-btn { width: auto; flex: 1; background: #444; color: #fff; margin: 0; }
+        .lang-btn.active { background: #00ffcc; color: #1a1a1a; }
+
+        /* ===== DONAT (donate-panel) ===== */
+        #donate-panel i.fa-heart { color: #ff5c8a; font-size: 36px; margin-bottom: 10px; display: block; }
+        #donate-panel p { color: #ccc; line-height: 1.6; }
+
+        /* Lobbi: Tayyor tugmasi */
+        #ready-btn.is-ready { background: #2ecc71; }
+        #ready-btn.not-ready { background: #ff5c5c; color: #fff; }
+        .ready-tick { color: #2ecc71; font-weight: bold; }
+        .ready-tick.not-ready-tick { color: #ff5c5c; }
+
+        /* Lobbi chati */
+        #chat-box {
+            background: #1e1e1e;
+            border-radius: 5px;
+            height: 130px;
+            overflow-y: auto;
+            padding: 8px;
+            text-align: left;
+            font-size: 13px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        #chat-box .chat-line { margin-bottom: 4px; word-wrap: break-word; }
+        #chat-box .chat-nick { color: #00ffcc; font-weight: bold; }
+        .chat-input-row { display: flex; gap: 6px; }
+        .chat-input-row input { margin: 0; flex: 1; }
+        .chat-input-row button { width: auto; margin: 0; padding: 10px 16px; }
+
+        /* Ikonlar (emoji o'rniga) */
+        .icon { margin-right: 6px; }
+        #logout-link .icon, .link-text .icon { margin-right: 4px; }
+
+        /* Lobbi tugmalari */
+        .lobby-toggle-btn, #leave-lobby-btn {
+            width: auto;
+            background: #3a3a3a;
+            color: #ccc;
+            padding: 8px 14px;
+            margin: 0;
+            font-size: 13px;
+        }
+        #leave-lobby-btn { color: #ff8080; }
+        .lobby-toggle-btn:hover, #leave-lobby-btn:hover { background: #4a4a4a; }
+        .lobby-toggle-btn.active { background: #00ffcc; color: #1a1a1a; }
+
+        /* O'yin tugadi paneli: g'alaba (default) va mag'lubiyat (retro) holatlari */
+        #gameover-title.gameover-title-win { color: #ffcc00; }
+        #gameover-title.gameover-title-loss {
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 22px;
+            color: #ff1a1a;
+            letter-spacing: 2px;
+            text-shadow: 0 0 8px #ff0000, 0 0 22px #ff0000, 3px 3px 0 #4d0000;
+            animation: retroFlicker 1.3s infinite;
+            margin: 10px 0 18px 0;
+        }
+        @keyframes retroFlicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.72; }
+        }
+        #gameover-panel.loss-panel {
+            border: 2px solid #ff1a1a;
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.35);
+        }
+
+        /* Xona kodini lobbi sarlavhasida ko'rsatish */
+        .room-code-badge { font-size: 12px; color: #888; letter-spacing: 1px; margin: 0 0 12px 0; }
+        .room-code-badge b { color: #00ffcc; }
+
+        /* XARITA TANLASH (lobbida) */
+        #level-select-section { text-align: left; margin: 0 0 16px 0; background: #262626; border-radius: 8px; padding: 12px 14px; }
+        #level-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+        .level-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #222; padding: 8px 12px; border-radius: 5px;
+            border-left: 4px solid #444; cursor: pointer;
+        }
+        .level-item.selected { border-left-color: #00ffcc; background: #253530; }
+        .level-item.locked { opacity: 0.45; cursor: not-allowed; }
+        .level-item .level-name { font-weight: bold; }
+        .level-item .level-desc { color: #999; font-size: 12px; display: block; }
+        .level-item.readonly { cursor: default; }
+
+        #player-list {
+            list-style: none;
+            margin: 0;
+            padding: 4px !important;
+            background: #222;
+            border-radius: 5px;
+        }
+        #player-list li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 12px;
+            border-bottom: 1px solid #383838;
+            font-size: 14px;
+        }
+        #player-list li:last-child { border-bottom: none; }
+
+        #char-select { width: 100%; }
+        .my-character-display {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #222; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;
+        }
+        .my-character-display b { color: #00ffcc; }
+        .my-character-display button { width: auto; margin: 0; padding: 7px 14px; font-size: 12px; }
+
+        /* ===== XARITA O'TILDI: O'YIN OYNASI ichida - ko'k fon, o'rtada chekpoint nuriga
+           o'xshash oq nur, "COMPLETED SUCCESSFULLY!", pastki o'ngda yutuq belgisi ===== */
+        #game-container { position: relative; }
+        #level-complete {
+            position: absolute; inset: 0; z-index: 50; overflow: hidden; line-height: normal;
+            display: flex; align-items: center; justify-content: center;
+            background: #00a2e8; font-family: "Press Start 2P", "Courier New", monospace;
+            opacity: 0; transition: opacity .25s ease; cursor: pointer; user-select: none;
+        }
+        #level-complete.show { opacity: 1; }
+        #level-complete .lc-beam {
+            position: absolute; top: 0; bottom: 0; left: 50%; width: 36%;
+            transform: translateX(-50%) scaleX(0);
+            background: linear-gradient(90deg, #99d9ea 0 17%, #ffffff 17% 83%, #99d9ea 83% 100%);
+            box-shadow: 0 0 40px rgba(255,255,255,.6);
+        }
+        #level-complete.show .lc-beam { animation: lc-beam-open .45s cubic-bezier(.2, 1.3, .4, 1) .1s forwards, lc-beam-pulse 1.2s ease-in-out .6s infinite; }
+        @keyframes lc-beam-open { to { transform: translateX(-50%) scaleX(1); } }
+        @keyframes lc-beam-pulse { 0%, 100% { box-shadow: 0 0 30px rgba(255,255,255,.5); } 50% { box-shadow: 0 0 70px rgba(255,255,255,.95); } }
+        #level-complete .lc-mote {
+            position: absolute; bottom: -10px; width: 6px; height: 6px; background: #ffffff; box-shadow: 0 0 0 2px #99d9ea;
+            animation: lc-rise linear infinite; pointer-events: none;
+        }
+        @keyframes lc-rise { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-640px); opacity: 0; } }
+        #level-complete .lc-title {
+            position: relative; z-index: 2; color: #000; text-align: center; padding: 0 12px;
+            font-size: 22px; line-height: 1.4; transform: scale(.3); opacity: 0;
+        }
+        #level-complete .lc-map { display: block; font-size: 12px; color: #0b5c8a; margin-bottom: 14px; }
+        #level-complete.show .lc-title { animation: lc-pop .5s cubic-bezier(.2, 1.6, .4, 1) .35s forwards; }
+        @keyframes lc-pop { to { transform: scale(1); opacity: 1; } }
+        #level-complete .lc-ach {
+            position: absolute; z-index: 2; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px;
+            background: #b97a57; border: 4px solid #000; border-radius: 8px; padding: 6px 12px 6px 6px;
+            transform: translateY(160%); transition: transform .45s cubic-bezier(.2, 1.4, .4, 1);
+        }
+        #level-complete.ach-in .lc-ach { transform: none; }
+        #level-complete .lc-ach-icon {
+            width: 30px; height: 18px; display: flex; align-items: center; justify-content: center;
+            background: #3b2314; border: 3px solid #000; border-radius: 6px; color: #ffd54f; font-size: 9px;
+        }
+        #level-complete .lc-ach-name { color: #000; font-size: 10px; }
+        #level-complete .lc-back-btn {
+            position: absolute; z-index: 3; left: 50%; bottom: 90px; transform: translate(-50%, 30px);
+            opacity: 0; pointer-events: none; cursor: pointer;
+            font-family: "Press Start 2P", "Courier New", monospace; font-size: 13px; line-height: 1;
+            color: #fff; background: #b71c1c; padding: 14px 20px;
+            border: 4px solid #000; border-radius: 0; box-shadow: inset -4px -4px 0 #7f0000, 0 6px 0 rgba(0,0,0,.35);
+            transition: opacity .3s ease, transform .3s cubic-bezier(.2, 1.4, .4, 1), background .1s;
+        }
+        #level-complete.btn-in .lc-back-btn { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+        #level-complete .lc-back-btn:hover { background: #d32f2f; }
+        #level-complete .lc-back-btn:active { transform: translate(-50%, 3px); box-shadow: inset 4px 4px 0 #7f0000; }
+        #level-complete .lc-back-btn i { margin-right: 8px; }
+        /* MAG'LUBIYAT varianti: xuddi shu sahna, lekin to'q qizil ranglarda; zarrachalar
+           tepaga ko'tarilmaydi - kul bo'lib pastga tushadi */
+        #level-complete.loss { background: #5c0a10; }
+        #level-complete.loss .lc-beam {
+            background: linear-gradient(90deg, #e53935 0 17%, #ffd6d6 17% 83%, #e53935 83% 100%);
+            box-shadow: 0 0 40px rgba(255,80,80,.5);
+        }
+        #level-complete.loss.show .lc-beam { animation: lc-beam-open .45s cubic-bezier(.2, 1.3, .4, 1) .1s forwards, lc-beam-pulse-loss 1.6s ease-in-out .6s infinite; }
+        @keyframes lc-beam-pulse-loss { 0%, 100% { box-shadow: 0 0 25px rgba(255,60,60,.4); } 50% { box-shadow: 0 0 60px rgba(255,60,60,.85); } }
+        #level-complete.loss .lc-mote { top: -10px; bottom: auto; background: #3b0508; box-shadow: 0 0 0 2px #e53935; animation-name: lc-fall; }
+        @keyframes lc-fall { from { transform: translateY(0); opacity: 1; } to { transform: translateY(640px); opacity: 0; } }
+        #level-complete.loss .lc-title { color: #3b0508; }
+        #level-complete.loss .lc-map { color: #b71c1c; }
+        #level-complete.loss.show .lc-title { animation: lc-pop .5s cubic-bezier(.2, 1.6, .4, 1) .35s forwards, lc-shake .4s linear .85s 2; }
+        @keyframes lc-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+        #level-complete.loss .lc-ach { background: #6d6d6d; }
+        #level-complete.loss .lc-ach-icon { background: #1a1a1a; color: #ff5252; }
+        #level-complete.loss .lc-ach-name { color: #1a1a1a; }
+
+        /* =====================================================================
+           PIKSEL UI MAVZUSI (menyu, lobbi, "My Character" va boshqa panellar) -
+           o'yindagi HUD bilan bir xil uslub: qora qalin ramka, yumaloqsiz burchak,
+           "3D" piksel tugmalar, qattiq soya, Press Start 2P shrifti
+           ===================================================================== */
+        :root {
+            --px-bg: #0e0b1a;
+            --px-panel: #1b1630;
+            --px-panel-2: #251e40;
+            --px-panel-3: #302752;
+            --px-edge: #4a3f7a;
+            --px-ink: #000000;
+            --px-accent: #00ffcc;
+            --px-accent-d: #00a383;
+            --px-gold: #ffca28;
+            --px-gold-d: #c79100;
+            --px-red: #ff5252;
+            --px-red-d: #b71c1c;
+            --px-text: #f3f0ff;
+            --px-muted: #9a93b8;
+        }
+        html { background: var(--px-bg); }
+        body {
+            background: transparent;
+            color: var(--px-text);
+            font-family: 'Press Start 2P', 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.7;
+            image-rendering: pixelated;
+        }
+        #menu-bg {
+            position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: -1;
+            image-rendering: pixelated; image-rendering: crisp-edges; background: var(--px-bg);
+        }
+
+        /* Panel - piksel oyna */
+        .panel {
+            position: relative;
+            width: 440px;
+            background: var(--px-panel);
+            border: 4px solid var(--px-ink);
+            border-radius: 0;
+            padding: 26px 26px 22px;
+            box-shadow:
+                inset 0 0 0 4px var(--px-edge),
+                inset 0 8px 0 4px var(--px-panel-3),
+                10px 10px 0 rgba(0, 0, 0, 0.55);
+            animation: px-panel-in .22s steps(4) both;
+        }
+        @keyframes px-panel-in { from { transform: translateY(10px); } to { transform: none; } }
+        /* Burchak "vintlari" */
+        .panel::before, .panel::after {
+            content: ''; position: absolute; top: 10px; width: 6px; height: 6px;
+            background: var(--px-edge); box-shadow: 0 0 0 2px var(--px-ink);
+        }
+        .panel::before { left: 10px; }
+        .panel::after { right: 10px; }
+
+        h2 {
+            font-size: 16px; letter-spacing: 1px; color: var(--px-accent); line-height: 1.5;
+            text-shadow: 3px 3px 0 var(--px-ink), -1px -1px 0 var(--px-ink);
+            margin: 4px 0 18px;
+        }
+        h3 { font-size: 11px; color: var(--px-gold); text-shadow: 2px 2px 0 var(--px-ink); }
+        h4 { font-size: 10px; }
+
+        /* Maydonlar */
+        input, select {
+            font-family: inherit; font-size: 11px;
+            background: var(--px-bg); color: var(--px-text);
+            border: 4px solid var(--px-ink); border-radius: 0;
+            box-shadow: inset 4px 4px 0 rgba(0, 0, 0, 0.45), inset -2px -2px 0 var(--px-panel-3);
+            padding: 12px;
+        }
+        input::placeholder { color: #5f5885; }
+        input:focus, select:focus { outline: none; border-color: var(--px-accent); }
+        input[type="range"] { box-shadow: none; border: none; background: transparent; }
+
+        /* Tugmalar - "3D" piksel */
+        button {
+            font-family: inherit; font-size: 11px; font-weight: normal; letter-spacing: 1px;
+            text-transform: uppercase; line-height: 1.4;
+            background: var(--px-accent); color: #062b24;
+            border: 4px solid var(--px-ink); border-radius: 0;
+            padding: 12px 14px;
+            box-shadow: inset -4px -4px 0 var(--px-accent-d), inset 4px 4px 0 rgba(255, 255, 255, 0.45), 0 4px 0 var(--px-ink);
+            transition: transform .06s steps(1), filter .1s;
+            position: relative;
+        }
+        button:hover { background: var(--px-accent); filter: brightness(1.12); transform: translateY(-2px); }
+        button:active { transform: translateY(3px); box-shadow: inset 4px 4px 0 var(--px-accent-d), 0 1px 0 var(--px-ink); }
+        button:disabled { filter: grayscale(1) brightness(.7); transform: none; cursor: not-allowed; }
+
+        /* Bosh menyu / Play - katta tugmalar, chapda rangli ikonka katagi */
+        .hub-btn {
+            background: var(--px-panel-2); color: var(--px-text);
+            padding: 12px 14px; font-size: 12px; gap: 16px;
+            box-shadow: inset -4px -4px 0 rgba(0, 0, 0, 0.35), inset 4px 4px 0 var(--px-panel-3), 0 4px 0 var(--px-ink);
+        }
+        .hub-btn:hover { background: var(--px-panel-3); filter: none; }
+        .hub-btn:active { box-shadow: inset 4px 4px 0 rgba(0, 0, 0, 0.35), 0 1px 0 var(--px-ink); }
+        .hub-btn i {
+            width: 34px; height: 34px; line-height: 34px; flex-shrink: 0; font-size: 16px;
+            color: var(--px-ink); background: var(--px-accent);
+            border: 3px solid var(--px-ink); box-shadow: inset -3px -3px 0 var(--px-accent-d);
+        }
+        #nav-character-btn i { background: var(--px-gold); box-shadow: inset -3px -3px 0 var(--px-gold-d); }
+        #nav-settings-btn i { background: #b388ff; box-shadow: inset -3px -3px 0 #7c4dff; }
+        #nav-donate-btn i { background: #ff80ab; color: var(--px-ink); box-shadow: inset -3px -3px 0 #f50057; }
+        #nav-all-lobbies-btn i { background: #40c4ff; box-shadow: inset -3px -3px 0 #0091ea; }
+        #nav-create-lobby-btn i { background: #b2ff59; box-shadow: inset -3px -3px 0 #64dd17; }
+        #nav-my-saved-room-btn i { background: var(--px-gold); box-shadow: inset -3px -3px 0 var(--px-gold-d); }
+
+        .back-btn, .lobby-toggle-btn, #leave-lobby-btn {
+            background: var(--px-panel-2); color: var(--px-muted); font-size: 9px; padding: 8px 12px;
+            box-shadow: inset -3px -3px 0 rgba(0, 0, 0, 0.35), inset 3px 3px 0 var(--px-panel-3), 0 3px 0 var(--px-ink);
+        }
+        .back-btn:hover, .lobby-toggle-btn:hover, #leave-lobby-btn:hover { background: var(--px-panel-3); color: var(--px-text); filter: none; }
+        .lobby-toggle-btn.active { background: var(--px-accent); color: #062b24; box-shadow: inset -3px -3px 0 var(--px-accent-d), 0 3px 0 var(--px-ink); }
+        #leave-lobby-btn { color: var(--px-red); }
+        .back-btn { display: block; }
+
+        /* Tanlov tugmalari (PC/PHONE, Public/Private, til, personaj tablari) */
+        .control-scheme-btn, .visibility-btn, .lang-btn, .char-tab-btn {
+            background: var(--px-panel-2); color: var(--px-muted); font-size: 10px;
+            box-shadow: inset -3px -3px 0 rgba(0, 0, 0, 0.35), inset 3px 3px 0 var(--px-panel-3), 0 3px 0 var(--px-ink);
+        }
+        .control-scheme-btn.active, .visibility-btn.active, .lang-btn.active, .char-tab-btn.active {
+            background: var(--px-accent); color: #062b24;
+            box-shadow: inset -3px -3px 0 var(--px-accent-d), inset 3px 3px 0 rgba(255, 255, 255, 0.45), 0 3px 0 var(--px-ink);
+        }
+
+        .link-text { color: var(--px-accent); font-size: 9px; text-decoration: none; border-bottom: 2px dashed var(--px-accent); }
+        .link-text:hover { color: #fff; border-color: #fff; }
+        .error-text { color: var(--px-red); font-size: 9px; text-shadow: 1px 1px 0 var(--px-ink); }
+        .settings-note { color: var(--px-muted); font-size: 8px; line-height: 1.8; }
+
+        /* Foydalanuvchi qatori - HUD panelidek */
+        .user-bar {
+            background: var(--px-bg); border: 4px solid var(--px-ink); border-radius: 0;
+            box-shadow: inset 0 0 0 2px var(--px-panel-3); padding: 10px 12px; font-size: 9px; gap: 8px;
+        }
+        .coin-badge { color: var(--px-gold); text-shadow: 2px 2px 0 var(--px-ink); }
+        .level-badge { color: #82b1ff; text-shadow: 2px 2px 0 var(--px-ink); }
+
+        /* Ichki "quti"lar: ro'yxatlar, chat, xarita tanlovi */
+        #room-list, #my-rooms-list, #player-list, #chat-box,
+        .char-details-desc, .my-character-display, #my-saved-room-content .saved-room-card, .upgrade-points-banner {
+            background: var(--px-bg); border: 4px solid var(--px-ink); border-radius: 0;
+            box-shadow: inset 0 0 0 2px var(--px-panel-2);
+        }
+        .room-item, .my-room-item, #player-list li { border-bottom: 2px dashed var(--px-panel-3); font-size: 10px; padding: 10px 8px; }
+        .room-item:hover { color: var(--px-accent); background: var(--px-panel); }
+        .room-code-badge { font-size: 9px; color: var(--px-muted); }
+        .room-code-badge b { color: var(--px-gold); letter-spacing: 3px; }
+        #chat-box { font-size: 9px; line-height: 1.8; }
+        #chat-box .chat-nick { color: var(--px-accent); }
+
+        /* Xaritalar ro'yxati */
+        .level-item {
+            background: var(--px-panel); border: 3px solid var(--px-ink); border-left-width: 8px; border-radius: 0;
+            border-left-color: var(--px-panel-3); font-size: 10px; padding: 10px 12px;
+        }
+        .level-item:hover { background: var(--px-panel-2); }
+        .level-item.selected { border-left-color: var(--px-accent); background: #0f3a33; box-shadow: 0 0 0 2px var(--px-accent) inset; }
+        .level-item.locked { filter: grayscale(1); opacity: .45; }
+        .level-item .level-desc { font-size: 8px; color: var(--px-muted); line-height: 1.7; margin-top: 4px; }
+
+        /* Tayyor / Start */
+        #ready-btn.not-ready { background: var(--px-red); color: #fff; box-shadow: inset -4px -4px 0 var(--px-red-d), inset 4px 4px 0 rgba(255,255,255,.35), 0 4px 0 var(--px-ink); }
+        #ready-btn.is-ready { background: #69f0ae; color: #06341c; box-shadow: inset -4px -4px 0 #00c853, inset 4px 4px 0 rgba(255,255,255,.45), 0 4px 0 var(--px-ink); }
+        #start-game-btn { background: var(--px-gold) !important; color: #3b2a00; box-shadow: inset -4px -4px 0 var(--px-gold-d), inset 4px 4px 0 rgba(255,255,255,.45), 0 4px 0 var(--px-ink); animation: px-pulse 1s steps(2) infinite; }
+        @keyframes px-pulse { 50% { filter: brightness(1.2); } }
+        #waiting-msg { font-size: 9px; color: var(--px-muted) !important; }
+
+        /* "My Character" - yaxshilashlar va skinlar */
+        #character-panel { width: 600px; }
+        .upgrade-points-banner { padding: 10px 14px; font-size: 10px; }
+        .upgrade-points-banner b { color: var(--px-gold); font-size: 16px; text-shadow: 2px 2px 0 var(--px-ink); }
+        .upgrade-row, .skin-row {
+            background: var(--px-panel-2); border: 3px solid var(--px-ink); border-radius: 0; font-size: 10px;
+            box-shadow: inset 0 3px 0 var(--px-panel-3);
+        }
+        .upgrade-row .upgrade-desc { font-size: 8px; color: var(--px-muted); line-height: 1.7; }
+        .upgrade-dot { width: 16px; height: 12px; border-radius: 0; background: #2a0f16; border: 2px solid var(--px-ink); }
+        .upgrade-dot.filled { background: var(--px-accent); box-shadow: inset 0 3px 0 rgba(255,255,255,.5); }
+        .upgrade-row button, .skin-buy-btn, .skin-equip-btn { font-size: 9px; padding: 8px 10px; }
+        .skin-buy-btn { background: var(--px-gold); color: #3b2a00; box-shadow: inset -3px -3px 0 var(--px-gold-d), 0 3px 0 var(--px-ink); }
+        .skin-equip-btn.equipped { background: var(--px-panel-3); color: var(--px-accent); box-shadow: none; }
+        .skin-swatch { border-radius: 0; border: 3px solid var(--px-ink); width: 18px; height: 18px; }
+        .char-details-desc { font-size: 9px; line-height: 1.8; color: #d6d0f0; }
+        /* Qahramonning jonli ko'rinishi */
+        .char-stage {
+            display: flex; justify-content: center; align-items: flex-end; height: 150px; margin: 0 0 14px;
+            background:
+                linear-gradient(#0000 0 70%, #2b2150 70% 74%, #1e173a 74%),
+                repeating-linear-gradient(90deg, #1b1630 0 16px, #1f1938 16px 32px);
+            border: 4px solid var(--px-ink); box-shadow: inset 0 0 0 2px var(--px-panel-3);
+        }
+        #char-preview { width: 192px; height: 144px; image-rendering: pixelated; animation: px-bob 1.2s steps(2) infinite; }
+        @keyframes px-bob { 50% { transform: translateY(-4px); } }
+
+        /* Bosh menyu: logotip va to'rt qahramon */
+        .pixel-logo { margin: 0 0 14px; line-height: 1.2; user-select: none; }
+        .pixel-logo .logo-main {
+            display: block; font-size: 30px; color: var(--px-gold); letter-spacing: 2px;
+            text-shadow: 4px 0 0 var(--px-ink), -4px 0 0 var(--px-ink), 0 4px 0 var(--px-ink), 0 -4px 0 var(--px-ink),
+                         4px 4px 0 var(--px-ink), 7px 7px 0 var(--px-red-d);
+            animation: px-logo 2.4s steps(3) infinite;
+        }
+        .pixel-logo .logo-sub { display: block; margin-top: 10px; font-size: 8px; color: var(--px-accent); letter-spacing: 3px; text-shadow: 2px 2px 0 var(--px-ink); }
+        @keyframes px-logo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        .hero-row { display: flex; justify-content: center; gap: 18px; margin: 4px 0 18px; }
+        .mini-hero {
+            width: 22px; height: 32px; background: var(--c); border: 3px solid var(--px-ink); position: relative;
+            box-shadow: inset -4px 0 0 rgba(0,0,0,.25);
+            animation: px-hop 1s steps(2) infinite; animation-delay: var(--d);
+        }
+        .mini-hero::before { /* visor */
+            content: ''; position: absolute; left: 2px; right: 2px; top: 5px; height: 5px;
+            background: #fff; box-shadow: 0 0 0 2px var(--px-ink);
+            background-image: linear-gradient(90deg, #fff 0 40%, var(--px-ink) 40% 60%, #fff 60%);
+        }
+        @keyframes px-hop { 50% { transform: translateY(-5px); } }
+
+        /* O'yin tugadi paneli, o'yin oynasi, telefon tugmalari */
+        #gameover-title.gameover-title-win { font-size: 20px; color: var(--px-gold); }
+        #gameover-text { font-size: 11px !important; line-height: 2; }
+        #game-container { border: 4px solid var(--px-ink); border-radius: 0; box-shadow: 0 0 0 4px var(--px-edge), 10px 10px 0 rgba(0,0,0,.55); }
+        .touch-btn, .touch-action-btn {
+            border-radius: 0; border: 4px solid var(--px-ink); background: rgba(27, 22, 48, 0.85); color: var(--px-accent);
+            box-shadow: inset -4px -4px 0 rgba(0,0,0,.4), inset 4px 4px 0 var(--px-panel-3);
+        }
+
+        /* Piksel aylantirish chizig'i */
+        ::-webkit-scrollbar { width: 12px; height: 12px; }
+        ::-webkit-scrollbar-track { background: var(--px-bg); border-left: 2px solid var(--px-ink); }
+        ::-webkit-scrollbar-thumb { background: var(--px-edge); border: 2px solid var(--px-ink); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--px-accent-d); }
+        ::selection { background: var(--px-accent); color: var(--px-ink); }
+
+        @media (max-width: 520px) {
+            .panel { padding: 22px 16px 18px; }
+            .pixel-logo .logo-main { font-size: 22px; }
+            h2 { font-size: 13px; }
+        }
+
+        /* ===== LOBBI: chizma bo'yicha (image.png) ===== */
+        #lobby-panel { width: 860px; text-align: left; }
+        .lobby-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .lobby-room-name { flex: 1; text-align: center; font-size: 12px; color: var(--px-accent); text-shadow: 2px 2px 0 var(--px-ink); }
+        #lobby-panel .room-code-badge { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 9px; }
+        #lobby-panel .room-code-badge.hidden { display: none; }
+        #room-code-value { font-size: 12px; min-width: 7ch; }
+        #room-code-value.code-hidden { letter-spacing: 2px; color: var(--px-muted); }
+        .eye-btn { width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; background: var(--px-panel-2); color: var(--px-text);
+            box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 var(--px-panel-3), 0 3px 0 var(--px-ink); }
+        .eye-btn:hover { background: var(--px-panel-3); filter: none; }
+        .lobby-map-line { margin: 18px 0 6px; font-size: 11px; padding-bottom: 8px; border-bottom: 4px solid var(--px-ink);
+            box-shadow: 0 2px 0 var(--px-panel-3); display: inline-block; min-width: 45%; }
+        .lobby-map-line b { color: var(--px-gold); text-shadow: 2px 2px 0 var(--px-ink); }
+
+        .lobby-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 22px 0 8px; }
+        .slot { display: flex; flex-direction: column; align-items: center; text-align: center; min-height: 250px; position: relative; }
+        .slot-name { height: 34px; display: flex; align-items: flex-end; justify-content: center; font-size: 10px; color: var(--px-text);
+            text-shadow: 2px 2px 0 var(--px-ink); word-break: break-all; line-height: 1.5; padding: 0 2px; }
+        .slot.me .slot-name { color: var(--px-accent); }
+        .slot-name .fa-crown { color: var(--px-gold); margin-right: 6px; }
+        .slot-card { width: 96px; height: 140px; margin-top: 8px; display: flex; align-items: flex-end; justify-content: center;
+            background: repeating-linear-gradient(0deg, #1b1630 0 8px, #1f1938 8px 16px); border: 4px solid var(--px-ink);
+            box-shadow: inset 0 0 0 3px var(--px-panel-3); }
+        .slot.me .slot-card { box-shadow: inset 0 0 0 3px var(--px-accent-d), 0 0 0 3px var(--px-accent); }
+        .slot-hero { width: 96px; height: 120px; image-rendering: pixelated; animation: px-bob 1.2s steps(2) infinite; }
+        .slot:nth-child(2) .slot-hero { animation-delay: .3s; } .slot:nth-child(3) .slot-hero { animation-delay: .6s; } .slot:nth-child(4) .slot-hero { animation-delay: .9s; }
+        .slot-pedestal { width: 128px; height: 8px; background: var(--px-edge); border: 3px solid var(--px-ink); margin-top: 8px; }
+        .slot-level { margin-top: 12px; font-size: 10px; color: #82b1ff; text-shadow: 2px 2px 0 var(--px-ink);
+            border-bottom: 3px solid var(--px-ink); padding-bottom: 6px; min-width: 96px; }
+        .slot-status { margin-top: 8px; font-size: 9px; letter-spacing: 1px; }
+        .slot-status.ready { color: #69f0ae; } .slot-status.not-ready { color: var(--px-red); } .slot-status.host { color: var(--px-gold); }
+        .slot.empty .slot-card { cursor: pointer; align-items: center; background: var(--px-bg); border-style: dashed; box-shadow: none; }
+        .slot.empty .slot-card:hover { border-color: var(--px-accent); }
+        .slot-plus { font-size: 32px; color: var(--px-muted); text-shadow: 3px 3px 0 var(--px-ink); }
+        .slot.empty .slot-card:hover .slot-plus { color: var(--px-accent); }
+        .slot-hint { margin-top: 12px; font-size: 8px; color: var(--px-muted); min-height: 14px; }
+
+        .lobby-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+        .lobby-bottom-left { display: flex; gap: 10px; flex-wrap: wrap; }
+        .lobby-bottom-left .lobby-toggle-btn { font-size: 10px; padding: 12px 14px; color: var(--px-text); }
+        .lobby-bottom-right button { width: auto; min-width: 200px; margin: 0; font-size: 16px; padding: 18px 26px; }
+        #toggle-chat-btn.has-new::after { content: ''; position: absolute; top: -6px; right: -6px; width: 10px; height: 10px;
+            background: var(--px-red); border: 3px solid var(--px-ink); animation: px-pulse .6s steps(2) infinite; }
+        #waiting-msg { margin: 10px 0 0; text-align: right; font-size: 8px; }
+
+        .lobby-popup { position: absolute; z-index: 20; left: 50%; top: 90px; transform: translateX(-50%); width: min(620px, 92%);
+            background: var(--px-panel); border: 4px solid var(--px-ink); padding: 16px;
+            box-shadow: inset 0 0 0 4px var(--px-edge), 12px 12px 0 rgba(0,0,0,.6); }
+        .lobby-popup.hidden { display: none; }
+        .popup-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .popup-head h3 { margin: 0; }
+        .popup-close { width: 34px; height: 30px; padding: 0; margin: 0; background: var(--px-red); color: #fff;
+            box-shadow: inset -3px -3px 0 var(--px-red-d), 0 3px 0 var(--px-ink); }
+        #lobby-chat-section #chat-box { height: 260px; }
+        #level-select-section { margin: 0; }
+        #level-list { max-height: 380px; }
+        #level-list .level-item span[style] { font-size: 8px !important; }
+        @media (max-width: 900px) {
+            #lobby-panel { width: 96vw; }
+            .lobby-slots { grid-template-columns: repeat(2, 1fr); }
+            .lobby-bottom-right button { min-width: 0; width: 100%; }
+            .lobby-bottom-right { width: 100%; }
+        }
+
+        /* ===== XARITALAR OYNASI (chizma bo'yicha) va XP chizig'i ===== */
+        .maps-popup { width: min(720px, 94%); }
+        .maps-head { position: relative; justify-content: center; }
+        .maps-head h3 { font-size: 14px; color: var(--px-text); letter-spacing: 3px; }
+        .maps-head .popup-close { position: absolute; right: 0; top: 0; }
+        .maps-body { display: flex; gap: 16px; align-items: flex-start; }
+        .maps-body #level-list { flex: 1; min-height: 300px; max-height: 380px; overflow-y: scroll; background: var(--px-bg);
+            border: 4px solid var(--px-ink); box-shadow: inset 0 0 0 2px var(--px-panel-2); padding: 8px; }
+        .maps-tabs { display: flex; flex-direction: column; gap: 12px; width: 170px; flex-shrink: 0; }
+        .maps-tab { margin: 0; font-size: 11px; padding: 14px 8px; background: var(--px-panel-2); color: var(--px-muted);
+            box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 var(--px-panel-3), 0 3px 0 var(--px-ink); }
+        .maps-tab:hover { background: var(--px-panel-3); color: var(--px-text); filter: none; }
+        .maps-tab.active { background: var(--px-gold); color: #3b2a00; box-shadow: inset -3px -3px 0 var(--px-gold-d), inset 3px 3px 0 rgba(255,255,255,.45), 0 3px 0 var(--px-ink); }
+        .maps-soon { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; gap: 14px;
+            color: var(--px-muted); font-size: 12px; text-shadow: 2px 2px 0 var(--px-ink); }
+        .maps-soon i { font-size: 30px; color: var(--px-edge); }
+        .xp-bar { display: inline-block; vertical-align: middle; width: 54px; height: 10px; margin-left: 6px; background: #120c22;
+            border: 2px solid var(--px-ink); position: relative; }
+        #player-xp-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #82b1ff; box-shadow: inset 0 2px 0 rgba(255,255,255,.5); }
+        @media (max-width: 700px) { .maps-body { flex-direction: column-reverse; } .maps-tabs { width: 100%; flex-direction: row; } .maps-tab { flex: 1; } }
+
+        /* ===== DARAJA IMKONIYATLARI ("My Character") ===== */
+        .char-xp { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 9px; color: var(--px-muted); }
+        .char-xp-bar { flex: 1; height: 14px; background: #120c22; border: 3px solid var(--px-ink); position: relative; }
+        #char-xp-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #82b1ff; box-shadow: inset 0 3px 0 rgba(255,255,255,.5); }
+        .perk-row { display: flex; align-items: center; gap: 12px; background: var(--px-panel-2); border: 3px solid var(--px-ink);
+            padding: 8px 12px; margin-bottom: 6px; text-align: left; font-size: 10px; }
+        .perk-row.locked { filter: grayscale(1); opacity: .5; }
+        .perk-lv { flex-shrink: 0; width: 54px; text-align: center; padding: 6px 0; background: var(--px-bg); border: 3px solid var(--px-ink);
+            color: var(--px-gold); font-size: 9px; }
+        .perk-row.unlocked .perk-lv { background: var(--px-accent); color: #062b24; }
+        .perk-desc { display: block; margin-top: 4px; font-size: 8px; color: var(--px-muted); line-height: 1.7; }
+        .perk-key { color: var(--px-gold); }
+        .upgrade-row.locked-upgrade { filter: grayscale(1); opacity: .55; }
     </style>
 </head>
 <body>
+    <canvas id="menu-bg"></canvas>
 
-    <div id="menu-panel" class="panel">
-        <h2>BOSH MENYU</h2>
-        <input type="text" id="room-name-input" placeholder="Xona nomini kiriting...">
-        <button id="create-room-btn">Yangi Xona (Lobby) Yaratish</button>
-        
-        <h3 style="text-align: left; margin-top: 20px;">Ochiq Xonalar:</h3>
-        <div id="room-list">
-            <div style="color: #888; text-align: center;">Hozircha xonalar yo'q...</div>
+    <div id="auth-panel" class="panel">
+        <div class="pixel-logo"><span class="logo-main">4 HEROES</span><span class="logo-sub">CO-OP ACTION</span></div>
+        <h2 data-i18n="auth_title">SIGN IN</h2>
+        <div id="login-form">
+            <input type="text" id="login-nickname" data-i18n-ph="nickname_ph" placeholder="Nickname">
+            <input type="password" id="login-password" data-i18n-ph="password_ph" placeholder="Password">
+            <button id="login-btn" data-i18n="login_btn">Sign In</button>
+            <p id="login-error" class="error-text"></p>
+            <p class="link-text" id="show-register-link" data-i18n="no_account">Don't have an account? Register</p>
+        </div>
+        <div id="register-form" class="hidden">
+            <input type="text" id="register-fullname" data-i18n-ph="fullname_ph" placeholder="Full name">
+            <input type="text" id="register-nickname" data-i18n-ph="nickname_ph" placeholder="Nickname">
+            <input type="password" id="register-password" data-i18n-ph="password_ph" placeholder="Password">
+            <button id="register-btn" data-i18n="register_btn">Register</button>
+            <p id="register-error" class="error-text"></p>
+            <p class="link-text" id="show-login-link" data-i18n="have_account">Already have an account? Sign in</p>
         </div>
     </div>
 
-    <div id="lobby-panel" class="panel hidden">
-        <h2 id="lobby-title">Xona: <span id="current-room-name">...</span></h2>
-        
-        <h3>Qahramonni Tanlang:</h3>
-        <select id="char-select">
-            <option value="knight">Knight (Ritsar)</option>
-            <option value="archer">Archer (Kamonchi)</option>
-            <option value="mage">Mage (Sehrgar)</option>
-            <option value="samurai">Samurai (Tezkor jangchi)</option> 
-        </select>
-
-        <h3>Xonadagilar (<span id="player-count">0</span>/4):</h3>
-        <ul id="player-list" style="text-align: left; background: #222; padding: 10px 25px; border-radius: 5px;">
-            </ul>
-
-        <button id="start-game-btn" class="hidden" style="background: #ffcc00;">O'yinni Boshlash (Host)</button>
-        <p id="waiting-msg" style="color: #aaa; font-style: italic;">Xona egasi o'yinni boshlashini kuting...</p>
+    <!-- ===== BOSH MENYU (HUB) ===== -->
+    <div id="main-menu-panel" class="panel hidden">
+        <div class="pixel-logo"><span class="logo-main">4 HEROES</span></div>
+        <div class="hero-row">
+            <div class="mini-hero" style="--c:#1e88e5; --d:0s"></div>
+            <div class="mini-hero" style="--c:#43a047; --d:.25s"></div>
+            <div class="mini-hero" style="--c:#8e24aa; --d:.5s"></div>
+            <div class="mini-hero" style="--c:#e53935; --d:.75s"></div>
+        </div>
+        <div class="user-bar">
+            <span><i class="fa-solid fa-user icon"></i><b id="welcome-nickname"></b></span>
+            <span class="level-badge"><i class="fa-solid fa-star icon"></i><span data-i18n="level_label">Level</span> <b id="player-level">0</b>
+                <span class="xp-bar" id="player-xp-bar" title=""><span id="player-xp-fill"></span></span></span>
+            <span class="coin-badge"><i class="fa-solid fa-coins icon"></i><span id="coin-balance">0</span></span>
+        </div>
+        <button id="nav-play-btn" class="hub-btn"><i class="fa-solid fa-play"></i><span data-i18n="nav_play">Play</span></button>
+        <button id="nav-character-btn" class="hub-btn"><i class="fa-solid fa-shield-halved"></i><span data-i18n="nav_character">My Character</span></button>
+        <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
+        <button id="nav-donate-btn" class="hub-btn"><i class="fa-solid fa-heart"></i><span data-i18n="nav_donate">Support the Author</span></button>
+        <div class="control-scheme-row" style="margin: 16px 0 0;">
+            <button class="control-scheme-btn" id="control-pc-btn"><i class="fa-solid fa-desktop"></i> PC</button>
+            <button class="control-scheme-btn" id="control-phone-btn"><i class="fa-solid fa-mobile-screen-button"></i> PHONE</button>
+        </div>
     </div>
 
-    <div id="game-container" class="hidden"></div>
+    <!-- ===== PLAY HUB: Connect / All Lobbies / Create / My Saved Room ===== -->
+    <div id="play-hub-panel" class="panel hidden">
+        <button class="back-btn" id="play-hub-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <h2 data-i18n="play_title">Play</h2>
+        <button id="nav-connect-btn" class="hub-btn"><i class="fa-solid fa-key"></i><span data-i18n="nav_connect">Connect</span></button>
+        <button id="nav-all-lobbies-btn" class="hub-btn"><i class="fa-solid fa-list"></i><span data-i18n="nav_all_lobbies">All Lobbies</span></button>
+        <button id="nav-create-lobby-btn" class="hub-btn"><i class="fa-solid fa-plus"></i><span data-i18n="nav_create_lobby">Create Lobby</span></button>
+        <button id="nav-my-saved-room-btn" class="hub-btn"><i class="fa-solid fa-bookmark"></i><span data-i18n="nav_my_saved_room">My Saved Room</span></button>
+    </div>
 
+    <!-- ===== CONNECT: xona kodi orqali qo'shilish ===== -->
+    <div id="connect-panel" class="panel hidden">
+        <button class="back-btn" id="connect-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <h2 data-i18n="nav_connect">Connect</h2>
+        <div class="join-code-row">
+            <input type="text" id="join-code-input" data-i18n-ph="join_code_ph" placeholder="Room code (e.g. K3F9QZ)" maxlength="6" style="text-transform:uppercase;">
+            <button id="join-code-btn"><i class="fa-solid fa-right-to-bracket"></i></button>
+        </div>
+    </div>
+
+    <!-- ===== BARCHA (OCHIQ) LOBBYLAR ===== -->
+    <div id="all-lobbies-panel" class="panel hidden">
+        <button class="back-btn" id="all-lobbies-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <h2 data-i18n="open_rooms_title">Open Rooms</h2>
+        <div id="room-list">
+            <div style="color: #888; text-align: center;" data-i18n="no_rooms_yet">No rooms yet...</div>
+        </div>
+    </div>
+
+    <!-- ===== YANGI LOBBY YARATISH ===== -->
+    <div id="create-lobby-panel" class="panel hidden">
+        <button class="back-btn" id="create-lobby-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <h2 data-i18n="create_room_btn">Create New Room</h2>
+        <input type="text" id="room-name-input" data-i18n-ph="room_name_ph" placeholder="Enter room name...">
+        <div class="visibility-row">
+            <button class="visibility-btn active" id="visibility-public-btn" data-i18n="visibility_public">Public</button>
+            <button class="visibility-btn" id="visibility-private-btn" data-i18n="visibility_private">Private</button>
+        </div>
+        <p class="settings-note" id="visibility-note" data-i18n="visibility_public_note">Anyone can find and join this room from "All Lobbies".</p>
+        <button id="create-room-btn"><i class="fa-solid fa-plus icon"></i><span data-i18n="create_room_btn">Create New Room</span></button>
+    </div>
+
+    <!-- ===== MENING SAQLANGAN XONAM (ENG OXIRGISI) ===== -->
+    <div id="my-saved-room-panel" class="panel hidden">
+        <button class="back-btn" id="my-saved-room-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <h2 data-i18n="nav_my_saved_room">My Saved Room</h2>
+        <div id="my-saved-room-content"></div>
+    </div>
+
+    <!-- ===== MENING PERSONAJIM: yaxshilashlar + skinlar ===== -->
+    <div id="character-panel" class="panel hidden">
+        <button class="back-btn" id="character-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <div class="user-bar">
+            <h2 style="margin:0;" data-i18n="char_title">My Character</h2>
+            <span class="coin-badge"><i class="fa-solid fa-coins icon"></i><span id="character-coin-balance">0</span></span>
+        </div>
+
+        <div class="char-stage"><canvas id="char-preview" width="64" height="48"></canvas></div>
+        <div id="char-tabs" class="char-tabs"></div>
+        <p id="char-locked-note" class="settings-note hidden" data-i18n="char_locked_note">Showing the character currently selected in this room.</p>
+
+        <p id="char-details-desc" class="char-details-desc"></p>
+
+        <div class="upgrade-points-banner">
+            <span data-i18n="char_skill_points">Available points</span>
+            <b id="skill-points-value">0</b>
+        </div>
+        <div id="upgrades-content"></div>
+
+        <!-- Daraja va shu darajalarda ochiladigan imkoniyatlar (tanlangan personaj uchun) -->
+        <h3 style="text-align:left; margin-top: 22px;"><span data-i18n="perks_title">Level rewards</span> — <span id="char-level-label"></span></h3>
+        <div class="char-xp"><div class="char-xp-bar"><span id="char-xp-fill"></span></div><span id="char-xp-text"></span></div>
+        <div id="perks-content"></div>
+
+        <h3 style="text-align:left; margin-top: 22px;" data-i18n="char_skins_title">Skins</h3>
+        <div id="shop-content"></div>
+
+        <h3 style="text-align:left; margin-top: 22px;" data-i18n="char_weapon_skins_title">Weapon Skins</h3>
+        <div id="weapon-shop-content"></div>
+    </div>
+
+    <!-- ===== SOZLAMALAR ===== -->
+    <div id="settings-panel" class="panel hidden">
+        <button class="back-btn" id="settings-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <h2 data-i18n="settings_title">Settings</h2>
+
+        <div class="settings-row">
+            <label data-i18n="settings_volume">Music Volume</label>
+            <input type="range" id="volume-slider" min="0" max="100" value="70">
+            <p class="settings-note" data-i18n="settings_no_music_note">No music added yet — this will take effect once music is added.</p>
+        </div>
+
+        <div class="settings-row">
+            <label data-i18n="settings_language">Language</label>
+            <div class="lang-options">
+                <button class="lang-btn" id="lang-en-btn">English</button>
+                <button class="lang-btn" id="lang-ru-btn">Русский</button>
+            </div>
+        </div>
+
+        <span class="link-text" id="logout-link" style="display:inline-block; margin-top:10px;"><i class="fa-solid fa-right-from-bracket icon"></i><span data-i18n="logout">Sign Out</span></span>
+    </div>
+
+    <!-- ===== DONAT ===== -->
+    <div id="donate-panel" class="panel hidden">
+        <button class="back-btn" id="donate-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
+        <i class="fa-solid fa-heart"></i>
+        <h2 data-i18n="donate_title">Support the Author</h2>
+        <p data-i18n="donate_placeholder">Donation details coming soon. Thanks for wanting to support the game!</p>
+    </div>
+
+    <!-- ===== LOBBI (xona): chapda "Leave", o'ngda xona kodi (ko'z - yashirish), xarita nomi,
+         4 ta o'yinchi o'rni (qahramon, ism, daraja, tayyorlik; bo'shi "+"), pastda Map / My Character /
+         Chat va katta START (xo'jayin) yoki READY (qolganlar). Xarita va chat - ustida ochiladigan oynalar ===== -->
+    <div id="lobby-panel" class="panel hidden">
+        <div class="lobby-top">
+            <button id="leave-lobby-btn"><i class="fa-solid fa-right-from-bracket icon"></i><span data-i18n="leave_lobby">Leave Lobby</span></button>
+            <div class="lobby-room-name"><span data-i18n="lobby_room_prefix">Room:</span> <span id="current-room-name">...</span></div>
+            <div id="room-code-badge" class="room-code-badge hidden">
+                <span data-i18n="room_code_label">Room code:</span>
+                <b id="room-code-value"></b>
+                <button id="toggle-code-btn" class="eye-btn" title="Show / hide"><i class="fa-solid fa-eye"></i></button>
+            </div>
+        </div>
+        <div class="lobby-map-line"><i class="fa-solid fa-map icon"></i><span data-i18n="map_title">Map</span>: <b id="lobby-map-name"></b></div>
+
+        <div id="lobby-slots" class="lobby-slots"></div>
+        <p id="start-error-msg" class="error-text"></p>
+
+        <div class="lobby-bottom">
+            <div class="lobby-bottom-left">
+                <button class="lobby-toggle-btn" id="toggle-map-btn"><i class="fa-solid fa-map icon"></i><span data-i18n="toggle_map">Map</span></button>
+                <button class="lobby-toggle-btn" id="open-my-character-btn"><i class="fa-solid fa-shield-halved icon"></i><span data-i18n="nav_character">My Character</span></button>
+                <button class="lobby-toggle-btn" id="toggle-chat-btn"><i class="fa-solid fa-comments icon"></i><span data-i18n="toggle_chat">Chat</span></button>
+            </div>
+            <div class="lobby-bottom-right">
+                <button id="ready-btn" class="not-ready"><i class="fa-solid fa-check icon"></i><span data-i18n="ready_btn">Ready</span></button>
+                <button id="start-game-btn" class="hidden"><i class="fa-solid fa-play icon"></i><span data-i18n="start_game_btn">START</span></button>
+            </div>
+        </div>
+        <p id="waiting-msg" data-i18n="waiting_host">Waiting for the host to start...</p>
+
+        <!-- XARITALAR oynasi (chizma bo'yicha): tepada "MAPS" va X, chapda aylantiriladigan ro'yxat,
+             o'ngda bo'limlar - BONUS / SEASON 1 / SEASON 2 -->
+        <div id="level-select-section" class="lobby-popup maps-popup hidden">
+            <div class="popup-head maps-head">
+                <h3 data-i18n="maps_title">MAPS</h3>
+                <button class="popup-close" data-close="map"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="maps-body">
+                <div id="level-list"></div>
+                <div class="maps-tabs">
+                    <button class="maps-tab" data-tab="bonus" data-i18n="tab_bonus">BONUS</button>
+                    <button class="maps-tab active" data-tab="s1" data-i18n="tab_season1">SEASON 1</button>
+                    <button class="maps-tab" data-tab="s2" data-i18n="tab_season2">SEASON 2</button>
+                </div>
+            </div>
+        </div>
+        <!-- Chat (oyna) -->
+        <div id="lobby-chat-section" class="lobby-popup hidden">
+            <div class="popup-head">
+                <h3><i class="fa-solid fa-comments icon"></i><span data-i18n="chat_title">Chat</span></h3>
+                <button class="popup-close" data-close="chat"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="chat-box"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" data-i18n-ph="chat_ph" placeholder="Type a message..." maxlength="200">
+                <button id="chat-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </div>
+
+        <!-- Eski ro'yxat elementlari (JS ularga murojaat qiladi) - ko'rinmaydi -->
+        <div class="hidden"><div id="my-character-display"></div><ul id="player-list"></ul><span id="player-count"></span></div>
+    </div>
+
+    <div id="gameover-panel" class="panel hidden">
+        <h2 id="gameover-title" class="gameover-title-win"><i class="fa-solid fa-trophy icon"></i><span data-i18n="win_title">VICTORY!</span></h2>
+        <p id="gameover-text" style="font-size: 18px;"></p>
+        <button id="gameover-ok-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_to_lobby">Back to Lobby</span></button>
+    </div>
+
+    <div id="game-wrapper" class="hidden">
+        <div id="game-container"></div>
+        <div id="touch-controls" class="hidden">
+            <div class="touch-dpad">
+                <button id="touch-left-btn" class="touch-btn"><i class="fa-solid fa-caret-left"></i></button>
+                <button id="touch-jump-btn" class="touch-btn"><i class="fa-solid fa-caret-up"></i></button>
+                <button id="touch-right-btn" class="touch-btn"><i class="fa-solid fa-caret-right"></i></button>
+            </div>
+            <button id="touch-ability-btn" class="touch-action-btn"><i class="fa-solid fa-bolt"></i></button>
+        </div>
+    </div>
+
+    <script src="audio.js"></script>
+    <script src="perks.js"></script>
+    <script src="i18n.js"></script>
     <script src="lobby.js"></script>
     <script src="game.js"></script>
 </body>

@@ -1,0 +1,472 @@
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import { config } from 'dotenv';
+import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL } from './perks';
+config({quiet:true})
+// Agar MongoDB'ga ulanib bo'lmasa yoki vaqtincha uzilib qolsa, so'rovlar
+// abadiy "osilib qolmasligi" uchun (aks holda foydalanuvchi cheksiz kutib qolardi)
+mongoose.set('bufferTimeoutMS', 8000);
+
+// MongoDB ulanish manzili. Agar .env yoki muhit o'zgaruvchisida MONGODB_URI
+// berilgan bo'lsa o'shani, aks holda lokal MongoDB'ni ishlatadi.
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/four_heroes';
+
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('MongoDB bilan muvaffaqiyatli ulandi:', MONGO_URI))
+    .catch((err) => {
+        console.error('MongoDB ulanishida xatolik! MongoDB kompyuteringizda ishga tushirilganiga ishonch hosil qiling.');
+        console.error(err.message);
+    });
+
+const DEFAULT_OWNED_SKINS = { knight: ['default'], samurai: ['default'], archer: ['default'], mage: ['default'] };
+const DEFAULT_EQUIPPED_SKINS = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default' };
+const CHARACTER_TYPES = ['knight', 'archer', 'mage', 'samurai'];
+const DEFAULT_UPGRADES = { knight: { damage: 0, stamina: 0 }, archer: { damage: 0, stamina: 0 }, mage: { damage: 0, stamina: 0 }, samurai: { damage: 0, stamina: 0 } };
+const DEFAULT_SKILL_POINTS = { knight: 0, archer: 0, mage: 0, samurai: 0 };
+const DEFAULT_CREDITED_LEVELS = { knight: [], archer: [], mage: [], samurai: [] };
+const MAX_UPGRADE_LEVEL = 5;
+
+// MONGOOSE SXEMASI (jadval strukturasi o'rniga)
+const userSchema = new mongoose.Schema({
+    fullName: { type: String, required: true },
+    nickname: { type: String, required: true, unique: true },
+    passwordHash: { type: String, required: true },
+    coins: { type: Number, required: true, default: 0 },
+    ownedSkins: { type: Object, required: true, default: DEFAULT_OWNED_SKINS },
+    equippedSkins: { type: Object, required: true, default: DEFAULT_EQUIPPED_SKINS },
+    ownedWeaponSkins: { type: Object, required: true, default: DEFAULT_OWNED_SKINS },        // qurol uchun alohida skin turkumi
+    equippedWeaponSkins: { type: Object, required: true, default: DEFAULT_EQUIPPED_SKINS },
+    defaultCharacter: { type: String, required: true, default: 'knight' },          // "Mening personajim" ekrani ochilganda qaysi personaj ko'rsatiladi
+    // MUHIM: yaxshilashlar HAR BIR PERSONAJ TURI UCHUN ALOHIDA saqlanadi -
+    // faqat "mage" bilan o'ynasangiz, faqat mage kuchayadi, boshqalar bazaviy holatda qoladi
+    upgrades: { type: Object, required: true, default: DEFAULT_UPGRADES },          // { knight: {damage,stamina}, archer: {...}, ... }
+    skillPoints: { type: Object, required: true, default: DEFAULT_SKILL_POINTS },   // { knight: 0, archer: 0, ... }
+    creditedLevels: { type: Object, required: true, default: DEFAULT_CREDITED_LEVELS }, // { knight: [levelId,...], ... } - ferma qilishning oldini olish uchun
+    // PROGRESS HISOBGA bog'liq (xonaga emas): ochilgan eng yuqori xarita va tajriba (XP)
+    unlockedLevel: { type: Number, required: true, default: 0 },
+    xp: { type: Number, required: true, default: 0 },
+    // HAR PERSONAJ tajribasi: shu personaj bilan o'tilgan har xarita +10 (daraja imkoniyatlari shundan)
+    charXp: { type: Object, required: true, default: () => ({ knight: 0, archer: 0, mage: 0, samurai: 0 }) },
+    // ADMIN (Telegram bot) bloklagan hisob: kira olmaydi, xonaga qo'shila olmaydi
+    banned: { type: Boolean, required: true, default: false },
+    banReason: { type: String, default: '' }
+}, { timestamps: true });
+
+const UserModel = mongoose.model('User', userSchema);
+
+export interface UserRecord {
+    id: string;
+    fullName: string;
+    nickname: string;
+    coins: number;
+    ownedSkins: { [character: string]: string[] };
+    equippedSkins: { [character: string]: string };
+    ownedWeaponSkins: { [character: string]: string[] };
+    equippedWeaponSkins: { [character: string]: string };
+    defaultCharacter: string;
+    upgrades: { [character: string]: { damage: number, stamina: number } };
+    skillPoints: { [character: string]: number };
+    creditedLevels: { [character: string]: number[] };
+    unlockedLevel: number;
+    xp: number;
+    charXp: { [character: string]: number };
+    banned: boolean;
+    banReason: string;
+    createdAt: Date | null;
+}
+
+// TAJRIBA DARAJASI: har o'tilgan xarita +XP_PER_MAP; har keyingi darajaga kerakli XP ikki
+// baravar oshadi (0->1: 10, 1->2: 20, 2->3: 40, ...)
+export const XP_PER_MAP = 10;
+export function xpLevel(xp: number): number {
+    let level = 0, need = XP_PER_MAP, rest = Math.max(0, xp || 0);
+    while (rest >= need) { rest -= need; level++; need *= 2; }
+    return level;
+}
+
+// Eski (bitta, umumiy) formatdagi hisoblar bo'lsa ham xatoga olib kelmasligi uchun,
+// har doim barcha 4 personaj uchun standart qiymatlar bilan to'ldirib qaytaramiz
+function docToUser(doc: any): UserRecord {
+    const rawUpgrades = doc.upgrades || {};
+    const rawPoints = doc.skillPoints || {};
+    const rawCredited = doc.creditedLevels || {};
+    const upgrades: any = {};
+    const skillPoints: any = {};
+    const creditedLevels: any = {};
+    CHARACTER_TYPES.forEach((c) => {
+        upgrades[c] = rawUpgrades[c] || { damage: 0, stamina: 0 };
+        skillPoints[c] = typeof rawPoints[c] === 'number' ? rawPoints[c] : 0;
+        creditedLevels[c] = rawCredited[c] || [];
+    });
+
+    return {
+        id: doc._id.toString(),
+        fullName: doc.fullName,
+        nickname: doc.nickname,
+        coins: doc.coins,
+        ownedSkins: doc.ownedSkins,
+        equippedSkins: doc.equippedSkins,
+        ownedWeaponSkins: doc.ownedWeaponSkins || DEFAULT_OWNED_SKINS,
+        equippedWeaponSkins: doc.equippedWeaponSkins || DEFAULT_EQUIPPED_SKINS,
+        defaultCharacter: doc.defaultCharacter || 'knight',
+        upgrades: upgrades,
+        skillPoints: skillPoints,
+        creditedLevels: creditedLevels,
+        ...legacyProgress(doc, creditedLevels),
+        banned: !!doc.banned,
+        banReason: doc.banReason || '',
+        createdAt: doc.createdAt || null
+    };
+}
+
+// ESKI HISOB: progress avval foydalanuvchida emas, u yaratgan SAQLANGAN XONALARDA turardi.
+// Hisobda hali ochilgan xarita yozilmagan bo'lsa - uning xonalaridagi eng yuqori ochilgan xarita
+// (va o'tilgan xaritalar tarixi) dan olinib, BIR MARTA hisobga yoziladi
+async function migrateRoomProgress(doc: any): Promise<void> {
+    if (typeof doc.$isDefault !== 'function' || !doc.$isDefault('unlockedLevel')) return;
+    try {
+        const best = await RoomModel.findOne({ hostUserId: doc._id }).sort({ unlockedLevel: -1 });
+        const fromRooms = best ? (best as any).unlockedLevel || 0 : 0;
+        doc.unlockedLevel = Math.max(fromRooms, docToUser(doc).unlockedLevel);
+        await doc.save();
+    } catch (err) {
+        console.error('migrateRoomProgress xatosi:', err);
+    }
+}
+
+// ESKI HISOBLAR (progress xonada saqlangan davrdagi): bazada unlockedLevel/xp hali yo'q bo'lsa -
+// o'tilgan xaritalar tarixidan (creditedLevels) hisoblaymiz: ochilgan = eng katta o'tilgan + 1,
+// XP = o'tilgan xaritalar soni x XP_PER_MAP. Keyingi saqlashda bazaga yoziladi
+function legacyProgress(doc: any, credited: { [c: string]: number[] }): { unlockedLevel: number, xp: number, charXp: { [c: string]: number } } {
+    const isDefault = (path: string) => typeof doc.$isDefault === 'function' ? doc.$isDefault(path) : doc[path] === undefined;
+    const ids = new Set<number>();
+    Object.values(credited).forEach(list => list.forEach(id => ids.add(id)));
+    const unlockedLevel = isDefault('unlockedLevel') ? (ids.size ? Math.max(...ids) + 1 : 0) : (doc.unlockedLevel || 0);
+    const xp = isDefault('xp') ? Object.values(credited).reduce((a, list) => a + list.length, 0) * XP_PER_MAP : (doc.xp || 0);
+    // Personaj tajribasi yo'q (eski hisob) - shu personaj bilan o'tilgan xaritalar tarixidan
+    const charXp: { [c: string]: number } = {};
+    CHARACTER_TYPES.forEach((c) => {
+        const saved = doc.charXp && typeof doc.charXp[c] === 'number' ? doc.charXp[c] : null;
+        charXp[c] = (saved !== null && !isDefault('charXp')) ? saved : (credited[c] || []).length * XP_PER_MAP;
+    });
+    return { unlockedLevel, xp, charXp };
+}
+
+// RO'YXATDAN O'TISH: ism, nickname va parol bilan
+export async function registerUser(fullName: string, nickname: string, password: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    if (!fullName || !nickname || !password) {
+        return { success: false, message: 'Ism, nickname va parol to\'ldirilishi shart' };
+    }
+    if (password.length < 4) {
+        return { success: false, message: 'Parol kamida 4 ta belgidan iborat bo\'lishi kerak' };
+    }
+
+    const existing = await UserModel.findOne({ nickname });
+    if (existing) {
+        return { success: false, message: 'Bu nickname band, boshqasini tanlang' };
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 10);
+    const doc = await UserModel.create({
+        fullName,
+        nickname,
+        passwordHash,
+        coins: 0,
+        ownedSkins: DEFAULT_OWNED_SKINS,
+        equippedSkins: DEFAULT_EQUIPPED_SKINS
+    });
+
+    return { success: true, user: docToUser(doc) };
+}
+
+// TIZIMGA KIRISH: nickname va parol bilan
+export async function loginUser(nickname: string, password: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const doc = await UserModel.findOne({ nickname });
+    if (!doc) {
+        return { success: false, message: 'Bunday foydalanuvchi topilmadi' };
+    }
+    if (!bcrypt.compareSync(password, doc.passwordHash)) {
+        return { success: false, message: 'Parol noto\'g\'ri' };
+    }
+    if ((doc as any).banned) {
+        return { success: false, message: 'Hisobingiz bloklangan' + ((doc as any).banReason ? ': ' + (doc as any).banReason : '') };
+    }
+    await migrateRoomProgress(doc);
+    return { success: true, user: docToUser(doc) };
+}
+
+// G'ALABA UCHUN TANGA QO'SHISH
+export async function addCoins(userId: string, amount: number): Promise<UserRecord | null> {
+    const doc = await UserModel.findByIdAndUpdate(
+        userId,
+        { $inc: { coins: amount } },
+        { returnDocument: 'after' }
+    );
+    return doc ? docToUser(doc) : null;
+}
+
+// SKIN SOTIB OLISH
+// SKIN SOTIB OLISH (category: 'body' - tana/qurol dizayni, 'weapon' - alohida qurol skin)
+export async function buySkin(userId: string, characterType: string, skinId: string, price: number, category: 'body' | 'weapon' = 'body'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const doc = await UserModel.findById(userId);
+    if (!doc) return { success: false, message: 'Foydalanuvchi topilmadi' };
+
+    const ownedField = category === 'weapon' ? 'ownedWeaponSkins' : 'ownedSkins';
+    const owned: string[] = (doc as any)[ownedField][characterType] || [];
+    if (owned.includes(skinId)) {
+        return { success: false, message: 'Bu skin allaqachon sizda bor' };
+    }
+    if (doc.coins < price) {
+        return { success: false, message: 'Tanga yetarli emas' };
+    }
+
+    owned.push(skinId);
+    (doc as any)[ownedField][characterType] = owned;
+    doc.coins -= price;
+    doc.markModified(ownedField);
+
+    await doc.save();
+
+    return { success: true, user: docToUser(doc) };
+}
+
+// SKIN KIYISH (faqat sotib olingan skinni kiyish mumkin)
+export async function equipSkin(userId: string, characterType: string, skinId: string, category: 'body' | 'weapon' = 'body'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const doc = await UserModel.findById(userId);
+    if (!doc) return { success: false, message: 'Foydalanuvchi topilmadi' };
+
+    const ownedField = category === 'weapon' ? 'ownedWeaponSkins' : 'ownedSkins';
+    const equippedField = category === 'weapon' ? 'equippedWeaponSkins' : 'equippedSkins';
+    const owned: string[] = (doc as any)[ownedField][characterType] || [];
+    if (!owned.includes(skinId)) {
+        return { success: false, message: 'Bu skin hali sotib olinmagan' };
+    }
+
+    (doc as any)[equippedField][characterType] = skinId;
+    doc.markModified(equippedField);
+    await doc.save();
+
+    return { success: true, user: docToUser(doc) };
+}
+
+export async function getUserById(userId: string): Promise<UserRecord | null> {
+    try {
+        const doc = await UserModel.findById(userId);
+        if (doc) await migrateRoomProgress(doc);
+        return doc ? docToUser(doc) : null;
+    } catch {
+        // Noto'g'ri formatdagi ID (masalan eski raqamli ID) yuborilsa xatolik bermasin
+        return null;
+    }
+}
+
+// ==================== PERSONAJ YAXSHILASH (SKILL POINT) TIZIMI ====================
+// Har bir XARITA, foydalanuvchi shu PERSONAJ bilan birinchi marta tugatganda o'sha
+// PERSONAJGA 1 ta ball beradi. Xuddi shu xarita/personaj birikmasi qayta o'ynalsa
+// (ferma qilish uchun) ball QAYTA berilmaydi.
+export async function awardSkillPointIfNew(userId: string, levelId: number, characterType: string): Promise<UserRecord | null> {
+    if (!CHARACTER_TYPES.includes(characterType)) return null;
+    try {
+        const doc = await UserModel.findById(userId);
+        if (!doc) return null;
+
+        const creditedAll: any = doc.creditedLevels || {};
+        const credited: number[] = creditedAll[characterType] || [];
+        if (credited.includes(levelId)) {
+            return docToUser(doc); // Bu personaj shu xarita uchun ball avval olgan - o'zgarishsiz qaytaramiz
+        }
+
+        credited.push(levelId);
+        creditedAll[characterType] = credited;
+        doc.creditedLevels = creditedAll;
+
+        const pointsAll: any = doc.skillPoints || {};
+        pointsAll[characterType] = (pointsAll[characterType] || 0) + 1;
+        doc.skillPoints = pointsAll;
+
+        doc.markModified('creditedLevels');
+        doc.markModified('skillPoints');
+        await doc.save();
+
+        return docToUser(doc);
+    } catch (err) {
+        console.error('awardSkillPointIfNew xatosi:', err);
+        return null;
+    }
+}
+
+// Tanlangan PERSONAJNING yig'ilgan ballaridan birini sarflab, "damage" yoki
+// "stamina" darajasini oshirish (max 5). Boshqa personajlarga ta'sir qilmaydi.
+// Qurol kuchaytirishlari (drobovik, kunai) - faqat o'sha qurol ochilgan 15-darajadan (perks.ts)
+
+export async function upgradeStat(userId: string, characterType: string, stat: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    if (!CHARACTER_TYPES.includes(characterType)) {
+        return { success: false, message: 'Noto\'g\'ri personaj turi' };
+    }
+    const doc = await UserModel.findById(userId);
+    if (!doc) return { success: false, message: 'Foydalanuvchi topilmadi' };
+    const isWeaponStat = (WEAPON_UPGRADES[characterType] || []).includes(stat);
+    if (stat !== 'damage' && stat !== 'stamina' && !isWeaponStat) {
+        return { success: false, message: 'Noto\'g\'ri ko\'nikma turi' };
+    }
+    if (isWeaponStat && xpLevel(docToUser(doc).charXp[characterType] || 0) < WEAPON_UPGRADE_LEVEL) {
+        return { success: false, message: 'Bu kuchaytirish ' + WEAPON_UPGRADE_LEVEL + '-darajada ochiladi' };
+    }
+
+    const pointsAll: any = doc.skillPoints || {};
+    if ((pointsAll[characterType] || 0) <= 0) {
+        return { success: false, message: 'Yaxshilash ballaringiz yo\'q. Shu personaj bilan xaritalarni tugatib ball to\'plang!' };
+    }
+
+    const upgradesAll: any = doc.upgrades || {};
+    const charUpgrades = upgradesAll[characterType] || { damage: 0, stamina: 0 };
+    const currentLevel = charUpgrades[stat] || 0;
+    if (currentLevel >= MAX_UPGRADE_LEVEL) {
+        return { success: false, message: 'Bu ko\'nikma allaqachon eng yuqori darajada (5/5)' };
+    }
+
+    charUpgrades[stat] = currentLevel + 1;
+    upgradesAll[characterType] = charUpgrades;
+    doc.upgrades = upgradesAll;
+    pointsAll[characterType] = pointsAll[characterType] - 1;
+    doc.skillPoints = pointsAll;
+    doc.markModified('upgrades');
+    doc.markModified('skillPoints');
+    await doc.save();
+
+    return { success: true, user: docToUser(doc) };
+}
+
+// "Mening personajim" ekrani ochilganda birinchi bo'lib qaysi personaj ko'rsatilishini
+// belgilaydi (odatda foydalanuvchi lobbida shu personajni tanlaganda avtomatik yangilanadi)
+export async function setDefaultCharacter(userId: string, characterType: string): Promise<UserRecord | null> {
+    if (!CHARACTER_TYPES.includes(characterType)) return null;
+    const doc = await UserModel.findByIdAndUpdate(userId, { $set: { defaultCharacter: characterType } }, { returnDocument: 'after' });
+    return doc ? docToUser(doc) : null;
+}
+
+// ==================== XONALAR (LOBBY) NI SAQLASH ====================
+// Hisobli (ro'yxatdan o'tgan) xo'jayin yaratgan xonalar bazada saqlanadi,
+// shunda do'stlar ertaga qaytib, xuddi o'sha xarita progressida davom
+// etishlari mumkin (xona xotirada emas, endi doimiy).
+
+const roomSchema = new mongoose.Schema({
+    roomCode: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    hostUserId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' },
+    unlockedLevel: { type: Number, required: true, default: 0 }, // nechta xarita ochilgan (0-based)
+    isPrivate: { type: Boolean, required: true, default: false } // true bo'lsa, "Barcha xonalar" ro'yxatida ko'rinmaydi - faqat kod bilan qo'shiladi
+}, { timestamps: true });
+
+const RoomModel = mongoose.model('Room', roomSchema);
+
+export interface RoomRecord {
+    roomCode: string;
+    name: string;
+    hostUserId: string;
+    unlockedLevel: number;
+    isPrivate: boolean;
+    updatedAt: Date;
+}
+
+function docToRoom(doc: any): RoomRecord {
+    return {
+        roomCode: doc.roomCode,
+        name: doc.name,
+        hostUserId: doc.hostUserId.toString(),
+        unlockedLevel: doc.unlockedLevel,
+        isPrivate: !!doc.isPrivate,
+        updatedAt: doc.updatedAt
+    };
+}
+
+// Tasodifiy, o'qish oson bo'lgan xona kodi (masalan: "K3F9QZ") generatsiya qilish
+function generateRoomCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // chalkashadigan harflar (I, O, 0, 1) olib tashlandi
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+}
+
+// YANGI DOIMIY XONA YARATISH (faqat hisobli foydalanuvchi uchun)
+export async function createPersistentRoom(name: string, hostUserId: string, isPrivate: boolean = false): Promise<RoomRecord> {
+    let roomCode = generateRoomCode();
+    // Ehtimoldan yiroq, lekin xavfsizlik uchun: band bo'lsa qayta generatsiya qilamiz
+    while (await RoomModel.findOne({ roomCode })) {
+        roomCode = generateRoomCode();
+    }
+    const doc = await RoomModel.create({ roomCode, name, hostUserId, unlockedLevel: 0, isPrivate });
+    return docToRoom(doc);
+}
+
+// Foydalanuvchi ENG OXIRGI marta yaratgan (yoki xo'jayin bo'lgan) saqlangan xona ("Mening saqlangan xonam")
+export async function getMostRecentRoomByHost(hostUserId: string): Promise<RoomRecord | null> {
+    const doc = await RoomModel.findOne({ hostUserId }).sort({ updatedAt: -1 });
+    return doc ? docToRoom(doc) : null;
+}
+
+export async function getRoomByCode(roomCode: string): Promise<RoomRecord | null> {
+    const doc = await RoomModel.findOne({ roomCode: roomCode.toUpperCase() });
+    return doc ? docToRoom(doc) : null;
+}
+
+// Foydalanuvchi o'zi xo'jayin bo'lgan saqlangan xonalar ro'yxati ("Mening xonalarim")
+export async function getRoomsByHost(hostUserId: string): Promise<RoomRecord[]> {
+    const docs = await RoomModel.find({ hostUserId }).sort({ updatedAt: -1 }).limit(20);
+    return docs.map(docToRoom);
+}
+
+// XARITA O'TILDI (hisob progressi): +XP; aynan o'z "chegara" xaritasini o'tgan bo'lsa -
+// keyingi xarita ochiladi (maxLevel - oxirgi mavjud xarita indeksi)
+export async function recordMapClear(userId: string, levelId: number, maxLevel: number, characterType: string): Promise<UserRecord | null> {
+    try {
+        const doc: any = await UserModel.findById(userId);
+        if (!doc) return null;
+        await migrateRoomProgress(doc);
+        // Eski hisob bo'lsa - avval tarixdan hisoblangan qiymatdan boshlaymiz
+        const before = docToUser(doc);
+        doc.xp = before.xp + XP_PER_MAP;
+        const charXp = { ...before.charXp };
+        if (CHARACTER_TYPES.includes(characterType)) charXp[characterType] = (charXp[characterType] || 0) + XP_PER_MAP;
+        doc.charXp = charXp;
+        doc.markModified('charXp');
+        const unlocked = before.unlockedLevel;
+        doc.unlockedLevel = (levelId === unlocked && unlocked < maxLevel) ? unlocked + 1 : unlocked;
+        await doc.save();
+        return docToUser(doc);
+    } catch (err) {
+        console.error('recordMapClear xatosi:', err);
+        return null;
+    }
+}
+
+// ==================== ADMIN (Telegram bot) ====================
+export async function countUsers(): Promise<{ total: number, banned: number }> {
+    const [total, banned] = await Promise.all([UserModel.countDocuments({}), UserModel.countDocuments({ banned: true })]);
+    return { total, banned };
+}
+
+// Login bo'yicha qidirish: avval aniq (katta-kichik harf farqsiz), topilmasa - o'xshashlari (10 tagacha)
+export async function findUsersByNickname(query: string): Promise<{ exact: UserRecord | null, similar: string[] }> {
+    const safe = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const exactDoc = await UserModel.findOne({ nickname: new RegExp('^' + safe + '$', 'i') });
+    if (exactDoc) return { exact: docToUser(exactDoc), similar: [] };
+    const docs = await UserModel.find({ nickname: new RegExp(safe, 'i') }).limit(10);
+    return { exact: null, similar: docs.map((d: any) => d.nickname) };
+}
+
+export async function setBanned(userId: string, banned: boolean, reason: string = ''): Promise<UserRecord | null> {
+    const doc = await UserModel.findByIdAndUpdate(userId, { $set: { banned, banReason: banned ? reason : '' } }, { returnDocument: 'after' });
+    return doc ? docToUser(doc) : null;
+}
+
+// Tanga qo'shish/ayirish (manfiy bo'lsa ham balans 0 dan pastga tushmaydi)
+export async function adjustCoins(userId: string, amount: number): Promise<UserRecord | null> {
+    const doc: any = await UserModel.findById(userId);
+    if (!doc) return null;
+    doc.coins = Math.max(0, (doc.coins || 0) + amount);
+    await doc.save();
+    return docToUser(doc);
+}
+
+export default UserModel;

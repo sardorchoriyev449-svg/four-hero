@@ -10,13 +10,19 @@ export class ArcherCharacter extends BaseCharacter {
         room.bullets.push({
             id: 'bullet_' + room.bulletIdCounter,
             playerId: player.id,
-            x: player.x + 12,
-            y: player.y,
+            // MUHIM: qaysi tomonga qarab turganiga qarab (Math.cos(angle) orqali) -
+            // aks holda o'yinchi chapga qarab tursa ham o'q doim o'ng tomondan
+            // chiqardi. Y - yoy uchining balandligiga mos (klientdagi vizual
+            // yoy tepasi taxminan shu balandlikda chiziladi - aks holda o'q
+            // qurol tasviridan pastroqda, "havoda osilib qolgandek" ko'rinardi)
+            x: player.x + Math.cos(angle) * 18,
+            y: player.y - 8,
             vx: Math.cos(angle) * 1000, // Judayam tez uchadi
             vy: Math.sin(angle) * 1000,
             color: player.color,
             lifetime: 80,
-            bulletType: 'arrow'
+            bulletType: 'arrow',
+            justSpawned: true
         });
     }
 

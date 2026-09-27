@@ -1,10 +1,77 @@
-oxirgi tugash:
-kamchiliklardan ritsar va samurayni animatsyasi juda qiyshiq 
-urganda birxilpayt tegmaydi va yana nima endi qilamiz xudi 
-ritsirdagiday stamina qilamiz xama personajga yaniy bosib turganda stamina ketsin va 
-qoyvorganda to'lsin lekin shifti bosib va qoyvorgandan keyin saldan keyin to'lsin 
-enterda xam shunday yaniy stamina juda tez to'lyapti 
-bizga esa unaqa bo'sa o'yin oson bo'lib qoladi o'yin qiynroq bo'lishi uchun shu detalni qo'sh 
-va personajlarni uron yetkazishini o'zgartir yaniy samuray va ritsar masalan: 
-uron yetkazishi 20 bo'sa stamina sekin ketsin , kamonchiniki 10 bo'sin va stamina sal sekin ketsin, 
-mag uron 30 bo'sin lekin stamina tez ketsin
+```text
+MAPS name
+BONUS LEVELS: coming soon.
+SESSON-1 GREEN LAGUN: 
+    map-1: The start,
+    map-2: Just run,
+    map-3: Mini game,
+    map-4: Why are we here?,
+    map-5: Just run 2 or end, // (boss)
+    map-6: Bad dogs,
+    map-7: Walking stones, // platform,
+    map-8: Gorila Rock, // ending fall in underworld
+    map-9: Shef, // 
+    map-10: Big Good Boy // (boss)
+SESSON-2: cooming soon.
+
+
+map-4: replika sotuvchi elf bilan:
+    elf: `Salom sarguzashchi(lar)`,
+    elf: `Silar bu yerda yangi misiz(lar),`,
+    elf: `Qayerdan kegansizla underworld, skylend, yoki....`,
+    player: `Men bu yerdan emasman, men chiqishim kerak yordam berolasizmi`,
+    elf: `ey YOQ, Bu yana sodir bo'ldi`,
+    player: `Nima?, menga chiqsh yo'lini ko'rsatolasizmi`,
+    elf: `senga maslaxatim bu yerdan ketgin qochigin bita lakatsyada yurma aslo!`,
+    elf: `ana bo'masam, AGAR sen Shu yerda bo'sang demak u xam shuyerda YOQ`,
+    player: `Tinchlaning, menga shunchaki chiqish yo'lini ko'rsating bo'ldi`,
+    elf: `YOQ... YOQ CHIQISH YO'L VIRUS uni o'chirgan va silar birinchi kishi emas`sizlar`,
+    player: `Birinchi emas`miz?`,
+    elf: `XA, Sen Chunmayapsan sen ketishing kerak seni topishga xarakat qilishadi`,
+    elf: `Va seni o'ldirishadi!!!`,
+    player: `kim? kim topadi?`,
+    elf: `Maslaxatim G'orga bor u yerda skyland`ga borishga yo'l bor`,
+    elf: `Extiyot bo'l bu yerda xama senga dushman`,
+    ...: *Yer Silkinyapti*,
+    elf: `U SHU YERDAAAAAAAA`,
+    player: `FUCK...`,
+map-5 boshlanadi shu joyda  
+    
+```
+
+```text
+level up`s
+
+Mag:
+    level 1: shift unlocked,
+    level 2: ICE bols, // 'Q' bosa almashtirsa bo'ladi kuchini va qaytarsa bo'ladi,
+    level 3: stamina +5,
+    level 5: DAMAGE +5,
+    level 10: mass healing 2 sec,
+    level 15: stamina +5,
+
+Knight:
+    level 1: shift unlocked,
+    level 2: stamina +5,
+    level 3: stamina +5,
+    level 5: DAMAGE +5,
+    level 10: fly boots 2 sec,
+    level 15: shotgun, // 'Q' bosa qilichni almashtirsa bo'ladi va qaytarsa bo'ladi,
+
+Samurai:
+    level 1: shift unlocked,
+    level 2: stamina +5,
+    level 3: stamina +5,
+    level 5: DAMAGE +5,
+    level 10: Double Jump,
+    level 15: Kunai-Knife,
+
+Archer:
+    level 1: shift unlocked,
+    level 2: stamina +5,
+    level 3: stamina +5,
+    level 5: DAMAGE +5,
+    level 10: invinsble +2 sec,
+    level 15: stamina +5,
+
+```

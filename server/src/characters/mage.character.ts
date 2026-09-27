@@ -10,13 +10,19 @@ export class MageCharacter extends BaseCharacter {
         room.bullets.push({
             id: 'bullet_' + room.bulletIdCounter,
             playerId: player.id,
-            x: player.x + 12,
-            y: player.y,
-            vx: Math.cos(angle) * 600, // Og'irroq va sekinroq o'q
-            vy: Math.sin(angle) * 600,
+            // MUHIM: qaysi tomonga qarab turganiga qarab (aks holda chapga
+            // qarab tursa ham o'q doim o'ng tomondan chiqardi). Y - tayoqcha
+            // uchining balandligiga mos (klientdagi vizual tayoqcha uchi
+            // shu atrofda chiziladi)
+            x: player.x + Math.cos(angle) * 20,
+            y: player.y - 10,
+            vx: Math.cos(angle) * (player.weaponMode === 'alt' ? 700 : 600), // Og'irroq va sekinroq o'q
+            vy: Math.sin(angle) * (player.weaponMode === 'alt' ? 700 : 600),
             color: player.color,
             lifetime: 80,
-            bulletType: 'fireball'
+            // 2-daraja: Q bilan MUZ shari - kamroq zarar, lekin botni muzlatadi
+            bulletType: player.weaponMode === 'alt' ? 'ice' : 'fireball',
+            justSpawned: true
         });
     }
 

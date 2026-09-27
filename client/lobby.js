@@ -1,22 +1,490 @@
 const socket = io();
 
-// HTML Elementlarni yuklab olamiz
-const menuPanel = document.getElementById('menu-panel');
-const lobbyPanel = document.getElementById('lobby-panel');
-const gameContainer = document.getElementById('game-container');
+// O'yin HUD'idagi piksel shrift canvas'ga chizilishidan oldin yuklangan bo'lsin
+// (brauzer shriftni odatda faqat sahifada ishlatilganda yuklaydi)
+if (document.fonts && document.fonts.load) document.fonts.load('10px "Press Start 2P"').catch(() => {});
 
-const roomNameInput = document.getElementById('room-name-input');
-const createRoomBtn = document.getElementById('create-room-btn');
+// SAHIFA YANGILANSA HAM JOYIDA QOLISH: har bir brauzer oynasining doimiy ID'si
+// (sessionStorage - yangilashda saqlanadi, yangi oynada yangisi). Server shu
+// orqali uzilgan o'yinchining o'rnini 15 soniya saqlab, qaytib kelsa qaytaradi
+const CLIENT_ID = sessionStorage.getItem('clientId') || (() => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem('clientId', id);
+    return id;
+})();
+
+// HTML Elementlarni yuklab olamiz
+const authPanel = document.getElementById('auth-panel');
+const mainMenuPanel = document.getElementById('main-menu-panel');
+const playHubPanel = document.getElementById('play-hub-panel');
+const connectPanel = document.getElementById('connect-panel');
+const allLobbiesPanel = document.getElementById('all-lobbies-panel');
+const createLobbyPanel = document.getElementById('create-lobby-panel');
+const mySavedRoomPanel = document.getElementById('my-saved-room-panel');
+const characterPanel = document.getElementById('character-panel');
+const settingsPanel = document.getElementById('settings-panel');
+const donatePanel = document.getElementById('donate-panel');
+const lobbyPanel = document.getElementById('lobby-panel');
+const gameoverPanel = document.getElementById('gameover-panel');
+const gameWrapper = document.getElementById('game-wrapper');
+const touchControls = document.getElementById('touch-controls');
+
+const ALL_PANELS = [authPanel, mainMenuPanel, playHubPanel, connectPanel, allLobbiesPanel, createLobbyPanel,
+    mySavedRoomPanel, characterPanel, settingsPanel, donatePanel, lobbyPanel, gameoverPanel];
+
+// --- AUTH elementlari ---
+const loginForm = document.getElementById('login-form');
+const registerForm = document.getElementById('register-form');
+const loginNickname = document.getElementById('login-nickname');
+const loginPassword = document.getElementById('login-password');
+const loginBtn = document.getElementById('login-btn');
+const loginError = document.getElementById('login-error');
+const registerFullname = document.getElementById('register-fullname');
+const registerNickname = document.getElementById('register-nickname');
+const registerPassword = document.getElementById('register-password');
+const registerBtn = document.getElementById('register-btn');
+const registerError = document.getElementById('register-error');
+const showRegisterLink = document.getElementById('show-register-link');
+const showLoginLink = document.getElementById('show-login-link');
+
+const welcomeNickname = document.getElementById('welcome-nickname');
+const coinBalance = document.getElementById('coin-balance');
+const playerLevelSpan = document.getElementById('player-level');
+const logoutLink = document.getElementById('logout-link');
+const controlPcBtn = document.getElementById('control-pc-btn');
+const controlPhoneBtn = document.getElementById('control-phone-btn');
+
+// --- HUB (bosh menyu) navigatsiyasi ---
+const navPlayBtn = document.getElementById('nav-play-btn');
+const navCharacterBtn = document.getElementById('nav-character-btn');
+const navSettingsBtn = document.getElementById('nav-settings-btn');
+const navDonateBtn = document.getElementById('nav-donate-btn');
+const characterBackBtn = document.getElementById('character-back-btn');
+const settingsBackBtn = document.getElementById('settings-back-btn');
+const donateBackBtn = document.getElementById('donate-back-btn');
+
+// --- PLAY HUB va uning 4 ta pastki ekrani ---
+const playHubBackBtn = document.getElementById('play-hub-back-btn');
+const navConnectBtn = document.getElementById('nav-connect-btn');
+const navAllLobbiesBtn = document.getElementById('nav-all-lobbies-btn');
+const navCreateLobbyBtn = document.getElementById('nav-create-lobby-btn');
+const navMySavedRoomBtn = document.getElementById('nav-my-saved-room-btn');
+
+const connectBackBtn = document.getElementById('connect-back-btn');
+const joinCodeInput = document.getElementById('join-code-input');
+const joinCodeBtn = document.getElementById('join-code-btn');
+
+const allLobbiesBackBtn = document.getElementById('all-lobbies-back-btn');
 const roomListDiv = document.getElementById('room-list');
 
+const createLobbyBackBtn = document.getElementById('create-lobby-back-btn');
+const roomNameInput = document.getElementById('room-name-input');
+const createRoomBtn = document.getElementById('create-room-btn');
+const visibilityPublicBtn = document.getElementById('visibility-public-btn');
+const visibilityPrivateBtn = document.getElementById('visibility-private-btn');
+const visibilityNote = document.getElementById('visibility-note');
+
+const mySavedRoomBackBtn = document.getElementById('my-saved-room-back-btn');
+const mySavedRoomContent = document.getElementById('my-saved-room-content');
+
+// --- MENING PERSONAJIM (yaxshilash + skinlar + qurol skinlari) ---
+const characterCoinBalance = document.getElementById('character-coin-balance');
+const skillPointsValue = document.getElementById('skill-points-value');
+const upgradesContent = document.getElementById('upgrades-content');
+const shopContent = document.getElementById('shop-content');
+const weaponShopContent = document.getElementById('weapon-shop-content');
+const charTabsDiv = document.getElementById('char-tabs');
+const charLockedNote = document.getElementById('char-locked-note');
+const charDetailsDesc = document.getElementById('char-details-desc');
+
+// --- SOZLAMALAR ---
+const volumeSlider = document.getElementById('volume-slider');
+const langEnBtn = document.getElementById('lang-en-btn');
+const langRuBtn = document.getElementById('lang-ru-btn');
+
+// --- LOBBI ---
 const currentRoomNameSpan = document.getElementById('current-room-name');
-const charSelect = document.getElementById('char-select');
+const leaveLobbyBtn = document.getElementById('leave-lobby-btn');
+const toggleMapBtn = document.getElementById('toggle-map-btn');
+const toggleChatBtn = document.getElementById('toggle-chat-btn');
+const openMyCharacterBtn = document.getElementById('open-my-character-btn');
+const lobbyChatSection = document.getElementById('lobby-chat-section');
+const roomCodeBadge = document.getElementById('room-code-badge');
+const roomCodeValue = document.getElementById('room-code-value');
+const levelSelectSection = document.getElementById('level-select-section');
+const levelListDiv = document.getElementById('level-list');
+const myCharacterDisplay = document.getElementById('my-character-display');
 const playerListUl = document.getElementById('player-list');
 const playerCountSpan = document.getElementById('player-count');
 const startGameBtn = document.getElementById('start-game-btn');
 const waitingMsg = document.getElementById('waiting-msg');
+const readyBtn = document.getElementById('ready-btn');
+const startErrorMsg = document.getElementById('start-error-msg');
+const chatBox = document.getElementById('chat-box');
+const chatInput = document.getElementById('chat-input');
+const chatSendBtn = document.getElementById('chat-send-btn');
+
+const gameoverText = document.getElementById('gameover-text');
+const gameoverTitle = document.getElementById('gameover-title');
+const gameoverPanelEl = document.getElementById('gameover-panel');
+const gameoverOkBtn = document.getElementById('gameover-ok-btn');
 
 let currentRoomId = null;
+let currentUser = null; // { id, fullName, nickname, coins, ownedSkins, equippedSkins, defaultCharacter }
+let skinCatalog = null;
+let weaponSkinCatalog = null;
+let isRoomHost = false;
+let roomMaps = [];        // { id, name, description, accentColor }[] - joriy xonada mavjud xaritalar
+let unlockedLevel = 0;    // xonada ochilgan eng yuqori xarita
+let selectedLevel = 0;    // hozir tanlangan (keyingi o'ynaladigan) xarita
+let latestPlayerListData = null; // oxirgi kelgan o'yinchilar ro'yxati (til almashganda qayta chizish uchun)
+let latestGameOverData = null;   // til almashganda o'yin tugadi ekranini qayta chizish uchun
+let characterReturnPanel = null; // "Mening personajim" dan "Orqaga" bosilganda qaysi panelga qaytish kerak
+let characterLocked = false;     // true bo'lsa (lobbidan ochilgan bo'lsa), personaj tabi almashtirilmaydi
+let selectedCharTab = 'knight';  // hozir "Mening personajim" ekranida ko'rsatilayotgan personaj turi
+let createRoomIsPrivate = false; // "Create Lobby" ekranida tanlangan ko'rinish (Public/Private)
+
+function showPanel(panel) {
+    ALL_PANELS.forEach(p => p.classList.add('hidden'));
+    panel.classList.remove('hidden');
+    sessionStorage.setItem('lastPanel', panel.id);
+}
+
+// Til almashganda, hozir ekranda turgan dinamik (JS orqali chizilgan) matnlarni yangilash
+// (i18n.js dagi setLang() shu funksiyani avtomatik chaqiradi)
+function onLanguageChanged() {
+    if (roomMaps.length > 0) renderLevelList();
+    if (latestPlayerListData) renderPlayerList(latestPlayerListData);
+    if (latestGameOverData) renderGameOver(latestGameOverData);
+    if (currentUser) renderMyCharacterDisplay();
+    if (!characterPanel.classList.contains('hidden')) {
+        renderCharTabs();
+        renderUpgrades();
+        renderShop();
+        renderWeaponShop();
+        charDetailsDesc.innerText = t('char_' + selectedCharTab + '_desc');
+    }
+}
+
+// --- 0. HISOB QAYDNOMASI (LOGIN / RO'YXATDAN O'TISH) ---
+
+showRegisterLink.onclick = () => {
+    loginForm.classList.add('hidden');
+    registerForm.classList.remove('hidden');
+};
+showLoginLink.onclick = () => {
+    registerForm.classList.add('hidden');
+    loginForm.classList.remove('hidden');
+};
+
+loginBtn.onclick = async () => {
+    loginError.innerText = '';
+    const nickname = loginNickname.value.trim();
+    const password = loginPassword.value;
+    if (!nickname || !password) {
+        loginError.innerText = t('fill_nickname_password');
+        return;
+    }
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nickname, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+            onAuthSuccess(data.user);
+        } else {
+            loginError.innerText = data.message || t('generic_error');
+        }
+    } catch (e) {
+        loginError.innerText = t('server_unreachable');
+    }
+};
+
+registerBtn.onclick = async () => {
+    registerError.innerText = '';
+    const fullName = registerFullname.value.trim();
+    const nickname = registerNickname.value.trim();
+    const password = registerPassword.value;
+    if (!fullName || !nickname || !password) {
+        registerError.innerText = t('fill_all_fields');
+        return;
+    }
+    try {
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fullName, nickname, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+            onAuthSuccess(data.user);
+        } else {
+            registerError.innerText = data.message || t('generic_error');
+        }
+    } catch (e) {
+        registerError.innerText = t('server_unreachable');
+    }
+};
+
+function onAuthSuccess(user) {
+    currentUser = user;
+    localStorage.setItem('gameUser', JSON.stringify(user));
+    enterMainMenu();
+}
+
+logoutLink.onclick = () => {
+    localStorage.removeItem('gameUser');
+    sessionStorage.removeItem('lastRoomId');
+    sessionStorage.removeItem('lastPanel');
+    currentUser = null;
+    loginNickname.value = '';
+    loginPassword.value = '';
+    showPanel(authPanel);
+};
+
+// Har o'yin boshida (login qilingandan keyin) BOSH MENYUGA (hub) o'tiladi -
+// aynan shu yerdan "Play"/"My Character"/"Settings"/"Donate" ga tarqaladi
+async function enterMainMenu() {
+    welcomeNickname.innerText = currentUser.nickname;
+    coinBalance.innerText = currentUser.coins;
+    showPanel(mainMenuPanel);
+    updateControlSchemeButtons();
+
+    // "Daraja" - joriy (default) personajning necha xil xaritani tugatganiga qarab hisoblanadi
+    try {
+        const res = await fetch('/api/character/' + currentUser.id);
+        const data = await res.json();
+        if (data.success) {
+            currentUser.defaultCharacter = data.defaultCharacter;
+            playerLevelSpan.innerText = data.level;
+            renderXpBar(data.xp || 0);
+        }
+    } catch (e) { /* internetsiz bo'lsa ham menyu ochilaversin */ }
+}
+
+// Sahifa yuklanganda, agar avval kirilgan bo'lsa, avtomatik kiritamiz
+(function tryAutoLogin() {
+    const saved = localStorage.getItem('gameUser');
+    // enterMainMenu() o'zi 'lastPanel'ni qayta yozadi - shuning uchun avval o'qib olamiz
+    const lastPanel = sessionStorage.getItem('lastPanel');
+    if (saved) {
+        try {
+            currentUser = JSON.parse(saved);
+            enterMainMenu();
+            // Xonada bo'lmagan bo'lsa - yangilashdan oldingi sahifasiga qaytaramiz
+            // (xonada bo'lgan bo'lsa - socket ulanganda xonaga qaytadi, pastda)
+            // setTimeout: tugmalar ishlovchilari fayl oxirroqda ulanadi - avval ular tayyor bo'lsin
+            setTimeout(() => {
+                if (!sessionStorage.getItem('lastRoomId') && PANEL_RESTORERS[lastPanel]) {
+                    PANEL_RESTORERS[lastPanel]();
+                }
+            }, 0);
+        } catch (e) {
+            showPanel(authPanel);
+        }
+    } else {
+        showPanel(authPanel);
+    }
+
+    // Saqlangan ovoz balandligini yuklab olamiz
+    const savedVolume = localStorage.getItem('gameVolume');
+    if (savedVolume !== null) volumeSlider.value = savedVolume;
+    // O'yindan tashqarida - menyu musiqasi (brauzer birinchi bosishdan keyin chaladi)
+    if (window.GameAudio) { GameAudio.setVolume(volumeSlider.value / 100); GameAudio.setMode('menu'); }
+})();
+
+// --- BOSHQARUV TURI: PC (klaviatura) yoki PHONE (ekrandagi virtual boshqaruv) ---
+
+function getControlScheme() {
+    const saved = localStorage.getItem('controlScheme');
+    return saved === 'phone' ? 'phone' : 'pc';
+}
+function updateControlSchemeButtons() {
+    const scheme = getControlScheme();
+    controlPcBtn.classList.toggle('active', scheme === 'pc');
+    controlPhoneBtn.classList.toggle('active', scheme === 'phone');
+}
+controlPcBtn.onclick = () => { localStorage.setItem('controlScheme', 'pc'); updateControlSchemeButtons(); };
+controlPhoneBtn.onclick = () => { localStorage.setItem('controlScheme', 'phone'); updateControlSchemeButtons(); };
+
+// --- HUB NAVIGATSIYASI ---
+
+navPlayBtn.onclick = () => {
+    showPanel(playHubPanel);
+};
+navCharacterBtn.onclick = () => {
+    openCharacterScreen({ locked: false, returnPanel: mainMenuPanel });
+};
+navSettingsBtn.onclick = () => {
+    updateLangButtons();
+    showPanel(settingsPanel);
+};
+navDonateBtn.onclick = () => {
+    showPanel(donatePanel);
+};
+[settingsBackBtn, donateBackBtn].forEach(btn => {
+    btn.onclick = () => {
+        coinBalance.innerText = currentUser.coins;
+        showPanel(mainMenuPanel);
+    };
+});
+characterBackBtn.onclick = () => {
+    coinBalance.innerText = currentUser.coins;
+    showPanel(characterReturnPanel);
+};
+
+// Sahifa yangilanganda qaytariladigan (xonadan tashqaridagi) sahifalar
+const PANEL_RESTORERS = {
+    'play-hub-panel': () => showPanel(playHubPanel),
+    'connect-panel': () => navConnectBtn.onclick(),
+    'all-lobbies-panel': () => navAllLobbiesBtn.onclick(),
+    'create-lobby-panel': () => navCreateLobbyBtn.onclick(),
+    'my-saved-room-panel': () => navMySavedRoomBtn.onclick(),
+    'character-panel': () => navCharacterBtn.onclick(),
+    'settings-panel': () => navSettingsBtn.onclick(),
+    'donate-panel': () => navDonateBtn.onclick()
+};
+
+// XONAGA QAYTISH: sahifa yangilansa (yoki internet uzilib, qayta ulansa) - oxirgi
+// xonaga qaytamiz. O'rni saqlanib turgan bo'lsa (15s) - xuddi o'sha holatda
+// (xo'jayinlik, tayyor, o'yin ketayotgan bo'lsa - o'yinning o'zi)
+socket.on('connect', () => {
+    const lastRoomId = sessionStorage.getItem('lastRoomId');
+    if (!lastRoomId) return;
+    socket.emit('rejoinRoom', {
+        roomId: lastRoomId,
+        clientId: CLIENT_ID,
+        userId: currentUser ? currentUser.id : null,
+        nickname: currentUser ? currentUser.nickname : t('guest_name')
+    });
+});
+
+// HISOB BLOKLANDI (admin): o'yindan chiqariladi, hisobdan chiqadi - kirish oynasiga
+socket.on('accountBanned', (data) => {
+    sessionStorage.removeItem('lastRoomId');
+    localStorage.removeItem('gameUser');
+    currentRoomId = null;
+    currentUser = null;
+    if (typeof stopGame === 'function') stopGame();
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    if (window.GameAudio) { GameAudio.release(); GameAudio.setMode('menu'); }
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    showPanel(authPanel);
+    alert(t('account_banned') + (data && data.reason ? ': ' + data.reason : ''));
+});
+
+// XONA YOPILDI (egasi chiqib ketdi) - o'yin to'xtaydi, bosh menyuga qaytamiz
+socket.on('roomClosed', () => {
+    sessionStorage.removeItem('lastRoomId');
+    currentRoomId = null;
+    isRoomHost = false;
+    latestPlayerListData = null;
+    if (typeof stopGame === 'function') stopGame();
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    if (window.GameAudio) { GameAudio.release(); GameAudio.setMode('menu'); }
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    showPanel(currentUser ? mainMenuPanel : authPanel);
+    alert(t('host_left'));
+});
+
+// Xona endi yo'q (masalan, hamma chiqib ketgan) - bosh menyuga
+socket.on('rejoinFailed', () => {
+    sessionStorage.removeItem('lastRoomId');
+    currentRoomId = null;
+    if (typeof stopGame === 'function') stopGame();
+    gameWrapper.classList.add('hidden');
+    showPanel(currentUser ? mainMenuPanel : authPanel);
+});
+
+// --- PLAY HUB: Connect / All Lobbies / Create Lobby / My Saved Room ---
+
+playHubBackBtn.onclick = () => showPanel(mainMenuPanel);
+
+navConnectBtn.onclick = () => {
+    joinCodeInput.value = '';
+    showPanel(connectPanel);
+};
+connectBackBtn.onclick = () => showPanel(playHubPanel);
+
+navAllLobbiesBtn.onclick = () => showPanel(allLobbiesPanel);
+allLobbiesBackBtn.onclick = () => showPanel(playHubPanel);
+
+navCreateLobbyBtn.onclick = () => {
+    roomNameInput.value = '';
+    setVisibility(false);
+    showPanel(createLobbyPanel);
+};
+createLobbyBackBtn.onclick = () => showPanel(playHubPanel);
+
+function setVisibility(isPrivate) {
+    createRoomIsPrivate = isPrivate;
+    visibilityPublicBtn.classList.toggle('active', !isPrivate);
+    visibilityPrivateBtn.classList.toggle('active', isPrivate);
+    visibilityNote.innerText = isPrivate ? t('visibility_private_note') : t('visibility_public_note');
+}
+visibilityPublicBtn.onclick = () => setVisibility(false);
+visibilityPrivateBtn.onclick = () => setVisibility(true);
+
+navMySavedRoomBtn.onclick = () => {
+    showPanel(mySavedRoomPanel);
+    loadMySavedRoom();
+};
+mySavedRoomBackBtn.onclick = () => showPanel(playHubPanel);
+
+async function loadMySavedRoom() {
+    mySavedRoomContent.innerHTML = '';
+    try {
+        const res = await fetch('/api/my-rooms/' + currentUser.id + '/latest');
+        const data = await res.json();
+        if (!data.success || !data.room) {
+            mySavedRoomContent.innerHTML = `<p class="empty-note">${t('no_saved_room')}</p>`;
+            return;
+        }
+        const r = data.room;
+        const card = document.createElement('div');
+        card.className = 'saved-room-card';
+        card.innerHTML = `
+            <h3><i class="fa-solid fa-door-open"></i> ${r.name}</h3>
+            <p class="saved-room-meta">
+                <span class="room-code-tag">[${r.roomCode}]</span> &middot;
+                ${t('saved_room_map_progress')}: ${tMapName(roomMaps.length ? Math.min(r.unlockedLevel, roomMaps.length - 1) : r.unlockedLevel)}
+                ${r.isPrivate ? ' &middot; <i class="fa-solid fa-lock"></i> ' + t('visibility_private') : ''}
+            </p>
+        `;
+        const btn = document.createElement('button');
+        btn.innerHTML = `<i class="fa-solid fa-play"></i> ${t('continue_btn')}`;
+        btn.onclick = () => {
+            socket.emit('joinRoomByCode', { roomCode: r.roomCode, userId: currentUser.id, nickname: currentUser.nickname, clientId: CLIENT_ID });
+        };
+        card.appendChild(btn);
+        mySavedRoomContent.appendChild(card);
+    } catch (e) {
+        mySavedRoomContent.innerHTML = `<p class="empty-note">${t('server_unreachable')}</p>`;
+    }
+}
+
+// --- SOZLAMALAR: OVOZ VA TIL ---
+
+volumeSlider.addEventListener('input', () => {
+    localStorage.setItem('gameVolume', volumeSlider.value);
+    if (window.GameAudio) GameAudio.setVolume(volumeSlider.value / 100);
+    // DIQQAT: o'yinda hali musiqa fayllari yo'q - bu qiymat saqlanadi va
+    // musiqa qo'shilgach avtomatik ishlatiladi.
+});
+
+function updateLangButtons() {
+    const lang = getLang();
+    langEnBtn.classList.toggle('active', lang === 'en');
+    langRuBtn.classList.toggle('active', lang === 'ru');
+}
+langEnBtn.onclick = () => { setLang('en'); updateLangButtons(); };
+langRuBtn.onclick = () => { setLang('ru'); updateLangButtons(); };
 
 // --- 1. SEVREDAN RO'YXATLARNI OLISH ---
 
@@ -24,16 +492,17 @@ let currentRoomId = null;
 socket.on('updateRoomList', (rooms) => {
     roomListDiv.innerHTML = '';
     if (rooms.length === 0) {
-        roomListDiv.innerHTML = '<div style="color: #888; text-align: center;">Hozircha xonalar yo\'q...</div>';
+        roomListDiv.innerHTML = `<div style="color: #888; text-align: center;">${t('no_rooms_yet')}</div>`;
         return;
     }
 
     rooms.forEach(room => {
         const item = document.createElement('div');
         item.className = 'room-item';
-        item.innerHTML = `<span>📂 ${room.name}</span> <span>${room.playerCount}/4 🚪</span>`;
+        item.innerHTML = `<span><i class="fa-solid fa-door-open icon"></i>${room.name}</span> <span><i class="fa-solid fa-users icon"></i>${room.playerCount}/${room.maxPlayers || 4}</span>`;
         item.onclick = () => {
-            socket.emit('joinRoom', room.id);
+            if (!currentUser) return;
+            socket.emit('joinRoom', { roomId: room.id, userId: currentUser.id, nickname: currentUser.nickname, clientId: CLIENT_ID });
         };
         roomListDiv.appendChild(item);
     });
@@ -44,66 +513,988 @@ socket.on('updateRoomList', (rooms) => {
 createRoomBtn.onclick = () => {
     const roomName = roomNameInput.value.trim();
     if (!roomName) {
-        alert('Iltimos, xona nomini kiriting!');
+        alert(t('enter_room_name_alert'));
         return;
     }
-    socket.emit('createRoom', roomName);
+    socket.emit('createRoom', { roomName, userId: currentUser.id, nickname: currentUser.nickname, isPrivate: createRoomIsPrivate, clientId: CLIENT_ID });
 };
+
+// XONA KODI ORQALI QO'SHILISH (masalan "Mening xonalarim"dan tashqari, do'stdan olingan kod bilan)
+joinCodeBtn.onclick = () => {
+    const roomCode = joinCodeInput.value.trim().toUpperCase();
+    if (!roomCode) {
+        alert(t('enter_room_code_alert'));
+        return;
+    }
+    socket.emit('joinRoomByCode', { roomCode, userId: currentUser ? currentUser.id : null, nickname: currentUser ? currentUser.nickname : t('guest_name'), clientId: CLIENT_ID });
+};
+joinCodeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') joinCodeBtn.onclick();
+});
+
+// Xonaga kirishda xatolik (xona to'la yoki hisob boshqa joyda faol)
+socket.on('joinError', (message) => {
+    alert(message);
+});
 
 // Lobbiga muvaffaqiyatli kirganda
 socket.on('roomJoined', (data) => {
     currentRoomId = data.roomId;
+    sessionStorage.setItem('lastRoomId', data.roomId);
     currentRoomNameSpan.innerText = data.roomName;
+    isRoomHost = !!data.isHost;
+    roomMaps = data.maps || [];
+    unlockedLevel = data.unlockedLevel || 0;
+    selectedLevel = data.selectedLevel || 0;
+    latestPlayerListData = null;
 
-    // Panellarni almashtirish
-    menuPanel.classList.add('hidden');
-    lobbyPanel.classList.remove('hidden');
+    // Yangi xonaga kirganda "Tayyor" holati, chat va panel ko'rinishini tozalab boshlaymiz
+    readyBtn.classList.remove('is-ready');
+    readyBtn.classList.add('not-ready');
+    readyBtn.innerHTML = `<i class="fa-solid fa-check icon"></i>${t('ready_btn')}`;
+    startErrorMsg.innerText = '';
+    chatBox.innerHTML = '';
+    levelSelectSection.classList.add('hidden');
+    lobbyChatSection.classList.add('hidden');
+    toggleMapBtn.classList.remove('active');
+    toggleChatBtn.classList.remove('active');
 
-    // Agar xonani o'zi yaratgan bo'lsa (Host), unga Start tugmasini ko'rsatamiz
-    if (data.isHost) {
-        startGameBtn.classList.remove('hidden');
-        waitingMsg.classList.add('hidden');
+    renderMyCharacterDisplay();
+
+    // Xona kodini saqlanadigan YOKI yopiq (private) xonalarda ko'rsatamiz (ulashish uchun)
+    if (data.isPersistent || data.isPrivate) {
+        renderRoomCode();
+        roomCodeBadge.classList.remove('hidden');
     } else {
-        startGameBtn.classList.add('hidden');
-        waitingMsg.classList.remove('hidden');
+        roomCodeBadge.classList.add('hidden');
     }
+
+    renderLevelList();
+    showPanel(lobbyPanel);
+
+    toggleChatBtn.classList.remove('has-new');
+    updateHostControls();
 });
+
+// Xo'jayin - katta START; qolganlar - READY (xo'jayin almashsa ham darhol yangilanadi)
+function updateHostControls() {
+    startGameBtn.classList.toggle('hidden', !isRoomHost);
+    readyBtn.classList.toggle('hidden', isRoomHost);
+    waitingMsg.classList.toggle('hidden', isRoomHost);
+}
+
+// Xarita/Chat ko'rsatish-yashirish tugmalari (lobbini toza ko'rinishda saqlash uchun)
+function setLobbyPopup(which) {
+    const mapOpen = which === 'map' && levelSelectSection.classList.contains('hidden');
+    const chatOpen = which === 'chat' && lobbyChatSection.classList.contains('hidden');
+    levelSelectSection.classList.toggle('hidden', !mapOpen);
+    lobbyChatSection.classList.toggle('hidden', !chatOpen);
+    toggleMapBtn.classList.toggle('active', mapOpen);
+    toggleChatBtn.classList.toggle('active', chatOpen);
+    if (chatOpen) {
+        toggleChatBtn.classList.remove('has-new');
+        chatBox.scrollTop = chatBox.scrollHeight;
+        document.getElementById('chat-input').focus();
+    }
+}
+toggleMapBtn.onclick = () => setLobbyPopup('map');
+toggleChatBtn.onclick = () => setLobbyPopup('chat');
+document.querySelectorAll('.popup-close').forEach((b) => { b.onclick = () => setLobbyPopup(null); });
+
+// Xona kodi: ko'z tugmasi bilan yashirish/ko'rsatish (ekranni ulashganda)
+let roomCodeHidden = false;
+function renderRoomCode() {
+    roomCodeValue.innerText = roomCodeHidden ? '\u2022'.repeat((currentRoomId || '').length || 6) : (currentRoomId || '');
+    roomCodeValue.classList.toggle('code-hidden', roomCodeHidden);
+    document.querySelector('#toggle-code-btn i').className = 'fa-solid ' + (roomCodeHidden ? 'fa-eye-slash' : 'fa-eye');
+}
+document.getElementById('toggle-code-btn').onclick = () => { roomCodeHidden = !roomCodeHidden; renderRoomCode(); };
+
+// Xonada "Sizning personajingiz" - endi lobbida tanlanmaydi, "Mening Personajim"da
+// (hisob darajasida) belgilangan personaj bilan avtomatik o'ynaysiz
+function renderMyCharacterDisplay() {
+    const type = currentUser.defaultCharacter || 'knight';
+    myCharacterDisplay.innerHTML = `
+        <span><i class="fa-solid fa-shield-halved" style="color:#00ffcc; margin-right:8px;"></i><b>${tCharName(type)}</b></span>
+    `;
+}
+
+// LOBBIDAGI "Mening Personajim": faqat XONADA HOZIR TANLANGAN (hisob darajasidagi
+// standart) personajga tegishli - boshqa personajlarni bu yerdan ko'rib/tanlab bo'lmaydi
+openMyCharacterBtn.onclick = () => {
+    openCharacterScreen({ locked: true, lockedType: currentUser.defaultCharacter || 'knight', returnPanel: lobbyPanel });
+};
+
+// Xarita tanlovi/ochilgan darajasi yangilanganda (masalan, raund yutilgach)
+socket.on('updateRoomLevel', (data) => {
+    unlockedLevel = data.unlockedLevel;
+    selectedLevel = data.selectedLevel;
+    renderLevelList();
+});
+
+// Xaritalar ro'yxatini (qulf holati bilan) chizish
+// Xaritalar oynasi bo'limi: 's1' - 1-mavsum (hozirgi xaritalar), 'bonus' va 's2' - tez orada
+let mapsTab = 's1';
+document.querySelectorAll('.maps-tab').forEach((b) => {
+    b.onclick = () => {
+        mapsTab = b.dataset.tab;
+        document.querySelectorAll('.maps-tab').forEach(x => x.classList.toggle('active', x === b));
+        renderLevelList();
+    };
+});
+
+function renderLevelList() {
+    const mapNameEl = document.getElementById('lobby-map-name');
+    if (mapNameEl) mapNameEl.innerText = (selectedLevel + 1) + '. ' + tMapName(selectedLevel);
+    levelListDiv.innerHTML = '';
+    if (mapsTab !== 's1') {
+        levelListDiv.innerHTML = `<div class="maps-soon"><i class="fa-solid fa-hourglass-half"></i>${t('coming_soon')}</div>`;
+        return;
+    }
+    roomMaps.forEach((m) => {
+        const locked = m.id > unlockedLevel;
+        const isSelected = m.id === selectedLevel;
+        const item = document.createElement('div');
+        item.className = 'level-item' + (isSelected ? ' selected' : '') + (locked ? ' locked' : '') + (isRoomHost ? '' : ' readonly');
+        const icon = locked ? '<i class="fa-solid fa-lock"></i>' : (isSelected ? '<i class="fa-solid fa-circle-check" style="color:#00ffcc;"></i>' : '<i class="fa-solid fa-circle"></i>');
+        // Avval o'tilgan xarita: qayta o'ynasa bo'ladi, lekin ball berilmaydi
+        const clearedTag = m.id < unlockedLevel
+            ? ` <span style="color:#aaa; font-size:12px;"><i class="fa-solid fa-flag-checkered"></i> ${t('level_cleared_tag')}</span>`
+            : '';
+        item.innerHTML = `<span>${icon} <span class="level-name">${m.id + 1}. ${tMapName(m.id)}</span>${clearedTag}<span class="level-desc">${tMapDesc(m.id)}</span></span>`;
+        if (isRoomHost && !locked) {
+            item.onclick = () => {
+                socket.emit('selectLevelInRoom', { roomId: currentRoomId, levelIndex: m.id });
+                setLobbyPopup(null);
+            };
+        }
+        levelListDiv.appendChild(item);
+    });
+}
 
 // Lobbidagi o'yinchilar ro'yxati yangilanganda
 socket.on('updateLobbyPlayers', (data) => {
+    latestPlayerListData = data;
+    renderPlayerList(data);
+});
+
+function renderPlayerList(data) {
     playerListUl.innerHTML = '';
     playerCountSpan.innerText = data.players.length;
+    // Xo'jayin almashgan bo'lishi mumkin (avvalgisi chiqib ketdi)
+    const nowHost = data.hostId === socket.id;
+    if (nowHost !== isRoomHost) { isRoomHost = nowHost; renderLevelList(); }
+    updateHostControls();
+    renderLobbySlots(data.players);
 
     data.players.forEach(p => {
         const li = document.createElement('li');
         li.style.color = p.id === socket.id ? '#00ffcc' : '#fff';
-        li.style.marginBottom = '5px';
-        li.innerText = `${p.id === socket.id ? '⭐ Siz' : '👤 O\'yinchi'} [${p.characterType.toUpperCase()}]`;
+        const name = p.nickname || t('guest_name');
+        const readyTick = p.isHost
+            ? `<span style="color:#ffcc00;"><i class="fa-solid fa-crown"></i> ${t('host_tag')}</span>`
+            : (p.isReady ? `<span class="ready-tick"><i class="fa-solid fa-check"></i> ${t('ready_tag')}</span>` : `<span class="ready-tick not-ready-tick"><i class="fa-solid fa-xmark"></i> ${t('not_ready_tag')}</span>`);
+        const nameIcon = p.id === socket.id ? '<i class="fa-solid fa-star" style="color:#00ffcc;"></i>' : '<i class="fa-solid fa-user"></i>';
+        li.innerHTML = `${nameIcon} ${name}${p.id === socket.id ? t('you_suffix') : ''} [${tCharName(p.characterType).toUpperCase()}] — ${readyTick}`;
         playerListUl.appendChild(li);
+
+        // O'zimizning "Tayyor" tugmamiz ko'rinishini serverdagi haqiqiy holat bilan sinxronlaymiz
+        if (p.id === socket.id) {
+            if (p.isReady) {
+                readyBtn.classList.add('is-ready');
+                readyBtn.classList.remove('not-ready');
+                readyBtn.innerHTML = `<i class="fa-solid fa-check icon"></i>${t('ready_confirmed_btn')}`;
+            } else {
+                readyBtn.classList.remove('is-ready');
+                readyBtn.classList.add('not-ready');
+                readyBtn.innerHTML = `<i class="fa-solid fa-check icon"></i>${t('ready_btn')}`;
+            }
+        }
     });
+}
+
+
+// LOBBI O'RINLARI: 4 ta - band o'rinda ism (xo'jayinda toj), qahramon (o'z skin ranglarida),
+// daraja va tayyorlik; bo'sh o'rinda "+" (bosilsa - xona kodi nusxalanadi, do'st chaqirish uchun)
+function renderLobbySlots(players) {
+    const wrap = document.getElementById('lobby-slots');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    const hex = (n, fb) => (typeof n === 'number' ? '#' + n.toString(16).padStart(6, '0') : fb);
+    for (let i = 0; i < 4; i++) {
+        const p = players[i];
+        const slot = document.createElement('div');
+        if (!p) {
+            slot.className = 'slot empty';
+            slot.innerHTML = `<div class="slot-name"></div><div class="slot-card"><span class="slot-plus">+</span></div>
+                <div class="slot-pedestal"></div><div class="slot-hint">${t('slot_invite')}</div>`;
+            slot.querySelector('.slot-card').onclick = () => {
+                const hint = slot.querySelector('.slot-hint');
+                const code = currentRoomId || '';
+                const done = () => { hint.innerText = t('slot_copied'); setTimeout(() => { hint.innerText = t('slot_invite'); }, 1500); };
+                if (navigator.clipboard) navigator.clipboard.writeText(code).then(done, done); else done();
+            };
+            wrap.appendChild(slot);
+            continue;
+        }
+        const me = p.id === socket.id;
+        slot.className = 'slot filled' + (me ? ' me' : '');
+        const status = p.isHost ? ['host', t('host_tag')] : p.isReady ? ['ready', t('ready_tag')] : ['not-ready', t('not_ready_tag')];
+        slot.innerHTML = `<div class="slot-name">${p.isHost ? '<i class="fa-solid fa-crown"></i>' : ''}</div>
+            <div class="slot-card"><canvas class="slot-hero" width="32" height="40"></canvas></div>
+            <div class="slot-pedestal"></div>
+            <div class="slot-level">${t('slot_level')}: ${p.level || 0}</div>
+            <div class="slot-status ${status[0]}">${status[1].toUpperCase()}</div>`;
+        slot.querySelector('.slot-name').appendChild(document.createTextNode((p.nickname || t('guest_name')) + (me ? t('you_suffix') : '')));
+        slot.title = tCharName(p.characterType);
+        drawHero(slot.querySelector('.slot-hero').getContext('2d'), p.characterType, hex(p.color, '#1e88e5'), hex(p.weaponColor, '#cfd8dc'), -16, -8);
+        wrap.appendChild(slot);
+    }
+}
+
+// TAJRIBA: har o'tilgan xarita +10 XP, har keyingi darajaga kerakli XP ikki baravar
+// (serverdagi xpLevel bilan bir xil hisob) - chiziq joriy darajadagi ulushni ko'rsatadi
+// (xpProgress - perks.js da)
+function renderXpBar(xp) {
+    const pr = xpProgress(xp);
+    const fill = document.getElementById('player-xp-fill');
+    const bar = document.getElementById('player-xp-bar');
+    if (fill) fill.style.width = Math.round(100 * pr.cur / pr.need) + '%';
+    if (bar) bar.title = 'XP ' + pr.cur + ' / ' + pr.need;
+}
+
+// LOBBIDAN CHIQISH: xonani tark etib, bosh menyuga qaytamiz
+leaveLobbyBtn.onclick = () => {
+    socket.emit('leaveRoom');
+    sessionStorage.removeItem('lastRoomId');
+    currentRoomId = null;
+    isRoomHost = false;
+    latestPlayerListData = null;
+    showPanel(mainMenuPanel);
+    coinBalance.innerText = currentUser.coins;
+};
+
+// "Tayyor" tugmasi bosilganda
+readyBtn.onclick = () => {
+    socket.emit('toggleReadyInRoom', currentRoomId);
+};
+
+// Host "Boshlash"ni bosganda, agar hamma tayyor bo'lmasa, server xato qaytaradi
+socket.on('startError', (message) => {
+    startErrorMsg.innerText = message;
+    setTimeout(() => { startErrorMsg.innerText = ''; }, 4000);
 });
 
-// --- 3. QAXRAMONNI TANLASH VA START ---
-
-charSelect.onchange = () => {
-    socket.emit('selectCharacter', {
-        roomId: currentRoomId,
-        characterType: charSelect.value
-    });
-};
+// --- 3. O'YINNI BOSHLASH ---
 
 // O'yinni boshlash (Faqat Host bosa oladi)
 startGameBtn.onclick = () => {
     socket.emit('requestStartGame', currentRoomId);
 };
 
+
+// ===== XARITA O'TILDI: O'YIN OYNASI ichida ko'k fon, o'rtada chekpoint nuriga o'xshash
+// oq nur, "COMPLETED SUCCESSFULLY!", pastki o'ng burchakda yutuq (xarita nomi) chiqadi.
+// Bosilsa yoki LEVEL_COMPLETE_MS dan so'ng yo'qoladi
+const LEVEL_COMPLETE_MS = 3200;
+let levelCompleteTimers = [];
+// isLoss - mag'lubiyat varianti (to'q qizil, "GAME OVER", bosh suyagi)
+// onBack berilsa (mag'lubiyat) - sahna o'zi yo'qolmaydi, "Lobbiga qaytish" tugmasini kutadi
+function showLevelComplete(levelIndex, isLoss = false, onBack = null) {
+    const host = document.getElementById('game-container');
+    if (!host || typeof levelIndex !== 'number' || levelIndex < 0) return;
+    const old = document.getElementById('level-complete');
+    if (old) old.remove();
+    levelCompleteTimers.forEach(clearTimeout);
+    levelCompleteTimers = [];
+
+    const el = document.createElement('div');
+    el.id = 'level-complete';
+    if (isLoss) el.classList.add('loss');
+    el.innerHTML = `
+        <div class="lc-beam"></div>
+        <div class="lc-title"><span class="lc-map"></span><span class="lc-text"></span></div>
+        <div class="lc-ach">
+            <div class="lc-ach-icon"><i class="fa-solid ${isLoss ? 'fa-skull' : 'fa-trophy'}"></i></div>
+            <div class="lc-ach-name"></div>
+        </div>`;
+    const name = tMapName(levelIndex);
+    el.querySelector('.lc-map').textContent = name;
+    el.querySelector('.lc-text').textContent = t(isLoss ? 'loss_title' : 'level_complete_sub');
+    el.querySelector('.lc-ach-name').textContent = name;
+    el.querySelector('.lc-ach').title = t(isLoss ? 'loss_sub1' : 'achievement_unlocked');
+    // Nur ichida tepaga ko'tariluvchi yorug' zarrachalar (chekpointdagidek)
+    for (let i = 0; i < 12; i++) {
+        const m = document.createElement('div');
+        m.className = 'lc-mote';
+        m.style.left = (34 + Math.random() * 32) + '%';
+        m.style.animationDuration = (1.4 + Math.random() * 1.4).toFixed(2) + 's';
+        m.style.animationDelay = (Math.random() * 1.5).toFixed(2) + 's';
+        el.appendChild(m);
+    }
+    host.appendChild(el);
+
+    const hide = () => {
+        levelCompleteTimers.forEach(clearTimeout);
+        levelCompleteTimers = [];
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 300);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+    levelCompleteTimers.push(setTimeout(() => el.classList.add('ach-in'), 800));
+    if (onBack) {
+        const btn = document.createElement('button');
+        btn.className = 'lc-back-btn';
+        btn.innerHTML = '<i class="fa-solid fa-arrow-left"></i> ';
+        btn.appendChild(document.createTextNode(t('back_to_lobby')));
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            btn.disabled = true;
+            hide();
+            onBack();
+        };
+        el.appendChild(btn);
+        levelCompleteTimers.push(setTimeout(() => el.classList.add('btn-in'), 1100));
+        return;
+    }
+    el.onclick = hide;
+    levelCompleteTimers.push(setTimeout(hide, LEVEL_COMPLETE_MS));
+}
+
 // Server o'yin boshlandi deb buyruq berganda Phaser'ni yoqamiz
-socket.on('gameStarted', () => {
+socket.on('gameStarted', (data) => {
+    // Oldingi mag'lubiyat sahnasi ("Lobbiga qaytish" kutayotgan) yangi o'yinni yopib qolmasin
+    const staleOverlay = document.getElementById('level-complete');
+    if (staleOverlay) staleOverlay.remove();
+    // Yangi xarita - musiqani yana o'yin boshqaradi
+    if (window.GameAudio) GameAudio.release();
+    levelCompleteTimers.forEach(clearTimeout);
+    levelCompleteTimers = [];
     lobbyPanel.classList.add('hidden');
-    gameContainer.classList.remove('hidden');
+    gameWrapper.classList.remove('hidden');
+    // Faqat "PHONE" boshqaruv turi tanlangan bo'lsa, ekrandagi virtual tugmalarni ko'rsatamiz
+    touchControls.classList.toggle('hidden', getControlScheme() !== 'phone');
 
     // game.js ichidagi Phadser o'yinini ishga tushirish funksiyasi
     if (typeof launchGame === 'function') {
-        launchGame(socket, currentRoomId);
+        launchGame(socket, currentRoomId, data && data.map, data && data.continued);
     }
+    // Oldingi xarita o'tilib, avtomatik keyingisiga o'tildi
+    if (data && data.continued) showLevelComplete(data.continued.fromLevel);
 });
+
+// --- 4. G'ALABA VA TANGA MUKOFOTI ---
+
+// QUTI SINDIRILDI: hisobdagi tanga yangilanadi (mehmonda totalCoins = null -
+// saqlanmaydi), o'yin ichida esa "+10" yozuvi chiqadi
+socket.on('coinsUpdated', (data) => {
+    if (data.totalCoins !== null && data.totalCoins !== undefined && currentUser) {
+        currentUser.coins = data.totalCoins;
+        coinBalance.innerText = currentUser.coins;
+        characterCoinBalance.innerText = currentUser.coins;
+    }
+    if (typeof window.onCoinsGained === 'function') window.onCoinsGained(data.amount);
+});
+
+socket.on('gameOver', (data) => {
+    // Natija ko'rsatilayotganda - sokin ohang (o'yin sikli uni o'zgartirmaydi)
+    if (window.GameAudio) GameAudio.lock('calm');
+    // G'alabada ham, mag'lubiyatda ham - avval o'yin oynasida sahna, keyin natija oynasi
+    if (!gameWrapper.classList.contains('hidden')) {
+        if (data.isLoss) {
+            // Mag'lubiyat: sahnadagi tugma bilan to'g'ridan-to'g'ri lobbiga qaytiladi
+            showLevelComplete(data.fromLevel, true, () => {
+                finishGameOver(data);
+                gameoverOkBtn.onclick();
+            });
+        } else {
+            showLevelComplete(data.fromLevel);
+            setTimeout(() => finishGameOver(data), LEVEL_COMPLETE_MS);
+        }
+        return;
+    }
+    finishGameOver(data);
+});
+
+function finishGameOver(data) {
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    if (window.GameAudio) { GameAudio.release(); GameAudio.setMode('menu'); }
+    // O'yin tugagach Phaser'ni to'liq to'xtatamiz (eski socket listenerlar/sprite'lar qolib ketmasin)
+    if (typeof stopGame === 'function') stopGame();
+
+    if (data.totalCoins !== null && data.totalCoins !== undefined && currentUser) {
+        currentUser.coins = data.totalCoins;
+        localStorage.setItem('gameUser', JSON.stringify(currentUser));
+    }
+
+    latestGameOverData = data;
+    renderGameOver(data);
+
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    showPanel(gameoverPanel);
+}
+
+function renderGameOver(data) {
+    if (data.isLoss) {
+        gameoverPanelEl.classList.add('loss-panel');
+        gameoverTitle.className = 'gameover-title-loss';
+        gameoverTitle.innerHTML = `<i class="fa-solid fa-skull icon"></i>${t('loss_title')}`;
+        gameoverText.innerHTML = `<span style="color:#ff8080;">${t('loss_sub1')}</span><br><span style="color:#aaa; font-size:13px;">${t('loss_sub2')}</span>`;
+    } else {
+        gameoverPanelEl.classList.remove('loss-panel');
+        gameoverTitle.className = 'gameover-title-win';
+        gameoverTitle.innerHTML = `<i class="fa-solid fa-trophy icon"></i>${t('win_title')}`;
+        let text = `<i class="fa-solid fa-star" style="color:#ffcc00;"></i> ${data.winnerNickname} ${t('win_by')}`;
+        if (data.coinsAwarded > 0) {
+            text += `<br><i class="fa-solid fa-coins icon" style="color:#ffcc00;"></i>+${data.coinsAwarded} ${t('coins_earned')}`;
+        } else {
+            text += `<br><span style="color:#aaa; font-size:13px;">${t('coins_note')}</span>`;
+        }
+        if (data.levelCleared) {
+            text += `<br><span style="color:#00ffcc; font-size:13px;"><i class="fa-solid fa-unlock"></i> ${t('level_unlocked')}</span>`;
+        }
+        gameoverText.innerHTML = text;
+    }
+}
+
+gameoverOkBtn.onclick = () => {
+    // Sahifani qayta yuklamasdan, xuddi o'sha avvalgi lobbiga qaytamiz
+    // (updateLobbyPlayers orqali "Tayyor" holatlari allaqachon serverda tozalangan)
+    gameoverPanelEl.classList.remove('loss-panel');
+    latestGameOverData = null;
+    if (currentRoomId) {
+        showPanel(lobbyPanel);
+    } else {
+        showPanel(mainMenuPanel);
+    }
+};
+
+// --- 5. MENING PERSONAJIM: YAXSHILASHLAR (damage/stamina) VA SKINLAR (personajga bog'liq) ---
+
+const CHARACTER_TYPES = ['knight', 'archer', 'mage', 'samurai'];
+
+// opts: { locked: bool, lockedType?: string, returnPanel: HTMLElement }
+async function openCharacterScreen(opts) {
+    characterLocked = !!opts.locked;
+    characterReturnPanel = opts.returnPanel;
+    showPanel(characterPanel);
+    await loadCharacterScreen();
+    selectedCharTab = characterLocked ? opts.lockedType : (currentUser.defaultCharacter || 'knight');
+    renderCharTabs();
+    charDetailsDesc.innerText = t('char_' + selectedCharTab + '_desc');
+    renderUpgrades();
+    renderShop();
+    renderWeaponShop();
+}
+
+async function loadCharacterScreen() {
+    if (!currentUser) return;
+    characterCoinBalance.innerText = currentUser.coins;
+
+    if (!skinCatalog) {
+        const res = await fetch('/api/skins');
+        const data = await res.json();
+        skinCatalog = data.catalog;
+    }
+    if (!weaponSkinCatalog) {
+        const res = await fetch('/api/weapon-skins');
+        const data = await res.json();
+        weaponSkinCatalog = data.catalog;
+    }
+
+    try {
+        const res = await fetch('/api/character/' + currentUser.id);
+        const data = await res.json();
+        if (data.success) {
+            currentUser.defaultCharacter = data.defaultCharacter;
+            currentUser.charXp = data.charXp || {};
+            currentUser.upgrades = data.upgrades;
+            currentUser.skillPoints = data.skillPoints;
+            currentUser.ownedSkins = data.ownedSkins;
+            currentUser.equippedSkins = data.equippedSkins;
+            currentUser.ownedWeaponSkins = data.ownedWeaponSkins;
+            currentUser.equippedWeaponSkins = data.equippedWeaponSkins;
+            localStorage.setItem('gameUser', JSON.stringify(currentUser));
+        }
+    } catch (e) { /* tarmoq xatosi bo'lsa, eski ma'lumot bilan ko'rsatamiz */ }
+}
+
+// Personaj tanlash tablari (faqat bosh menyudan ochilganda ko'rinadi va bosiladi)
+function renderCharTabs() {
+    if (characterLocked) {
+        charTabsDiv.classList.add('hidden');
+        charLockedNote.classList.remove('hidden');
+        return;
+    }
+    charLockedNote.classList.add('hidden');
+    charTabsDiv.classList.remove('hidden');
+    charTabsDiv.innerHTML = '';
+    CHARACTER_TYPES.forEach((type) => {
+        const btn = document.createElement('button');
+        btn.className = 'char-tab-btn' + (type === selectedCharTab ? ' active' : '');
+        btn.innerText = tCharName(type);
+        btn.onclick = () => {
+            if (selectedCharTab === type) return;
+            selectedCharTab = type;
+            renderCharTabs();
+            charDetailsDesc.innerText = t('char_' + selectedCharTab + '_desc');
+            renderUpgrades();
+            renderShop();
+            renderWeaponShop();
+            // Keyingi safar ekran ochilganda shu personaj birinchi ko'rsatilishi uchun eslab qolamiz
+            currentUser.defaultCharacter = type;
+            fetch('/api/character/' + currentUser.id + '/default', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ characterType: type })
+            }).catch(() => {});
+        };
+        charTabsDiv.appendChild(btn);
+    });
+}
+
+// Har qanday buy/upgrade/equip amalidan so'ng, agar hozir bir xonada bo'lsak,
+// serverga xonadagi jonli holatni (rang/kuch) qayta yuklashni so'raymiz
+function syncRoomIfNeeded() {
+    if (currentRoomId) {
+        socket.emit('refreshCharacterInRoom', currentRoomId);
+    }
+}
+
+// Tanlangan personajning darajasi, XP chizig'i va darajalarda ochiladigan imkoniyatlar
+function renderPerks() {
+    const box = document.getElementById('perks-content');
+    if (!box) return;
+    const xp = (currentUser.charXp && currentUser.charXp[selectedCharTab]) || 0;
+    const pr = xpProgress(xp);
+    document.getElementById('char-level-label').innerText = t('slot_level') + ' ' + pr.level;
+    document.getElementById('char-xp-fill').style.width = Math.round(100 * pr.cur / pr.need) + '%';
+    document.getElementById('char-xp-text').innerText = 'XP ' + pr.cur + ' / ' + pr.need;
+    box.innerHTML = '';
+    (PERK_TABLE[selectedCharTab] || []).forEach((perk) => {
+        const open = pr.level >= perk.level;
+        const row = document.createElement('div');
+        row.className = 'perk-row ' + (open ? 'unlocked' : 'locked');
+        row.innerHTML = `<span class="perk-lv">${t('perk_level')} ${perk.level}</span>
+            <span><b>${open ? '' : '<i class="fa-solid fa-lock"></i> '}${t('perk_' + perk.id)}</b><span class="perk-desc">${t('perk_' + perk.id + '_d')}</span></span>`;
+        box.appendChild(row);
+    });
+}
+
+function renderUpgrades() {
+    renderPerks();
+    const points = (currentUser.skillPoints && currentUser.skillPoints[selectedCharTab]) || 0;
+    skillPointsValue.innerText = points;
+    upgradesContent.innerHTML = '';
+
+    const stats = [
+        { key: 'damage', icon: 'fa-hand-fist', nameKey: 'char_damage', descKey: 'char_damage_desc' },
+        { key: 'stamina', icon: 'fa-bolt', nameKey: 'char_stamina', descKey: 'char_stamina_desc' }
+    ];
+    // 15-darajadan: qurol kuchaytirishlari (knight - drobovik, samurai - kunai)
+    const WEAPON_STATS = {
+        knight: [{ key: 'shotgunDamage', icon: 'fa-burst', nameKey: 'up_shotgun_dmg', descKey: 'up_shotgun_dmg_d' },
+                 { key: 'shotgunMag', icon: 'fa-box', nameKey: 'up_shotgun_mag', descKey: 'up_shotgun_mag_d' }],
+        samurai: [{ key: 'kunaiDamage', icon: 'fa-khanda', nameKey: 'up_kunai_dmg', descKey: 'up_kunai_dmg_d' }]
+    };
+    const charLevel = xpProgress((currentUser.charXp && currentUser.charXp[selectedCharTab]) || 0).level;
+    (WEAPON_STATS[selectedCharTab] || []).forEach(st => stats.push({ ...st, needLevel: 15, locked: charLevel < 15 }));
+
+    const charUpgrades = (currentUser.upgrades && currentUser.upgrades[selectedCharTab]) || { damage: 0, stamina: 0 };
+
+    stats.forEach((stat) => {
+        const level = charUpgrades[stat.key] || 0;
+        const row = document.createElement('div');
+        row.className = 'upgrade-row';
+
+        const dots = Array.from({ length: 5 }, (_, i) =>
+            `<span class="upgrade-dot ${i < level ? 'filled' : ''}"></span>`
+        ).join('');
+
+        const info = document.createElement('div');
+        info.className = 'upgrade-info';
+        info.innerHTML = `
+            <span class="upgrade-name"><i class="fa-solid ${stat.icon}" style="color:#00ffcc; margin-right:6px;"></i>${t(stat.nameKey)}</span>
+            <span class="upgrade-desc">${t(stat.descKey)}</span>
+            <div class="upgrade-dots">${dots}</div>
+        `;
+        row.appendChild(info);
+
+        // Kuchaytirish hisobga bog'liq - bosh menyudan ham, lobbidan ham qilish mumkin
+        const btn = document.createElement('button');
+        if (stat.locked) {
+            row.classList.add('locked-upgrade');
+            btn.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('perk_level')} ${stat.needLevel}`;
+            btn.disabled = true;
+        } else if (level >= 5) {
+            btn.innerText = t('char_maxed');
+            btn.disabled = true;
+        } else {
+            btn.innerHTML = `<i class="fa-solid fa-plus"></i> ${t('char_upgrade_btn')}`;
+            btn.disabled = points <= 0;
+            btn.onclick = () => upgradeStat(stat.key);
+        }
+        row.appendChild(btn);
+
+        upgradesContent.appendChild(row);
+    });
+
+    if (points <= 0) {
+        const note = document.createElement('p');
+        note.className = 'settings-note';
+        note.style.textAlign = 'center';
+        note.innerText = t('char_no_points');
+        upgradesContent.appendChild(note);
+    }
+}
+
+async function upgradeStat(stat) {
+    try {
+        const res = await fetch('/api/character/' + currentUser.id + '/upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterType: selectedCharTab, stat, roomId: currentRoomId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentUser.upgrades = data.user.upgrades;
+            currentUser.skillPoints = data.user.skillPoints;
+            localStorage.setItem('gameUser', JSON.stringify(currentUser));
+            renderUpgrades();
+            syncRoomIfNeeded();
+        } else {
+            alert(data.message || t('generic_error'));
+        }
+    } catch (e) {
+        alert(t('server_unreachable'));
+    }
+}
+
+// Skinlar faqat hozir tanlangan personaj (tab) uchun ko'rsatiladi
+function renderShop() {
+    shopContent.innerHTML = '';
+    drawCharPreview();
+
+    const charType = selectedCharTab;
+    const owned = (currentUser.ownedSkins && currentUser.ownedSkins[charType]) || ['default'];
+    const equipped = (currentUser.equippedSkins && currentUser.equippedSkins[charType]) || 'default';
+
+    (skinCatalog[charType] || []).forEach((skin) => {
+        const row = document.createElement('div');
+        row.className = 'skin-row';
+
+        const isOwned = owned.includes(skin.id);
+        const isEquipped = equipped === skin.id;
+        const colorHex = '#' + skin.color.toString(16).padStart(6, '0');
+
+        const left = document.createElement('span');
+        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${skin.name}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        row.appendChild(left);
+
+        const btn = document.createElement('button');
+        if (isEquipped) {
+            btn.innerHTML = `${t('equipped_label')} <i class="fa-solid fa-check"></i>`;
+            btn.className = 'skin-equip-btn equipped';
+        } else if (isOwned) {
+            btn.innerText = t('equip_btn');
+            btn.className = 'skin-equip-btn';
+            btn.onclick = () => equipSkin(charType, skin.id);
+        } else {
+            btn.innerText = t('buy_btn');
+            btn.className = 'skin-buy-btn';
+            btn.onclick = () => buySkin(charType, skin.id);
+        }
+        row.appendChild(btn);
+        shopContent.appendChild(row);
+    });
+}
+
+// Skin sotib olish/kiyish endi hisobga (userId) bog'liq REST so'rovlar orqali ishlaydi -
+// XONADA bo'lish-bo'lmasligidan qat'i nazar to'g'ri ishlaydi (ilgari faqat xonada
+// bo'lganda ishlab, aks holda "ro'yxatdan o'tmagansiz" degan noto'g'ri xato berardi)
+async function buySkin(characterType, skinId) {
+    try {
+        const res = await fetch('/api/skins/' + currentUser.id + '/buy', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterType, skinId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            applyShopUpdate(data.user);
+            syncRoomIfNeeded();
+        } else {
+            alert(data.message || t('generic_error'));
+        }
+    } catch (e) {
+        alert(t('server_unreachable'));
+    }
+}
+
+async function equipSkin(characterType, skinId) {
+    try {
+        const res = await fetch('/api/skins/' + currentUser.id + '/equip', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterType, skinId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            applyShopUpdate(data.user);
+            syncRoomIfNeeded();
+        } else {
+            alert(data.message || t('generic_error'));
+        }
+    } catch (e) {
+        alert(t('server_unreachable'));
+    }
+}
+
+function applyShopUpdate(user) {
+    currentUser.coins = user.coins;
+    currentUser.ownedSkins = user.ownedSkins;
+    currentUser.equippedSkins = user.equippedSkins;
+    currentUser.ownedWeaponSkins = user.ownedWeaponSkins;
+    currentUser.equippedWeaponSkins = user.equippedWeaponSkins;
+    localStorage.setItem('gameUser', JSON.stringify(currentUser));
+    characterCoinBalance.innerText = currentUser.coins;
+    renderShop();
+    renderWeaponShop();
+}
+
+// QUROL SKINLARI - tana skinidan ALOHIDA turkum, faqat qurol/o'q rangini o'zgartiradi
+function renderWeaponShop() {
+    weaponShopContent.innerHTML = '';
+    if (!weaponSkinCatalog) return;
+
+    const charType = selectedCharTab;
+    const owned = (currentUser.ownedWeaponSkins && currentUser.ownedWeaponSkins[charType]) || ['default'];
+    const equipped = (currentUser.equippedWeaponSkins && currentUser.equippedWeaponSkins[charType]) || 'default';
+
+    (weaponSkinCatalog[charType] || []).forEach((skin) => {
+        const row = document.createElement('div');
+        row.className = 'skin-row';
+
+        const isOwned = owned.includes(skin.id);
+        const isEquipped = equipped === skin.id;
+        const colorHex = '#' + skin.color.toString(16).padStart(6, '0');
+
+        const left = document.createElement('span');
+        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${skin.name}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        row.appendChild(left);
+
+        const btn = document.createElement('button');
+        if (isEquipped) {
+            btn.innerHTML = `${t('equipped_label')} <i class="fa-solid fa-check"></i>`;
+            btn.className = 'skin-equip-btn equipped';
+        } else if (isOwned) {
+            btn.innerText = t('equip_btn');
+            btn.className = 'skin-equip-btn';
+            btn.onclick = () => equipWeaponSkin(charType, skin.id);
+        } else {
+            btn.innerText = t('buy_btn');
+            btn.className = 'skin-buy-btn';
+            btn.onclick = () => buyWeaponSkin(charType, skin.id);
+        }
+        row.appendChild(btn);
+        weaponShopContent.appendChild(row);
+    });
+}
+
+async function buyWeaponSkin(characterType, skinId) {
+    try {
+        const res = await fetch('/api/weapon-skins/' + currentUser.id + '/buy', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterType, skinId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            applyShopUpdate(data.user);
+            syncRoomIfNeeded();
+        } else {
+            alert(data.message || t('generic_error'));
+        }
+    } catch (e) {
+        alert(t('server_unreachable'));
+    }
+}
+
+async function equipWeaponSkin(characterType, skinId) {
+    try {
+        const res = await fetch('/api/weapon-skins/' + currentUser.id + '/equip', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterType, skinId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            applyShopUpdate(data.user);
+            syncRoomIfNeeded();
+        } else {
+            alert(data.message || t('generic_error'));
+        }
+    } catch (e) {
+        alert(t('server_unreachable'));
+    }
+}
+
+// --- 6. LOBBI CHATI ---
+
+function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text || !currentRoomId) return;
+    socket.emit('sendLobbyChat', { roomId: currentRoomId, text });
+    chatInput.value = '';
+}
+
+chatSendBtn.onclick = sendChat;
+chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendChat();
+});
+
+socket.on('lobbyChatMessage', (data) => {
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    const time = new Date(data.timestamp).toLocaleTimeString().slice(0, 5);
+    line.innerHTML = `<span class="chat-nick">${data.nickname}:</span> ${escapeHtml(data.text)} <span style="color:#666; font-size:11px;">${time}</span>`;
+    chatBox.appendChild(line);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    if (lobbyChatSection.classList.contains('hidden')) toggleChatBtn.classList.add('has-new');
+});
+
+// Chatga yozilgan matnni xavfsiz ko'rsatish uchun (HTML in'ektsiyasining oldini olish)
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.innerText = str;
+    return div.innerHTML;
+}
+
+
+// ===== MENYU FONI: jonli piksel manzara (kechki osmon, yulduzlar, oy, bulutlar, tog'lar,
+// derazalari yonib turgan qal'a, daraxtlar). Kichik o'lchamda chizilib, "pikselli" kattalashadi =====
+(function initMenuBackground() {
+    const cv = document.getElementById('menu-bg');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = 320;
+    let H = 180;
+    const stars = Array.from({ length: 70 }, (_, i) => ({ x: (i * 97) % W, y: (i * 53) % 90, p: i % 7 }));
+    const clouds = [{ x: 30, y: 30, w: 46 }, { x: 170, y: 18, w: 60 }, { x: 260, y: 44, w: 38 }];
+    // Tog'lar/tepaliklar - bir marta hisoblanadi (sinus yig'indisi, 2px qadam)
+    const ridge = (base, amp, f1, f2) => Array.from({ length: W / 2 + 1 }, (_, i) =>
+        Math.round(base - amp * (Math.abs(Math.sin(i * f1)) * 0.7 + Math.abs(Math.sin(i * f2 + 1)) * 0.3)));
+    let far, mid;
+    function resize() {
+        H = Math.max(140, Math.round(W * window.innerHeight / Math.max(1, window.innerWidth)));
+        cv.width = W; cv.height = H;
+        far = ridge(H * 0.62, 34, 0.045, 0.13);
+        mid = ridge(H * 0.76, 22, 0.07, 0.19);
+    }
+    function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+    function draw(tMs) {
+        const t = tMs / 1000;
+        // Osmon - pog'onali (silliq emas)
+        const sky = ['#140f2b', '#1c1438', '#2a1a48', '#3d2156', '#5a2a5e', '#7b3662', '#a2485f'];
+        const band = Math.ceil(H * 0.7 / sky.length);
+        sky.forEach((c, i) => rect(0, i * band, W, band, c));
+        rect(0, sky.length * band, W, H, sky[sky.length - 1]);
+        // Yulduzlar (miltillaydi)
+        stars.forEach((s, i) => {
+            if (((Math.floor(t * 2) + s.p) % 7) === 0) return;
+            rect(s.x, s.y, 1, 1, i % 5 === 0 ? '#ffe082' : '#e8e4ff');
+        });
+        // Oy
+        rect(250, 22, 14, 14, '#fff3c4'); rect(248, 24, 18, 10, '#fff3c4'); rect(252, 20, 10, 18, '#fff3c4');
+        rect(255, 26, 3, 3, '#e6d9a3'); rect(259, 31, 2, 2, '#e6d9a3');
+        // Bulutlar (sekin suzadi)
+        clouds.forEach((c, i) => {
+            const x = ((c.x + t * (3 + i)) % (W + 80)) - 60;
+            rect(x, c.y, c.w, 6, '#6b3f7a'); rect(x + 6, c.y - 4, c.w - 16, 4, '#6b3f7a'); rect(x + 4, c.y + 6, c.w - 8, 2, '#4d2d5e');
+        });
+        // Uzoq tog'lar
+        far.forEach((y, i) => rect(i * 2, y, 2, H - y, '#2b1d45'));
+        // Qal'a (o'yindagi kabi): devor, minoralar, bayroqlar, yonib turgan derazalar
+        const cx = Math.round(W * 0.58), gy = Math.round(H * 0.7);
+        rect(cx - 50, gy - 26, 100, 40, '#1e1535');
+        for (let x = cx - 50; x < cx + 50; x += 8) rect(x, gy - 30, 4, 4, '#1e1535');
+        [[cx - 58, 44], [cx - 10, 60], [cx + 42, 48]].forEach(([x, h], k) => {
+            rect(x, gy - h, 16, h + 14, '#1e1535');
+            rect(x - 2, gy - h - 4, 20, 4, '#1e1535');
+            for (let s = 0; s < 4; s++) rect(x + s * 2, gy - h - 8 - s * 3, 16 - s * 4, 3, '#2a1c47');
+            rect(x + 7, gy - h - 22, 1, 10, '#1e1535');
+            rect(x + 8, gy - h - 22 + (Math.floor(t * 3 + k) % 2), 6, 4, k === 1 ? '#40c4ff' : '#ff5252');
+            const lit = (Math.floor(t * 1.5 + k * 3) % 5) !== 0;
+            rect(x + 6, gy - h + 10, 4, 6, lit ? '#ffca28' : '#6d4c00');
+            rect(x + 6, gy - h + 24, 4, 6, '#ffb300');
+        });
+        // Yaqin tepaliklar va daraxtlar
+        mid.forEach((y, i) => rect(i * 2, y, 2, H - y, '#1a1230'));
+        for (let i = 0; i < 16; i++) {
+            const x = (i * 23 + 7) % W, y = mid[Math.floor(x / 2)] + 2;
+            rect(x - 1, y - 4, 3, 6, '#120c22');
+            rect(x - 5, y - 10, 11, 6, '#150e28'); rect(x - 3, y - 15, 7, 5, '#150e28'); rect(x - 1, y - 18, 3, 3, '#150e28');
+        }
+        // O't-yer
+        rect(0, H - 10, W, 10, '#0e0a1c');
+        for (let x = 0; x < W; x += 4) rect(x, H - 11 - ((x * 7) % 3), 2, 2, '#1d3b2c');
+        // O'qish oson bo'lsin - ustidan yengil qoraytirish
+        rect(0, 0, W, H, 'rgba(8,6,18,0.28)');
+    }
+    let last = 0;
+    function loop(ts) {
+        // O'yin ketayotganda fon ko'rinmaydi - chizmaymiz (resurs tejash)
+        const inGame = !document.getElementById('game-wrapper').classList.contains('hidden');
+        if (!inGame && ts - last > 66) { last = ts; draw(ts); }
+        requestAnimationFrame(loop);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(loop);
+})();
+
+// "MY CHARACTER": tanlangan personaj - o'yindagi ko'rinishida (tana skin rangi, visor, quroli)
+function drawCharPreview() {
+    const cv = document.getElementById('char-preview');
+    if (!cv || !currentUser) return;
+    const ctx = cv.getContext('2d');
+    const type = selectedCharTab;
+    const pick = (catalog, equippedMap) => {
+        const id = (equippedMap && equippedMap[type]) || 'default';
+        const list = (catalog && catalog[type]) || [];
+        const skin = list.find(s => s.id === id) || list[0];
+        return skin ? '#' + skin.color.toString(16).padStart(6, '0') : null;
+    };
+    const body = pick(skinCatalog, currentUser.equippedSkins) || '#1e88e5';
+    const weapon = pick(weaponSkinCatalog, currentUser.equippedWeaponSkins) || '#cfd8dc';
+    ctx.clearRect(0, 0, 64, 48);
+    drawHero(ctx, type, body, weapon, 0, 0);
+}
+
+// Qahramon rasmi (o'yindagi ko'rinishi): tana skin rangi, visor, personaj quroli.
+// (ox, oy) - siljish: 64x48 lik chizmaning qaysi qismi ko'rinishi
+function drawHero(ctx, type, body, weapon, ox, oy) {
+    // O'yindagi ko'rinish (chizma bo'yicha): rangli tana, o'ngda to'q sariq ramkali visor, personaj quroli
+    const r = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x + ox, y + oy, w, h); };
+    const line = (x0, y0, x1, y1, t, c) => {                // piksel chiziq (qalinligi t)
+        const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+        for (let i = 0; i <= n; i++) r(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), t, t, c);
+    };
+    r(18, 44, 28, 3, 'rgba(0,0,0,0.45)');                    // soya
+    r(24, 12, 16, 32, '#000'); r(25, 13, 14, 30, body);      // tana
+    r(25, 13, 2, 30, 'rgba(255,255,255,0.22)'); r(37, 13, 2, 30, 'rgba(0,0,0,0.25)');
+    r(31, 17, 9, 5, '#000'); r(32, 18, 8, 3, '#d9822b');     // visor (o'ng tomonda)
+    r(33, 18, 2, 1, '#fff'); r(36, 18, 2, 1, '#fff');
+    if (type === 'knight') {                                 // tepaga ko'tarilgan qilich, qora gard
+        line(36, 34, 50, 8, 3, '#000'); line(37, 33, 50, 9, 1, weapon);
+        line(33, 32, 40, 38, 3, '#111'); r(35, 34, 3, 4, '#2b1d14');
+    } else if (type === 'samurai') {                         // pastga-orqaga qaragan katana
+        line(40, 28, 14, 40, 3, '#111'); line(39, 28, 15, 39, 1, '#f5f5f5');
+        line(38, 26, 44, 24, 3, '#8d5a3a'); r(37, 26, 2, 3, '#c9975b');
+    } else if (type === 'archer') {                          // tayoq + uchburchak kamon
+        line(34, 27, 48, 33, 2, '#6d4c41');
+        for (let y = 0; y < 14; y++) { const w = Math.round((14 - Math.abs(y - 7) * 2) * 0.6); r(42, 23 + y, w + 1, 1, '#000'); r(43, 23 + y, Math.max(0, w - 1), 1, '#b97a57'); }
+    } else {                                                 // hassa: pastida katta sariq shar, tepada sharcha
+        line(22, 42, 46, 20, 2, '#7b4a2a');
+        r(18, 40, 6, 6, '#000'); r(19, 41, 4, 4, '#ffd600');
+        r(45, 17, 4, 4, '#000'); r(46, 18, 2, 2, weapon === '#cfd8dc' ? '#ffd600' : weapon);
+        line(40, 23, 43, 27, 2, '#ffd600');
+    }
+}

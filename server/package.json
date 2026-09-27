@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "npx ts-node src/server.ts",
-    "build": "tsc",
+    "build": "tsc --incremental false",
     "start": "node dist/server.js"
   },
   "keywords": [],
@@ -13,11 +13,16 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@nestjs/config": "^4.0.4",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
+    "mongoose": "^9.7.4",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.0",
     "ts-node": "^10.9.2",
