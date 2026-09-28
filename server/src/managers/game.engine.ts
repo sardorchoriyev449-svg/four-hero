@@ -121,6 +121,11 @@ export class GameEngine {
         Object.keys(this.activeRooms).forEach(roomId => {
             const room = this.activeRooms[roomId];
             if (!room.isStarted) return;
+            // Hali kimdir xaritani yuklayapti - raund to'xtab turadi (kutish vaqti tugasa - boshlanadi)
+            if (room.loadingIds && room.loadingIds.length > 0) {
+                if (Date.now() < (room.loadDeadline || 0)) return;
+                this.roomManager.finishLoading(roomId);
+            }
 
             // 0. O'YINCHILAR TEZLIGINI HISOBLASH (botlar sakrashni oldindan ko'rishi uchun)
             Object.values(room.players).forEach(p => {

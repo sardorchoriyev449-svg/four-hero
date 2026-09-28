@@ -32,7 +32,8 @@ export class RoomManager {
     private static readonly CUTSCENE_ADVANCE_COOLDOWN_MS = 250;
     // socket.id -> uzilgandan keyin xonadan chiqarish taymeri
     private pendingLeaves: Map<string, NodeJS.Timeout> = new Map();
-    private pendingJoins: Set<string> = new Set(); // bazadan ma'lumot kutilayotgan qo'shilishlar (takror so'rovlarga qarshi)
+    private pendingJoins: Set<string> = new Set();
+    private static readonly LOAD_WAIT_MS = 15000; // bazadan ma'lumot kutilayotgan qo'shilishlar (takror so'rovlarga qarshi)
 
     constructor(io: Server, activeRooms: { [key: string]: RoomState }) {
         this.io = io;
@@ -45,6 +46,11 @@ export class RoomManager {
         const room = this.activeRooms[roomId];
         if (!room) return;
 
+        // Xo'jayin bu o'yinchini xonadan chiqarib yuborgan - qayta kira olmaydi
+        if (room.kicked && ((userId !== null && room.kicked.includes('u:' + userId)) || (clientId && room.kicked.includes('c:' + clientId)))) {
+            socket.emit('joinError', 'Xona egasi sizni bu xonadan chiqarib yuborgan');
+            return;
+        }
         // Shu socket allaqachon xonada (takroriy so'rov) - ikkinchi nusxa qo'shilmaydi
         if (room.players[socket.id]) {
             socket.emit('roomJoined', this.roomJoinedPayload(room, socket.id));
@@ -52,8 +58,19 @@ export class RoomManager {
         }
         // Shu brauzer oynasi (clientId) xonada allaqachon bor - sahifa yangilangan: yangi o'yinchi
         // qo'shmasdan, eski o'rnini qaytarib beramiz (aks holda lobbida ikkita bo'lib qolardi)
-        if (clientId && this.reclaimPlayer(socket, roomId, clientId)) return;
         if (this.pendingJoins.has(socket.id)) return;
+        if (clientId) {
+            this.pendingJoins.add(socket.id);
+            const r = await this.reclaimPlayer(socket, roomId, clientId);
+            this.pendingJoins.delete(socket.id);
+            if (r === 'reclaimed') return;
+            if (r === 'conflict') {
+                // Nusxalangan tab: alohida o'yinchi bo'ladi - o'z identifikatorini oladi
+                clientId = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+                socket.emit('clientIdChanged', clientId);
+            }
+            if (!this.activeRooms[roomId] || room.players[socket.id]) return;
+        }
 
         // XONA TO'LGANMI? Maksimal 4 kishi
         if (Object.keys(room.players).length >= RoomManager.MAX_PLAYERS) {
@@ -185,7 +202,7 @@ export class RoomManager {
     public useSpecial(socket: Socket, roomId: string): void {
         const room = this.activeRooms[roomId];
         const p = room?.players[socket.id];
-        if (!room || !room.isStarted || !p || p.isDead) return;
+        if (!room || !room.isStarted || !p || p.isDead || this.isLoading(room)) return;
         const perk = SPECIAL_PERK[p.characterType];
         if (!perk || !hasPerk(p, perk) || (p.specialCooldown || 0) > 0) return;
         p.specialTicks = SPECIAL_TICKS;
@@ -233,15 +250,21 @@ export class RoomManager {
     // QAYTA ULANISH: shu oynaning (clientId) eski o'rni hali saqlanib turgan
     // bo'lsa - yangi socket'ga ko'chiramiz (xo'jayinlik, tayyor holati, o'yindagi
     // joyi, joni - hammasi saqlanadi). O'yin ketayotgan bo'lsa - darhol o'yinga qaytadi
-    public reclaimPlayer(socket: Socket, roomId: string, clientId: string): boolean {
-        const room = this.activeRooms[roomId];
-        if (!room) return false;
-        const oldId = Object.keys(room.players).find(id => id !== socket.id && room.players[id].clientId === clientId);
-        if (!oldId) return false;
-        // Eski ulanish hali "tirik" ko'rinishi mumkin: sahifa yangilanganda brauzer eski ulanishni
-        // darhol yopmaydi, server buni kechroq sezadi. clientId - shu oynaniki, demak eski ulanish
-        // eskirgan: o'rnini yangisiga ko'chirib, eskisini uzamiz (ikkita nusxa bo'lib qolmasin)
+    // Natija: 'reclaimed' - o'rni qaytarildi; 'none' - bu oynaning o'rni yo'q; 'conflict' - shu
+    // clientId li BOSHQA tirik tab bor (brauzer tabni nusxalaganda sessionStorage ham nusxalanadi)
+    public async reclaimPlayer(socket: Socket, roomId: string, clientId: string): Promise<'reclaimed' | 'none' | 'conflict'> {
+        let room = this.activeRooms[roomId];
+        if (!room) return 'none';
+        let oldId = Object.keys(room.players).find(id => id !== socket.id && room.players[id].clientId === clientId);
+        if (!oldId) return 'none';
+        // Eski ulanish hali "tirik" ko'rinsa - haqiqatan javob berishini tekshiramiz: sahifa yangilangan
+        // bo'lsa, eski sahifa yo'q - javob kelmaydi (o'rnini olamiz). Javob kelsa - bu boshqa ochiq tab
+        // (nusxa): unga TEGMAYMIZ, yangisi alohida o'yinchi bo'ladi
         const staleSocket = this.io.sockets.sockets.get(oldId);
+        if (staleSocket && await this.isSocketAlive(staleSocket)) return 'conflict';
+        // Kutish paytida holat o'zgargan bo'lishi mumkin - qayta tekshiramiz
+        room = this.activeRooms[roomId];
+        if (!room || !room.players[oldId] || room.players[socket.id]) return 'none';
 
         const pending = this.pendingLeaves.get(oldId);
         if (pending) {
@@ -259,6 +282,7 @@ export class RoomManager {
         room.bullets.forEach(b => { if (b.playerId === oldId) b.playerId = socket.id; });
         room.bots.forEach(b => { if (b.targetPlayerId === oldId) b.targetPlayerId = socket.id; });
         room.checkpointReached = room.checkpointReached.map(id => (id === oldId ? socket.id : id));
+        if (room.loadingIds) room.loadingIds = room.loadingIds.map(id => (id === oldId ? socket.id : id));
 
         if (staleSocket) staleSocket.disconnect(true);
 
@@ -269,7 +293,18 @@ export class RoomManager {
         if (room.isStarted) {
             socket.emit('gameStarted', { map: this.mapPayload(room), continued: null });
         }
-        return true;
+        return 'reclaimed';
+    }
+
+    // Ulanish haqiqatan tirikmi: klientdan javob so'raymiz (1.5s ichida kelmasa - eskirgan)
+    private async isSocketAlive(sock: Socket): Promise<boolean> {
+        if (!sock || typeof (sock as any).timeout !== 'function') return false;
+        try {
+            await sock.timeout(1500).emitWithAck('areYouThere');
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     // Lobbida personaj turini o'zgartirish (Samurai, Mage, Archer, Knight)
@@ -381,7 +416,7 @@ export class RoomManager {
     // ENTER/SICHQONCHA BOSIB TURILGANDA: avtomatik-otish holatini yoqamiz
     public startAttack(socket: Socket, roomId: string, angle: number): void {
         const room = this.activeRooms[roomId];
-        if (!room || !room.isStarted) return;
+        if (!room || !room.isStarted || this.isLoading(room)) return;
         if (!Number.isFinite(angle)) return;
 
         const player = room.players[socket.id];
@@ -421,7 +456,7 @@ export class RoomManager {
     // SHIFT BOSIB TURILGANDA: barcha personajlar uchun umumiy - qobiliyat faollashadi
     public startAbility(socket: Socket, roomId: string): void {
         const room = this.activeRooms[roomId];
-        if (!room || !room.isStarted) return;
+        if (!room || !room.isStarted || this.isLoading(room)) return;
 
         const player = room.players[socket.id];
         if (!player || player.isDead) return; // O'lgan ("arvoh") o'yinchi qobiliyat ishlata olmaydi
@@ -475,6 +510,11 @@ export class RoomManager {
                 }
 
                 delete room.players[socketId];
+                // Yuklanishini kutayotgan edik - endi kutilmaydi
+                if (this.isLoading(room)) {
+                    room.loadingIds = room.loadingIds!.filter(id => id !== socketId);
+                    if (room.loadingIds.length === 0) this.finishLoading(roomId); else this.sendLoadingStatus(roomId);
+                }
 
                 // XONA EGASI chiqib ketsa - xo'jayinlik boshqaga O'TMAYDI: xona yopiladi,
                 // qolganlar menyuga qaytadi (sahifani yangilasa - 15s ichida o'rni qaytadi)
@@ -486,6 +526,25 @@ export class RoomManager {
                 this.broadcastRoomList();
             }
         });
+    }
+
+    // KICK: xona egasi boshqa o'yinchini xonadan chiqaradi (o'yin paytida ham). Chiqarilgan o'yinchi
+    // (hisobi yoki brauzer oynasi bo'yicha) bu xonaga qayta kira olmaydi
+    public kickPlayer(socket: Socket, roomId: string, targetId: string): void {
+        const room = this.activeRooms[roomId];
+        if (!room || room.hostId !== socket.id || typeof targetId !== 'string' || targetId === socket.id) return;
+        const target = room.players[targetId];
+        if (!target) return;
+        room.kicked = room.kicked || [];
+        if (target.userId !== null) room.kicked.push('u:' + target.userId);
+        if (target.clientId) room.kicked.push('c:' + target.clientId);
+        this.io.to(targetId).emit('kickedFromRoom', { roomName: room.name });
+        this.io.sockets.sockets.get(targetId)?.leave(roomId);
+        this.leavePlayerById(targetId);
+        this.sendChatSystem(roomId, target.nickname);
+    }
+    private sendChatSystem(roomId: string, nickname: string): void {
+        this.io.to(roomId).emit('playerKicked', { nickname });
     }
 
     // ===== ADMIN (Telegram bot) uchun =====
@@ -572,7 +631,40 @@ export class RoomManager {
         GameEngine.startRound(room, map);
 
         this.io.to(roomId).emit('gameStarted', { map: this.mapPayload(room), continued });
+        // YUKLANISH: hamma o'yinchi xaritani yuklab bo'lguncha raund boshlanmaydi (ko'pi bilan 15s)
+        room.loadingIds = Object.keys(room.players);
+        room.loadDeadline = Date.now() + RoomManager.LOAD_WAIT_MS;
+        this.sendLoadingStatus(roomId);
         this.broadcastRoomList();
+    }
+
+    // O'yinchining brauzeri xaritani yuklab bo'ldi
+    public markLoaded(socket: Socket, roomId: string): void {
+        const room = this.activeRooms[roomId];
+        if (!room || !room.players[socket.id]) return;
+        if (!room.loadingIds || room.loadingIds.length === 0) {
+            socket.emit('roundGo'); // raund allaqachon ketyapti (masalan, qayta ulangan) - darhol o'ynaydi
+            return;
+        }
+        room.loadingIds = room.loadingIds.filter(id => id !== socket.id);
+        if (room.loadingIds.length === 0) this.finishLoading(roomId);
+        else this.sendLoadingStatus(roomId);
+    }
+    private sendLoadingStatus(roomId: string): void {
+        const room = this.activeRooms[roomId];
+        if (!room) return;
+        const total = Object.keys(room.players).length;
+        this.io.to(roomId).emit('loadingStatus', { ready: total - (room.loadingIds || []).length, total });
+    }
+    // Hamma tayyor (yoki kutish vaqti tugadi) - raund boshlanadi
+    public finishLoading(roomId: string): void {
+        const room = this.activeRooms[roomId];
+        if (!room) return;
+        room.loadingIds = [];
+        this.io.to(roomId).emit('roundGo');
+    }
+    public isLoading(room: RoomState): boolean {
+        return !!room.loadingIds && room.loadingIds.length > 0;
     }
 
     // SUHBAT SAHNASI (bozor): sotuvchi oldidagi tirik qahramon E bossa boshlanadi va

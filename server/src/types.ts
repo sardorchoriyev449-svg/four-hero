@@ -239,6 +239,9 @@ export interface RoomState {
     walls: RectState[];           // Shu raund devorlari (xaritadagilar + "ayri yo'l"larning tasodifiy yopilgan tarmog'i)
     checkpointReached: string[];  // Chekpointga yetib kelgan o'yinchilar (id)
     redBoxes?: RedBoxState[];     // O'rmon: tushayotgan/yotgan qizil qutilar
+    kicked?: string[];             // Xo'jayin chiqarib yuborganlar (hisob ID yoki brauzer oynasi ID) - qayta kira olmaydi
+    loadingIds?: string[];        // Xarita boshida hali YUKLANAYOTGAN o'yinchilar - hammasi tayyor bo'lguncha raund kutadi
+    loadDeadline?: number;        // Ko'pi bilan shu vaqtgacha kutiladi (ms) - qotib qolgan o'yinchi hammani to'xtatmasin
     stones?: StoneState[];        // Yuruvchi toshlar (map-7)
     gorilla?: GorillaState | null;  // Tosh gorilla (map-8)
     gPlats?: GPlatState[];

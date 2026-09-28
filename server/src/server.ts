@@ -369,9 +369,9 @@ io.on('connection', (socket) => {
 
     // 2c. SAHIFA YANGILANGACH XONAGA QAYTISH: avval eski o'rnini (15s saqlanadi)
     // qaytarib olishga urinadi; bo'lmasa - oddiy qo'shilish (xona hali bor bo'lsa)
-    socket.on('rejoinRoom', (data: { roomId: string, clientId: string, userId: string | null, nickname: string }) => {
+    socket.on('rejoinRoom', async (data: { roomId: string, clientId: string, userId: string | null, nickname: string }) => {
         if (!data || typeof data.roomId !== 'string' || typeof data.clientId !== 'string') return;
-        if (roomManager.reclaimPlayer(socket, data.roomId, data.clientId)) return;
+        if ((await roomManager.reclaimPlayer(socket, data.roomId, data.clientId)) === 'reclaimed') return;
         if (activeRooms[data.roomId]) {
             roomManager.joinPlayer(socket, data.roomId, data.userId ?? null, data.nickname || 'Mehmon', data.clientId);
             return;
@@ -433,6 +433,12 @@ io.on('connection', (socket) => {
         roomManager.toggleReady(socket, roomId);
     });
 
+    // 4b2. KICK: xona egasi o'yinchini xonadan chiqaradi
+    socket.on('kickPlayer', (data: { roomId: string, targetId: string }) => {
+        if (!data || typeof data.roomId !== 'string') return;
+        roomManager.kickPlayer(socket, data.roomId, data.targetId);
+    });
+
     // 4c. LOBBI CHATI: xabar yuborish
     socket.on('sendLobbyChat', (data: { roomId: string, text: string }) => {
         if (!data || typeof data.text !== 'string') return;
@@ -445,6 +451,7 @@ io.on('connection', (socket) => {
         if (room && room.players[socket.id]) {
             socket.emit('initPlayer', { ...room.players[socket.id], killsToWin: room.killsToWin });
             roomManager.sendCutsceneState(socket, roomId);
+            roomManager.markLoaded(socket, roomId); // xarita yuklandi - hamma tayyor bo'lsa raund boshlanadi
         }
     });
 

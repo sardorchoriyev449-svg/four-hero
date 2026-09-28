@@ -13,7 +13,35 @@ let touchState = { left: false, right: false, jump: false }; // PHONE rejimidagi
 // o'chirib, keyingi raund uchun holatni tozalaydi. Shu bo'lmasa, har yangi
 // raundda eski socket listenerlar/sprite'lar "yopishib" qolib, ikki barobar
 // ishlab ketardi.
+// YUKLANISH OYNASI: xarita yuklanayotganda va boshqa o'yinchilar kutilayotganda o'yin oynasi ustida
+function showLoadingOverlay() {
+    hideLoadingOverlay(true);
+    const host = document.getElementById('game-container');
+    if (!host) return;
+    const el = document.createElement('div');
+    el.id = 'loading-overlay';
+    el.innerHTML = `<div class="ld-title">${t('loading_title')}<span class="ld-dots"></span></div>
+        <div class="ld-bar"><span id="ld-fill"></span></div>
+        <div class="ld-text" id="ld-text">${t('loading_map')}</div>`;
+    host.appendChild(el);
+}
+function setLoadingStatus(ready, total) {
+    const fill = document.getElementById('ld-fill');
+    const text = document.getElementById('ld-text');
+    if (fill) fill.style.width = Math.round(100 * ready / Math.max(1, total)) + '%';
+    if (text) text.innerText = t('loading_players') + ': ' + ready + ' / ' + total;
+}
+function hideLoadingOverlay(instant) {
+    const el = document.getElementById('loading-overlay');
+    if (!el) return;
+    if (instant) { el.remove(); return; }
+    el.classList.add('go');
+    el.innerHTML = '<div class="ld-go">GO!</div>';
+    setTimeout(() => el.remove(), 700);
+}
+
 function stopGame() {
+    hideLoadingOverlay(true);
     if (phaserGame) {
         phaserGame.destroy(true);
         phaserGame = null;
@@ -99,6 +127,7 @@ function launchGame(socket, roomId, mapData, continued) {
     let myApples = 0;
     let pickupHint = null;     // Yaqindagi tanga ustida "E" yozuvi
     let lastSentMove = { x: -1, y: -1, t: -1e9 }; // serverga oxirgi yuborilgan joy (tarmoqni tejash)
+    let roundGo = false;       // hamma o'yinchi yuklanib, raund boshlandimi (shungacha qahramon qimirlamaydi)
     let emotes = [];           // qahramonlar tepasidagi emotsiyalar: { img, playerId }
     let lastEmoteAt = -1e9;
 
@@ -117,6 +146,11 @@ function launchGame(socket, roomId, mapData, continued) {
         scene: { preload: preload, create: create, update: update }
     };
 
+    showLoadingOverlay();
+    socket.off('loadingStatus');
+    socket.on('loadingStatus', (d) => { if (d) setLoadingStatus(d.ready, d.total); });
+    socket.off('roundGo');
+    socket.on('roundGo', () => { roundGo = true; hideLoadingOverlay(false); });
     phaserGame = new Phaser.Game(config);
 
     function preload() {
@@ -3756,6 +3790,8 @@ function launchGame(socket, roomId, mapData, continued) {
         }
 
         if (!currentCharacter || !currentCharacter.body) return;
+        // Boshqa o'yinchilar hali yuklanmoqda - raund boshlanguncha joyida turadi
+        if (!roundGo) { currentCharacter.setVelocityX(0); return; }
 
         // O'LIK ("ARVOH") HOLATDA: yura oladi (chapga/o'ngga/sakrash), lekin
         // hujum va qobiliyat ishlamaydi (server bu holatda ularni allaqachon rad etadi)

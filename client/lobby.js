@@ -7,10 +7,25 @@ if (document.fonts && document.fonts.load) document.fonts.load('10px "Press Star
 // SAHIFA YANGILANSA HAM JOYIDA QOLISH: har bir brauzer oynasining doimiy ID'si
 // (sessionStorage - yangilashda saqlanadi, yangi oynada yangisi). Server shu
 // orqali uzilgan o'yinchining o'rnini 15 soniya saqlab, qaytib kelsa qaytaradi
-const CLIENT_ID = sessionStorage.getItem('clientId') || (() => {
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-    sessionStorage.setItem('clientId', id);
-    return id;
+const newClientId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+let CLIENT_ID = sessionStorage.getItem('clientId') || newClientId();
+sessionStorage.setItem('clientId', CLIENT_ID);
+// NUSXALANGAN TAB: brauzer tabni nusxalaganda sessionStorage (va clientId) ham nusxalanadi - shunda
+// ikkala tab bitta o'yinchi deb hisoblanib, biri ikkinchisini uzib qo'yardi. Ochilishda boshqa
+// tablardan "bu identifikator siznikimi?" deb so'raymiz; ha desa - o'zimizga yangisini olamiz
+(function dedupeTabClientId() {
+    if (!window.BroadcastChannel) return;
+    const nonce = Math.random().toString(36).slice(2);
+    const ch = new BroadcastChannel('four-heroes-tabs');
+    ch.onmessage = (e) => {
+        const d = e.data || {};
+        if (d.type === 'who' && d.id === CLIENT_ID && d.nonce !== nonce) ch.postMessage({ type: 'mine', id: d.id, nonce: d.nonce });
+        if (d.type === 'mine' && d.nonce === nonce && d.id === CLIENT_ID) {
+            CLIENT_ID = newClientId();
+            sessionStorage.setItem('clientId', CLIENT_ID);
+        }
+    };
+    ch.postMessage({ type: 'who', id: CLIENT_ID, nonce });
 })();
 
 // HTML Elementlarni yuklab olamiz
@@ -347,6 +362,15 @@ const PANEL_RESTORERS = {
     'donate-panel': () => navDonateBtn.onclick()
 };
 
+// Server "hali shu yerdamisan?" deb so'raydi (shu identifikatorli boshqa ulanish paydo bo'lganda)
+socket.on('areYouThere', (ack) => { if (typeof ack === 'function') ack(true); });
+// Server bu tabga yangi identifikator berdi (nusxalangan tab - alohida o'yinchi)
+socket.on('clientIdChanged', (id) => {
+    if (typeof id !== 'string') return;
+    CLIENT_ID = id;
+    sessionStorage.setItem('clientId', id);
+});
+
 // XONAGA QAYTISH: sahifa yangilansa (yoki internet uzilib, qayta ulansa) - oxirgi
 // xonaga qaytamiz. O'rni saqlanib turgan bo'lsa (15s) - xuddi o'sha holatda
 // (xo'jayinlik, tayyor, o'yin ketayotgan bo'lsa - o'yinning o'zi)
@@ -375,6 +399,31 @@ socket.on('accountBanned', (data) => {
     touchControls.classList.add('hidden');
     showPanel(authPanel);
     alert(t('account_banned') + (data && data.reason ? ': ' + data.reason : ''));
+});
+
+// XONADAN CHIQARILDI (xo'jayin kick qildi) - o'yin to'xtaydi, bosh menyuga
+socket.on('kickedFromRoom', () => {
+    sessionStorage.removeItem('lastRoomId');
+    currentRoomId = null;
+    isRoomHost = false;
+    latestPlayerListData = null;
+    if (typeof stopGame === 'function') stopGame();
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    if (window.GameAudio) { GameAudio.release(); GameAudio.setMode('menu'); }
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    showPanel(currentUser ? mainMenuPanel : authPanel);
+    alert(t('kicked_msg'));
+});
+// Xonada qolganlarga: kim chiqarildi (chatda tizim xabari)
+socket.on('playerKicked', (d) => {
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    line.style.color = '#ff8a80';
+    line.textContent = '⚠ ' + t('kicked_chat').replace('{name}', (d && d.nickname) || '');
+    chatBox.appendChild(line);
+    chatBox.scrollTop = chatBox.scrollHeight;
 });
 
 // XONA YOPILDI (egasi chiqib ketdi) - o'yin to'xtaydi, bosh menyuga qaytamiz
@@ -746,6 +795,19 @@ function renderLobbySlots(players) {
             <div class="slot-level">${t('slot_level')}: ${p.level || 0}</div>
             <div class="slot-status ${status[0]}">${status[1].toUpperCase()}</div>`;
         slot.querySelector('.slot-name').appendChild(document.createTextNode((p.nickname || t('guest_name')) + (me ? t('you_suffix') : '')));
+        // Xo'jayinga: boshqa o'yinchini xonadan chiqarish (KICK)
+        if (isRoomHost && !me) {
+            const kick = document.createElement('button');
+            kick.className = 'slot-kick';
+            kick.title = t('kick_btn');
+            kick.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+            kick.onclick = () => {
+                if (confirm(t('kick_confirm').replace('{name}', p.nickname || t('guest_name')))) {
+                    socket.emit('kickPlayer', { roomId: currentRoomId, targetId: p.id });
+                }
+            };
+            slot.appendChild(kick);
+        }
         slot.title = tCharName(p.characterType);
         drawHero(slot.querySelector('.slot-hero').getContext('2d'), p.characterType, hex(p.color, '#1e88e5'), hex(p.weaponColor, '#cfd8dc'), -16, -8);
         wrap.appendChild(slot);
