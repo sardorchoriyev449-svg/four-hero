@@ -52,7 +52,7 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/user/:id', async (req, res) => {
     const user = await db.getUserById(req.params.id);
     if (user) res.json({ success: true, user });
-    else res.status(404).json({ success: false, message: 'Topilmadi' });
+    else res.status(404).json({ success: false, message: 'err_not_found' });
 });
 
 // SKIN KATALOGINI OLISH (narxlar va ranglar)
@@ -71,7 +71,7 @@ app.get('/api/my-rooms/:userId', async (req, res) => {
         const rooms = await db.getRoomsByHost(req.params.userId);
         res.json({ success: true, rooms });
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xonalarni yuklab bo\'lmadi' });
+        res.status(500).json({ success: false, message: 'err_load_rooms' });
     }
 });
 
@@ -81,7 +81,7 @@ app.get('/api/my-rooms/:userId/latest', async (req, res) => {
         const room = await db.getMostRecentRoomByHost(req.params.userId);
         res.json({ success: true, room });
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xonani yuklab bo\'lmadi' });
+        res.status(500).json({ success: false, message: 'err_load_room' });
     }
 });
 
@@ -90,7 +90,7 @@ app.get('/api/character/:userId', async (req, res) => {
     try {
         const user = await db.getUserById(req.params.userId);
         if (!user) {
-            res.status(404).json({ success: false, message: 'Foydalanuvchi topilmadi' });
+            res.status(404).json({ success: false, message: 'err_user_not_found' });
             return;
         }
         // "Daraja" - tajribadan (har o'tilgan xarita +10 XP, har daraja uchun kerakli XP x2)
@@ -110,7 +110,7 @@ app.get('/api/character/:userId', async (req, res) => {
             equippedWeaponSkins: user.equippedWeaponSkins
         });
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Ma\'lumotni yuklab bo\'lmadi' });
+        res.status(500).json({ success: false, message: 'err_load_data' });
     }
 });
 
@@ -121,12 +121,12 @@ app.post('/api/character/:userId/default', async (req, res) => {
     try {
         const user = await db.setDefaultCharacter(req.params.userId, characterType);
         if (!user) {
-            res.status(400).json({ success: false, message: 'Noto\'g\'ri personaj turi' });
+            res.status(400).json({ success: false, message: 'err_bad_character' });
             return;
         }
         res.json({ success: true, defaultCharacter: user.defaultCharacter });
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xatolik yuz berdi' });
+        res.status(500).json({ success: false, message: 'generic_error' });
     }
 });
 
@@ -136,7 +136,7 @@ app.post('/api/character/:userId/default', async (req, res) => {
 app.post('/api/character/:userId/upgrade', async (req, res) => {
     const { characterType, stat, roomId } = req.body || {};
     if (typeof stat !== 'string' || typeof characterType !== 'string') {
-        res.status(400).json({ success: false, message: 'Noto\'g\'ri ko\'nikma turi' });
+        res.status(400).json({ success: false, message: 'err_bad_skill' });
         return;
     }
 
@@ -152,7 +152,7 @@ app.post('/api/character/:userId/upgrade', async (req, res) => {
         }
         res.json(result);
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Yaxshilashda xatolik yuz berdi' });
+        res.status(500).json({ success: false, message: 'err_upgrade_failed' });
     }
 });
 
@@ -166,7 +166,7 @@ app.post('/api/skins/:userId/buy', async (req, res) => {
         const result = await db.buySkin(req.params.userId, characterType, skinId, price, 'body');
         res.json(result);
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xatolik yuz berdi' });
+        res.status(500).json({ success: false, message: 'generic_error' });
     }
 });
 
@@ -176,7 +176,7 @@ app.post('/api/skins/:userId/equip', async (req, res) => {
         const result = await db.equipSkin(req.params.userId, characterType, skinId, 'body');
         res.json(result);
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xatolik yuz berdi' });
+        res.status(500).json({ success: false, message: 'generic_error' });
     }
 });
 
@@ -193,7 +193,7 @@ app.post('/api/weapon-skins/:userId/buy', async (req, res) => {
         const result = await db.buySkin(req.params.userId, characterType, skinId, price, 'weapon');
         res.json(result);
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xatolik yuz berdi' });
+        res.status(500).json({ success: false, message: 'generic_error' });
     }
 });
 
@@ -203,7 +203,7 @@ app.post('/api/weapon-skins/:userId/equip', async (req, res) => {
         const result = await db.equipSkin(req.params.userId, characterType, skinId, 'weapon');
         res.json(result);
     } catch (err) {
-        res.status(500).json({ success: false, message: 'Xatolik yuz berdi' });
+        res.status(500).json({ success: false, message: 'generic_error' });
     }
 });
 
@@ -235,7 +235,7 @@ io.on('connection', (socket) => {
     // shunda do'stlar bilan ertaga qaytib, xuddi shu xarita progressida davom etish mumkin.
     // Mehmon (hisobsiz) yaratsa, xona eski-usulda vaqtinchalik bo'lib qoladi.
     socket.on('createRoom', async (data: { roomName: string, userId: string | null, nickname: string, isPrivate?: boolean, clientId?: string }) => {
-        const roomName = (data.roomName || 'Xona').toString().slice(0, 40);
+        const roomName = (data.roomName || 'Room').toString().slice(0, 40);
         const isPrivate = !!data.isPrivate;
         let roomId: string;
         let isPersistent = false;
@@ -253,7 +253,7 @@ io.on('connection', (socket) => {
                 isPersistent = true;
             } catch (err) {
                 console.error('createPersistentRoom xatosi:', err);
-                socket.emit('joinError', 'Xonani saqlashda xatolik yuz berdi. Qayta urinib ko\'ring.');
+                socket.emit('joinError', 'err_room_save');
                 return;
             }
         } else {
@@ -294,7 +294,7 @@ io.on('connection', (socket) => {
         if (activeRooms[data.roomId]) {
             roomManager.joinPlayer(socket, data.roomId, data.userId ?? null, data.nickname || 'Mehmon', data.clientId ?? null);
         } else {
-            socket.emit('joinError', 'Xona topilmadi!');
+            socket.emit('joinError', 'err_room_not_found');
         }
     });
 
@@ -312,7 +312,7 @@ io.on('connection', (socket) => {
         const roomCode = (data.roomCode || '').toString().trim().toUpperCase();
         const clientId = typeof data.clientId === 'string' ? data.clientId : null;
         if (!roomCode) {
-            fail('Xona kodini kiriting');
+            fail('err_enter_code');
             return;
         }
 
@@ -325,11 +325,11 @@ io.on('connection', (socket) => {
         try {
             const record = await db.getRoomByCode(roomCode);
             if (!record) {
-                fail('Bunday kodli xona topilmadi');
+                fail('err_code_not_found');
                 return;
             }
             if (!data.userId || data.userId !== record.hostUserId) {
-                fail('Bu xona hali ochilmagan. Avval xona egasi shu kodni kiritib xonani ochishi kerak.');
+                fail('err_room_not_open');
                 return;
             }
 
@@ -363,7 +363,7 @@ io.on('connection', (socket) => {
             roomManager.joinPlayer(socket, roomCode, data.userId, data.nickname || 'Mehmon', clientId);
         } catch (err) {
             console.error('joinRoomByCode xatosi:', err);
-            fail('Xonaga ulanishda xatolik yuz berdi');
+            fail('err_join_failed');
         }
     }
 
@@ -399,7 +399,7 @@ io.on('connection', (socket) => {
             const otherPlayers = Object.values(room.players).filter(p => p.id !== room.hostId);
             const allReady = otherPlayers.every(p => p.isReady);
             if (!allReady) {
-                socket.emit('startError', 'Barcha o\'yinchilar "Tayyor" tugmasini bosishi kerak!');
+                socket.emit('startError', 'err_not_all_ready');
                 return;
             }
 
@@ -433,6 +433,12 @@ io.on('connection', (socket) => {
         roomManager.toggleReady(socket, roomId);
     });
 
+    // 4b1. PAUZA (faqat yolg'iz o'yinchi)
+    socket.on('setPaused', (data: { roomId: string, paused: boolean }) => {
+        if (!data || typeof data.roomId !== 'string') return;
+        roomManager.setPaused(socket, data.roomId, !!data.paused);
+    });
+
     // 4b2. KICK: xona egasi o'yinchini xonadan chiqaradi
     socket.on('kickPlayer', (data: { roomId: string, targetId: string }) => {
         if (!data || typeof data.roomId !== 'string') return;
@@ -461,6 +467,9 @@ io.on('connection', (socket) => {
         // koordinatalari ham NaN bo'lib, butunlay "yo'qolib" qolardi
         if (!data || !Number.isFinite(data.x) || !Number.isFinite(data.y)) return;
         const room = activeRooms[data.roomId];
+        // Yangi xaritani hali yuklayotgan o'yinchining harakati - eski xaritadan kechikib kelgan paket:
+        // qabul qilinsa yangi xaritadagi boshlang'ich joy eski koordinataga (devor/fon ichiga) almashardi
+        if (room && room.loadingIds && room.loadingIds.includes(socket.id)) return;
         if (room && room.players[socket.id]) {
             room.players[socket.id].x = data.x;
             room.players[socket.id].y = data.y;

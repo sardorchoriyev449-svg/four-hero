@@ -48,7 +48,7 @@ export class RoomManager {
 
         // Xo'jayin bu o'yinchini xonadan chiqarib yuborgan - qayta kira olmaydi
         if (room.kicked && ((userId !== null && room.kicked.includes('u:' + userId)) || (clientId && room.kicked.includes('c:' + clientId)))) {
-            socket.emit('joinError', 'Xona egasi sizni bu xonadan chiqarib yuborgan');
+            socket.emit('joinError', 'err_kicked');
             return;
         }
         // Shu socket allaqachon xonada (takroriy so'rov) - ikkinchi nusxa qo'shilmaydi
@@ -74,7 +74,7 @@ export class RoomManager {
 
         // XONA TO'LGANMI? Maksimal 4 kishi
         if (Object.keys(room.players).length >= RoomManager.MAX_PLAYERS) {
-            socket.emit('joinError', 'Xona to\'la! Maksimal ' + RoomManager.MAX_PLAYERS + ' kishi o\'ynashi mumkin.');
+            socket.emit('joinError', 'err_room_full|' + RoomManager.MAX_PLAYERS);
             return;
         }
 
@@ -83,7 +83,7 @@ export class RoomManager {
         if (userId !== null) {
             const existingSocketId = this.activeUserSockets.get(userId);
             if (existingSocketId && existingSocketId !== socket.id && this.io.sockets.sockets.get(existingSocketId)) {
-                socket.emit('joinError', 'Bu hisobdan allaqachon boshqa qurilmada/oynada o\'ynalyapti!');
+                socket.emit('joinError', 'err_account_in_use');
                 return;
             }
             this.activeUserSockets.set(userId, socket.id);
@@ -168,6 +168,11 @@ export class RoomManager {
         RoomManager.refreshPerks(room.players[socket.id]);
         // Xonaning ochilgan xaritalari - xo'jayin hisobining progressi
         if (room.hostId === socket.id) this.applyHostProgress(room, true);
+        // Pauzadagi xonaga kimdir kirsa - pauza yechiladi (yolg'iz o'yinchining menyusi ham yopiladi)
+        if (room.paused) {
+            room.paused = false;
+            this.io.to(roomId).emit('forceResume');
+        }
 
         socket.join(roomId);
 
@@ -528,6 +533,14 @@ export class RoomManager {
         });
     }
 
+    // PAUZA: faqat xonada YOLG'IZ o'yinchi bo'lsa (bir necha kishida o'yin to'xtamaydi)
+    public setPaused(socket: Socket, roomId: string, paused: boolean): void {
+        const room = this.activeRooms[roomId];
+        if (!room || !room.isStarted || !room.players[socket.id]) return;
+        if (paused && Object.keys(room.players).length !== 1) return;
+        room.paused = paused;
+    }
+
     // KICK: xona egasi boshqa o'yinchini xonadan chiqaradi (o'yin paytida ham). Chiqarilgan o'yinchi
     // (hisobi yoki brauzer oynasi bo'yicha) bu xonaga qayta kira olmaydi
     public kickPlayer(socket: Socket, roomId: string, targetId: string): void {
@@ -619,16 +632,16 @@ export class RoomManager {
             p.invisLinger = 0;
             p.ammo = shotgunMagOf(p);
             p.reloadTicks = 0;
-            const keepPosition = continued !== null && !map.spawnAtEntrance && p.x > 0 && p.x < map.mapWidth && p.y < 560;
-            if (!keepPosition) {
-                const spawn = map.playerSpawns[i % map.playerSpawns.length];
-                p.x = spawn.x;
-                p.y = spawn.y;
-            }
+            // Har xaritada o'z boshlang'ich joyi: oldingi xaritadagi joy yangi xaritada devor, to'siq
+            // yoki chuqurlik ichiga to'g'ri kelib, qahramon tiqilib qolardi
+            const spawn = map.playerSpawns[i % map.playerSpawns.length];
+            p.x = spawn.x;
+            p.y = spawn.y;
         });
 
         // Botlar / ilon / qutilar / minalar - xarita turiga qarab
         GameEngine.startRound(room, map);
+        room.paused = false;
 
         this.io.to(roomId).emit('gameStarted', { map: this.mapPayload(room), continued });
         // YUKLANISH: hamma o'yinchi xaritani yuklab bo'lguncha raund boshlanmaydi (ko'pi bilan 15s)

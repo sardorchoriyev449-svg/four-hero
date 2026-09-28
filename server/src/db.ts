@@ -155,15 +155,15 @@ function legacyProgress(doc: any, credited: { [c: string]: number[] }): { unlock
 // RO'YXATDAN O'TISH: ism, nickname va parol bilan
 export async function registerUser(fullName: string, nickname: string, password: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     if (!fullName || !nickname || !password) {
-        return { success: false, message: 'Ism, nickname va parol to\'ldirilishi shart' };
+        return { success: false, message: 'err_fields_required' };
     }
     if (password.length < 4) {
-        return { success: false, message: 'Parol kamida 4 ta belgidan iborat bo\'lishi kerak' };
+        return { success: false, message: 'err_password_short' };
     }
 
     const existing = await UserModel.findOne({ nickname });
     if (existing) {
-        return { success: false, message: 'Bu nickname band, boshqasini tanlang' };
+        return { success: false, message: 'err_nickname_taken' };
     }
 
     const passwordHash = bcrypt.hashSync(password, 10);
@@ -183,13 +183,13 @@ export async function registerUser(fullName: string, nickname: string, password:
 export async function loginUser(nickname: string, password: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     const doc = await UserModel.findOne({ nickname });
     if (!doc) {
-        return { success: false, message: 'Bunday foydalanuvchi topilmadi' };
+        return { success: false, message: 'err_no_such_user' };
     }
     if (!bcrypt.compareSync(password, doc.passwordHash)) {
-        return { success: false, message: 'Parol noto\'g\'ri' };
+        return { success: false, message: 'err_wrong_password' };
     }
     if ((doc as any).banned) {
-        return { success: false, message: 'Hisobingiz bloklangan' + ((doc as any).banReason ? ': ' + (doc as any).banReason : '') };
+        return { success: false, message: 'err_banned' + ((doc as any).banReason ? '|' + (doc as any).banReason : '') };
     }
     await migrateRoomProgress(doc);
     return { success: true, user: docToUser(doc) };
@@ -209,15 +209,15 @@ export async function addCoins(userId: string, amount: number): Promise<UserReco
 // SKIN SOTIB OLISH (category: 'body' - tana/qurol dizayni, 'weapon' - alohida qurol skin)
 export async function buySkin(userId: string, characterType: string, skinId: string, price: number, category: 'body' | 'weapon' = 'body'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     const doc = await UserModel.findById(userId);
-    if (!doc) return { success: false, message: 'Foydalanuvchi topilmadi' };
+    if (!doc) return { success: false, message: 'err_user_not_found' };
 
     const ownedField = category === 'weapon' ? 'ownedWeaponSkins' : 'ownedSkins';
     const owned: string[] = (doc as any)[ownedField][characterType] || [];
     if (owned.includes(skinId)) {
-        return { success: false, message: 'Bu skin allaqachon sizda bor' };
+        return { success: false, message: 'err_skin_owned' };
     }
     if (doc.coins < price) {
-        return { success: false, message: 'Tanga yetarli emas' };
+        return { success: false, message: 'err_not_enough_coins' };
     }
 
     owned.push(skinId);
@@ -233,13 +233,13 @@ export async function buySkin(userId: string, characterType: string, skinId: str
 // SKIN KIYISH (faqat sotib olingan skinni kiyish mumkin)
 export async function equipSkin(userId: string, characterType: string, skinId: string, category: 'body' | 'weapon' = 'body'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     const doc = await UserModel.findById(userId);
-    if (!doc) return { success: false, message: 'Foydalanuvchi topilmadi' };
+    if (!doc) return { success: false, message: 'err_user_not_found' };
 
     const ownedField = category === 'weapon' ? 'ownedWeaponSkins' : 'ownedSkins';
     const equippedField = category === 'weapon' ? 'equippedWeaponSkins' : 'equippedSkins';
     const owned: string[] = (doc as any)[ownedField][characterType] || [];
     if (!owned.includes(skinId)) {
-        return { success: false, message: 'Bu skin hali sotib olinmagan' };
+        return { success: false, message: 'err_skin_not_owned' };
     }
 
     (doc as any)[equippedField][characterType] = skinId;
@@ -301,28 +301,28 @@ export async function awardSkillPointIfNew(userId: string, levelId: number, char
 
 export async function upgradeStat(userId: string, characterType: string, stat: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     if (!CHARACTER_TYPES.includes(characterType)) {
-        return { success: false, message: 'Noto\'g\'ri personaj turi' };
+        return { success: false, message: 'err_bad_character' };
     }
     const doc = await UserModel.findById(userId);
-    if (!doc) return { success: false, message: 'Foydalanuvchi topilmadi' };
+    if (!doc) return { success: false, message: 'err_user_not_found' };
     const isWeaponStat = (WEAPON_UPGRADES[characterType] || []).includes(stat);
     if (stat !== 'damage' && stat !== 'stamina' && !isWeaponStat) {
-        return { success: false, message: 'Noto\'g\'ri ko\'nikma turi' };
+        return { success: false, message: 'err_bad_skill' };
     }
     if (isWeaponStat && xpLevel(docToUser(doc).charXp[characterType] || 0) < WEAPON_UPGRADE_LEVEL) {
-        return { success: false, message: 'Bu kuchaytirish ' + WEAPON_UPGRADE_LEVEL + '-darajada ochiladi' };
+        return { success: false, message: 'err_upgrade_locked|' + WEAPON_UPGRADE_LEVEL };
     }
 
     const pointsAll: any = doc.skillPoints || {};
     if ((pointsAll[characterType] || 0) <= 0) {
-        return { success: false, message: 'Yaxshilash ballaringiz yo\'q. Shu personaj bilan xaritalarni tugatib ball to\'plang!' };
+        return { success: false, message: 'err_no_points' };
     }
 
     const upgradesAll: any = doc.upgrades || {};
     const charUpgrades = upgradesAll[characterType] || { damage: 0, stamina: 0 };
     const currentLevel = charUpgrades[stat] || 0;
     if (currentLevel >= MAX_UPGRADE_LEVEL) {
-        return { success: false, message: 'Bu ko\'nikma allaqachon eng yuqori darajada (5/5)' };
+        return { success: false, message: 'err_skill_max' };
     }
 
     charUpgrades[stat] = currentLevel + 1;

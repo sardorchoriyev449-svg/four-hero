@@ -239,6 +239,7 @@ export interface RoomState {
     walls: RectState[];           // Shu raund devorlari (xaritadagilar + "ayri yo'l"larning tasodifiy yopilgan tarmog'i)
     checkpointReached: string[];  // Chekpointga yetib kelgan o'yinchilar (id)
     redBoxes?: RedBoxState[];     // O'rmon: tushayotgan/yotgan qizil qutilar
+    paused?: boolean;             // Yolg'iz o'yinchi pauza qilgan (bir necha o'yinchida pauza yo'q)
     kicked?: string[];             // Xo'jayin chiqarib yuborganlar (hisob ID yoki brauzer oynasi ID) - qayta kira olmaydi
     loadingIds?: string[];        // Xarita boshida hali YUKLANAYOTGAN o'yinchilar - hammasi tayyor bo'lguncha raund kutadi
     loadDeadline?: number;        // Ko'pi bilan shu vaqtgacha kutiladi (ms) - qotib qolgan o'yinchi hammani to'xtatmasin

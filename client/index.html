@@ -776,6 +776,26 @@
         #loading-overlay .ld-text { font-size: 10px; color: var(--px-muted); }
         #loading-overlay.go { background: rgba(14, 11, 26, 0.35); transition: background .4s; }
         #loading-overlay .ld-go { font-size: 54px; color: var(--px-accent); text-shadow: 5px 5px 0 var(--px-ink); animation: lc-pop .35s cubic-bezier(.2, 1.6, .4, 1) both; transform: scale(.3); }
+
+        /* ===== PAUZA MENYUSI (o'yin oynasi ichida) ===== */
+        #pause-btn { position: absolute; z-index: 35; top: 8px; right: 8px; width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; line-height: normal;
+            background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); opacity: .85; }
+        #pause-btn:hover { opacity: 1; }
+        #pause-menu { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
+            background: rgba(14, 11, 26, 0.72); line-height: normal; font-family: "Press Start 2P", "Courier New", monospace; }
+        #pause-menu .pm-box { width: 320px; max-width: calc(100% - 32px); background: var(--px-panel); border: 4px solid var(--px-ink); padding: 22px;
+            box-shadow: inset 0 0 0 4px var(--px-edge), 10px 10px 0 rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 12px; }
+        #pause-menu .pm-title { text-align: center; font-size: 18px; color: var(--px-gold); text-shadow: 3px 3px 0 var(--px-ink); margin-bottom: 6px; }
+        #pause-menu .pm-note { text-align: center; font-size: 8px; color: var(--px-muted); line-height: 1.7; }
+        #pause-menu .pm-btn { margin: 0; font-size: 11px; }
+        #pause-menu .pm-alt { background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 4px 0 var(--px-ink); }
+        #pause-menu .pm-leave { background: var(--px-red); color: #fff; box-shadow: inset -4px -4px 0 var(--px-red-d), 0 4px 0 var(--px-ink); }
+        #pause-menu .pm-settings { display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--px-muted); padding: 6px 2px; }
+        #pause-menu .pm-settings.hidden { display: none; }
+        #pause-menu .pm-vol { margin: 0; width: 100%; accent-color: var(--px-accent); }
+        #pause-menu .pm-langs { display: flex; gap: 8px; }
+        #pause-menu .pm-lang { flex: 1; margin: 0; font-size: 9px; padding: 8px; background: var(--px-panel-2); color: var(--px-muted); box-shadow: 0 3px 0 var(--px-ink); }
+        #pause-menu .pm-lang.active { background: var(--px-accent); color: #062b24; }
     </style>
 </head>
 <body>

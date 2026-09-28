@@ -210,7 +210,7 @@ loginBtn.onclick = async () => {
         if (data.success) {
             onAuthSuccess(data.user);
         } else {
-            loginError.innerText = data.message || t('generic_error');
+            loginError.innerText = tMsg(data.message);
         }
     } catch (e) {
         loginError.innerText = t('server_unreachable');
@@ -236,7 +236,7 @@ registerBtn.onclick = async () => {
         if (data.success) {
             onAuthSuccess(data.user);
         } else {
-            registerError.innerText = data.message || t('generic_error');
+            registerError.innerText = tMsg(data.message);
         }
     } catch (e) {
         registerError.innerText = t('server_unreachable');
@@ -583,7 +583,7 @@ joinCodeInput.addEventListener('keydown', (e) => {
 
 // Xonaga kirishda xatolik (xona to'la yoki hisob boshqa joyda faol)
 socket.on('joinError', (message) => {
-    alert(message);
+    alert(tMsg(message));
 });
 
 // Lobbiga muvaffaqiyatli kirganda
@@ -836,6 +836,23 @@ leaveLobbyBtn.onclick = () => {
     coinBalance.innerText = currentUser.coins;
 };
 
+// O'YINDAN CHIQISH (pauza menyusidan): o'yinni to'xtatib, xonadan chiqib, bosh menyuga
+window.leaveGameToMenu = () => {
+    if (typeof stopGame === 'function') stopGame();
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    if (window.GameAudio) { GameAudio.release(); GameAudio.setMode('menu'); }
+    leaveLobbyBtn.onclick();
+};
+// Pauza menyusidagi ovoz - sozlamalardagi bilan bir xil
+window.setGameVolume = (v) => {
+    volumeSlider.value = v;
+    localStorage.setItem('gameVolume', v);
+    if (window.GameAudio) GameAudio.setVolume(v / 100);
+};
+
 // "Tayyor" tugmasi bosilganda
 readyBtn.onclick = () => {
     socket.emit('toggleReadyInRoom', currentRoomId);
@@ -843,7 +860,7 @@ readyBtn.onclick = () => {
 
 // Host "Boshlash"ni bosganda, agar hamma tayyor bo'lmasa, server xato qaytaradi
 socket.on('startError', (message) => {
-    startErrorMsg.innerText = message;
+    startErrorMsg.innerText = tMsg(message);
     setTimeout(() => { startErrorMsg.innerText = ''; }, 4000);
 });
 
@@ -1226,7 +1243,7 @@ async function upgradeStat(stat) {
             renderUpgrades();
             syncRoomIfNeeded();
         } else {
-            alert(data.message || t('generic_error'));
+            alert(tMsg(data.message));
         }
     } catch (e) {
         alert(t('server_unreachable'));
@@ -1251,7 +1268,7 @@ function renderShop() {
         const colorHex = '#' + skin.color.toString(16).padStart(6, '0');
 
         const left = document.createElement('span');
-        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${skin.name}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${tSkinName('skin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
         row.appendChild(left);
 
         const btn = document.createElement('button');
@@ -1286,7 +1303,7 @@ async function buySkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(data.message || t('generic_error'));
+            alert(tMsg(data.message));
         }
     } catch (e) {
         alert(t('server_unreachable'));
@@ -1304,7 +1321,7 @@ async function equipSkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(data.message || t('generic_error'));
+            alert(tMsg(data.message));
         }
     } catch (e) {
         alert(t('server_unreachable'));
@@ -1341,7 +1358,7 @@ function renderWeaponShop() {
         const colorHex = '#' + skin.color.toString(16).padStart(6, '0');
 
         const left = document.createElement('span');
-        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${skin.name}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${tSkinName('wskin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
         row.appendChild(left);
 
         const btn = document.createElement('button');
@@ -1373,7 +1390,7 @@ async function buyWeaponSkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(data.message || t('generic_error'));
+            alert(tMsg(data.message));
         }
     } catch (e) {
         alert(t('server_unreachable'));
@@ -1391,7 +1408,7 @@ async function equipWeaponSkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(data.message || t('generic_error'));
+            alert(tMsg(data.message));
         }
     } catch (e) {
         alert(t('server_unreachable'));

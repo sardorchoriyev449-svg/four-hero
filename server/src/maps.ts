@@ -232,9 +232,6 @@ export interface MapDef {
     story?: StoryDef;           // Faqat mode === 'story' bo'lsa
     boss?: BossDef;             // Faqat mode === 'boss' bo'lsa
     market?: { stalls: StallDef[], planks: PlatformDef[] }; // Bozor rastalari va taxtalar (map-4, map-5)
-    // true - oldingi xaritadan kelganda ham qahramonlar kirish eshigida paydo bo'ladi
-    // (joyini saqlamaydi)
-    spawnAtEntrance?: boolean;
     forest?: ForestDef;         // Faqat o'rmon xaritasi (map-6)
     stones?: StonesDef;         // Faqat yuruvchi toshlar (map-7)
     gorilla?: GorillaDef;       // Faqat tosh gorilla (map-8)
@@ -269,8 +266,8 @@ export const GROUND_Y = 555;
 export const MAPS: MapDef[] = [
     {
         id: 0,
-        name: "Boshlang'ich maydon",
-        description: "Tekis, ochiq maydon - birinchi jang uchun eng sodda joy.",
+        name: "The start",
+        description: "A flat, open field — the simplest place for your first battle.",
         mode: 'waves',
         killsToWin: 0, // 0 = o'yinchilar soniga teng: har o'yinchiga bitta bot, bitta to'lqin
         accentColor: 0x00ffcc,
@@ -294,8 +291,8 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 1,
-        name: "Ilon quvishi",
-        description: "Orqadan bahaybat ilon quvlaydi - to'siqlardan o'tib, chekpointgacha qoching!",
+        name: "Just run",
+        description: "A giant robot snake breaks through the wall — dodge mines, pick the right path and land on the checkpoint!",
         mode: 'chase',
         killsToWin: 0,
         // Map-1 ning davomi: bir xil ranglar va boshidagi 1300px - aynan map-1
@@ -383,11 +380,10 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 2,
-        name: "Elf qishlog'i",
-        description: "Havorang elf daraxtdan mega olma otadi - savatchangizga 12 ta tuting, bir-biringizga tegmang!",
+        name: "Mini game",
+        description: "A sky-blue elf throws mega apples from a giant tree — catch 12 in your basket and don't bump into each other!",
         mode: 'apples',
         killsToWin: 0,
-        spawnAtEntrance: true,
         accentColor: 0x81d4fa,
         groundColor: 0x4e7a2c,
         mapWidth: 800,
@@ -414,14 +410,13 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 3,
-        name: "Elflar bozori",
-        description: "Shahar bozori. Baliq sotuvchi elf bilan gaplashing - u nimadir biladi...",
+        name: "Why are we here?",
+        description: "The city market. Talk to the fishmonger elf — he knows something...",
         mode: 'story',
         killsToWin: 0,
         accentColor: 0xffb74d,
         groundColor: 0x5d5566,
         mapWidth: 1600, // Ikki ekran - kamera qahramon bilan suriladi
-        spawnAtEntrance: true,
         // Chapda - map-3 dagi KATTA DEVORning orqa tomoni (eshigi ochiq turadi)
         // + osma taxtalar (rasta tomlari - klientda, rastalardan quriladi)
         platforms: [{ x: 0, y: 0, w: 96, h: 570 }, ...MARKET_4.planks],
@@ -440,8 +435,8 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 4,
-        name: "Robot-ilon jangi",
-        description: "Bahaybat robot-ilon devorni buzib bozorga bostirib kirdi - uni o'ldirguningizcha oting!",
+        name: "Just run 2 or end",
+        description: "The giant robot snake smashed into the market. Shoot it until it dies!",
         mode: 'boss',
         killsToWin: 0,
         accentColor: 0xff5252,
@@ -475,8 +470,8 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 5,
-        name: "Yovuz itlar",
-        description: "Qal'adan chiqib o'rmonga kirdingiz. Bahaybat daraxt yonida robot itlar kutib turibdi!",
+        name: "Bad dogs",
+        description: "You left the castle for the forest. Evil robot dogs wait by the giant tree — shoot the red boxes!",
         mode: 'waves',
         killsToWin: 0,             // 0 = qahramonlar soni x botsPerPlayer
         accentColor: 0x76ff03,
@@ -496,7 +491,6 @@ export const MAPS: MapDef[] = [
             // qoladi, tosh tepalik ortiga o'tib ketmaydi
             { x: 3600, y: 0, w: 200, h: 570 }
         ],
-        spawnAtEntrance: true,
         forest: {
             treeX: 1760,
             arenaTriggerX: 1150,
@@ -522,8 +516,8 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 6,
-        name: "Yuruvchi toshlar",
-        description: "G'or ichidagi tubsiz chuqurlik ustida tebranayotgan toshlar - ustiga tushgan tosh 1 soniyada qulaydi!",
+        name: "Walking stones",
+        description: "Swaying stones over a bottomless pit in the cave — a stone collapses 1 second after you land on it!",
         mode: 'stones',
         killsToWin: 0,
         accentColor: 0x40c4ff,
@@ -533,7 +527,6 @@ export const MAPS: MapDef[] = [
         // Boshidagi va oxiridagi qirg'oq orasi - butunlay tubsiz chuqurlik
         pits: [{ x: STONES_7.pitX, w: STONES_7.pitW }],
         stones: STONES_7.stones,
-        spawnAtEntrance: true,
         playerSpawns: [
             { x: 70, y: 500 }, { x: 110, y: 500 }, { x: 150, y: 500 }, { x: 190, y: 500 }
         ],
@@ -541,15 +534,14 @@ export const MAPS: MapDef[] = [
     },
     {
         id: 7,
-        name: "Tosh gorilla",
-        description: "Toshdan yasalgan bahaybat gorilla uyasi - u baqiradi, itaradi, yerdan tosh chiqaradi va platformalarni shiftga uradi!",
+        name: "Gorila Rock",
+        description: "The lair of a giant stone gorilla: it roars, shoves, bursts rocks from the ground and smashes platforms into the ceiling!",
         mode: 'gorilla',
         killsToWin: 0,
         accentColor: 0xffab40,
         groundColor: 0x3a3440,
         mapWidth: 800,
         platforms: [],            // platformalar - gorilla.platforms (harakatlanadi, server boshqaradi)
-        spawnAtEntrance: true,
         gorilla: {
             baseHp: 2400,
             hpPerExtraPlayer: 800,

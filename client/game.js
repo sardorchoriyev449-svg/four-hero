@@ -40,8 +40,22 @@ function hideLoadingOverlay(instant) {
     setTimeout(() => el.remove(), 700);
 }
 
+// Esc - pauza menyusi (o'yin ketayotganda). Hujjat darajasida: pauzadagi sahna klaviaturani tinglamaydi
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !phaserGame || !window.togglePauseMenu) return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' && document.activeElement.type === 'text') return;
+    e.preventDefault();
+    window.togglePauseMenu();
+});
+
 function stopGame() {
     hideLoadingOverlay(true);
+    window.togglePauseMenu = null;
+    const pauseMenu = document.getElementById('pause-menu');
+    if (pauseMenu) pauseMenu.remove();
+    const pauseBtn = document.getElementById('pause-btn');
+    if (pauseBtn) pauseBtn.remove();
     if (phaserGame) {
         phaserGame.destroy(true);
         phaserGame = null;
@@ -128,6 +142,7 @@ function launchGame(socket, roomId, mapData, continued) {
     let pickupHint = null;     // Yaqindagi tanga ustida "E" yozuvi
     let lastSentMove = { x: -1, y: -1, t: -1e9 }; // serverga oxirgi yuborilgan joy (tarmoqni tejash)
     let roundGo = false;       // hamma o'yinchi yuklanib, raund boshlandimi (shungacha qahramon qimirlamaydi)
+    let pauseMenuOpen = false; // pauza/menyu oynasi ochiq (qahramon boshqarilmaydi)
     let emotes = [];           // qahramonlar tepasidagi emotsiyalar: { img, playerId }
     let lastEmoteAt = -1e9;
 
@@ -2466,17 +2481,18 @@ function launchGame(socket, roomId, mapData, continued) {
         this.physics.world.setBounds(0, 0, mapWidth, 600);
         this.cameras.main.setBounds(0, 0, mapWidth, 600);
 
-        // Xarita nomini/rangini ekranning yuqori o'ng burchagida ko'rsatamiz (joriy tilda)
+        // Xarita nomini/rangini ekranning yuqori o'ng burchagida ko'rsatamiz (joriy tilda),
+        // eng o'ng chetda pauza tugmasi turadi
         const mapDisplayName = (map.id !== undefined) ? tMapName(map.id) : map.name;
         if (mapDisplayName) {
-            const nameText = this.add.text(778, 21, mapDisplayName, {
+            const nameText = this.add.text(734, 21, mapDisplayName, {
                 fontFamily: PIXEL_FONT, fontSize: '10px',
                 color: '#' + (map.accentColor || 0x00ffcc).toString(16).padStart(6, '0'),
                 stroke: '#000000', strokeThickness: 3
             }).setOrigin(1, 0.5).setScrollFactor(0).setDepth(1000);
             // HUD bilan bir xil piksel panel ichida
             const w = Math.round(nameText.width) + 20;
-            drawHudPanel(this.add.graphics().setScrollFactor(0).setDepth(998), 790 - w, 8, w, 26);
+            drawHudPanel(this.add.graphics().setScrollFactor(0).setDepth(998), 746 - w, 8, w, 26);
         }
 
         // Klaviatura tugmalarini eshitish
@@ -2821,10 +2837,90 @@ function launchGame(socket, roomId, mapData, continued) {
         // DIQQAT: Phaser to'liq yuklanib bo'ldi, endi serverdan o'yinchimizni so'raymiz!
         socket.emit('playerReadyInRoom', roomId);
 
+        // PAUZA MENYUSI (Esc yoki o'ng yuqoridagi tugma): yolg'iz o'yinchida o'yin TO'XTAYDI,
+        // bir necha o'yinchida to'xtamaydi - faqat menyu ochiladi. Ichida: davom etish,
+        // sozlamalar (ovoz, til) va o'yindan chiqish
+        const scene = this;
+        const closePauseMenu = () => {
+            const el = document.getElementById('pause-menu');
+            if (el) el.remove();
+            if (!pauseMenuOpen) return;
+            pauseMenuOpen = false;
+            if (scene.scene.isPaused()) scene.scene.resume();
+            socket.emit('setPaused', { roomId, paused: false });
+        };
+        const openPauseMenu = () => {
+            if (pauseMenuOpen || !currentCharacter) return;
+            const host = document.getElementById('game-container');
+            if (!host) return;
+            pauseMenuOpen = true;
+            const solo = Object.keys(otherPlayers).length === 0;
+            socket.emit('stopAttackInRoom', roomId);
+            socket.emit('stopAbilityInRoom', roomId);
+            if (solo) {
+                socket.emit('setPaused', { roomId, paused: true });
+                scene.scene.pause();
+            }
+            const vol = localStorage.getItem('gameVolume') || '70';
+            const el = document.createElement('div');
+            el.id = 'pause-menu';
+            el.innerHTML = `<div class="pm-box">
+                <div class="pm-title">${solo ? t('pause_title') : t('menu_title')}</div>
+                ${solo ? '' : `<div class="pm-note">${t('pause_multi_note')}</div>`}
+                <button class="pm-btn" data-act="resume"><i class="fa-solid fa-play"></i> ${t('pause_resume')}</button>
+                <button class="pm-btn pm-alt" data-act="settings"><i class="fa-solid fa-gear"></i> ${t('nav_settings')}</button>
+                <div class="pm-settings hidden">
+                    <label>${t('settings_volume')}</label>
+                    <input type="range" min="0" max="100" value="${vol}" class="pm-vol">
+                    <div class="pm-langs">
+                        <button class="pm-lang" data-lang="en">English</button><button class="pm-lang" data-lang="ru">Русский</button>
+                    </div>
+                </div>
+                <button class="pm-btn pm-leave" data-act="leave"><i class="fa-solid fa-right-from-bracket"></i> ${t('pause_leave')}</button>
+            </div>`;
+            host.appendChild(el);
+            el.querySelector('[data-act="resume"]').onclick = closePauseMenu;
+            el.querySelector('[data-act="settings"]').onclick = () => el.querySelector('.pm-settings').classList.toggle('hidden');
+            el.querySelector('.pm-vol').oninput = (e) => { if (window.setGameVolume) window.setGameVolume(e.target.value); };
+            el.querySelectorAll('.pm-lang').forEach((b) => {
+                b.classList.toggle('active', b.dataset.lang === getLang());
+                b.onclick = () => {
+                    setLang(b.dataset.lang);
+                    // Menyu yangi tilda qayta chiziladi (pauza holati o'zgarmaydi)
+                    el.remove();
+                    pauseMenuOpen = false;
+                    if (scene.scene.isPaused()) scene.scene.resume();
+                    openPauseMenu();
+                    const again = document.querySelector('#pause-menu .pm-settings');
+                    if (again) again.classList.remove('hidden');
+                };
+            });
+            el.querySelector('[data-act="leave"]').onclick = () => {
+                if (!confirm(t('pause_leave_confirm'))) return;
+                pauseMenuOpen = false;
+                if (window.leaveGameToMenu) window.leaveGameToMenu();
+            };
+        };
+        // Esc hujjat darajasida tinglanadi (sahna pauzada bo'lsa Phaser klaviaturasi ishlamaydi)
+        window.togglePauseMenu = () => { if (pauseMenuOpen) closePauseMenu(); else openPauseMenu(); };
+        // Telefon/sichqoncha uchun: o'yin oynasining o'ng yuqorisida pauza tugmasi
+        const oldPauseBtn = document.getElementById('pause-btn');
+        if (oldPauseBtn) oldPauseBtn.remove();
+        const pauseBtn = document.createElement('button');
+        pauseBtn.id = 'pause-btn';
+        pauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+        pauseBtn.onpointerdown = (e) => e.stopPropagation();
+        pauseBtn.onclick = (e) => { e.stopPropagation(); window.togglePauseMenu(); };
+        const gameBox = document.getElementById('game-container');
+        if (gameBox) gameBox.appendChild(pauseBtn);
+        // Xonaga boshqa o'yinchi kirdi - yolg'iz pauza bekor
+        socket.off('forceResume');
+        socket.on('forceResume', () => closePauseMenu());
+
         // SHIFT: barcha personajlar uchun umumiy - bosib turilgancha qobiliyat faol,
         // stamina ketaveradi; qo'yib yuborilsa effekt tugaydi va biroz kutib tiklanadi
         this.input.keyboard.on('keydown-SHIFT', () => {
-            if (!currentCharacter) return;
+            if (!currentCharacter || pauseMenuOpen) return;
             socket.emit('startAbilityInRoom', roomId);
         });
         this.input.keyboard.on('keyup-SHIFT', () => {
@@ -2838,7 +2934,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // ENTER: bosib turilgancha avtomatik hujum qiladi, stamina ketaveradi
         this.input.keyboard.on('keydown-ENTER', () => {
-            if (!currentCharacter) return;
+            if (!currentCharacter || pauseMenuOpen) return;
             let angle = (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
         });
@@ -2849,7 +2945,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // SICHQONCHA: bosib turilgancha avtomatik hujum qiladi
         this.input.on('pointerdown', () => {
-            if (!currentCharacter) return;
+            if (!currentCharacter || pauseMenuOpen) return;
             let angle = (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
         });
@@ -2880,11 +2976,11 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // DARAJA IMKONIYATLARI: Q - ikkinchi qurol (almashtirish/qaytarish), R - maxsus qobiliyat
         this.input.keyboard.on('keydown-Q', () => {
-            if (!currentCharacter || dialog || currentCharacter.isDead) return;
+            if (!currentCharacter || dialog || pauseMenuOpen || currentCharacter.isDead) return;
             socket.emit('toggleWeapon', roomId);
         });
         this.input.keyboard.on('keydown-R', () => {
-            if (!currentCharacter || dialog || currentCharacter.isDead) return;
+            if (!currentCharacter || dialog || pauseMenuOpen || currentCharacter.isDead) return;
             socket.emit('useSpecial', roomId);
         });
 
@@ -3791,7 +3887,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
         if (!currentCharacter || !currentCharacter.body) return;
         // Boshqa o'yinchilar hali yuklanmoqda - raund boshlanguncha joyida turadi
-        if (!roundGo) { currentCharacter.setVelocityX(0); return; }
+        if (!roundGo || pauseMenuOpen) { currentCharacter.setVelocityX(0); return; }
 
         // O'LIK ("ARVOH") HOLATDA: yura oladi (chapga/o'ngga/sakrash), lekin
         // hujum va qobiliyat ishlamaydi (server bu holatda ularni allaqachon rad etadi)
