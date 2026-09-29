@@ -585,7 +585,8 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+// Render (va boshqa hostinglar) portni PORT orqali beradi; tashqaridan kirish uchun barcha tarmoq interfeyslarida tinglaymiz
+const PORT = Number(process.env.PORT) || 3000;
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server professional modda ${PORT}-portda ishlamoqda.`);
 });
