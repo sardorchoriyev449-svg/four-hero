@@ -10,7 +10,7 @@ export interface CosmeticItem {
 }
 
 // Narx pog'onalari: oddiy / o'rtacha / noyob
-const C = 100, U = 200, R = 350;
+const C = 200, U = 300, R = 650;
 
 export const HEAD_ITEMS: CosmeticItem[] = [
     { id: 'cowboy', name: 'Cowboy Hat', price: U },
