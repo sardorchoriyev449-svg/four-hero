@@ -796,9 +796,59 @@
         #pause-menu .pm-langs { display: flex; gap: 8px; }
         #pause-menu .pm-lang { flex: 1; margin: 0; font-size: 9px; padding: 8px; background: var(--px-panel-2); color: var(--px-muted); box-shadow: 0 3px 0 var(--px-ink); }
         #pause-menu .pm-lang.active { background: var(--px-accent); color: #062b24; }
+
+        /* ===== SAHIFA YUKLANISH EKRANI ===== */
+        #boot-loader { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+            background: #0e0b1a; font-family: "Press Start 2P", "Courier New", monospace; transition: opacity .4s; }
+        #boot-loader.hide { opacity: 0; pointer-events: none; }
+        #boot-loader .bl-logo { font-size: 30px; color: #ffca28; text-shadow: 4px 4px 0 #000; letter-spacing: 2px; animation: px-logo 1.6s ease-in-out infinite; }
+        #boot-loader .bl-heroes { display: flex; gap: 16px; }
+        #boot-loader .bl-heroes i { width: 18px; height: 26px; background: var(--c); border: 3px solid #000; animation: px-hop .7s steps(2) infinite; }
+        #boot-loader .bl-heroes i:nth-child(2) { animation-delay: .175s; }
+        #boot-loader .bl-heroes i:nth-child(3) { animation-delay: .35s; }
+        #boot-loader .bl-heroes i:nth-child(4) { animation-delay: .525s; }
+        #boot-loader .bl-bar { width: min(320px, calc(100vw - 48px)); height: 22px; background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 2px #3a3060; }
+        #boot-fill { display: block; height: 100%; width: 15%; transition: width .3s steps(6);
+            background: repeating-linear-gradient(90deg, #1de9b6 0 12px, #00bfa5 12px 16px); animation: ld-slide .6s linear infinite; }
+        #boot-loader .bl-text { font-size: 10px; color: #b8b0d8; }
+        #boot-loader .bl-dots::after { content: ''; animation: ld-dots 1.2s steps(4) infinite; }
+
+        /* Bo'lim ichidagi kichik yuklanish belgisi */
+        .inline-loader { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 22px 0; font-size: 9px; color: var(--px-muted); line-height: normal; }
+        .px-dots { display: inline-flex; gap: 5px; }
+        .px-dots i { width: 8px; height: 8px; background: var(--px-accent); box-shadow: 2px 2px 0 var(--px-ink); animation: px-dot .9s steps(2) infinite; }
+        .px-dots i:nth-child(2) { animation-delay: .15s; }
+        .px-dots i:nth-child(3) { animation-delay: .3s; }
+        @keyframes px-dot { 50% { transform: translateY(-5px); opacity: .5; } }
+        .lobby-slots > .inline-loader { grid-column: 1 / -1; width: 100%; }
+        /* So'rov ketayotgan tugma */
+        button.busy { pointer-events: none; opacity: .75; }
+        button.busy::after { content: ''; display: inline-block; width: 3ch; text-align: left; animation: ld-dots 1s steps(4) infinite; }
+        #character-panel.is-loading .char-stage { opacity: .4; }
+
+        /* ===== DETALLAR (bosh kiyimi, yuz, qurol ko'rinishlari) ===== */
+        .cos-note { text-align: left; margin: 0 0 10px; }
+        .cos-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .cos-tab { width: auto; margin: 0; padding: 8px 10px; font-size: 8px; background: var(--px-panel-2); color: var(--px-muted);
+            box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); }
+        .cos-tab.active { background: var(--px-accent); color: #062b24; }
+        .cos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+        .cos-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px; background: var(--px-panel-2);
+            border: 3px solid var(--px-ink); box-shadow: inset 0 0 0 2px var(--px-panel-3); }
+        .cos-card.equipped { box-shadow: inset 0 0 0 2px var(--px-accent); }
+        .cos-icon { width: 88px; height: 72px; image-rendering: pixelated; background: var(--px-bg); border: 2px solid var(--px-ink); }
+        .cos-name { font-size: 8px; line-height: 1.5; min-height: 24px; text-align: center; color: var(--px-text); }
+        .cos-card button { width: 100%; margin: 0; }
     </style>
 </head>
 <body>
+    <!-- Sahifa yuklanish ekrani: hamma narsa tayyor bo'lguncha (lobby.js dagi Boot yopadi) -->
+    <div id="boot-loader">
+        <div class="bl-logo">4 HEROES</div>
+        <div class="bl-heroes"><i style="--c:#9e9e9e"></i><i style="--c:#7b1fa2"></i><i style="--c:#1565c0"></i><i style="--c:#d32f2f"></i></div>
+        <div class="bl-bar"><span id="boot-fill"></span></div>
+        <div class="bl-text"><span data-i18n="loading_title">LOADING</span><span class="bl-dots"></span></div>
+    </div>
     <canvas id="menu-bg"></canvas>
 
     <div id="auth-panel" class="panel">
@@ -871,7 +921,7 @@
         <button class="back-btn" id="all-lobbies-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
         <h2 data-i18n="open_rooms_title">Open Rooms</h2>
         <div id="room-list">
-            <div style="color: #888; text-align: center;" data-i18n="no_rooms_yet">No rooms yet...</div>
+            <div class="inline-loader"><span class="px-dots"><i></i><i></i><i></i></span><span data-i18n="loading_short">Loading</span></div>
         </div>
     </div>
 
@@ -925,6 +975,12 @@
 
         <h3 style="text-align:left; margin-top: 22px;" data-i18n="char_weapon_skins_title">Weapon Skins</h3>
         <div id="weapon-shop-content"></div>
+
+        <!-- Detallar: bosh kiyimi, yuz buyumi (hamma qahramonga umumiy) va qurol ko'rinishlari -->
+        <h3 style="text-align:left; margin-top: 22px;" data-i18n="cos_title">Accessories</h3>
+        <p class="settings-note cos-note" data-i18n="cos_note">Head and face items are shared by all heroes - buy once, wear on anyone.</p>
+        <div id="cos-tabs" class="cos-tabs"></div>
+        <div id="cos-grid" class="cos-grid"></div>
     </div>
 
     <!-- ===== SOZLAMALAR ===== -->
@@ -1041,6 +1097,7 @@
 
     <script src="audio.js"></script>
     <script src="perks.js"></script>
+    <script src="cosmetics.js"></script>
     <script src="i18n.js"></script>
     <script src="lobby.js"></script>
     <script src="game.js"></script>

@@ -3,6 +3,7 @@ import { RoomState, PlayerState } from '../types';
 import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getWeaponSkinColor } from '../skins';
+import { lookString } from '../cosmetics';
 import { MAPS, getMapById } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
@@ -54,6 +55,7 @@ export class RoomManager {
         // Shu socket allaqachon xonada (takroriy so'rov) - ikkinchi nusxa qo'shilmaydi
         if (room.players[socket.id]) {
             socket.emit('roomJoined', this.roomJoinedPayload(room, socket.id));
+            this.updateLobby(roomId);
             return;
         }
         // Shu brauzer oynasi (clientId) xonada allaqachon bor - sahifa yangilangan: yangi o'yinchi
@@ -97,6 +99,7 @@ export class RoomManager {
             knight: { damage: 0, stamina: 0 }, archer: { damage: 0, stamina: 0 },
             mage: { damage: 0, stamina: 0 }, samurai: { damage: 0, stamina: 0 }
         };
+        let equippedCosmetics: { [c: string]: { [slot: string]: string } } = {};
         let characterType = 'knight';
         this.pendingJoins.add(socket.id);
         let unlockedLevel = 0, xp = 0;
@@ -116,6 +119,7 @@ export class RoomManager {
                 charXp = user.charXp;
                 equippedSkins = user.equippedSkins;
                 equippedWeaponSkins = user.equippedWeaponSkins;
+                equippedCosmetics = user.equippedCosmetics;
                 accountUpgrades = user.upgrades;
                 // MUHIM: "Mening personajim" ekranida tanlangan personaj bilan HAR QANDAY
                 // xonada shu personaj sifatida o'ynaydi (endi lobbida alohida tanlanmaydi)
@@ -149,6 +153,8 @@ export class RoomManager {
             equippedSkins: equippedSkins,
             weaponColor: getWeaponSkinColor(characterType, equippedWeaponSkins[characterType] || 'default'),
             equippedWeaponSkins: equippedWeaponSkins,
+            equippedCosmetics: equippedCosmetics,
+            look: lookString(equippedCosmetics[characterType], characterType),
             isDead: false,
             respawnTimer: 0,
             isReady: false,
@@ -321,6 +327,7 @@ export class RoomManager {
             const skinId = player.equippedSkins[characterType] || 'default';
             player.skinId = skinId;
             player.color = getSkinColor(characterType, skinId) ?? CHARACTER_COLORS[characterType];
+            player.look = lookString((player.equippedCosmetics || {})[characterType], characterType);
             // MUHIM: yaxshilashlar HAR BIR PERSONAJGA ALOHIDA tegishli - shu personajga
             // almashganda, uning o'z damage/stamina darajasini keshdan olamiz
             const charUpgrades = player.accountUpgrades[characterType] || { damage: 0, stamina: 0 };
@@ -357,6 +364,8 @@ export class RoomManager {
         player.color = getSkinColor(player.characterType, skinId) ?? CHARACTER_COLORS[player.characterType];
         const weaponSkinId = user.equippedWeaponSkins[player.characterType] || 'default';
         player.weaponColor = getWeaponSkinColor(player.characterType, weaponSkinId);
+        player.equippedCosmetics = user.equippedCosmetics;
+        player.look = lookString(user.equippedCosmetics[player.characterType], player.characterType);
         const charUpgrades = user.upgrades[player.characterType] || { damage: 0, stamina: 0 };
         player.damageLevel = charUpgrades.damage || 0;
         player.staminaLevel = charUpgrades.stamina || 0;
@@ -887,6 +896,7 @@ export class RoomManager {
             // Lobbidagi o'rinlarda qahramon rasmi va darajasi uchun
             color: p.color,
             weaponColor: p.weaponColor,
+            look: p.look || '',
             level: p.level || 0
         }));
 

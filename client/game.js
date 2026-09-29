@@ -173,35 +173,13 @@ function launchGame(socket, roomId, mapData, continued) {
         this.load.image('emote_1', 'public/emotions/emotion-1.png');
     }
 
-    // Rangni oqartirish/qoraytirish (piksel soyalar uchun)
-    function mixColor(c, t, k) {
-        const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
-        const tr = (t >> 16) & 255, tg = (t >> 8) & 255, tb = t & 255;
-        return (Math.round(r + (tr - r) * k) << 16) | (Math.round(g + (tg - g) * k) << 8) | Math.round(b + (tb - b) * k);
-    }
-
     // O'YINCHI QAHRAMON TANASI (chizma bo'yicha, piksel): skin rangidagi tik to'rtburchak
     // (chap qirrasi yorug', o'ng qirrasi soyada), o'ng tomonda - qora ramkali TO'Q SARIQ visor,
     // ichida ikkita oq tirqish. O'ngga qaragan; chapga qaraganda rasm ko'zgudek aylanadi. 32x48
+    // (rasm cosmetics.js da - lobbidagi oldindan ko'rinish bilan bir xil bo'lishi uchun)
     function createPlayerTexture(scene, key, color) {
         if (scene.textures.exists(key)) return;
-        const W = 14, H = 22;
-        const g = gridNew(W, H);
-        for (let y = 0; y < H; y++) {
-            for (let x = 0; x < W; x++) {
-                let c = color;
-                if (x <= 1) c = mixColor(color, 0xffffff, 0.22);
-                else if (x >= W - 2) c = mixColor(color, 0x000000, 0.25);
-                if (y >= H - 2) c = mixColor(c, 0x000000, 0.18);
-                g[y][x] = c;
-            }
-        }
-        const INK = 0x141414, ORANGE = 0xd9822b, WHITE = 0xffffff;
-        for (let x = 6; x < W; x++) { g[4][x] = INK; g[7][x] = INK; }
-        g[5][6] = INK; g[6][6] = INK;
-        for (let x = 7; x < W; x++) { g[5][x] = ORANGE; g[6][x] = ORANGE; }
-        [8, 9, 11, 12].forEach((x) => { g[5][x] = WHITE; });
-        gridToTexture(scene, key, gridOutline(g, 0x0d0d0d), 2);
+        gridToTexture(scene, key, Cosmetics.bodyGrid(color), 2);
     }
 
 
@@ -310,116 +288,56 @@ function launchGame(socket, roomId, mapData, continued) {
         g.strokePath();
     }
 
-    // QAHRAMONNING TINCH HOLATDAGI QUROLI: har bir sinf o'ziga xos qurolni
-    // qo'lida ushlab turadi - siz bergan "default pose" sxemasiga mos (to'la
-    // to'ldirilgan, qora chegarali shakllar, ingichka chiziqlar emas):
-    // samuray - diagonal katana (pastda romb shaklidagi jigarrang dastasi),
-    // ritsar - deyarli tik tig' + qora dastasi,
-    // kamonchi - to'ldirilgan uchburchak yoy,
-    // sehrgar - diagonal tayoqcha, dastasida to'p, uchida kichik xoch
-    // QUROLLAR (chizma bo'yicha, piksel, o'ngga qaragan, dastasi chapda):
-    //   knight - tepaga-oldinga ko'tarilgan katta qilich (qora gard); samurai - pastga-orqaga
-    //   qaragan katana (jigarrang dasta, oq tig'); archer - uchburchak kamon + tayoq;
-    //   mage - pastida sariq shar, tepasida sariq sharcha va halqa; Q bilan: drobovik, kunai
+    // QUROLLAR VA DETALLAR (piksel rasmlari cosmetics.js da): standart qurollar - "w_<tur>",
+    // kiyilgan detallar (bosh kiyimi, yuz buyumi, qurol ko'rinishi) - "cos_<slot>_<id>" teksturalari
     function weaponGrid(kind) {
-        const put = (g, x, y, c) => { if (g[y] && x >= 0 && x < g[0].length) g[y][x] = c; };
-        if (kind === 'sword') {
-            const g = gridNew(30, 7);
-            for (let x = 0; x < 5; x++) for (let y = 2; y < 5; y++) g[y][x] = 0x2b1d14;
-            for (let y = 0; y < 7; y++) { g[y][5] = 0x111111; g[y][6] = 0x111111; }
-            for (let x = 7; x < 27; x++) { g[2][x] = 0xe0e6ea; g[3][x] = 0xb0bec5; g[4][x] = 0x78909c; }
-            put(g, 27, 3, 0xb0bec5); put(g, 27, 2, 0xe0e6ea); put(g, 28, 3, 0x90a4ae); put(g, 29, 3, 0x78909c);
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'katana') {
-            const g = gridNew(34, 5);
-            for (let x = 0; x < 7; x++) for (let y = 1; y < 4; y++) g[y][x] = (x % 2) ? 0x6d4c41 : 0x3e2723;
-            for (let y = 0; y < 5; y++) g[y][7] = 0xc9975b;
-            for (let x = 8; x < 31; x++) { g[1][x] = 0x9e9e9e; g[2][x] = 0xf5f5f5; g[3][x] = 0xffffff; }
-            put(g, 31, 2, 0xf5f5f5); put(g, 31, 3, 0xffffff); put(g, 32, 3, 0xffffff); put(g, 33, 3, 0xe0e0e0);
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'bow') {
-            const g = gridNew(18, 14);
-            for (let x = 0; x < 14; x++) { g[6][x] = 0x8d5a3a; g[7][x] = 0x6d4c41; }
-            for (let y = 0; y < 14; y++) {
-                const half = Math.abs(y - 6.5);
-                const x0 = 8 + Math.round(half * 0.2), x1 = 17 - Math.round(half * 1.2);
-                for (let x = x0; x <= x1; x++) g[y][x] = (x === x0 || x === x1 || y === 0 || y === 13) ? 0x5d3a22 : 0xb97a57;
-            }
-            for (let y = 0; y < 14; y++) put(g, 8, y, 0xf5f5f5);                          // ip
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'staff') {
-            const g = gridNew(32, 8);
-            for (let y = 1; y < 7; y++) for (let x = 0; x < 6; x++) if (Math.hypot(x - 2.5, y - 3.5) < 3) g[y][x] = (x + y < 5) ? 0xfff59d : 0xffd600;
-            for (let x = 6; x < 27; x++) { g[3][x] = 0xa1673e; g[4][x] = 0x7b4a2a; }
-            for (let y = 1; y < 7; y++) { g[y][21] = 0xffd600; g[y][22] = 0xffab00; }
-            for (let y = 2; y < 6; y++) for (let x = 27; x < 31; x++) if (Math.hypot(x - 28.5, y - 3.5) < 2.1) g[y][x] = (x < 29 && y < 4) ? 0xfff59d : 0xffd600;
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'shotgun') {
-            const g = gridNew(28, 7);
-            for (let x = 0; x < 8; x++) for (let y = 2 + Math.floor(x / 4); y < 6; y++) g[y][x] = 0x6d4c41;
-            for (let x = 8; x < 13; x++) for (let y = 1; y < 5; y++) g[y][x] = 0x37474f;
-            for (let x = 13; x < 28; x++) { g[1][x] = 0x78909c; g[2][x] = 0x546e7a; g[3][x] = 0x455a64; }
-            for (let x = 15; x < 21; x++) { g[4][x] = 0x8d5a3a; g[5][x] = 0x6d4c41; }       // pomp
-            put(g, 10, 5, 0x263238); put(g, 10, 6, 0x263238);                                 // tepki
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'kunai') {
-            const g = gridNew(16, 5);
-            for (let y = 1; y < 4; y++) { g[y][0] = 0xc62828; g[y][2] = 0xc62828; }
-            g[1][1] = 0xc62828; g[3][1] = 0xc62828;
-            for (let x = 3; x < 7; x++) g[2][x] = 0x212121;
-            for (let x = 7; x < 16; x++) { const hw = Math.max(0, Math.round((16 - x) / 4)); for (let y = 2 - hw; y <= 2 + hw; y++) put(g, x, y, y < 2 ? 0xeceff1 : 0xb0bec5); }
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'shield') {
-            // Ritsar qalqoni: temir hoshiya, ko'k yuz, o'rtada oltin chiziq va belgi
-            const g = gridNew(18, 26);
-            for (let y = 0; y < 26; y++) {
-                const hw = y < 14 ? 9 : Math.max(1, Math.round(9 * (1 - (y - 14) / 12)));
-                for (let x = 9 - hw; x < 9 + hw; x++) {
-                    const edge = x === 9 - hw || x === 9 + hw - 1 || y === 0 || y === 25;
-                    g[y][x] = edge ? 0x455a64 : (x === 8 || x === 9) ? 0xffca28 : shade(0.8 - y / 40 - (x > 9 ? 0.15 : 0), x, y, [0x1565c0, 0x1e88e5, 0x42a5f5, 0x90caf9]);
-                }
-            }
-            for (let y = 8; y < 13; y++) for (let x = 6; x < 12; x++) if (Math.abs(x - 8.5) + Math.abs(y - 10) < 3.2) g[y][x] = 0xffca28;
-            return gridOutline(g, 0x111111);
-        }
-        if (kind === 'flash') {
-            const g = gridNew(10, 10);
-            for (let y = 0; y < 10; y++) for (let x = 0; x < 10; x++) {
-                const d = Math.abs(x - 4.5) + Math.abs(y - 4.5);
-                if (d < 5 && (Math.abs(x - 4.5) < 1 || Math.abs(y - 4.5) < 1 || d < 3)) g[y][x] = d < 2 ? 0xffffff : d < 3.5 ? 0xffeb3b : 0xff9100;
-            }
-            return g;
-        }
-        return gridNew(1, 1);
+        return Cosmetics.defaultWeapon(kind);
     }
     function ensureWeaponTextures(scene) {
         ['sword', 'katana', 'bow', 'staff', 'shotgun', 'kunai', 'shield', 'flash'].forEach((k) => {
             if (!scene.textures.exists('w_' + k)) gridToTexture(scene, 'w_' + k, weaponGrid(k), 2);
         });
     }
-    // Qurolning qo'ldagi joyi (tana markaziga nisbatan, o'ngga qaraganda), dasta nuqtasi va burchagi
-    const WEAPON_POSE = {
-        knight: { tex: 'w_sword', ox: 0.1, hand: [9, 8], angle: -58 },
-        samurai: { tex: 'w_katana', ox: 0.12, hand: [9, 8], angle: 152 },
-        archer: { tex: 'w_bow', ox: 0.2, hand: [8, 4], angle: 18 },
-        mage: { tex: 'w_staff', ox: 0.6, hand: [9, 6], angle: -38 },
-        shotgun: { tex: 'w_shotgun', ox: 0.3, hand: [9, 6], angle: 0 },
-        kunai: { tex: 'w_kunai', ox: 0.25, hand: [11, 6], angle: 12 }
-    };
+    // Detal teksturasi (yo'q bo'lsa yaratiladi); noma'lum detal - null
+    function cosTexture(scene, slot, id) {
+        const art = id && Cosmetics.art(slot, id);
+        if (!art) return null;
+        const key = 'cos_' + slot + '_' + id;
+        if (!scene.textures.exists(key)) gridToTexture(scene, key, art.grid, 2);
+        return { key, art };
+    }
+    // Serverdan kelgan detallar satri o'zgarsa - qayta o'qiladi
+    function setHeroLook(sprite, lookStr) {
+        const str = lookStr || '';
+        if (sprite.lookStr === str) return;
+        sprite.lookStr = str;
+        sprite.look = Cosmetics.parseLook(str);
+    }
     function weaponPoseKey(sprite, characterType) {
         if (sprite.weaponMode === 'alt' && characterType === 'knight') return 'shotgun';
         if (sprite.weaponMode === 'alt' && characterType === 'samurai') return 'kunai';
-        return characterType in WEAPON_POSE ? characterType : 'knight';
+        return characterType in Cosmetics.POSE ? characterType : 'knight';
+    }
+    // Bosh kiyimi / yuz buyumi: tana ustida, qarash tomoniga qarab ko'zgudek aylanadi
+    function updateHeroOverlay(scene, sprite, field, slot, depth, facingRight, hidden) {
+        const tex = cosTexture(scene, slot, sprite.look && sprite.look[slot]);
+        let img = sprite[field];
+        if (!tex) { if (img) img.setVisible(false); return; }
+        if (!img) img = sprite[field] = scene.add.image(sprite.x, sprite.y, tex.key).setDepth(depth);
+        if (img.texture.key !== tex.key) img.setTexture(tex.key);
+        img.setVisible(!hidden);
+        if (hidden) return;
+        // Tana 32x48 (markazda); detal kataklari tana kataklariga (ax, ay) bog'langan, 1 katak = 2px
+        const dx = -16 + 2 * tex.art.ax + img.width / 2;
+        const dy = -24 + 2 * tex.art.ay + img.height / 2;
+        img.setFlipX(!facingRight);
+        img.setPosition(sprite.x + (facingRight ? dx : -dx), sprite.y + dy * sprite.scaleY);
+        img.setAlpha(sprite.alpha);
+        if (sprite.isTinted) img.setTint(sprite.tintTopLeft); else img.clearTint();
     }
 
     // Har kadr: qurol qo'lda (zarba animatsiyasi siljishlari bilan), ritsar qalqoni (paydo bo'lish/
-    // yo'qolish animatsiyasi), tana qarash tomoniga buriladi
+    // yo'qolish animatsiyasi), bosh kiyimi va yuz buyumi, tana qarash tomoniga buriladi
     function updateHeroWeaponVisuals(scene, sprite, characterType, facingRight) {
         ensureWeaponTextures(scene);
         if (!sprite.weaponSpr) sprite.weaponSpr = scene.add.image(sprite.x, sprite.y, 'w_sword').setDepth(3.1);
@@ -427,21 +345,29 @@ function launchGame(socket, roomId, mapData, continued) {
         if (!sprite.atk) sprite.atk = { angle: 0, dx: 0, dy: 0 };
         sprite.setFlipX(!facingRight);
         const dir = facingRight ? 1 : -1;
-        const pose = WEAPON_POSE[weaponPoseKey(sprite, characterType)];
+        const pose = Cosmetics.POSE[weaponPoseKey(sprite, characterType)];
+        const custom = cosTexture(scene, pose.slot, sprite.look && sprite.look[pose.slot]);
         const w = sprite.weaponSpr;
         const hidden = sprite.isDead || sprite.alpha <= 0.01;
         w.setVisible(!hidden);
         if (!hidden) {
-            if (w.texture.key !== pose.tex) w.setTexture(pose.tex);
-            const ang = pose.angle + sprite.atk.angle;
-            w.setFlipX(!facingRight).setOrigin(facingRight ? pose.ox : 1 - pose.ox, 0.5);
+            const texKey = custom ? custom.key : 'w_' + pose.kind;
+            if (w.texture.key !== texKey) w.setTexture(texKey);
+            const ox = custom ? custom.art.ox : pose.ox, oy = custom ? custom.art.oy : 0.5;
+            const ang = ((custom && custom.art.angle !== undefined) ? custom.art.angle : pose.angle) + sprite.atk.angle;
+            w.setFlipX(!facingRight).setOrigin(facingRight ? ox : 1 - ox, oy);
             w.angle = facingRight ? ang : -ang;
             w.setPosition(sprite.x + dir * (pose.hand[0] + sprite.atk.dx), sprite.y + pose.hand[1] + sprite.atk.dy);
             w.setAlpha(sprite.alpha);
             if (characterType === 'mage' && sprite.weaponMode === 'alt') w.setTint(0x80d8ff); else w.clearTint();
         }
+        updateHeroOverlay(scene, sprite, 'faceSpr', 'face', 3.04, facingRight, hidden);
+        updateHeroOverlay(scene, sprite, 'hatSpr', 'head', 3.05, facingRight, hidden);
         // RITSAR QALQONI: bosilganda oldinga "chiqadi" (kattalashib), qo'yib yuborilganda yo'qoladi
         const sh = sprite.shieldSpr;
+        const shieldTex = (characterType === 'knight' && cosTexture(scene, 'shield', sprite.look && sprite.look.shield)) || null;
+        const shieldKey = shieldTex ? shieldTex.key : 'w_shield';
+        if (sh.texture.key !== shieldKey) sh.setTexture(shieldKey);
         const want = !!sprite.shieldActive && !sprite.isDead;
         if (want && !sprite.shieldOn) {
             sprite.shieldOn = true;
@@ -533,7 +459,9 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // Rasmning haqiqiy tepa qirrasidan (origin hisobga olinadi) - aks holda baland yoki
         // pastga surilgan teksturalarda (katta it) chiziq boshning ustiga emas, ichiga tushardi
-        const barY = Math.round(sprite.y - sprite.displayHeight * sprite.originY - 9);
+        let barY = Math.round(sprite.y - sprite.displayHeight * sprite.originY - 9);
+        // Bosh kiyimi bo'lsa - chiziq uning ustida (baland toj/quloqlar chiziqni yopmasin)
+        if (sprite.hatSpr && sprite.hatSpr.visible) barY = Math.min(barY, Math.round(sprite.hatSpr.y - sprite.hatSpr.height / 2 - 7));
         const x = Math.round(sprite.x - 16);
 
         // Piksel uslub: qora ramka, to'q fon, jon rangi (yashil -> sariq -> qizil), yuqorida yorug' qator
@@ -3336,6 +3264,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.ammo = myData.ammo || 0;
                 currentCharacter.maxAmmo = myData.maxAmmo || 7;
                 currentCharacter.reloading = !!myData.reloading;
+                setHeroLook(currentCharacter, myData.look);
 
                 if (myData.isDead) {
                     // O'LGAN ("ARVOH") HOLATI: yarim shaffof va ko'kimtir tus
@@ -3393,6 +3322,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
                 otherPlayers[id].isDead = pData.isDead;
                 otherPlayers[id].isInvisible = pData.isInvisible;
+                setHeroLook(otherPlayers[id], pData.look);
                 if (isApples) {
                     const n = pData.apples || 0;
                     if (n === 0 && (otherPlayers[id].apples || 0) > 0) spillApples(this, otherPlayers[id].x, otherPlayers[id].y, otherPlayers[id].apples);
@@ -3425,6 +3355,8 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (otherPlayers[id].healthBar) otherPlayers[id].healthBar.destroy();
                     if (otherPlayers[id].shieldSpr) otherPlayers[id].shieldSpr.destroy();
                     if (otherPlayers[id].weaponSpr) otherPlayers[id].weaponSpr.destroy();
+                    if (otherPlayers[id].hatSpr) otherPlayers[id].hatSpr.destroy();
+                    if (otherPlayers[id].faceSpr) otherPlayers[id].faceSpr.destroy();
                     if (otherPlayers[id].basketGfx) otherPlayers[id].basketGfx.destroy();
                     if (otherPlayers[id].appleText) otherPlayers[id].appleText.destroy();
                     otherPlayers[id].destroy();
@@ -3544,8 +3476,11 @@ function launchGame(socket, roomId, mapData, continued) {
 
                     if (bData.bulletType === 'ice') currentTexture = 'projectile_fireball';
                     else if (bData.bulletType === 'pellet') currentTexture = 'projectile_normal';
-                    else if (bData.bulletType === 'kunai') currentTexture = 'projectile_kunai';
-                    else if (shooter) {
+                    else if (bData.bulletType === 'kunai') {
+                        // Kunai ko'rinishi kiyilgan bo'lsa - uchadigani ham o'sha (kartalar, tish cho'tkasi, darts)
+                        const kunaiSkin = ownerSprite && ownerSprite.look && cosTexture(this, 'kunai', ownerSprite.look.kunai);
+                        currentTexture = kunaiSkin ? kunaiSkin.key : 'projectile_kunai';
+                    } else if (shooter) {
                         if (shooter.characterType === 'knight') currentTexture = 'melee_knight';
                         else if (shooter.characterType === 'samurai') currentTexture = 'melee_samurai';
                         else if (shooter.characterType === 'archer') currentTexture = 'projectile_arrow';
@@ -3560,7 +3495,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     // (alohida tekstura chizish o'rniga, tez va yengil "tint" usuli)
                     if (bData.bulletType === 'ice') bSprite.setTint(0x80d8ff);          // muz shari - ko'kish
                     else if (bData.bulletType === 'pellet') bSprite.setTint(0xffe082).setScale(0.7); // sochma o'q
-                    else if (shooter && shooter.weaponColor) {
+                    else if (shooter && shooter.weaponColor && !currentTexture.startsWith('cos_')) {
                         bSprite.setTint(shooter.weaponColor);
                     }
 

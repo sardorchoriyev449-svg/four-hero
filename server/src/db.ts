@@ -47,6 +47,10 @@ const userSchema = new mongoose.Schema({
     xp: { type: Number, required: true, default: 0 },
     // HAR PERSONAJ tajribasi: shu personaj bilan o'tilgan har xarita +10 (daraja imkoniyatlari shundan)
     charXp: { type: Object, required: true, default: () => ({ knight: 0, archer: 0, mage: 0, samurai: 0 }) },
+    // DETALLAR: sotib olinganlar ("head:cowboy", "knight.sword:bat") va har personajda kiyilganlari
+    // ({ knight: { head: 'cowboy', sword: 'bat' }, ... })
+    ownedCosmetics: { type: [String], default: () => [] },
+    equippedCosmetics: { type: Object, default: () => ({}) },
     // ADMIN (Telegram bot) bloklagan hisob: kira olmaydi, xonaga qo'shila olmaydi
     banned: { type: Boolean, required: true, default: false },
     banReason: { type: String, default: '' }
@@ -70,6 +74,8 @@ export interface UserRecord {
     unlockedLevel: number;
     xp: number;
     charXp: { [character: string]: number };
+    ownedCosmetics: string[];
+    equippedCosmetics: { [character: string]: { [slot: string]: string } };
     banned: boolean;
     banReason: string;
     createdAt: Date | null;
@@ -113,6 +119,8 @@ function docToUser(doc: any): UserRecord {
         skillPoints: skillPoints,
         creditedLevels: creditedLevels,
         ...legacyProgress(doc, creditedLevels),
+        ownedCosmetics: Array.isArray(doc.ownedCosmetics) ? [...doc.ownedCosmetics] : [],
+        equippedCosmetics: doc.equippedCosmetics || {},
         banned: !!doc.banned,
         banReason: doc.banReason || '',
         createdAt: doc.createdAt || null
@@ -246,6 +254,38 @@ export async function equipSkin(userId: string, characterType: string, skinId: s
     doc.markModified(equippedField);
     await doc.save();
 
+    return { success: true, user: docToUser(doc) };
+}
+
+// DETAL SOTIB OLISH: tanga yetarli va hali olinmagan bo'lsa - bitta atomar yozuv bilan
+// (ikki marta tez bosilsa ham ikki marta pul yechilmaydi)
+export async function buyCosmetic(userId: string, key: string, price: number): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const doc = await UserModel.findOneAndUpdate(
+        { _id: userId, ownedCosmetics: { $ne: key }, coins: { $gte: price } },
+        { $push: { ownedCosmetics: key }, $inc: { coins: -price } },
+        { returnDocument: 'after' }
+    );
+    if (doc) return { success: true, user: docToUser(doc) };
+    const cur = await UserModel.findById(userId);
+    if (!cur) return { success: false, message: 'err_user_not_found' };
+    if ((cur as any).ownedCosmetics && (cur as any).ownedCosmetics.includes(key)) return { success: false, message: 'err_skin_owned' };
+    return { success: false, message: 'err_not_enough_coins' };
+}
+
+// DETAL KIYISH / YECHISH (itemId = null - yechish). Kiyish uchun oldin sotib olingan bo'lishi kerak
+export async function equipCosmetic(userId: string, characterType: string, slot: string, itemId: string | null, key: string | null): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const doc = await UserModel.findById(userId);
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    if (itemId !== null && !((doc as any).ownedCosmetics || []).includes(key)) {
+        return { success: false, message: 'err_skin_not_owned' };
+    }
+    const all = { ...((doc as any).equippedCosmetics || {}) };
+    const mine = { ...(all[characterType] || {}) };
+    if (itemId === null) delete mine[slot]; else mine[slot] = itemId;
+    all[characterType] = mine;
+    (doc as any).equippedCosmetics = all;
+    doc.markModified('equippedCosmetics');
+    await doc.save();
     return { success: true, user: docToUser(doc) };
 }
 

@@ -251,7 +251,7 @@ export class GameEngine {
                     x: p.x, y: p.y, hp: p.hp, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
-                    weaponColor: p.weaponColor, nickname: p.nickname, apples: p.apples,
+                    weaponColor: p.weaponColor, look: p.look || '', nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main',
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0

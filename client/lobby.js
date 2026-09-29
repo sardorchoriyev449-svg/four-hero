@@ -1,8 +1,62 @@
 const socket = io();
 
+// SAHIFA YUKLANISH EKRANI (#boot-loader): shriftlar, ikonalar, fayllar va birinchi ma'lumotlar
+// (menyu, xonaga qaytish, ochiq turgan bo'lim) kelguncha - bo'sh sahifa ko'rinib, keyin
+// elementlar birdan "paydo bo'lmasin". Ko'pi bilan 8 soniya kutiladi
+const Boot = (() => {
+    const el = document.getElementById('boot-loader');
+    const fill = document.getElementById('boot-fill');
+    let total = 0, settled = 0, started = false, finished = false;
+    const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (!el) return;
+        if (fill) fill.style.width = '100%';
+        setTimeout(() => { el.classList.add('hide'); setTimeout(() => el.remove(), 450); }, 150);
+    };
+    const check = () => {
+        if (started && settled >= total) setTimeout(() => { if (settled >= total) finish(); }, 80);
+    };
+    return {
+        // Promise tugaguncha yuklanish ekrani turadi (ekran allaqachon yopilgan bo'lsa - hech narsa qilmaydi)
+        wait(p) {
+            if (finished || !p || typeof p.then !== 'function') return p;
+            total++;
+            const done = () => {
+                settled++;
+                if (fill) fill.style.width = Math.round(15 + 85 * settled / total) + '%';
+                check();
+            };
+            p.then(done, done);
+            return p;
+        },
+        start() { started = true; setTimeout(finish, 8000); check(); }
+    };
+})();
+const bootFont = (spec) => (document.fonts && document.fonts.load) ? document.fonts.load(spec).catch(() => {}) : Promise.resolve();
 // O'yin HUD'idagi piksel shrift canvas'ga chizilishidan oldin yuklangan bo'lsin
 // (brauzer shriftni odatda faqat sahifada ishlatilganda yuklaydi)
-if (document.fonts && document.fonts.load) document.fonts.load('10px "Press Start 2P"').catch(() => {});
+Boot.wait(bootFont('10px "Press Start 2P"'));
+Boot.wait(bootFont('900 16px "Font Awesome 6 Free"'));
+Boot.wait(new Promise(r => { if (document.readyState === 'complete') r(); else window.addEventListener('load', r); }));
+// Sahifa yangilanganda xonaga/o'yinga qaytish - javob kelguncha (aks holda avval bosh menyu ko'rinib, keyin almashardi)
+if (sessionStorage.getItem('lastRoomId')) {
+    Boot.wait(new Promise(r => {
+        ['roomJoined', 'gameStarted', 'rejoinFailed', 'joinError', 'accountBanned', 'roomClosed', 'kickedFromRoom'].forEach(ev => socket.once(ev, r));
+        setTimeout(r, 6000);
+    }));
+}
+
+// Bo'lim ichidagi kichik yuklanish belgisi (ma'lumot serverdan kelguncha)
+function loaderHtml() {
+    return `<div class="inline-loader"><span class="px-dots"><i></i><i></i><i></i></span><span>${t('loading_short')}</span></div>`;
+}
+// Tugma so'rov tugaguncha "band" (qayta bosilmaydi)
+async function withBusy(btn, fn) {
+    if (!btn || btn.classList.contains('busy')) return;
+    btn.classList.add('busy');
+    try { return await fn(); } finally { btn.classList.remove('busy'); }
+}
 
 // SAHIFA YANGILANSA HAM JOYIDA QOLISH: har bir brauzer oynasining doimiy ID'si
 // (sessionStorage - yangilashda saqlanadi, yangi oynada yangisi). Server shu
@@ -148,6 +202,8 @@ let currentRoomId = null;
 let currentUser = null; // { id, fullName, nickname, coins, ownedSkins, equippedSkins, defaultCharacter }
 let skinCatalog = null;
 let weaponSkinCatalog = null;
+let cosCatalog = null;          // detallar katalogi: { head: [...], face: [...], weapons: { knight: { sword: [...] } } }
+let selectedCosSlot = 'head';   // "Detallar" bo'limida ochiq turgan tab
 let isRoomHost = false;
 let roomMaps = [];        // { id, name, description, accentColor }[] - joriy xonada mavjud xaritalar
 let unlockedLevel = 0;    // xonada ochilgan eng yuqori xarita
@@ -192,7 +248,7 @@ showLoginLink.onclick = () => {
     loginForm.classList.remove('hidden');
 };
 
-loginBtn.onclick = async () => {
+loginBtn.onclick = () => withBusy(loginBtn, async () => {
     loginError.innerText = '';
     const nickname = loginNickname.value.trim();
     const password = loginPassword.value;
@@ -215,9 +271,9 @@ loginBtn.onclick = async () => {
     } catch (e) {
         loginError.innerText = t('server_unreachable');
     }
-};
+});
 
-registerBtn.onclick = async () => {
+registerBtn.onclick = () => withBusy(registerBtn, async () => {
     registerError.innerText = '';
     const fullName = registerFullname.value.trim();
     const nickname = registerNickname.value.trim();
@@ -241,7 +297,7 @@ registerBtn.onclick = async () => {
     } catch (e) {
         registerError.innerText = t('server_unreachable');
     }
-};
+});
 
 function onAuthSuccess(user) {
     currentUser = user;
@@ -287,7 +343,7 @@ async function enterMainMenu() {
     if (saved) {
         try {
             currentUser = JSON.parse(saved);
-            enterMainMenu();
+            Boot.wait(enterMainMenu());
             // Xonada bo'lmagan bo'lsa - yangilashdan oldingi sahifasiga qaytaramiz
             // (xonada bo'lgan bo'lsa - socket ulanganda xonaga qaytadi, pastda)
             // setTimeout: tugmalar ishlovchilari fayl oxirroqda ulanadi - avval ular tayyor bo'lsin
@@ -486,8 +542,11 @@ navMySavedRoomBtn.onclick = () => {
 };
 mySavedRoomBackBtn.onclick = () => showPanel(playHubPanel);
 
-async function loadMySavedRoom() {
-    mySavedRoomContent.innerHTML = '';
+function loadMySavedRoom() {
+    mySavedRoomContent.innerHTML = loaderHtml();
+    return Boot.wait(fetchMySavedRoom());
+}
+async function fetchMySavedRoom() {
     try {
         const res = await fetch('/api/my-rooms/' + currentUser.id + '/latest');
         const data = await res.json();
@@ -512,6 +571,7 @@ async function loadMySavedRoom() {
             socket.emit('joinRoomByCode', { roomCode: r.roomCode, userId: currentUser.id, nickname: currentUser.nickname, clientId: CLIENT_ID });
         };
         card.appendChild(btn);
+        mySavedRoomContent.innerHTML = '';
         mySavedRoomContent.appendChild(card);
     } catch (e) {
         mySavedRoomContent.innerHTML = `<p class="empty-note">${t('server_unreachable')}</p>`;
@@ -588,6 +648,7 @@ socket.on('joinError', (message) => {
 
 // Lobbiga muvaffaqiyatli kirganda
 socket.on('roomJoined', (data) => {
+    const sameRoom = currentRoomId === data.roomId && latestPlayerListData;
     currentRoomId = data.roomId;
     sessionStorage.setItem('lastRoomId', data.roomId);
     currentRoomNameSpan.innerText = data.roomName;
@@ -595,7 +656,12 @@ socket.on('roomJoined', (data) => {
     roomMaps = data.maps || [];
     unlockedLevel = data.unlockedLevel || 0;
     selectedLevel = data.selectedLevel || 0;
-    latestPlayerListData = null;
+    // Yangi xona: o'yinchilar ro'yxati kelguncha o'rinlarda yuklanish belgisi
+    if (!sameRoom) {
+        latestPlayerListData = null;
+        const slots = document.getElementById('lobby-slots');
+        if (slots) slots.innerHTML = loaderHtml();
+    }
 
     // Yangi xonaga kirganda "Tayyor" holati, chat va panel ko'rinishini tozalab boshlaymiz
     readyBtn.classList.remove('is-ready');
@@ -809,7 +875,7 @@ function renderLobbySlots(players) {
             slot.appendChild(kick);
         }
         slot.title = tCharName(p.characterType);
-        drawHero(slot.querySelector('.slot-hero').getContext('2d'), p.characterType, hex(p.color, '#1e88e5'), hex(p.weaponColor, '#cfd8dc'), -16, -8);
+        drawHero(slot.querySelector('.slot-hero').getContext('2d'), p.characterType, hex(p.color, '#1e88e5'), p.look, -16, -8);
         wrap.appendChild(slot);
     }
 }
@@ -1059,7 +1125,13 @@ async function openCharacterScreen(opts) {
     characterLocked = !!opts.locked;
     characterReturnPanel = opts.returnPanel;
     showPanel(characterPanel);
-    await loadCharacterScreen();
+    // Ma'lumot kelguncha - bo'limlarda yuklanish belgisi (eski/bo'sh ro'yxat ko'rinmasin)
+    characterPanel.classList.add('is-loading');
+    upgradesContent.innerHTML = loaderHtml();
+    shopContent.innerHTML = loaderHtml();
+    weaponShopContent.innerHTML = loaderHtml();
+    await Boot.wait(loadCharacterScreen());
+    characterPanel.classList.remove('is-loading');
     selectedCharTab = characterLocked ? opts.lockedType : (currentUser.defaultCharacter || 'knight');
     renderCharTabs();
     charDetailsDesc.innerText = t('char_' + selectedCharTab + '_desc');
@@ -1072,20 +1144,17 @@ async function loadCharacterScreen() {
     if (!currentUser) return;
     characterCoinBalance.innerText = currentUser.coins;
 
-    if (!skinCatalog) {
-        const res = await fetch('/api/skins');
-        const data = await res.json();
-        skinCatalog = data.catalog;
-    }
-    if (!weaponSkinCatalog) {
-        const res = await fetch('/api/weapon-skins');
-        const data = await res.json();
-        weaponSkinCatalog = data.catalog;
-    }
-
     try {
-        const res = await fetch('/api/character/' + currentUser.id);
-        const data = await res.json();
+        // Uchala so'rov bir vaqtda (ketma-ket kutilmaydi)
+        const [skins, weaponSkins, cos, data] = await Promise.all([
+            skinCatalog ? null : fetch('/api/skins').then(r => r.json()),
+            weaponSkinCatalog ? null : fetch('/api/weapon-skins').then(r => r.json()),
+            cosCatalog ? null : fetch('/api/cosmetics').then(r => r.json()),
+            fetch('/api/character/' + currentUser.id).then(r => r.json())
+        ]);
+        if (skins) skinCatalog = skins.catalog;
+        if (weaponSkins) weaponSkinCatalog = weaponSkins.catalog;
+        if (cos && cos.success) cosCatalog = cos;
         if (data.success) {
             currentUser.defaultCharacter = data.defaultCharacter;
             currentUser.charXp = data.charXp || {};
@@ -1095,6 +1164,8 @@ async function loadCharacterScreen() {
             currentUser.equippedSkins = data.equippedSkins;
             currentUser.ownedWeaponSkins = data.ownedWeaponSkins;
             currentUser.equippedWeaponSkins = data.equippedWeaponSkins;
+            currentUser.ownedCosmetics = data.ownedCosmetics || [];
+            currentUser.equippedCosmetics = data.equippedCosmetics || {};
             localStorage.setItem('gameUser', JSON.stringify(currentUser));
         }
     } catch (e) { /* tarmoq xatosi bo'lsa, eski ma'lumot bilan ko'rsatamiz */ }
@@ -1254,6 +1325,7 @@ async function upgradeStat(stat) {
 function renderShop() {
     shopContent.innerHTML = '';
     drawCharPreview();
+    if (!skinCatalog) return;
 
     const charType = selectedCharTab;
     const owned = (currentUser.ownedSkins && currentUser.ownedSkins[charType]) || ['default'];
@@ -1287,6 +1359,102 @@ function renderShop() {
         row.appendChild(btn);
         shopContent.appendChild(row);
     });
+    renderCosmetics();
+}
+
+// ===== DETALLAR: bosh kiyimi, yuz buyumi (hamma personajga umumiy), qurol ko'rinishlari (personajga) =====
+const cosSlotsFor = (charType) => ['head', 'face', ...Object.keys((cosCatalog && cosCatalog.weapons[charType]) || {})];
+const cosKey = (charType, slot, id) => (slot === 'head' || slot === 'face') ? slot + ':' + id : charType + '.' + slot + ':' + id;
+function cosName(slot, item) {
+    const k = 'cos_' + slot + '_' + item.id, v = t(k);
+    return v === k ? item.name : v;
+}
+function renderCosmetics() {
+    const tabs = document.getElementById('cos-tabs');
+    const grid = document.getElementById('cos-grid');
+    if (!tabs || !grid) return;
+    tabs.innerHTML = '';
+    grid.innerHTML = '';
+    if (!cosCatalog) return;
+    const charType = selectedCharTab;
+    const slots = cosSlotsFor(charType);
+    if (!slots.includes(selectedCosSlot)) selectedCosSlot = 'head';
+    slots.forEach((slot) => {
+        const b = document.createElement('button');
+        b.className = 'cos-tab' + (slot === selectedCosSlot ? ' active' : '');
+        b.innerText = t('slot_' + slot);
+        b.onclick = () => { selectedCosSlot = slot; renderCosmetics(); };
+        tabs.appendChild(b);
+    });
+
+    const items = selectedCosSlot === 'head' ? cosCatalog.head : selectedCosSlot === 'face' ? cosCatalog.face : cosCatalog.weapons[charType][selectedCosSlot];
+    const owned = currentUser.ownedCosmetics || [];
+    const equipped = ((currentUser.equippedCosmetics || {})[charType] || {})[selectedCosSlot];
+    items.forEach((item) => {
+        const isOwned = owned.includes(cosKey(charType, selectedCosSlot, item.id));
+        const isEquipped = equipped === item.id;
+        const card = document.createElement('div');
+        card.className = 'cos-card' + (isEquipped ? ' equipped' : '');
+        const icon = document.createElement('canvas');
+        icon.width = 44; icon.height = 36;
+        icon.className = 'cos-icon';
+        Cosmetics.drawIcon(icon, selectedCosSlot, item.id);
+        card.appendChild(icon);
+        const name = document.createElement('div');
+        name.className = 'cos-name';
+        name.innerText = cosName(selectedCosSlot, item);
+        card.appendChild(name);
+        const btn = document.createElement('button');
+        if (isEquipped) {
+            btn.className = 'skin-equip-btn equipped';
+            btn.innerText = t('remove_btn');
+            btn.onclick = () => withBusy(btn, () => equipCosmetic(charType, selectedCosSlot, null));
+        } else if (isOwned) {
+            btn.className = 'skin-equip-btn';
+            btn.innerText = t('equip_btn');
+            btn.onclick = () => withBusy(btn, () => equipCosmetic(charType, selectedCosSlot, item.id));
+        } else {
+            btn.className = 'skin-buy-btn';
+            btn.innerHTML = `<i class="fa-solid fa-coins"></i> ${item.price}`;
+            btn.onclick = () => withBusy(btn, () => buyCosmetic(charType, selectedCosSlot, item));
+        }
+        card.appendChild(btn);
+        grid.appendChild(card);
+    });
+}
+async function cosRequest(action, body) {
+    try {
+        const res = await fetch('/api/cosmetics/' + currentUser.id + '/' + action, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!data.success) { alert(tMsg(data.message)); return null; }
+        currentUser.coins = data.user.coins;
+        currentUser.ownedCosmetics = data.user.ownedCosmetics;
+        currentUser.equippedCosmetics = data.user.equippedCosmetics;
+        localStorage.setItem('gameUser', JSON.stringify(currentUser));
+        characterCoinBalance.innerText = currentUser.coins;
+        coinBalance.innerText = currentUser.coins;
+        return data;
+    } catch (e) {
+        alert(t('server_unreachable'));
+        return null;
+    }
+}
+// Sotib olingach darhol kiydiriladi
+async function buyCosmetic(charType, slot, item) {
+    if (!confirm(t('cos_buy_confirm').replace('{name}', cosName(slot, item)).replace('{price}', item.price))) return;
+    if (await cosRequest('buy', { characterType: charType, slot, itemId: item.id })) {
+        await cosRequest('equip', { characterType: charType, slot, itemId: item.id });
+    }
+    drawCharPreview();
+    renderCosmetics();
+}
+async function equipCosmetic(charType, slot, itemId) {
+    await cosRequest('equip', { characterType: charType, slot, itemId });
+    drawCharPreview();
+    renderCosmetics();
 }
 
 // Skin sotib olish/kiyish endi hisobga (userId) bog'liq REST so'rovlar orqali ishlaydi -
@@ -1542,38 +1710,16 @@ function drawCharPreview() {
         return skin ? '#' + skin.color.toString(16).padStart(6, '0') : null;
     };
     const body = pick(skinCatalog, currentUser.equippedSkins) || '#1e88e5';
-    const weapon = pick(weaponSkinCatalog, currentUser.equippedWeaponSkins) || '#cfd8dc';
     ctx.clearRect(0, 0, 64, 48);
-    drawHero(ctx, type, body, weapon, 0, 0);
+    drawHero(ctx, type, body, (currentUser.equippedCosmetics || {})[type], 0, 0);
 }
 
-// Qahramon rasmi (o'yindagi ko'rinishi): tana skin rangi, visor, personaj quroli.
+// Qahramon rasmi - o'yindagi bilan bir xil (cosmetics.js): tana skin rangi, visor, quroli va
+// kiyilgan detallar (look: "cowboy|hockey|..." satri yoki { head, face, sword, ... } obyekti).
 // (ox, oy) - siljish: 64x48 lik chizmaning qaysi qismi ko'rinishi
-function drawHero(ctx, type, body, weapon, ox, oy) {
-    // O'yindagi ko'rinish (chizma bo'yicha): rangli tana, o'ngda to'q sariq ramkali visor, personaj quroli
-    const r = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x + ox, y + oy, w, h); };
-    const line = (x0, y0, x1, y1, t, c) => {                // piksel chiziq (qalinligi t)
-        const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-        for (let i = 0; i <= n; i++) r(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), t, t, c);
-    };
-    r(18, 44, 28, 3, 'rgba(0,0,0,0.45)');                    // soya
-    r(24, 12, 16, 32, '#000'); r(25, 13, 14, 30, body);      // tana
-    r(25, 13, 2, 30, 'rgba(255,255,255,0.22)'); r(37, 13, 2, 30, 'rgba(0,0,0,0.25)');
-    r(31, 17, 9, 5, '#000'); r(32, 18, 8, 3, '#d9822b');     // visor (o'ng tomonda)
-    r(33, 18, 2, 1, '#fff'); r(36, 18, 2, 1, '#fff');
-    if (type === 'knight') {                                 // tepaga ko'tarilgan qilich, qora gard
-        line(36, 34, 50, 8, 3, '#000'); line(37, 33, 50, 9, 1, weapon);
-        line(33, 32, 40, 38, 3, '#111'); r(35, 34, 3, 4, '#2b1d14');
-    } else if (type === 'samurai') {                         // pastga-orqaga qaragan katana
-        line(40, 28, 14, 40, 3, '#111'); line(39, 28, 15, 39, 1, '#f5f5f5');
-        line(38, 26, 44, 24, 3, '#8d5a3a'); r(37, 26, 2, 3, '#c9975b');
-    } else if (type === 'archer') {                          // tayoq + uchburchak kamon
-        line(34, 27, 48, 33, 2, '#6d4c41');
-        for (let y = 0; y < 14; y++) { const w = Math.round((14 - Math.abs(y - 7) * 2) * 0.6); r(42, 23 + y, w + 1, 1, '#000'); r(43, 23 + y, Math.max(0, w - 1), 1, '#b97a57'); }
-    } else {                                                 // hassa: pastida katta sariq shar, tepada sharcha
-        line(22, 42, 46, 20, 2, '#7b4a2a');
-        r(18, 40, 6, 6, '#000'); r(19, 41, 4, 4, '#ffd600');
-        r(45, 17, 4, 4, '#000'); r(46, 18, 2, 2, weapon === '#cfd8dc' ? '#ffd600' : weapon);
-        line(40, 23, 43, 27, 2, '#ffd600');
-    }
+function drawHero(ctx, type, body, look, ox, oy) {
+    Cosmetics.drawHero(ctx, type, body, look, ox, oy);
 }
+
+// Hamma yuklanish vazifalari ro'yxatga qo'shildi (saqlangan bo'limni tiklash ham - u ham setTimeout 0 da) - endi kutamiz
+setTimeout(() => Boot.start(), 0);

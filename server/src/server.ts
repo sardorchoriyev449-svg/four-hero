@@ -8,6 +8,7 @@ import { RoomManager } from './managers/room.manager';
 import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice } from './skins';
+import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
 import { MAPS } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
@@ -107,7 +108,9 @@ app.get('/api/character/:userId', async (req, res) => {
             ownedSkins: user.ownedSkins,
             equippedSkins: user.equippedSkins,
             ownedWeaponSkins: user.ownedWeaponSkins,
-            equippedWeaponSkins: user.equippedWeaponSkins
+            equippedWeaponSkins: user.equippedWeaponSkins,
+            ownedCosmetics: user.ownedCosmetics,
+            equippedCosmetics: user.equippedCosmetics
         });
     } catch (err) {
         res.status(500).json({ success: false, message: 'err_load_data' });
@@ -201,6 +204,56 @@ app.post('/api/weapon-skins/:userId/equip', async (req, res) => {
     const { characterType, skinId } = req.body || {};
     try {
         const result = await db.equipSkin(req.params.userId, characterType, skinId, 'weapon');
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'generic_error' });
+    }
+});
+
+// DETALLAR (bosh kiyimi, yuz buyumi, qurol ko'rinishlari): katalog, sotib olish, kiyish/yechish
+app.get('/api/cosmetics', (req, res) => {
+    res.json({ success: true, head: HEAD_ITEMS, face: FACE_ITEMS, weapons: WEAPON_ITEMS });
+});
+
+// Kiyilgan detal o'zgarsa - shu hisob hozir biror xonada bo'lsa, u yerdagi ko'rinishi ham darhol yangilanadi
+function refreshUserInRooms(userId: string): void {
+    Object.values(activeRooms).forEach(room => {
+        const p = Object.values(room.players).find(pl => pl.userId === userId);
+        if (p) roomManager.refreshCharacterInRoom(p.id, room.id).catch(() => {});
+    });
+}
+
+app.post('/api/cosmetics/:userId/buy', async (req, res) => {
+    const { characterType, slot, itemId } = req.body || {};
+    const item = findCosmetic(characterType, slot, itemId);
+    if (!item) {
+        res.status(400).json({ success: false, message: 'err_not_found' });
+        return;
+    }
+    try {
+        res.json(await db.buyCosmetic(req.params.userId, cosmeticKey(characterType, slot, item.id), item.price));
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'generic_error' });
+    }
+});
+
+app.post('/api/cosmetics/:userId/equip', async (req, res) => {
+    const { characterType, slot, itemId } = req.body || {};
+    if (typeof characterType !== 'string' || !WEAPON_ITEMS[characterType]) {
+        res.status(400).json({ success: false, message: 'err_bad_character' });
+        return;
+    }
+    // itemId: null - yechish (slot shu personajga tegishli bo'lishi kerak)
+    const validSlot = slot === 'head' || slot === 'face' || !!(WEAPON_ITEMS[characterType] && WEAPON_ITEMS[characterType][slot]);
+    const item = itemId === null ? null : findCosmetic(characterType, slot, itemId);
+    if (!validSlot || (itemId !== null && !item)) {
+        res.status(400).json({ success: false, message: 'err_not_found' });
+        return;
+    }
+    try {
+        const result = await db.equipCosmetic(req.params.userId, characterType, slot, item ? item.id : null,
+            item ? cosmeticKey(characterType, slot, item.id) : null);
+        if (result.success) refreshUserInRooms(req.params.userId);
         res.json(result);
     } catch (err) {
         res.status(500).json({ success: false, message: 'generic_error' });
