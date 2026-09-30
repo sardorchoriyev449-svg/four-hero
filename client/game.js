@@ -2353,7 +2353,7 @@ function launchGame(socket, roomId, mapData, continued) {
         return parts.join('   ');
     }
 
-    function drawHUD(scene, hp, stamina, progressText, perkText = '') {
+    function drawHUD(scene, hp, stamina, progressText, perkText = '', maxHp = 100) {
         if (!scene.hud) {
             buildHudTextures(scene);
             const fixed = (o, d) => o.setScrollFactor(0).setDepth(d);
@@ -2371,7 +2371,10 @@ function launchGame(socket, roomId, mapData, continued) {
             };
         }
         const H = scene.hud;
-        const safeHp = Math.max(0, Math.min(100, hp));
+        // Maksimal jon "hp" kuchaytirishiga bog'liq (100..200) - chiziq shunga nisbatan to'ladi
+        const safeMax = Math.max(1, maxHp || 100);
+        const safeHp = Math.max(0, Math.min(safeMax, hp));
+        const hpFrac = safeHp / safeMax;
         const safeSt = Math.max(0, Math.min(100, stamina === undefined ? 100 : stamina));
 
         if (H.objText.text !== progressText) H.objText.setText(progressText);
@@ -2389,15 +2392,15 @@ function launchGame(socket, roomId, mapData, continued) {
             drawHudPanel(H.panel, HUD_X, HUD_Y, panelW, panelH);
         }
 
-        if (safeHp !== H.lastHp || safeSt !== H.lastSt) {
-            H.lastHp = safeHp; H.lastSt = safeSt;
+        if (hpFrac !== H.lastHp || safeSt !== H.lastSt) {
+            H.lastHp = hpFrac; H.lastSt = safeSt;
             H.bars.clear();
-            drawPixelBar(H.bars, HP_BAR, safeHp / 100, hpPalette(safeHp / 100), 10);
+            drawPixelBar(H.bars, HP_BAR, hpFrac, hpPalette(hpFrac), 10);
             drawPixelBar(H.bars, ST_BAR, safeSt / 100, STAMINA_PALETTE, 10);
         }
 
         // Jon kam qolganda yurakcha lipillaydi
-        H.heart.setAlpha(safeHp > 0 && safeHp < 30 && Math.floor(scene.time.now / 250) % 2 ? 0.35 : 1);
+        H.heart.setAlpha(safeHp > 0 && hpFrac < 0.3 && Math.floor(scene.time.now / 250) % 2 ? 0.35 : 1);
         // Kalit (elf qishlog'ida) - panelning o'ng tomonida
         if (hudKey) hudKey.setPosition(HUD_X + panelW + 8, HUD_Y + 64);
     }
@@ -3250,6 +3253,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (currentCharacter && serverPlayers[socket.id]) {
                 const myData = serverPlayers[socket.id];
                 currentCharacter.hp = myData.hp;
+                currentCharacter.maxHp = myData.maxHp || 100;
                 currentCharacter.stamina = myData.stamina;
                 currentCharacter.kills = myData.kills;
                 currentCharacter.isDead = myData.isDead;
@@ -3322,6 +3326,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
                 otherPlayers[id].isDead = pData.isDead;
                 otherPlayers[id].isInvisible = pData.isInvisible;
+                otherPlayers[id].maxHp = pData.maxHp || 100;
                 setHeroLook(otherPlayers[id], pData.look);
                 if (isApples) {
                     const n = pData.apples || 0;
@@ -3716,7 +3721,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 const movingRight = p.targetX >= p.x;
                 p.x = Phaser.Math.Linear(p.x, p.targetX, 0.22);
                 p.y = Phaser.Math.Linear(p.y, p.targetY, 0.4);
-                drawHealthBar(this, p, p.hp);
+                drawHealthBar(this, p, p.hp, p.maxHp);
                 if (isApples && !p.isDead) {
                     drawBasket(this, p, movingRight, p.apples || 0, map.apples.applesToCollect, true);
                     p.basketGfx.setAlpha(p.alpha);
@@ -3795,7 +3800,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 progressText = t('hud_bots') + ': ' + botsKilled + ' / ' + currentCharacter.killsToWin;
             }
             const stPct = 100 * (currentCharacter.stamina || 0) / (currentCharacter.maxStamina || 100);
-            drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText());
+            drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText(), currentCharacter.maxHp);
 
             // Qurol, ritsar qalqoni va qarash tomoni (ko'rinmas kamonchida qurol ham xiralashadi)
             updateHeroWeaponVisuals(this, currentCharacter, currentCharacter.characterType, lastDirection === 'right');

@@ -26,6 +26,7 @@ export interface PlayerState {
     weaponColor: number;           // Joriy personaj uchun kiyilgan QUROL skinining rangi (tana skinidan alohida)
     equippedWeaponSkins: { [characterType: string]: string }; // Har personaj uchun kiyilgan qurol skin keshi
     equippedCosmetics?: { [characterType: string]: { [slot: string]: string } }; // Kiyilgan detallar keshi
+    maxHp?: number;                // Maksimal jon (100 + "hp" kuchaytirishi) - perks.ts: maxHpOf
     look?: string;                 // Joriy personajning detallari qisqa satrda (cosmetics.ts: lookString)
     isDead: boolean;               // O'lgan bo'lsa true - "arvoh" holatida, harakat/hujum qila olmaydi
     respawnTimer: number;         // Qayta tug'ilishga qolgan tik (0 bo'lganda qayta tiriladi)

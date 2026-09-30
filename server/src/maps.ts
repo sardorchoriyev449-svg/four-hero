@@ -543,8 +543,8 @@ export const MAPS: MapDef[] = [
         mapWidth: 800,
         platforms: [],            // platformalar - gorilla.platforms (harakatlanadi, server boshqaradi)
         gorilla: {
-            baseHp: 2400,
-            hpPerExtraPlayer: 800,
+            baseHp: 1400,             // Har o'yinchiga 1400 jon: 1 kishi - 1400, 2 kishi - 2800, 4 kishi - 5600
+            hpPerExtraPlayer: 1400,
             startX: 400,
             halfW: 70,
             height: 130,

@@ -825,6 +825,11 @@
         button.busy { pointer-events: none; opacity: .75; }
         button.busy::after { content: ''; display: inline-block; width: 3ch; text-align: left; animation: ld-dots 1s steps(4) infinite; }
         #character-panel.is-loading .char-stage { opacity: .4; }
+        /* Kuchaytirish tugmasi: pastida narxi (ball + tanga) */
+        .upgrade-row .upgrade-cost-btn { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 104px; }
+        .upgrade-cost { font-size: 8px; color: #3b2a00; display: flex; gap: 4px; align-items: center; }
+        .upgrade-cost .fa-star { color: #6a1b9a; }
+        .upgrade-cost-btn:disabled .upgrade-cost { color: inherit; }
 
         /* ===== DETALLAR (bosh kiyimi, yuz, qurol ko'rinishlari) ===== */
         .cos-note { text-align: left; margin: 0 0 10px; }
@@ -855,16 +860,16 @@
         <div class="pixel-logo"><span class="logo-main">4 HEROES</span><span class="logo-sub">CO-OP ACTION</span></div>
         <h2 data-i18n="auth_title">SIGN IN</h2>
         <div id="login-form">
-            <input type="text" id="login-nickname" data-i18n-ph="nickname_ph" placeholder="Nickname">
+            <input type="text" id="login-nickname" maxlength="20" data-i18n-ph="nickname_ph" placeholder="Nickname">
             <input type="password" id="login-password" data-i18n-ph="password_ph" placeholder="Password">
             <button id="login-btn" data-i18n="login_btn">Sign In</button>
             <p id="login-error" class="error-text"></p>
             <p class="link-text" id="show-register-link" data-i18n="no_account">Don't have an account? Register</p>
         </div>
         <div id="register-form" class="hidden">
-            <input type="text" id="register-fullname" data-i18n-ph="fullname_ph" placeholder="Full name">
-            <input type="text" id="register-nickname" data-i18n-ph="nickname_ph" placeholder="Nickname">
-            <input type="password" id="register-password" data-i18n-ph="password_ph" placeholder="Password">
+            <input type="text" id="register-fullname" maxlength="40" data-i18n-ph="fullname_ph" placeholder="Full name">
+            <input type="text" id="register-nickname" maxlength="20" data-i18n-ph="nickname_ph" placeholder="Nickname">
+            <input type="password" id="register-password" maxlength="72" data-i18n-ph="password_ph" placeholder="Password">
             <button id="register-btn" data-i18n="register_btn">Register</button>
             <p id="register-error" class="error-text"></p>
             <p class="link-text" id="show-login-link" data-i18n="have_account">Already have an account? Sign in</p>
@@ -929,7 +934,7 @@
     <div id="create-lobby-panel" class="panel hidden">
         <button class="back-btn" id="create-lobby-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
         <h2 data-i18n="create_room_btn">Create New Room</h2>
-        <input type="text" id="room-name-input" data-i18n-ph="room_name_ph" placeholder="Enter room name...">
+        <input type="text" id="room-name-input" maxlength="40" data-i18n-ph="room_name_ph" placeholder="Enter room name...">
         <div class="visibility-row">
             <button class="visibility-btn active" id="visibility-public-btn" data-i18n="visibility_public">Public</button>
             <button class="visibility-btn" id="visibility-private-btn" data-i18n="visibility_private">Private</button>

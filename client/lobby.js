@@ -1,5 +1,17 @@
 const socket = io();
 
+// HISOB TOKENI: server hisobga tegishli har so'rovni (/api/...) login paytida bergan token bilan
+// tekshiradi. Token avtomatik qo'shiladi; 401 - sessiya tugagan (qayta kirish kerak)
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (url, opts = {}) => {
+    if (typeof url === 'string' && url.startsWith('/api/') && currentUser && currentUser.token) {
+        opts = { ...opts, headers: { ...(opts.headers || {}), 'X-Auth-Token': currentUser.token } };
+    }
+    const res = await nativeFetch(url, opts);
+    if (res.status === 401 && typeof url === 'string' && url.startsWith('/api/')) onSessionExpired();
+    return res;
+};
+
 // SAHIFA YUKLANISH EKRANI (#boot-loader): shriftlar, ikonalar, fayllar va birinchi ma'lumotlar
 // (menyu, xonaga qaytish, ochiq turgan bo'lim) kelguncha - bo'sh sahifa ko'rinib, keyin
 // elementlar birdan "paydo bo'lmasin". Ko'pi bilan 8 soniya kutiladi
@@ -301,6 +313,7 @@ registerBtn.onclick = () => withBusy(registerBtn, async () => {
 
 function onAuthSuccess(user) {
     currentUser = user;
+    sessionExpiredShown = false;
     localStorage.setItem('gameUser', JSON.stringify(user));
     enterMainMenu();
 }
@@ -437,9 +450,28 @@ socket.on('connect', () => {
         roomId: lastRoomId,
         clientId: CLIENT_ID,
         userId: currentUser ? currentUser.id : null,
+        token: currentUser ? currentUser.token : null,
         nickname: currentUser ? currentUser.nickname : t('guest_name')
     });
 });
+
+// SESSIYA TUGADI: token yo'q/noto'g'ri (masalan, yangilanishdan oldin kirilgan) - qayta kirish kerak
+let sessionExpiredShown = false;
+function onSessionExpired() {
+    if (!currentUser) return;
+    sessionStorage.removeItem('lastRoomId');
+    localStorage.removeItem('gameUser');
+    currentRoomId = null;
+    currentUser = null;
+    if (typeof stopGame === 'function') stopGame();
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    showPanel(authPanel);
+    if (!sessionExpiredShown) { sessionExpiredShown = true; alert(t('session_expired')); }
+}
+socket.on('sessionExpired', onSessionExpired);
 
 // HISOB BLOKLANDI (admin): o'yindan chiqariladi, hisobdan chiqadi - kirish oynasiga
 socket.on('accountBanned', (data) => {
@@ -558,7 +590,7 @@ async function fetchMySavedRoom() {
         const card = document.createElement('div');
         card.className = 'saved-room-card';
         card.innerHTML = `
-            <h3><i class="fa-solid fa-door-open"></i> ${r.name}</h3>
+            <h3><i class="fa-solid fa-door-open"></i> ${escapeHtml(r.name)}</h3>
             <p class="saved-room-meta">
                 <span class="room-code-tag">[${r.roomCode}]</span> &middot;
                 ${t('saved_room_map_progress')}: ${tMapName(roomMaps.length ? Math.min(r.unlockedLevel, roomMaps.length - 1) : r.unlockedLevel)}
@@ -568,7 +600,7 @@ async function fetchMySavedRoom() {
         const btn = document.createElement('button');
         btn.innerHTML = `<i class="fa-solid fa-play"></i> ${t('continue_btn')}`;
         btn.onclick = () => {
-            socket.emit('joinRoomByCode', { roomCode: r.roomCode, userId: currentUser.id, nickname: currentUser.nickname, clientId: CLIENT_ID });
+            socket.emit('joinRoomByCode', { roomCode: r.roomCode, userId: currentUser.id, token: currentUser.token, nickname: currentUser.nickname, clientId: CLIENT_ID });
         };
         card.appendChild(btn);
         mySavedRoomContent.innerHTML = '';
@@ -608,10 +640,10 @@ socket.on('updateRoomList', (rooms) => {
     rooms.forEach(room => {
         const item = document.createElement('div');
         item.className = 'room-item';
-        item.innerHTML = `<span><i class="fa-solid fa-door-open icon"></i>${room.name}</span> <span><i class="fa-solid fa-users icon"></i>${room.playerCount}/${room.maxPlayers || 4}</span>`;
+        item.innerHTML = `<span><i class="fa-solid fa-door-open icon"></i>${escapeHtml(room.name)}</span> <span><i class="fa-solid fa-users icon"></i>${room.playerCount}/${room.maxPlayers || 4}</span>`;
         item.onclick = () => {
             if (!currentUser) return;
-            socket.emit('joinRoom', { roomId: room.id, userId: currentUser.id, nickname: currentUser.nickname, clientId: CLIENT_ID });
+            socket.emit('joinRoom', { roomId: room.id, userId: currentUser.id, token: currentUser.token, nickname: currentUser.nickname, clientId: CLIENT_ID });
         };
         roomListDiv.appendChild(item);
     });
@@ -625,7 +657,7 @@ createRoomBtn.onclick = () => {
         alert(t('enter_room_name_alert'));
         return;
     }
-    socket.emit('createRoom', { roomName, userId: currentUser.id, nickname: currentUser.nickname, isPrivate: createRoomIsPrivate, clientId: CLIENT_ID });
+    socket.emit('createRoom', { roomName, userId: currentUser.id, token: currentUser.token, nickname: currentUser.nickname, isPrivate: createRoomIsPrivate, clientId: CLIENT_ID });
 };
 
 // XONA KODI ORQALI QO'SHILISH (masalan "Mening xonalarim"dan tashqari, do'stdan olingan kod bilan)
@@ -635,7 +667,7 @@ joinCodeBtn.onclick = () => {
         alert(t('enter_room_code_alert'));
         return;
     }
-    socket.emit('joinRoomByCode', { roomCode, userId: currentUser ? currentUser.id : null, nickname: currentUser ? currentUser.nickname : t('guest_name'), clientId: CLIENT_ID });
+    socket.emit('joinRoomByCode', { roomCode, userId: currentUser ? currentUser.id : null, token: currentUser ? currentUser.token : null, nickname: currentUser ? currentUser.nickname : t('guest_name'), clientId: CLIENT_ID });
 };
 joinCodeInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') joinCodeBtn.onclick();
@@ -805,7 +837,7 @@ function renderPlayerList(data) {
     data.players.forEach(p => {
         const li = document.createElement('li');
         li.style.color = p.id === socket.id ? '#00ffcc' : '#fff';
-        const name = p.nickname || t('guest_name');
+        const name = escapeHtml(p.nickname || t('guest_name'));
         const readyTick = p.isHost
             ? `<span style="color:#ffcc00;"><i class="fa-solid fa-crown"></i> ${t('host_tag')}</span>`
             : (p.isReady ? `<span class="ready-tick"><i class="fa-solid fa-check"></i> ${t('ready_tag')}</span>` : `<span class="ready-tick not-ready-tick"><i class="fa-solid fa-xmark"></i> ${t('not_ready_tag')}</span>`);
@@ -1091,7 +1123,7 @@ function renderGameOver(data) {
         gameoverPanelEl.classList.remove('loss-panel');
         gameoverTitle.className = 'gameover-title-win';
         gameoverTitle.innerHTML = `<i class="fa-solid fa-trophy icon"></i>${t('win_title')}`;
-        let text = `<i class="fa-solid fa-star" style="color:#ffcc00;"></i> ${data.winnerNickname} ${t('win_by')}`;
+        let text = `<i class="fa-solid fa-star" style="color:#ffcc00;"></i> ${escapeHtml(data.winnerNickname)} ${t('win_by')}`;
         if (data.coinsAwarded > 0) {
             text += `<br><i class="fa-solid fa-coins icon" style="color:#ffcc00;"></i>+${data.coinsAwarded} ${t('coins_earned')}`;
         } else {
@@ -1232,6 +1264,12 @@ function renderPerks() {
     });
 }
 
+// Kuchaytirish narxi (indeks - hozirgi daraja): server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil
+const UPGRADE_COSTS = [
+    { points: 1, coins: 150 }, { points: 1, coins: 300 }, { points: 1, coins: 500 },
+    { points: 2, coins: 800 }, { points: 2, coins: 1200 }
+];
+
 function renderUpgrades() {
     renderPerks();
     const points = (currentUser.skillPoints && currentUser.skillPoints[selectedCharTab]) || 0;
@@ -1239,6 +1277,8 @@ function renderUpgrades() {
     upgradesContent.innerHTML = '';
 
     const stats = [
+        { key: 'hp', icon: 'fa-heart', nameKey: 'char_hp', descKey: 'char_hp_desc' },
+        { key: 'regen', icon: 'fa-heart-pulse', nameKey: 'char_regen', descKey: 'char_regen_desc' },
         { key: 'damage', icon: 'fa-hand-fist', nameKey: 'char_damage', descKey: 'char_damage_desc' },
         { key: 'stamina', icon: 'fa-bolt', nameKey: 'char_stamina', descKey: 'char_stamina_desc' }
     ];
@@ -1281,9 +1321,15 @@ function renderUpgrades() {
             btn.innerText = t('char_maxed');
             btn.disabled = true;
         } else {
-            btn.innerHTML = `<i class="fa-solid fa-plus"></i> ${t('char_upgrade_btn')}`;
-            btn.disabled = points <= 0;
-            btn.onclick = () => upgradeStat(stat.key);
+            // Narx: ball + tanga (server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil)
+            const cost = UPGRADE_COSTS[level];
+            const canPay = points >= cost.points && (currentUser.coins || 0) >= cost.coins;
+            btn.className = 'upgrade-cost-btn';
+            btn.innerHTML = `<span><i class="fa-solid fa-plus"></i> ${t('char_upgrade_btn')}</span>` +
+                `<span class="upgrade-cost"><i class="fa-solid fa-star"></i>${cost.points} <i class="fa-solid fa-coins"></i>${cost.coins}</span>`;
+            btn.title = t('upgrade_cost_hint').replace('{p}', cost.points).replace('{c}', cost.coins);
+            btn.disabled = !canPay;
+            btn.onclick = () => withBusy(btn, () => upgradeStat(stat.key));
         }
         row.appendChild(btn);
 
@@ -1310,8 +1356,12 @@ async function upgradeStat(stat) {
         if (data.success) {
             currentUser.upgrades = data.user.upgrades;
             currentUser.skillPoints = data.user.skillPoints;
+            currentUser.coins = data.user.coins;
             localStorage.setItem('gameUser', JSON.stringify(currentUser));
+            characterCoinBalance.innerText = currentUser.coins;
+            coinBalance.innerText = currentUser.coins;
             renderUpgrades();
+            renderShop();
             syncRoomIfNeeded();
         } else {
             alert(tMsg(data.message));
@@ -1601,7 +1651,7 @@ socket.on('lobbyChatMessage', (data) => {
     const line = document.createElement('div');
     line.className = 'chat-line';
     const time = new Date(data.timestamp).toLocaleTimeString().slice(0, 5);
-    line.innerHTML = `<span class="chat-nick">${data.nickname}:</span> ${escapeHtml(data.text)} <span style="color:#666; font-size:11px;">${time}</span>`;
+    line.innerHTML = `<span class="chat-nick">${escapeHtml(data.nickname)}:</span> ${escapeHtml(data.text)} <span style="color:#666; font-size:11px;">${time}</span>`;
     chatBox.appendChild(line);
     chatBox.scrollTop = chatBox.scrollHeight;
     if (lobbyChatSection.classList.contains('hidden')) toggleChatBtn.classList.add('has-new');
@@ -1609,9 +1659,7 @@ socket.on('lobbyChatMessage', (data) => {
 
 // Chatga yozilgan matnni xavfsiz ko'rsatish uchun (HTML in'ektsiyasining oldini olish)
 function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.innerText = str;
-    return div.innerHTML;
+    return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 

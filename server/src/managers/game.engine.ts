@@ -3,7 +3,7 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL } from '../perks';
+import { bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE } from '../maps';
 
 // Xarita bo'yicha bot "tura oladigan" bitta sirt (yer yoki bitta platforma) -
@@ -169,9 +169,14 @@ export class GameEngine {
                     // Mage: 2 soniya davomida xonadagi barcha tirik qahramonlar davolanadi (~40 HP)
                     if (player.characterType === 'mage') {
                         Object.values(room.players).forEach(ally => {
-                            if (!ally.isDead) ally.hp = Math.min(100, ally.hp + 0.6);
+                            if (!ally.isDead) ally.hp = Math.min(ally.maxHp || BASE_HP, ally.hp + 0.6);
                         });
                     }
+                }
+                // JON TIKLANISHI ("regen" kuchaytirishi): tirik qahramon asta-sekin o'zi davolanadi
+                const regen = regenPerSecondOf(player);
+                if (regen > 0 && player.hp < (player.maxHp || BASE_HP)) {
+                    player.hp = Math.min(player.maxHp || BASE_HP, player.hp + regen * this.TICK_SECONDS);
                 }
                 // Drobovik qayta o'qlanishi
                 if ((player.reloadTicks || 0) > 0 && --player.reloadTicks! <= 0) player.ammo = shotgunMagOf(player);
@@ -248,7 +253,7 @@ export class GameEngine {
             const players: { [id: string]: object } = {};
             Object.values(room.players).forEach(p => {
                 players[p.id] = {
-                    x: p.x, y: p.y, hp: p.hp, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
+                    x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
                     weaponColor: p.weaponColor, look: p.look || '', nickname: p.nickname, apples: p.apples,

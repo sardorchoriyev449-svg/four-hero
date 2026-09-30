@@ -12,11 +12,30 @@ import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from 
 import { MAPS } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
+import { signUser, verifyUser } from './auth';
 config({quiet:true})
+
+// Bitta kutilmagan xato (masalan, noto'g'ri formatdagi socket xabari) butun serverni - hamma
+// o'yinchilarni - to'xtatib qo'ymasin: xato yoziladi, server ishlashda davom etadi
+process.on('unhandledRejection', (err) => console.error('Kutilmagan xato (promise):', err));
+process.on('uncaughtException', (err) => console.error('Kutilmagan xato:', err));
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20kb' }));
+
+// Hisobga tegishli har so'rov (manzilida :userId / :id bor) - login paytida berilgan token bilan
+// keladi (X-Auth-Token). Aks holda boshqa birovning ID sini bilgan har kim uning tangasini sarflardi
+const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction, id: string) => {
+    if (verifyUser(id, req.get('x-auth-token'))) return next();
+    res.status(401).json({ success: false, message: 'err_session' });
+};
+app.param('userId', requireAuth);
+app.param('id', requireAuth);
+
+// Login/ro'yxatdan o'tish javobiga token qo'shiladi (klient uni saqlab, keyingi so'rovlarda yuboradi)
+const withToken = (result: { success: boolean, user?: db.UserRecord }) =>
+    result.success && result.user ? { ...result, user: { ...result.user, token: signUser(result.user.id) } } : result;
 
 // Client papkasidagi fayllarni (index.html, game.js, lobby.js) serve qilish
 // no-cache: brauzer har safar fayl o'zgarganini tekshiradi (o'zgarmagan bo'lsa -
@@ -32,7 +51,7 @@ app.post('/api/register', async (req, res) => {
     const { fullName, nickname, password } = req.body || {};
     const result = await db.registerUser(fullName, nickname, password);
     if (result.success) {
-        res.json(result);
+        res.json(withToken(result));
     } else {
         res.status(400).json(result);
     }
@@ -43,7 +62,7 @@ app.post('/api/login', async (req, res) => {
     const { nickname, password } = req.body || {};
     const result = await db.loginUser(nickname, password);
     if (result.success) {
-        res.json(result);
+        res.json(withToken(result));
     } else {
         res.status(400).json(result);
     }
@@ -277,8 +296,20 @@ const gameEngine = new GameEngine(io, activeRooms, roomManager);
 // O'yin siklini (Tick loop) fonda ishga tushiramiz
 gameEngine.start();
 
+// O'yinchi ismi: matn, bo'sh joylarsiz, ko'pi bilan 20 belgi
+const cleanNick = (n: unknown) => (typeof n === 'string' ? n.trim().slice(0, 20) : '') || 'Guest';
+
 io.on('connection', (socket) => {
     console.log(`Foydalanuvchi ulandi: ${socket.id}`);
+
+    // Hisob nomidan kelgan so'rov: userId bo'lsa, token to'g'ri bo'lishi shart.
+    // null - mehmon; undefined - token noto'g'ri (klientga "sessiya tugadi" deyiladi, so'rov bajarilmaydi)
+    const authedUserId = (data: any): string | null | undefined => {
+        if (!data || !data.userId) return null;
+        if (verifyUser(data.userId, data.token)) return data.userId;
+        socket.emit('sessionExpired');
+        return undefined;
+    };
 
     // Yangi ulanish bo'lganda mavjud xonalar ro'yxatini yuborish
     roomManager.broadcastRoomList();
@@ -287,21 +318,24 @@ io.on('connection', (socket) => {
     // Hisobli (ro'yxatdan o'tgan) foydalanuvchi yaratsa, xona bazada SAQLANADI -
     // shunda do'stlar bilan ertaga qaytib, xuddi shu xarita progressida davom etish mumkin.
     // Mehmon (hisobsiz) yaratsa, xona eski-usulda vaqtinchalik bo'lib qoladi.
-    socket.on('createRoom', async (data: { roomName: string, userId: string | null, nickname: string, isPrivate?: boolean, clientId?: string }) => {
-        const roomName = (data.roomName || 'Room').toString().slice(0, 40);
+    socket.on('createRoom', async (data: { roomName: string, userId: string | null, token?: string, nickname: string, isPrivate?: boolean, clientId?: string }) => {
+        if (!data) return;
+        const userId = authedUserId(data);
+        if (userId === undefined) return;
+        const roomName = (typeof data.roomName === 'string' && data.roomName.trim() ? data.roomName.trim() : 'Room').slice(0, 40);
         const isPrivate = !!data.isPrivate;
         let roomId: string;
         let isPersistent = false;
 
-        if (data.userId) {
+        if (userId) {
             // Bloklangan hisob xona ocha olmaydi
-            const owner = await db.getUserById(data.userId);
+            const owner = await db.getUserById(userId);
             if (owner && owner.banned) {
                 socket.emit('accountBanned', { reason: owner.banReason });
                 return;
             }
             try {
-                const record = await db.createPersistentRoom(roomName, data.userId, isPrivate);
+                const record = await db.createPersistentRoom(roomName, userId, isPrivate);
                 roomId = record.roomCode;
                 isPersistent = true;
             } catch (err) {
@@ -317,7 +351,7 @@ io.on('connection', (socket) => {
             id: roomId,
             name: roomName,
             hostId: socket.id,
-            hostUserId: data.userId ?? null,
+            hostUserId: userId,
             players: {},
             bots: [],
             bullets: [],
@@ -339,13 +373,21 @@ io.on('connection', (socket) => {
             isPrivate: isPrivate
         };
 
-        roomManager.joinPlayer(socket, roomId, data.userId ?? null, data.nickname || 'Mehmon', data.clientId ?? null);
+        await roomManager.joinPlayer(socket, roomId, userId, cleanNick(data.nickname), typeof data.clientId === 'string' ? data.clientId : null);
+        // Kira olmagan bo'lsa (hisob boshqa joyda band va h.k.) - bo'sh xona ro'yxatda qolib ketmasin
+        if (activeRooms[roomId] && Object.keys(activeRooms[roomId].players).length === 0) {
+            delete activeRooms[roomId];
+            roomManager.broadcastRoomList();
+        }
     });
 
     // 2. XONAGA QO'SHILISH (ochiq xonalar ro'yxatidan bosib)
-    socket.on('joinRoom', (data: { roomId: string, userId: string | null, nickname: string, clientId?: string }) => {
+    socket.on('joinRoom', (data: { roomId: string, userId: string | null, token?: string, nickname: string, clientId?: string }) => {
+        if (!data || typeof data.roomId !== 'string') return;
+        const userId = authedUserId(data);
+        if (userId === undefined) return;
         if (activeRooms[data.roomId]) {
-            roomManager.joinPlayer(socket, data.roomId, data.userId ?? null, data.nickname || 'Mehmon', data.clientId ?? null);
+            roomManager.joinPlayer(socket, data.roomId, userId, cleanNick(data.nickname), typeof data.clientId === 'string' ? data.clientId : null);
         } else {
             socket.emit('joinError', 'err_room_not_found');
         }
@@ -355,14 +397,18 @@ io.on('connection', (socket) => {
     // Agar xona hozir xotirada faol bo'lmasa (masalan, server qayta ishga tushgan yoki
     // hammasi chiqib ketgan bo'lsa), bazadan progressni yuklab, xonani QAYTA TIKLAYMIZ -
     // lekin buni faqat o'sha xonaning asl xo'jayini (hostUserId mos kelsa) qila oladi.
-    type JoinByCodeData = { roomCode: string, userId: string | null, nickname: string, clientId?: string };
+    type JoinByCodeData = { roomCode: string, userId: string | null, token?: string, nickname: string, clientId?: string };
     socket.on('joinRoomByCode', (data: JoinByCodeData) => joinByCode(data, false));
 
     // quiet = true: sahifa yangilangach avtomatik qayta kirish - muvaffaqiyatsiz
     // bo'lsa ogohlantirish (alert) emas, 'rejoinFailed' yuboriladi (klient menyuga qaytadi)
     async function joinByCode(data: JoinByCodeData, quiet: boolean): Promise<void> {
         const fail = (message: string) => socket.emit(quiet ? 'rejoinFailed' : 'joinError', message);
-        const roomCode = (data.roomCode || '').toString().trim().toUpperCase();
+        if (!data) return;
+        const userId = authedUserId(data);
+        if (userId === undefined) return;
+        const nickname = cleanNick(data.nickname);
+        const roomCode = (typeof data.roomCode === 'string' ? data.roomCode : '').trim().toUpperCase().slice(0, 40);
         const clientId = typeof data.clientId === 'string' ? data.clientId : null;
         if (!roomCode) {
             fail('err_enter_code');
@@ -370,7 +416,7 @@ io.on('connection', (socket) => {
         }
 
         if (activeRooms[roomCode]) {
-            roomManager.joinPlayer(socket, roomCode, data.userId ?? null, data.nickname || 'Mehmon', clientId);
+            roomManager.joinPlayer(socket, roomCode, userId, nickname, clientId);
             return;
         }
 
@@ -381,7 +427,7 @@ io.on('connection', (socket) => {
                 fail('err_code_not_found');
                 return;
             }
-            if (!data.userId || data.userId !== record.hostUserId) {
+            if (!userId || userId !== record.hostUserId) {
                 fail('err_room_not_open');
                 return;
             }
@@ -413,7 +459,7 @@ io.on('connection', (socket) => {
                 isPersistent: true,
                 isPrivate: record.isPrivate
             };
-            roomManager.joinPlayer(socket, roomCode, data.userId, data.nickname || 'Mehmon', clientId);
+            roomManager.joinPlayer(socket, roomCode, userId, nickname, clientId);
         } catch (err) {
             console.error('joinRoomByCode xatosi:', err);
             fail('err_join_failed');
@@ -422,14 +468,16 @@ io.on('connection', (socket) => {
 
     // 2c. SAHIFA YANGILANGACH XONAGA QAYTISH: avval eski o'rnini (15s saqlanadi)
     // qaytarib olishga urinadi; bo'lmasa - oddiy qo'shilish (xona hali bor bo'lsa)
-    socket.on('rejoinRoom', async (data: { roomId: string, clientId: string, userId: string | null, nickname: string }) => {
+    socket.on('rejoinRoom', async (data: { roomId: string, clientId: string, userId: string | null, token?: string, nickname: string }) => {
         if (!data || typeof data.roomId !== 'string' || typeof data.clientId !== 'string') return;
+        const userId = authedUserId(data);
+        if (userId === undefined) return;
         if ((await roomManager.reclaimPlayer(socket, data.roomId, data.clientId)) === 'reclaimed') return;
         if (activeRooms[data.roomId]) {
-            roomManager.joinPlayer(socket, data.roomId, data.userId ?? null, data.nickname || 'Mehmon', data.clientId);
+            roomManager.joinPlayer(socket, data.roomId, userId, cleanNick(data.nickname), data.clientId);
             return;
         }
-        joinByCode({ roomCode: data.roomId, userId: data.userId, nickname: data.nickname, clientId: data.clientId }, true);
+        joinByCode({ roomCode: data.roomId, userId: data.userId, token: data.token, nickname: data.nickname, clientId: data.clientId }, true);
     });
 
     // 3. LOBBIDA PERSONAJ TANLASH
@@ -446,8 +494,8 @@ io.on('connection', (socket) => {
 
     // 4. ADMIN O'YINNI BOSHLAGANDA
     socket.on('requestStartGame', (roomId: string) => {
-        const room = activeRooms[roomId];
-        if (room && room.hostId === socket.id) {
+        const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
+        if (room && room.hostId === socket.id && !room.isStarted) {
             // BARCHA (xo'jayindan tashqari) O'YINCHILAR "TAYYOR" BOSGANMI TEKSHIRAMIZ
             const otherPlayers = Object.values(room.players).filter(p => p.id !== room.hostId);
             const allReady = otherPlayers.every(p => p.isReady);

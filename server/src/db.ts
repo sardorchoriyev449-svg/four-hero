@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { config } from 'dotenv';
-import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL } from './perks';
+import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL, UPGRADE_COSTS, BASE_UPGRADES } from './perks';
 config({quiet:true})
 // Agar MongoDB'ga ulanib bo'lmasa yoki vaqtincha uzilib qolsa, so'rovlar
 // abadiy "osilib qolmasligi" uchun (aks holda foydalanuvchi cheksiz kutib qolardi)
@@ -161,12 +161,22 @@ function legacyProgress(doc: any, credited: { [c: string]: number[] }): { unlock
 }
 
 // RO'YXATDAN O'TISH: ism, nickname va parol bilan
-export async function registerUser(fullName: string, nickname: string, password: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+// Faqat matn qabul qilinadi (obyekt yuborilsa - masalan {"$ne": null} - bazaga so'rov sifatida
+// ketib qolmasin), chetidagi bo'sh joylar olib tashlanadi
+const str = (v: unknown) => typeof v === 'string' ? v.trim() : '';
+export const NICKNAME_MAX = 20;
+
+export async function registerUser(fullNameRaw: unknown, nicknameRaw: unknown, passwordRaw: unknown): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const fullName = str(fullNameRaw), nickname = str(nicknameRaw);
+    const password = typeof passwordRaw === 'string' ? passwordRaw : '';
     if (!fullName || !nickname || !password) {
         return { success: false, message: 'err_fields_required' };
     }
     if (password.length < 4) {
         return { success: false, message: 'err_password_short' };
+    }
+    if (nickname.length < 3 || nickname.length > NICKNAME_MAX || fullName.length > 40 || password.length > 72) {
+        return { success: false, message: 'err_field_length' };
     }
 
     const existing = await UserModel.findOne({ nickname });
@@ -174,26 +184,37 @@ export async function registerUser(fullName: string, nickname: string, password:
         return { success: false, message: 'err_nickname_taken' };
     }
 
-    const passwordHash = bcrypt.hashSync(password, 10);
-    const doc = await UserModel.create({
-        fullName,
-        nickname,
-        passwordHash,
-        coins: 0,
-        ownedSkins: DEFAULT_OWNED_SKINS,
-        equippedSkins: DEFAULT_EQUIPPED_SKINS
-    });
-
-    return { success: true, user: docToUser(doc) };
+    // Asinxron hash: sinxron variant butun serverni (o'yin siklini ham) ~0.1s to'xtatib turardi
+    const passwordHash = await bcrypt.hash(password, 10);
+    try {
+        const doc = await UserModel.create({
+            fullName,
+            nickname,
+            passwordHash,
+            coins: 0,
+            ownedSkins: DEFAULT_OWNED_SKINS,
+            equippedSkins: DEFAULT_EQUIPPED_SKINS
+        });
+        return { success: true, user: docToUser(doc) };
+    } catch (err: any) {
+        // Ikki kishi bir vaqtda bir xil nickname bilan ro'yxatdan o'tsa
+        if (err && err.code === 11000) return { success: false, message: 'err_nickname_taken' };
+        throw err;
+    }
 }
 
 // TIZIMGA KIRISH: nickname va parol bilan
-export async function loginUser(nickname: string, password: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+export async function loginUser(nicknameRaw: unknown, passwordRaw: unknown): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const nickname = str(nicknameRaw);
+    const password = typeof passwordRaw === 'string' ? passwordRaw : '';
+    if (!nickname || !password) {
+        return { success: false, message: 'err_fields_required' };
+    }
     const doc = await UserModel.findOne({ nickname });
     if (!doc) {
         return { success: false, message: 'err_no_such_user' };
     }
-    if (!bcrypt.compareSync(password, doc.passwordHash)) {
+    if (!(await bcrypt.compare(password, doc.passwordHash))) {
         return { success: false, message: 'err_wrong_password' };
     }
     if ((doc as any).banned) {
@@ -346,35 +367,35 @@ export async function upgradeStat(userId: string, characterType: string, stat: s
     const doc = await UserModel.findById(userId);
     if (!doc) return { success: false, message: 'err_user_not_found' };
     const isWeaponStat = (WEAPON_UPGRADES[characterType] || []).includes(stat);
-    if (stat !== 'damage' && stat !== 'stamina' && !isWeaponStat) {
+    if (!BASE_UPGRADES.includes(stat) && !isWeaponStat) {
         return { success: false, message: 'err_bad_skill' };
     }
     if (isWeaponStat && xpLevel(docToUser(doc).charXp[characterType] || 0) < WEAPON_UPGRADE_LEVEL) {
         return { success: false, message: 'err_upgrade_locked|' + WEAPON_UPGRADE_LEVEL };
     }
 
-    const pointsAll: any = doc.skillPoints || {};
-    if ((pointsAll[characterType] || 0) <= 0) {
-        return { success: false, message: 'err_no_points' };
-    }
-
     const upgradesAll: any = doc.upgrades || {};
-    const charUpgrades = upgradesAll[characterType] || { damage: 0, stamina: 0 };
-    const currentLevel = charUpgrades[stat] || 0;
+    const currentLevel = ((upgradesAll[characterType] || {})[stat]) || 0;
     if (currentLevel >= MAX_UPGRADE_LEVEL) {
         return { success: false, message: 'err_skill_max' };
     }
+    // Narx: ball + tanga (daraja oshgan sari qimmatlashadi)
+    const cost = UPGRADE_COSTS[currentLevel];
+    const points = ((doc.skillPoints || {}) as any)[characterType] || 0;
+    if (points < cost.points) return { success: false, message: 'err_no_points_n|' + cost.points };
+    if (doc.coins < cost.coins) return { success: false, message: 'err_not_enough_coins' };
 
-    charUpgrades[stat] = currentLevel + 1;
-    upgradesAll[characterType] = charUpgrades;
-    doc.upgrades = upgradesAll;
-    pointsAll[characterType] = pointsAll[characterType] - 1;
-    doc.skillPoints = pointsAll;
-    doc.markModified('upgrades');
-    doc.markModified('skillPoints');
-    await doc.save();
-
-    return { success: true, user: docToUser(doc) };
+    // Bitta atomar yozuv: daraja hali o'zgarmagan, ball va tanga yetarli bo'lsagina - ikki marta
+    // tez bosilsa ham ikki marta yechilmaydi
+    const levelPath = `upgrades.${characterType}.${stat}`;
+    const pointsPath = `skillPoints.${characterType}`;
+    const updated = await UserModel.findOneAndUpdate(
+        { _id: doc._id, [levelPath]: currentLevel === 0 ? { $in: [0, null] } : currentLevel, [pointsPath]: { $gte: cost.points }, coins: { $gte: cost.coins } },
+        { $set: { [levelPath]: currentLevel + 1 }, $inc: { [pointsPath]: -cost.points, coins: -cost.coins } },
+        { returnDocument: 'after' }
+    );
+    if (!updated) return { success: false, message: 'err_upgrade_failed' };
+    return { success: true, user: docToUser(updated) };
 }
 
 // "Mening personajim" ekrani ochilganda birinchi bo'lib qaysi personaj ko'rsatilishini

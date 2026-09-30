@@ -7,7 +7,7 @@ import { lookString } from '../cosmetics';
 import { MAPS, getMapById } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
-import { hasPerk, maxStaminaOf, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf } from '../perks';
+import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -43,7 +43,7 @@ export class RoomManager {
 
     // Yangi o'yinchini xonaga (lobbiga) qo'shish
     // userId/nickname - agar foydalanuvchi ro'yxatdan o'tgan/tizimga kirgan bo'lsa yuboriladi
-    public async joinPlayer(socket: Socket, roomId: string, userId: string | null = null, nickname: string = 'Mehmon', clientId: string | null = null): Promise<void> {
+    public async joinPlayer(socket: Socket, roomId: string, userId: string | null = null, nickname: string = 'Guest', clientId: string | null = null): Promise<void> {
         const room = this.activeRooms[roomId];
         if (!room) return;
 
@@ -51,6 +51,12 @@ export class RoomManager {
         if (room.kicked && ((userId !== null && room.kicked.includes('u:' + userId)) || (clientId && room.kicked.includes('c:' + clientId)))) {
             socket.emit('joinError', 'err_kicked');
             return;
+        }
+        // Boshqa xonada qolib ketgan bo'lsa - avval o'sha yerdan chiqadi (aks holda eski xonada
+        // "arvoh" o'yinchi qolib, u xona bo'shamasdi)
+        if (!room.players[socket.id] && Object.keys(this.activeRooms).some(id => id !== roomId && this.activeRooms[id].players[socket.id])) {
+            this.leavePlayer(socket);
+            if (!this.activeRooms[roomId]) return;
         }
         // Shu socket allaqachon xonada (takroriy so'rov) - ikkinchi nusxa qo'shilmaydi
         if (room.players[socket.id]) {
@@ -195,6 +201,11 @@ export class RoomManager {
         p.level = db.xpLevel((p.charXp && p.charXp[p.characterType]) || 0);
         p.maxStamina = maxStaminaOf(p.characterType, p.level);
         if (p.stamina > p.maxStamina) p.stamina = p.maxStamina;
+        // Maksimal jon ("hp" kuchaytirishi): oshsa - qo'shilgan qismi joriy jonga ham qo'shiladi
+        const oldMaxHp = p.maxHp || BASE_HP;
+        p.maxHp = maxHpOf(p);
+        if (p.hp > p.maxHp) p.hp = p.maxHp;
+        else if (p.maxHp > oldMaxHp && !p.isDead) p.hp += p.maxHp - oldMaxHp;
         if (p.weaponMode === 'alt' && !(ALT_WEAPON_PERK[p.characterType] && hasPerk(p, ALT_WEAPON_PERK[p.characterType]))) p.weaponMode = 'main';
         // Magazin hajmi kuchaytirilgan bo'lishi mumkin
         if (p.ammo === undefined || p.ammo > shotgunMagOf(p)) p.ammo = shotgunMagOf(p);
@@ -321,7 +332,9 @@ export class RoomManager {
     // Lobbida personaj turini o'zgartirish (Samurai, Mage, Archer, Knight)
     public selectCharacter(socket: Socket, roomId: string, characterType: string): void {
         const room = this.activeRooms[roomId];
-        if (room && room.players[socket.id]) {
+        // Faqat mavjud personajlar va faqat lobbida (o'yin o'rtasida almashsa - holati buzilardi)
+        if (!(characterType in CHARACTER_COLORS) || !room || room.isStarted) return;
+        if (room.players[socket.id]) {
             const player = room.players[socket.id];
             player.characterType = characterType;
             const skinId = player.equippedSkins[characterType] || 'default';
@@ -382,7 +395,8 @@ export class RoomManager {
         if (!room || room.isStarted) return;
         if (room.hostId !== socket.id) return; // Faqat xo'jayin tanlay oladi
 
-        if (levelIndex < 0 || levelIndex >= MAPS.length || levelIndex > room.unlockedLevel) return;
+        // Butun son bo'lishi shart (matn/NaN kelsa - tekshiruvlar o'tib ketib, START da xato berardi)
+        if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || levelIndex > room.unlockedLevel) return;
 
         room.selectedLevel = levelIndex;
         // Tanlovni hammaga yuboramiz (avval o'yinchilar ro'yxati yuborilardi -
@@ -627,7 +641,6 @@ export class RoomManager {
 
         Object.values(room.players).forEach((p, i) => {
             p.kills = 0;
-            p.hp = 100;
             p.isDead = false;
             p.respawnTimer = 0;
             p.isInvisible = false;
@@ -635,6 +648,7 @@ export class RoomManager {
             p.isHoldingAbility = false;
             p.isHoldingAttack = false;
             RoomManager.refreshPerks(p);
+            p.hp = p.maxHp || BASE_HP;
             p.stamina = p.maxStamina || 100;
             p.specialTicks = 0;
             p.specialCooldown = 0;
@@ -824,7 +838,7 @@ export class RoomManager {
         // Barcha o'yinchilarni yangi raund uchun tozalab qo'yamiz
         Object.values(room.players).forEach((p) => {
             p.kills = 0;
-            p.hp = 100;
+            p.hp = p.maxHp || BASE_HP;
             p.isDead = false;
             p.respawnTimer = 0;
             p.isReady = false; // Keyingi raund uchun hamma qayta "Tayyor" bosishi kerak
@@ -872,7 +886,7 @@ export class RoomManager {
         // Barcha o'yinchilarni yangi raund uchun tozalab qo'yamiz
         Object.values(room.players).forEach((p) => {
             p.kills = 0;
-            p.hp = 100;
+            p.hp = p.maxHp || BASE_HP;
             p.isDead = false;
             p.respawnTimer = 0;
             p.isReady = false; // Keyingi raund uchun hamma qayta "Tayyor" bosishi kerak

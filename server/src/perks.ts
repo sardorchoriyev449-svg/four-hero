@@ -60,6 +60,35 @@ export function shotgunMagOf(p: PlayerState): number {
     const up = (p.accountUpgrades && p.accountUpgrades.knight) as any || {};
     return SHOTGUN_BASE_MAG + SHOTGUN_MAG_PER_LEVEL * Math.min(5, up.shotgunMag || 0);
 }
+
+// JON VA JON TIKLANISHI (kuchaytirish, har personajga alohida, 5 darajagacha):
+//   hp    - maksimal jon: 100 + 20 har darajaga (5-darajada 200)
+//   regen - jang paytida sekundiga +0.5 HP o'zi tiklanadi (5-darajada 2.5 HP/s)
+export const BASE_HP = 100;
+export const HP_PER_LEVEL = 20;
+export const REGEN_PER_LEVEL = 0.5;
+function charUpgrade(p: PlayerState, key: string): number {
+    const up = (p.accountUpgrades && p.accountUpgrades[p.characterType]) as any || {};
+    return Math.max(0, Math.min(5, up[key] || 0));
+}
+export function maxHpOf(p: PlayerState): number {
+    return BASE_HP + HP_PER_LEVEL * charUpgrade(p, 'hp');
+}
+export function regenPerSecondOf(p: PlayerState): number {
+    return REGEN_PER_LEVEL * charUpgrade(p, 'regen');
+}
+
+// KUCHAYTIRISH NARXI (hamma kuchaytirishlar uchun): har keyingi daraja - ball + tanga.
+// Indeks - hozirgi daraja (0 -> 1-darajaga o'tish narxi)
+export const UPGRADE_COSTS: { points: number, coins: number }[] = [
+    { points: 1, coins: 150 },
+    { points: 1, coins: 300 },
+    { points: 1, coins: 500 },
+    { points: 2, coins: 800 },
+    { points: 2, coins: 1200 }
+];
+export const BASE_UPGRADES = ['damage', 'stamina', 'hp', 'regen'];
+
 export function weaponUpgradeLevel(p: PlayerState, key: string): number {
     const up = (p.accountUpgrades && p.accountUpgrades[p.characterType]) as any || {};
     return Math.min(5, up[key] || 0);
