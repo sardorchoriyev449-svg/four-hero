@@ -157,6 +157,9 @@ function launchGame(socket, roomId, mapData, continued) {
     const isFatElf = !!map.fatElf;   // semiz elf (map-9, "Vaxtida kelding")
     const isUnderworld = !!map.underworld; // UnderWorld (map-10): og'zibor gul, shahar, trol
     const isArena = !!map.arena;     // Arena (bonus): cheksiz botlar, har 5 o'ldirishda boss
+    const isGFlower = !!map.giantFlower; // Season 2 map-1: Gigant gul
+    const isSnakeArena = isArena && !!map.arena.snake; // arenada Robot ilon boss bo'lib chiqishi mumkin
+    const snakeDef = map.boss || (isSnakeArena ? map.arena.snake : null);
 
     // Shu raundga xos holat (har raundda launchGame qaytadan chaqiriladi)
     let crateGroup;
@@ -216,6 +219,13 @@ function launchGame(socket, roomId, mapData, continued) {
     let uwTalkShown = false;
     let trollHint = null;
     let arenaState = null;     // serverdan: { kills, sinceBoss, boss, bossesBeaten }
+    // GIGANT GUL: server holati va sahna obyektlari
+    let gfState = null;
+    let gfObj = null;          // { head, crown, stem, whip, walls: [img, img], wallGroup, disp: {x, y} }
+    let gfWallsUp = false;
+    let gfDying = false;
+    let gfThornSprites = {};
+    let gfRootSprites = {};
     let gPoundHit = false;     // yerni urish seriyasi: oxirgi kadr "urish" bo'lganmi
     let gCracks = [];          // urishlardan polda paydo bo'lgan yoriqlar
     let gRideId = null;        // shiftga otilayotgan platforma ustida qolgan bo'lsam - uning id si
@@ -2236,6 +2246,364 @@ function launchGame(socket, roomId, mapData, continued) {
         }
     }
 
+    // ===== GIGANT GUL (Season 2, map-1) =====
+    // Bosh (chapga qaragan): ko'zsiz to'q qizil gul, tomirlari bor, katta tishli jag'lar
+    function gfHeadGrid(open) {
+        const W = 46, H = 38;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const ell = (cx, cy, rx, ry, pal, light = 0) => {
+            for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+                if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) set(x, y, shade(0.82 + light - (y - cy + ry) / (ry * 4) - (x - cx + rx) / (rx * 7), x, y, pal));
+            }
+        };
+        ell(30, 19, 15, 16, UW_RED, 0.04);                       // orqa (piyoz) qismi
+        // Tomirlar - egri qora-qizil chiziqlar
+        for (let k = 0; k < 4; k++) for (let t = 0; t <= 1; t += 0.03) {
+            const x = Math.round(19 + t * 24), y = Math.round(8 + k * 7 + Math.sin(t * 3.1) * 3 - t * 2);
+            if (((x - 30) / 15) ** 2 + ((y - 19) / 16) ** 2 < 0.85) set(x, y, UW_RED[0]);
+        }
+        const W8 = 0xfafafa;
+        if (open) {
+            ell(13, 8, 12, 6.5, UW_RED, 0.08);                     // yuqori jag' (ko'tarilgan)
+            ell(14, 30, 11, 5, UW_RED);                            // pastki jag'
+            for (let y = 12; y <= 27; y++) for (let x = 2; x <= 27; x++) {
+                const d = ((x - 14) / 12) ** 2 + ((y - 20) / 7.5) ** 2;
+                if (d <= 1) set(x, y, d < 0.3 && y > 20 ? 0xad1457 : 0x1b0000);
+            }
+            for (let x = 3; x < 25; x += 3) { set(x, 13, W8); set(x + 1, 13, W8); set(x, 14, W8); set(x, 15, W8); set(x + 1, 26, W8); set(x + 2, 26, W8); set(x + 2, 25, W8); set(x + 2, 24, W8); }
+        } else {
+            ell(13, 15, 13, 7, UW_RED, 0.06);                      // yuqori jag'
+            ell(14, 24, 12, 5.5, UW_RED);                          // pastki jag'
+            for (let x = 1; x <= 26; x++) set(x, 20, 0x1b0000);    // yopiq og'iz
+            for (let x = 3; x < 25; x += 3) { set(x, 19, W8); set(x + 1, 19, W8); set(x, 18, W8); set(x + 1, 21, W8); set(x + 2, 21, W8); set(x + 2, 22, W8); }
+        }
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // Boshning orqasidagi tikanli yashil barglar toji
+    function gfCrownGrid() {
+        const W = 36, H = 34;
+        const g = gridNew(W, H);
+        const LEAF = [0x1b5e20, 0x2e7d32, 0x43a047, 0x66bb6a];
+        const leaf = (bx, by, width) => {
+            const cx0 = 18, cy0 = 18, n = 40;
+            for (let i = 0; i <= n; i++) {
+                const t = i / n, cx = cx0 + (bx - cx0) * t, cy = cy0 + (by - cy0) * t;
+                const half = width * (1 - t) * Math.min(1, t * 3 + 0.4);
+                for (let y = Math.floor(cy - half); y <= cy + half; y++) for (let x = Math.floor(cx - half); x <= cx + half; x++) {
+                    if (y < 0 || y >= H || x < 0 || x >= W || (x - cx) ** 2 + (y - cy) ** 2 > half * half + 0.3) continue;
+                    g[y][x] = shade(0.85 - t * 0.35 + 0.1 * Math.sin(x + y), x, y, LEAF);
+                }
+                if (i % 2 === 0 && t > 0.1 && t < 0.85) { const x = Math.round(cx), y = Math.round(cy); if (g[y] && x >= 0 && x < W) g[y][x] = LEAF[0]; }
+            }
+        };
+        [[1, 5, 4], [3, 21, 4], [10, 33, 3.5], [29, 1, 4.5], [35, 13, 4], [33, 30, 4], [17, 0, 3.5], [23, 33, 3.5], [8, 0, 3]].forEach(([x, y, w]) => leaf(x, y, w));
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function gfThornGrid() {
+        const g = gridNew(9, 3);
+        for (let x = 0; x < 9; x++) { g[1][x] = x > 6 ? 0x5d4037 : 0xf5f5dc; if (x < 5) { g[0][x] = 0xd7ccc8; g[2][x] = 0xd7ccc8; } }
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // Yerdan sanchiladigan tomir (uchi tepada)
+    function gfRootGrid() {
+        const W = 10, H = 40;
+        const g = gridNew(W, H);
+        const BARK = [0x3e2723, 0x4e342e, 0x6d4c41, 0x8d6e63];
+        for (let y = 0; y < H; y++) {
+            const half = 0.5 + (y / H) * 4;
+            const cx = 5 + Math.sin(y * 0.3) * 0.8;
+            for (let x = 0; x < W; x++) if (Math.abs(x - cx) <= half) g[y][x] = shade(0.8 - Math.abs(x - cx) / (half * 3) + 0.15 * Math.sin(y * 0.9), x, y, BARK);
+        }
+        [[2, 30], [8, 24], [1, 14]].forEach(([x, y]) => { g[y][x] = BARK[1]; g[y - 1][x] = BARK[2]; });
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // Yo'lni yopadigan uzun tikonli devor
+    function gfThornWallGrid() {
+        const W = 18, H = 143;
+        const g = gridNew(W, H);
+        const BARK = [0x3e2723, 0x4e342e, 0x5d4037, 0x795548];
+        const cxOf = (y) => 9 + Math.round(Math.sin(y * 0.12) * 1.5);
+        for (let y = 0; y < H; y++) {
+            const cx = cxOf(y), half = 4 + ((y * 7) % 3 === 0 ? 1 : 0);
+            for (let x = cx - half; x <= cx + half; x++) g[y][x] = shade(0.78 - Math.abs(x - cx) / (half * 3) + 0.12 * Math.sin(y * 0.5 + x), x, y, BARK);
+        }
+        for (let y = 4, k = 0; y < H - 3; y += 8, k++) {
+            const side = k % 2 ? 1 : -1, cx = cxOf(y), bx = cx + side * 5;
+            for (let i = 0; i < 4; i++) {
+                const x = bx + side * i;
+                if (x >= 0 && x < W) { g[y][x] = i === 3 ? 0xbdbdbd : 0xeeeeee; if (i < 2) g[y + 1][x] = 0xbdbdbd; }
+            }
+        }
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // Kichkina gul: oyoqlari - tomirlar. frame 0/1 - yurish, 2 - tishlash
+    function sproutGrid(frame) {
+        const W = 18, H = 24;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const ell = (cx, cy, rx, ry, pal) => {
+            for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+                if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) set(x, y, shade(0.8 - (y - cy + ry) / (ry * 4), x, y, pal));
+            }
+        };
+        // Tomir-oyoqlar
+        const legs = frame === 1 ? [[6, 23], [10, 23], [15, 22]] : [[3, 23], [9, 23], [13, 23]];
+        legs.forEach(([ex, ey]) => {
+            for (let t = 0; t <= 1; t += 0.12) set(Math.round(9 + (ex - 9) * t), Math.round(17 + (ey - 17) * t), t > 0.7 ? 0x4e342e : 0x6d4c41);
+        });
+        for (let y = 11; y < 18; y++) { set(8, y, 0x2e7d32); set(9, y, 0x1b5e20); }       // poya
+        ell(5, 14, 3, 1.5, UW_LEAF); ell(13, 13, 3, 1.5, UW_LEAF);                     // barglar
+        if (frame === 2) {
+            ell(9, 3, 7, 3.5, UW_RED); ell(9, 10, 6, 2.5, UW_RED);
+            for (let x = 3; x <= 15; x++) for (let y = 5; y <= 8; y++) set(x, y, 0x1b0000);
+            for (let x = 3; x < 15; x += 3) { set(x, 5, 0xfafafa); set(x + 1, 8, 0xfafafa); }
+        } else {
+            ell(9, 6, 7, 5.5, UW_RED);
+            for (let x = 3; x <= 15; x++) set(x, 7, 0x1b0000);
+            for (let x = 4; x < 15; x += 3) { set(x, 6, 0xfafafa); set(x + 1, 8, 0xfafafa); }
+        }
+        [[1, 4], [17, 4], [4, 0], [9, 0], [14, 0]].forEach(([x, y]) => set(x, y, UW_RED[0]));
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function ensureGfTextures(scene) {
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        mk('px_gf_head', gfHeadGrid(false), 3);
+        mk('px_gf_head_open', gfHeadGrid(true), 3);
+        mk('px_gf_crown', gfCrownGrid(), 3);
+        mk('px_gf_thorn', gfThornGrid(), 2);
+        mk('px_gf_root', gfRootGrid(), 3);
+        mk('px_gf_wall', gfThornWallGrid(), 4);
+        [0, 1, 2].forEach(f => mk('px_sprout_' + f, sproutGrid(f), 3));
+    }
+    // Pushti qo'ziqorin platforma: qalpoq (oq dog'lar) va oq oyoqlar yergacha
+    function drawShroomPlatform(scene, pl) {
+        const st = scene.add.graphics().setDepth(-0.45);
+        const stalkW = 14;
+        [pl.x + pl.w * 0.28, pl.x + pl.w * 0.72].forEach((cx) => {
+            const x0 = Math.round(cx - stalkW / 2), y0 = pl.y + 12, h = 572 - y0;
+            st.fillStyle(0x0a0a0a, 1); st.fillRect(x0 - 2, y0, stalkW + 4, h);
+            st.fillStyle(0xf5f5f5, 1); st.fillRect(x0, y0, stalkW, h);
+            st.fillStyle(0xd7ccc8, 1); st.fillRect(x0 + stalkW - 4, y0, 4, h);
+            st.fillStyle(0xe0e0e0, 1);
+            for (let y = y0 + 30; y < 566; y += 38) st.fillRect(x0, y, stalkW, 2);
+        });
+        const g = scene.add.graphics().setDepth(1.4);
+        const cy = pl.y, ch = 18;
+        g.fillStyle(0x0a0a0a, 1); g.fillRect(pl.x - 2, cy - 2, pl.w + 4, ch + 4);
+        g.fillStyle(0xd81b60, 1); g.fillRect(pl.x, cy, pl.w, ch);
+        g.fillStyle(0xf06292, 1); g.fillRect(pl.x, cy, pl.w, 4);
+        g.fillStyle(0xad1457, 1); g.fillRect(pl.x, cy + ch - 4, pl.w, 4);
+        g.fillStyle(0xffffff, 1);
+        for (let k = 0; k < Math.floor(pl.w / 34); k++) {
+            const sx = pl.x + 6 + ((k * 53 + pl.x * 7) % Math.max(10, pl.w - 26));
+            g.fillRect(sx, cy + 5 + (k % 2) * 4, 10 + (k % 3) * 4, 5);
+        }
+    }
+    function buildGiantFlowerScene(scene) {
+        const W = mapWidth, d = map.giantFlower;
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        ensureGfTextures(scene);
+        mk('px_troll_b', trollGrid(1), 3);
+        [[0xff7043, 'a'], [0x26c6da, 'b'], [0xffca28, 'c'], [0xec407a, 'd']].forEach(([c, k]) => {
+            mk('px_blk_' + k + '0', blockCreatureGrid(c, false), 3);
+            mk('px_blk_' + k + '1', blockCreatureGrid(c, true), 3);
+        });
+        mk('px_treehouse_0', treeHouseGrid(0), 3);
+        mk('px_treehouse_1', treeHouseGrid(1), 3);
+        [0x69f0ae, 0x80d8ff, 0xea80fc].forEach((c, i) => mk('px_uwm_' + i, uwMushroomGrid(c), 3));
+        mk('px_uw_grass', uwGrassGrid(), 2);
+        // UnderWorld ko'rinishi (map-10 dagidek)
+        drawPixelBackdrop(scene, { sky: [0x0b0920, 0x110e30, 0x181440, 0x201a52, 0x282063, 0x312673], clouds: false, mountains: false, width: W });
+        bakeTile(scene, 'bg_uw', 570, 0, (g, w) => uwBackInto(g, w));
+        scene.add.tileSprite(0, 0, W, 570, 'bg_uw').setOrigin(0, 0).setScrollFactor(0.5, 1).setDepth(-3);
+        scene.add.tileSprite(0, 570, W, 30, 'px_uw_grass').setOrigin(0, 0).setDepth(1);
+        [[300, 1], [760, 0]].forEach(([x, v]) => scene.add.image(x, 572, 'px_treehouse_' + v).setOrigin(0.5, 1).setDepth(-0.5));
+        scene.add.image(520, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6).setFlipX(true);
+        for (let x = 120; x < W - 40; x += 70 + ((x * 13) % 60)) {
+            if (x > d.arenaX - 40 && Math.abs(x - d.stemX) < 80) continue;
+            const m = scene.add.image(x, 572, 'px_uwm_' + (x % 3)).setOrigin(0.5, 1).setDepth(1.2);
+            scene.tweens.add({ targets: m, alpha: 0.6, duration: 900 + (x % 5) * 200, yoyo: true, repeat: -1 });
+        }
+        ['b', 'd'].forEach((k, i) => {
+            const x0 = 180 + i * 420;
+            const c = scene.add.image(x0, 572, 'px_blk_' + k + '0').setOrigin(0.5, 1).setDepth(1.6);
+            scene.tweens.add({ targets: c, x: x0 + 90, duration: 2800 + i * 500, yoyo: true, repeat: -1, ease: 'Sine.InOut',
+                onYoyo: () => c.setFlipX(true), onRepeat: () => c.setFlipX(false) });
+            scene.time.addEvent({ delay: 260, loop: true, callback: () => c.setTexture('px_blk_' + k + (c.texture.key.endsWith('0') ? '1' : '0')) });
+        });
+        scene.time.addEvent({ delay: 220, loop: true, callback: () => {
+            const cam = scene.cameras.main;
+            const sp = scene.add.rectangle(cam.scrollX + Phaser.Math.Between(0, 800), 580, 3, 3, [0xb2ff59, 0x80d8ff, 0xea80fc][Phaser.Math.Between(0, 2)], 0.9).setDepth(-0.4);
+            scene.tweens.add({ targets: sp, y: Phaser.Math.Between(150, 420), x: sp.x + Phaser.Math.Between(-60, 60), alpha: 0, duration: Phaser.Math.Between(2500, 4500), onComplete: () => sp.destroy() });
+        } });
+        // Jang maydoni: pushti qo'ziqorin platformalar
+        map.platforms.forEach(pl => drawShroomPlatform(scene, pl));
+        // Gigant gul: poya (har kadr chiziladi), barg toji va bosh
+        const stem = scene.add.graphics().setDepth(1.2);
+        const whip = scene.add.graphics().setDepth(3.3);
+        const crown = scene.add.image(d.stemX, d.headY - 10, 'px_gf_crown').setDepth(3.45);
+        const head = scene.add.image(d.stemX - 75, d.headY, 'px_gf_head').setDepth(3.5);
+        // Tikon devorlar: jang boshlanguncha yer ostida
+        const walls = [d.arenaX + 18, d.arenaX + d.arenaW - 18].map(x => scene.add.image(x, 572 + 600, 'px_gf_wall').setOrigin(0.5, 1).setDepth(3.6));
+        const wallGroup = scene.physics.add.staticGroup();
+        gfObj = { head, crown, stem, whip, walls, wallGroup, disp: { x: d.stemX - 75, y: d.headY } };
+    }
+    // Jang boshlandi: tikon devorlar ko'tariladi, kamera maydonga qulflanadi
+    function raiseGfWalls(scene, instant) {
+        if (gfWallsUp || !gfObj) return;
+        gfWallsUp = true;
+        const d = map.giantFlower;
+        gfObj.walls.forEach((w) => {
+            if (instant) w.y = 572;
+            else {
+                scene.tweens.add({ targets: w, y: 572, duration: 900, ease: 'Back.Out' });
+                gDust(scene, w.x, 566, 10, 0x4e342e);
+            }
+            const r = scene.add.rectangle(w.x, 285, 36, 570, 0x000000, 0);
+            gfObj.wallGroup.add(r);
+        });
+        scene.cameras.main.setBounds(d.arenaX, 0, d.arenaW, 600);
+        if (!instant) scene.cameras.main.shake(700, 0.012);
+    }
+    function lowerGfWalls(scene) {
+        if (!gfObj) return;
+        gfObj.walls.forEach(w => scene.tweens.add({ targets: w, y: 572 + 600, duration: 1400, ease: 'Quad.In' }));
+        gfObj.wallGroup.clear(true, true);
+    }
+    // Har kadr: poya (egilib turadi), bosh va toj, novda
+    function drawGiantFlower(scene) {
+        if (!gfObj || !gfState) return;
+        const d = map.giantFlower, t = scene.time.now, G = gfState;
+        const D = gfObj.disp;
+        if (!gfDying) {
+            D.x = Phaser.Math.Linear(D.x, G.hx, 0.35);
+            D.y = Phaser.Math.Linear(D.y, G.hy, 0.35);
+        }
+        const sway = G.state === 'sleep' ? Math.sin(t / 700) * 8 : 0;
+        const hx = D.x + sway, hy = D.y + Math.sin(t / 500) * 3;
+        const side = G.side || -1;
+        const open = G.bite === 'wind' || G.bite === 'lunge' || G.state === 'wake' || (G.whip && G.whip.phase === 'lash');
+        gfObj.head.setPosition(hx, hy).setFlipX(side === 1).setTexture(open ? 'px_gf_head_open' : 'px_gf_head');
+        if (!gfDying) {
+            if (G.hitFlash > 0 && Math.floor(t / 60) % 2) gfObj.head.setTint(0xffffff); else gfObj.head.clearTint();
+        }
+        const cx = hx - side * 56, cy = hy - 12;
+        gfObj.crown.setPosition(cx, cy).setFlipX(side === 1);
+        // Poya: yerdan tojgacha egri, qalin, tikanli
+        const g = gfObj.stem;
+        g.clear();
+        const x0 = d.stemX, y0 = 574, x2 = cx, y2 = cy + 10;
+        const x1 = d.stemX + Math.sin(t / 900) * 14 + (x2 - x0) * 0.2, y1 = (y0 + y2) / 2 + 30;
+        const pts = [];
+        for (let i = 0; i <= 40; i++) {
+            const k = i / 40, a = (1 - k) * (1 - k), b = 2 * (1 - k) * k, c = k * k;
+            pts.push([a * x0 + b * x1 + c * x2, a * y0 + b * y1 + c * y2, 22 - k * 8]);
+        }
+        pts.forEach(([x, y, w]) => { g.fillStyle(0x0a0a0a, 1); g.fillRect(Math.round(x - w / 2 - 2), Math.round(y - 4), Math.round(w + 4), 10); });
+        pts.forEach(([x, y, w], i) => {
+            g.fillStyle(0x2e9e3a, 1); g.fillRect(Math.round(x - w / 2), Math.round(y - 3), Math.round(w), 8);
+            g.fillStyle(0x1b6e25, 1); g.fillRect(Math.round(x + w / 2 - 5), Math.round(y - 3), 5, 8);
+            g.fillStyle(0x5fd068, 1); g.fillRect(Math.round(x - w / 2 + 3), Math.round(y - 3), 3, 8);
+            // Tikanlar
+            if (i % 6 === 3 && i < 36) {
+                const sd = (i / 6) % 2 ? 1 : -1, bx = Math.round(x + sd * w / 2);
+                g.fillStyle(0x0a0a0a, 1); g.fillTriangle(bx, y - 6, bx, y + 6, bx + sd * 16, y - 4);
+                g.fillStyle(0xeeeeee, 1); g.fillTriangle(bx, y - 4, bx, y + 4, bx + sd * 12, y - 3);
+            }
+        });
+        // Novda: o'sayotganda - poyadan kurtak va yo'l bo'ylab ogohlantirish, urganda - butun platforma bo'ylab
+        const wg = gfObj.whip;
+        wg.clear();
+        const w = G.whip;
+        if (!w || gfDying) return;
+        const dir = w.x1 > w.x0 ? 1 : -1;
+        if (w.phase === 'grow') {
+            if (Math.floor(t / 130) % 2) {
+                wg.fillStyle(0xff1744, 0.55);
+                for (let x = w.x0; dir * (w.x1 - x) > 0; x += dir * 18) wg.fillRect(Math.round(x) - 3, w.y + 18, 6, 3);
+            }
+            const len = 18 + 10 * Math.abs(Math.sin(t / 90));
+            for (let i = 0; i < len; i += 3) {
+                const x = w.x0 + dir * i, y = w.y - Math.sin(i / 7) * 6;
+                wg.fillStyle(0x0a0a0a, 1); wg.fillRect(Math.round(x) - 1, Math.round(y) - 4, 6, 9);
+                wg.fillStyle(0x43a047, 1); wg.fillRect(Math.round(x), Math.round(y) - 3, 4, 7);
+            }
+        } else {
+            const n = Math.ceil(Math.abs(w.x1 - w.x0) / 6);
+            for (let i = 0; i <= n; i++) {
+                const x = Math.round(w.x0 + dir * i * 6), y = Math.round(w.y + Math.sin(i * 0.5 - t / 40) * 5);
+                wg.fillStyle(0x0a0a0a, 1); wg.fillRect(x - 1, y - 5, 8, 11);
+                wg.fillStyle(0x2e9e3a, 1); wg.fillRect(x, y - 4, 6, 9);
+                wg.fillStyle(0x5fd068, 1); wg.fillRect(x, y - 4, 6, 2);
+                if (i % 4 === 2) { wg.fillStyle(0xeeeeee, 1); wg.fillTriangle(x, y - 4, x + 4, y - 4, x + 2, y - 10); }
+            }
+            const tx = Math.round(w.x0 + dir * n * 6), ty = Math.round(w.y + Math.sin(n * 0.5 - t / 40) * 5);
+            wg.fillStyle(0x0a0a0a, 1); wg.fillTriangle(tx, ty - 9, tx, ty + 9, tx + dir * 20, ty);
+            wg.fillStyle(0x66bb6a, 1); wg.fillTriangle(tx, ty - 6, tx, ty + 6, tx + dir * 15, ty);
+        }
+    }
+    // Server holatidan tikanlar va tomirlar
+    function syncGfHazards(scene, data) {
+        const th = data.gfThorns || [];
+        const thIds = new Set(th.map(x => x.id));
+        th.forEach((o) => {
+            let sp = gfThornSprites[o.id];
+            if (!sp) sp = gfThornSprites[o.id] = scene.add.image(o.x, o.y, 'px_gf_thorn').setDepth(4.5).setRotation(Math.atan2(o.vy, o.vx));
+            sp.tx = o.x; sp.ty = o.y;
+        });
+        Object.keys(gfThornSprites).forEach((id) => {
+            if (thIds.has(id)) return;
+            gfThornSprites[id].destroy();
+            delete gfThornSprites[id];
+        });
+        const rs = data.gfRoots || [];
+        const rIds = new Set(rs.map(x => x.id));
+        rs.forEach((r) => {
+            let o = gfRootSprites[r.id];
+            if (!o) {
+                // Ogohlantirish: yer yoriladi, kichik tomirchalar qimirlaydi
+                const warn = scene.add.graphics().setDepth(3.2);
+                warn.fillStyle(0x3e2723, 1);
+                warn.fillRect(r.x - 22, r.y - 3, 44, 4);
+                warn.fillStyle(0x6d4c41, 1);
+                [-14, -4, 8, 16].forEach((dx, k) => warn.fillRect(r.x + dx, r.y - 8 - (k % 2) * 4, 3, 8 + (k % 2) * 4));
+                scene.tweens.add({ targets: warn, alpha: 0.35, duration: 120, yoyo: true, repeat: -1 });
+                o = gfRootSprites[r.id] = { warn, img: null };
+            }
+            if (r.phase === 'up' && !o.img) {
+                if (o.warn) { o.warn.destroy(); o.warn = null; }
+                o.img = scene.add.image(r.x, r.y + 4, 'px_gf_root').setOrigin(0.5, 1).setDepth(3.4).setScale(1, 0.05);
+                scene.tweens.add({ targets: o.img, scaleY: 1, duration: 110, ease: 'Back.Out' });
+                gDust(scene, r.x, r.y - 4, 6, 0x4e342e);
+            }
+        });
+        Object.keys(gfRootSprites).forEach((id) => {
+            if (rIds.has(id)) return;
+            const o = gfRootSprites[id];
+            if (o.warn) o.warn.destroy();
+            if (o.img) scene.tweens.add({ targets: o.img, scaleY: 0, duration: 200, onComplete: () => o.img.destroy() });
+            delete gfRootSprites[id];
+        });
+    }
+    // Gul halok bo'ldi: bosh so'lib egiladi, gulbarglar to'kiladi, tikon devorlar yerga kiradi
+    function gfDeathAnim(scene) {
+        if (gfDying || !gfObj) return;
+        gfDying = true;
+        const h = gfObj.head;
+        h.setTexture('px_gf_head').setTint(0x6d4c41);
+        scene.tweens.add({ targets: h, angle: (gfState && gfState.side === 1 ? 1 : -1) * -70, y: h.y + 220, duration: 1800, ease: 'Quad.In' });
+        scene.tweens.add({ targets: [h, gfObj.crown, gfObj.stem], alpha: 0, delay: 1200, duration: 1200 });
+        gfObj.crown.setTint(0x8d6e63);
+        for (let k = 0; k < 24; k++) {
+            const pt = scene.add.rectangle(h.x + Phaser.Math.Between(-60, 60), h.y + Phaser.Math.Between(-40, 40), 7, 5, UW_RED[Phaser.Math.Between(1, 3)]).setDepth(4);
+            scene.tweens.add({ targets: pt, y: 566, x: pt.x + Phaser.Math.Between(-90, 90), angle: 360, alpha: 0.3,
+                duration: Phaser.Math.Between(900, 1800), delay: Phaser.Math.Between(0, 600), onComplete: () => pt.destroy() });
+        }
+        scene.cameras.main.shake(900, 0.012);
+        scene.time.delayedCall(1200, () => lowerGfWalls(scene));
+    }
+
     // ===== TOSH GORILLA (map-8): shiftli tosh zal, chap pastda eshik, 5 ta tosh platforma =====
     const STONE = [0x3a3a40, 0x55555d, 0x72727a, 0x8f8f96, 0xadadb3];
     // Gorilla (old tomondan): pose - 'idle' | 'roar' | 'slam' | 'push' | 'rest'
@@ -2594,7 +2962,7 @@ function launchGame(socket, roomId, mapData, continued) {
             s.setFlipX(n.dir < 0);
             if (isBoss && snakeDisplayX !== null && bossState && bossState.wallBroken) {
                 const crushed = snakeDisplayX >= s.x - 6;
-                const burned = bossState.fire === 'fire' && s.x >= snakeDisplayX - 20 && s.x <= snakeDisplayX + map.boss.fireRange;
+                const burned = bossState.fire === 'fire' && s.x >= snakeDisplayX - 20 && s.x <= snakeDisplayX + snakeDef.fireRange;
                 if (crushed || burned) {
                     blueBlood(scene, s.x, 548);
                     s.destroy();
@@ -2643,7 +3011,7 @@ function launchGame(socket, roomId, mapData, continued) {
             return;
         }
         if (bossState.fire !== 'fire') return;
-        const range = map.boss.fireRange, P = 6;
+        const range = snakeDef.fireRange, P = 6;
         const q = (v) => Math.round(v / P) * P;
         const x0 = Math.floor(M.x - 6);
         const blendEnd = hx + 40;
@@ -2754,6 +3122,9 @@ function launchGame(socket, roomId, mapData, continued) {
     }
 
     // BOSS JONI - ekranda katta chiziq (HUD panelidan pastda, o'rtada)
+    function arenaBossName(b) {
+        return b === 'gorilla' ? t('gorilla_name') : b === 'fatelf' ? t('fatelf_name') : b === 'snake' ? t('boss_name') : t('arena_boss_squad');
+    }
     function drawBossBar(scene, hp, maxHp, bossName = t('boss_name')) {
         if (!scene.bossBar) {
             scene.bossBar = {
@@ -2779,7 +3150,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function bossDeathAnim(scene) {
         scene.time.addEvent({
             delay: 140, repeat: 20, callback: () => {
-                const x = (snakeDisplayX || 0) - Phaser.Math.Between(0, 900);
+                const x = (snakeDisplayX || 0) - Phaser.Math.Between(0, isArena ? 260 : 900);
                 const y = Phaser.Math.Between(400, 560);
                 const flash = scene.add.circle(x, y, 14, 0xffeb3b, 1).setDepth(7);
                 scene.tweens.add({ targets: flash, scale: 5, alpha: 0, duration: 380, onComplete: () => flash.destroy() });
@@ -3137,7 +3508,7 @@ function launchGame(socket, roomId, mapData, continued) {
             platforms.add(plat);
             // Bozorda: devor/taxtalar o'z piksel rasmi bilan chiziladi; taxtalar bir tomonlama
             // (pastdan sakrab o'tib, ustiga qo'nish mumkin)
-            if (isMarket || isForest || isFatElf || isUnderworld) {
+            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower) {
                 plat.setVisible(false);
                 if (p.h <= 14) makeOneWay(plat);
             }
@@ -3288,11 +3659,13 @@ function launchGame(socket, roomId, mapData, continued) {
             buildMarketScene(this);
             if (isBoss) snakeGfx = this.add.graphics().setDepth(5);
         }
+        if (isSnakeArena) snakeGfx = this.add.graphics().setDepth(5);
         if (isForest) buildForestScene(this);
         if (isStones) buildStonesScene(this);
         if (isGorilla) buildGorillaScene(this);
         if (isFatElf) buildFatElfScene(this, isArena);
         if (isUnderworld) buildUnderworldScene(this);
+        if (isGFlower) buildGiantFlowerScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 3
@@ -3383,6 +3756,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (stoneGroup) this.physics.add.collider(currentCharacter, stoneGroup);
             if (gPlatGroup) this.physics.add.collider(currentCharacter, gPlatGroup);
             if (flowerBlockGroup) this.physics.add.collider(currentCharacter, flowerBlockGroup);
+            if (gfObj) this.physics.add.collider(currentCharacter, gfObj.wallGroup);
 
             // XARITA EKRANDAN KENGROQ BO'LSA: kamera o'yinchini kuzatib boradi
             // (ilon quvishida esa kamerani ilon suradi - update() ichida)
@@ -3681,9 +4055,26 @@ function launchGame(socket, roomId, mapData, continued) {
                 this.tweens.add({ targets: small, alpha: 0, delay: 2200, duration: 500, onComplete: () => small.destroy() });
             }
         };
+        // GIGANT GUL: jang boshlandi (yo'llar tikon bilan yopildi) / tishladi / yengildi
+        socket.off('gflowerWake');
+        socket.on('gflowerWake', () => {
+            raiseGfWalls(this, false);
+            arenaBanner(t('gf_banner'), '#ff4081', t('gf_banner_sub'));
+        });
+        socket.off('gflowerBite');
+        socket.on('gflowerBite', () => this.cameras.main.shake(180, 0.008));
+        socket.off('gflowerDown');
+        socket.on('gflowerDown', () => gfDeathAnim(this));
+        // Server qahramonni boshqa joyga o'tkazdi (masalan, jang maydoni yopilganda tashqarida qolgan)
+        socket.off('teleport');
+        socket.on('teleport', (d) => {
+            if (!currentCharacter || !currentCharacter.body) return;
+            currentCharacter.setPosition(d.x, d.y);
+            currentCharacter.setVelocity(0, 0);
+        });
         socket.off('arenaBoss');
         socket.on('arenaBoss', (d) => {
-            const nm = d.boss === 'gorilla' ? t('gorilla_name') : d.boss === 'fatelf' ? t('fatelf_name') : t('arena_boss_squad');
+            const nm = arenaBossName(d.boss);
             this.cameras.main.shake(400, 0.01);
             arenaBanner(t('arena_boss_in'), '#ff5252', nm);
         });
@@ -3741,9 +4132,18 @@ function launchGame(socket, roomId, mapData, continued) {
             botsKilled = data.botsKilled || 0;
 
             // ROBOT-ILON JANGI: devor buzilishi, rastalar ezilishi, o'lim - bir marta effekt
-            if (isBoss && data.boss) {
+            // Arena: ilon yengilib ketdi - chizmalar tozalanadi, keyingi safar yana boshidan chiqadi
+            if (isSnakeArena && !data.boss && bossState) {
+                bossState = null; snakeServerX = null; snakeDisplayX = null; mouthOpen = 0;
+                bossFx = { wall: false, dead: false };
+                if (snakeGfx) snakeGfx.clear();
+                if (fireGfx) fireGfx.clear();
+                Object.values(flyingMineSprites).forEach(sp => sp.destroy());
+                flyingMineSprites = {};
+            }
+            if ((isBoss || isSnakeArena) && data.boss) {
                 bossState = data.boss;
-                if (bossState.wallBroken && !bossFx.wall) { bossFx.wall = true; breakMarketWall(this); }
+                if (isBoss && bossState.wallBroken && !bossFx.wall) { bossFx.wall = true; breakMarketWall(this); }
                 if (bossState.dead && !bossFx.dead) { bossFx.dead = true; bossDeathAnim(this); }
                 const fl = data.flyingMines || [];
                 const ids = new Set(fl.map(f => f.id));
@@ -3763,6 +4163,14 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             }
             checkpointReached = data.checkpointReached || [];
+
+            // GIGANT GUL: holat, tikanlar, tomirlar; jang boshlangan bo'lsa (kech qo'shilgan) - devorlar darhol
+            if (isGFlower) {
+                gfState = data.gflower || null;
+                if (gfState && gfState.state !== 'sleep' && gfState.state !== 'dying' && !gfWallsUp) raiseGfWalls(this, true);
+                if (gfState && gfState.state === 'dying' && !gfDying) gfDeathAnim(this);
+                syncGfHazards(this, data);
+            }
 
             // ARENA: hisob, joriy boss; boss yo'q bo'lsa - gorilla/semiz elf yo'q (yashiriladi)
             if (isArena) {
@@ -4237,7 +4645,14 @@ function launchGame(socket, roomId, mapData, continued) {
             serverBots.forEach((bot) => {
                 if (!enemyBots[bot.id]) {
                     let b;
-                    if (bot.kind === 'dog') {
+                    if (bot.skin === 'sprout') {
+                        // KICHKINA GUL: 54x72 rasm, oyog'i (tomirlari) server hitboxi tagiga (y+20) to'g'ri keladi
+                        ensureGfTextures(this);
+                        b = this.physics.add.sprite(bot.x, bot.y, 'px_sprout_0').setDepth(3).setOrigin(0.5, 52 / 72);
+                        b.isSprout = true;
+                        b.animT = 0;
+                        b.animFrame = 0;
+                    } else if (bot.kind === 'dog') {
                         // ROBOT IT: 80x60 rasm, oyog'i server hitboxi tagiga (y+20) to'g'ri keladi
                         b = this.physics.add.sprite(bot.x, bot.y, 'px_dog_0').setDepth(3).setOrigin(0.5, 40 / 60);
                         b.isDog = true;
@@ -4255,6 +4670,8 @@ function launchGame(socket, roomId, mapData, continued) {
                     // To'siq tanasi - serverdagi it hitboxi bilan bir xil (60x44, oyoqlari tagida)
                     if (b.isDog) { b.body.setSize(60, 44, false); b.body.setOffset(10, 16); }
                     if (b.isRobot) { b.body.setSize(32, 40, false); b.body.setOffset(26, 10); }
+                    if (b.isSprout) { b.body.setSize(36, 44, false); b.body.setOffset(9, 28); }
+                    b.emerge = bot.emerge || 0;
                     b.targetX = bot.x; b.targetY = bot.y; b.hp = bot.hp; b.maxHp = bot.maxHp;
                     b.isBlocking = bot.isBlocking; b.isAttacking = bot.isAttacking; b.facingLeft = bot.facingLeft;
                     b.isJetting = bot.isJetting;
@@ -4280,6 +4697,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     enemyBots[bot.id].isAttacking = bot.isAttacking;
                     enemyBots[bot.id].isJetting = bot.isJetting;
                     enemyBots[bot.id].facingLeft = bot.facingLeft;
+                    enemyBots[bot.id].emerge = bot.emerge || 0;
                 }
             });
 
@@ -4360,6 +4778,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (dialog || isStory) return 'calm';
         if (isForest) return (forestTriggered && botsKilled < (currentCharacter ? currentCharacter.killsToWin : 1)) ? 'action' : 'calm';
         if (isArena) return 'action';
+        if (isGFlower) return gfState && gfState.state !== 'sleep' ? 'action' : 'calm';
         if (isUnderworld) {
             return Object.values(flowerSprites).some(f => f.state !== 'hidden' && f.state !== 'dead') ? 'action' : 'calm';
         }
@@ -4405,16 +4824,16 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         // ILON QUVISHI: ilon silliq siljiydi, KAMERA u bilan bir xil suriladi
         // (ilon ekranning chap chetida ko'rinib turadi)
-        if ((isChase || isBoss) && snakeServerX !== null) {
+        if ((isChase || isBoss || isSnakeArena) && snakeServerX !== null && snakeDisplayX !== null) {
             snakeDisplayX = Phaser.Math.Linear(snakeDisplayX, snakeServerX, 0.3);
             // Bahaybat bosh (~250px) to'liq ko'rinib tursin - kamera ilonni ko'zlaydi
             this.cameras.main.scrollX = Phaser.Math.Clamp(snakeDisplayX - 260, 0, mapWidth - 800);
             const mouthTarget = isBoss && bossState && !bossState.dead ? (bossState.fire === 'fire' ? 1 : bossState.fire === 'charge' ? 0.7 : 0) : 0;
             mouthOpen += (mouthTarget - mouthOpen) * 0.2;
             drawSnake(snakeGfx, snakeDisplayX, this.time.now, mouthOpen);
-            if (isBoss) drawBossFire(this);
+            if (isBoss || isSnakeArena) drawBossFire(this);
             // Zarba olganda ilon lipillaydi
-            if (isBoss && bossState && !bossState.dead) snakeGfx.setAlpha(bossState.hitFlash > 0 && Math.floor(this.time.now / 60) % 2 ? 0.55 : 1);
+            if ((isBoss || isSnakeArena) && bossState && !bossState.dead) snakeGfx.setAlpha(bossState.hitFlash > 0 && Math.floor(this.time.now / 60) % 2 ? 0.55 : 1);
             if (isChase && introWall && snakeDisplayX >= map.chase.introWallX + 10) breakIntroWall(this);
         }
         if (isMarket) {
@@ -4422,6 +4841,11 @@ function launchGame(socket, roomId, mapData, continued) {
             updateCrowd(this, this.game.loop.delta);
         }
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
+        if (isGFlower) {
+            drawGiantFlower(this);
+            Object.values(gfThornSprites).forEach((sp) => { sp.x = Phaser.Math.Linear(sp.x, sp.tx, 0.6); sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6); });
+            if (gfState && gfState.state !== 'sleep') drawBossBar(this, gfState.hp, gfState.maxHp, t('gf_name'));
+        }
         // TOSH GORILLA
         if (isGorilla && gorillaState && gorillaSprite) {
             const gs = gorillaState;
@@ -4488,6 +4912,8 @@ function launchGame(socket, roomId, mapData, continued) {
             const elites = Object.values(enemyBots).filter(b => b.elite);
             if (arenaState && arenaState.boss === 'squad' && elites.length) {
                 drawBossBar(this, elites.reduce((a, b) => a + Math.max(0, b.hp), 0), elites.reduce((a, b) => a + (b.maxHp || 1), 0), t('arena_boss_squad'));
+            } else if (arenaState && arenaState.boss === 'snake' && bossState) {
+                drawBossBar(this, bossState.hp, bossState.maxHp, t('boss_name'));
             } else if (arenaState && arenaState.boss === 'fatelf' && fatElfState) {
                 drawBossBar(this, fatElfState.hp, fatElfState.maxHp, t('fatelf_name'));
             }
@@ -4495,7 +4921,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 const show = !!(arenaState && arenaState.boss);
                 [this.bossBar.panel, this.bossBar.bar, this.bossBar.name].forEach(o => o.setVisible(show));
                 if (arenaState && arenaState.boss) {
-                    const nm = arenaState.boss === 'gorilla' ? t('gorilla_name') : arenaState.boss === 'fatelf' ? t('fatelf_name') : t('arena_boss_squad');
+                    const nm = arenaBossName(arenaState.boss);
                     if (this.bossBar.name.text !== nm) this.bossBar.name.setText(nm);
                 }
             }
@@ -4666,8 +5092,25 @@ function launchGame(socket, roomId, mapData, continued) {
             if (b && b.active && b.targetX !== undefined) {
                 b.x = Phaser.Math.Linear(b.x, b.targetX, 0.22);
                 b.y = Phaser.Math.Linear(b.y, b.targetY, 0.4);
-                drawHealthBar(this, b, b.hp, b.maxHp);
-                if (b.isDog) {
+                if (b.isSprout) {
+                    // Yerdan sug'urilib chiqmoqda: faqat yer ustidagi qismi ko'rinadi
+                    if (b.emerge > 0) {
+                        const frac = Phaser.Math.Clamp(1 - b.emerge / 30, 0.05, 1);
+                        b.y = b.targetY + 72 * (1 - frac);
+                        b.setCrop(0, 0, 54, 72 * frac);
+                        b.cropped = true;
+                        if (Math.random() < 0.2) gDust(this, b.x, 566, 1, 0x4e342e);
+                    } else if (b.cropped) { b.setCrop(); b.cropped = false; }
+                    b.setFlipX(!b.facingLeft);
+                    const moving = Math.abs(b.targetX - b.x) > 0.6;
+                    b.animT += this.game.loop.delta;
+                    if (b.animT > 140) { b.animT = 0; b.animFrame = 1 - b.animFrame; }
+                    b.setTexture(b.isAttacking ? 'px_sprout_2' : moving ? 'px_sprout_' + b.animFrame : 'px_sprout_0');
+                    if (b.emerge <= 0) drawHealthBar(this, b, b.hp, b.maxHp); else if (b.healthBar) b.healthBar.clear();
+                } else drawHealthBar(this, b, b.hp, b.maxHp);
+                if (b.isSprout) {
+                    // (yuqorida chizildi)
+                } else if (b.isDog) {
                     b.setFlipX(!!b.facingLeft);
                     const moving = Math.abs(b.targetX - b.x) > 0.6 || Math.abs(b.targetY - b.y) > 0.6;
                     b.animT += this.game.loop.delta;
@@ -4707,10 +5150,15 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (myApples >= need && !hudKey) {
                     hudKey = this.add.image(22, 134, 'px_key').setOrigin(0, 0.5).setScrollFactor(0).setDepth(1002);
                 }
+            } else if (isGFlower) {
+                const st = gfState ? gfState.state : 'sleep';
+                progressText = st === 'sleep' ? t('hud_gf_go') : st === 'wake' ? t('hud_gf_wake') : st === 'dying' ? '' : t('hud_gf_fight');
             } else if (isArena) {
                 const A = arenaState || { kills: 0, sinceBoss: 0, boss: null };
-                progressText = A.boss ? t('hud_arena_boss')
-                    : t('hud_arena').replace('{k}', A.kills).replace('{n}', Math.max(0, map.arena.killsPerBoss - A.sinceBoss));
+                const wave = (A.bossesBeaten || 0) + 1;
+                progressText = A.boss === 'snake' && bossState && bossState.fire !== 'idle' ? t('hud_arena_fire')
+                    : A.boss ? t('hud_arena_boss').replace('{w}', wave)
+                    : t('hud_arena').replace('{w}', wave).replace('{k}', A.kills).replace('{n}', Math.max(0, map.arena.killsPerBoss - A.sinceBoss));
             } else if (isGorilla) {
                 const gst = gorillaState ? gorillaState.state : 'idle';
                 progressText = gst === 'rest' ? t('hud_gorilla_rest') : gst === 'roar' ? t('hud_gorilla_roar')
@@ -4825,7 +5273,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // Harakat koordinatalarini faqat o'z xonamizga yuboramiz
         // Robot-ilon jangida: ilonning ichiga kirib bo'lmaydi (u to'siq)
         // (taxtada - baland turgan qahramon ilon ustidan o'tib keta oladi)
-        if (isBoss && snakeDisplayX !== null && bossState && !bossState.dead && currentCharacter.y > 360 && currentCharacter.x < snakeDisplayX + 18) {
+        if ((isBoss || isSnakeArena) && snakeDisplayX !== null && bossState && !bossState.dead && currentCharacter.y > 360 && currentCharacter.x < snakeDisplayX + 18) {
             currentCharacter.x = snakeDisplayX + 18;
             if (currentCharacter.body.velocity.x < 0) currentCharacter.setVelocityX(0);
         }

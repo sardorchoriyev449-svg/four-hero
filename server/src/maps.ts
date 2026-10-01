@@ -248,6 +248,28 @@ export interface UnderworldDef {
     talkRange: number;
 }
 
+// GIGANT GUL (Season 2, map-1): UnderWorld'da yo'l oxirida jang maydoni. Qahramon triggerX ga yetganda
+// ikki tomondagi yo'l uzun tikonli devorlar bilan yopiladi. Gulning faqat BOSHI zarar oladi (poyasi - yo'q).
+// Hujumlari: platformadagi qahramonga poyadan chiqqan novda bilan urib, uloqtiradi; harakatlanayotgan
+// qahramonga 6 ta tikan sochadi; istalgan joydan yerdan tomir chiqib sanchiladi; eng tepa platformada
+// kimdir bo'lsa - boshi bilan o'ziga yaqin qahramonni tishlaydi (boshqalarga hujumlar siyraklashadi);
+// qahramon yerda bo'lsa - yerdan kichkina gullar sug'urilib chiqib, uni quvlaydi
+export interface GiantFlowerDef {
+    arenaX: number;          // jang maydonining chap cheti (chap tikon devor)
+    arenaW: number;
+    triggerX: number;        // shu yerga yetilganda jang boshlanadi
+    stemX: number;           // poya asosi
+    headY: number;           // boshning odatdagi balandligi (markazi)
+    headR: number;           // bosh hitboxi (radius)
+    hpPerPlayer: number;     // joni = hpPerPlayer x o'yinchilar soni
+    topPlats: number[];      // platforms indekslari - "eng tepa" platformalar (tishlash)
+    whipDamage: number; whipEveryMs: number; whipGrowMs: number;
+    thornDamage: number; thornEveryMs: number; thornSpeed: number;
+    rootDamage: number; rootEveryMs: number; rootWarnMs: number; rootUpMs: number;
+    biteDamage: number; biteEveryMs: number; biteWindMs: number; biteRange: number; biteReach: number;
+    sproutEveryMs: number; sproutHp: number; sproutMax: number; sproutBiteDamage: number;
+}
+
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
 // Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
@@ -259,6 +281,7 @@ export interface ArenaDef {
     bossXp: number;
     spawnIntervalMs: number;
     maxBots: number;
+    snake?: BossDef;           // Robot ilon arenada: chap eshikdan chiqib, joyida turib mina otadi va olov sochadi
 }
 
 export interface MapDef {
@@ -270,7 +293,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
@@ -292,6 +315,8 @@ export interface MapDef {
     fatElf?: FatElfDef;         // Faqat semiz elf (map-9)
     underworld?: UnderworldDef; // Faqat UnderWorld (map-10)
     arena?: ArenaDef;           // Faqat Arena (bonus)
+    giantFlower?: GiantFlowerDef; // Season 2, map-1
+    season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
     mines?: PointDef[];         // Mina markazi
@@ -707,6 +732,42 @@ export const MAPS: MapDef[] = [
             { x: 70, y: 500 }, { x: 105, y: 500 }, { x: 140, y: 500 }, { x: 175, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // ishlatilmaydi - bu xaritada bot yo'q
+    },
+    // ===================== SEASON 2 =====================
+    {
+        id: 10,
+        name: "Giant Flower",
+        description: "Deep in the UnderWorld the road is blocked by thorns. A giant flower guards it - only its head can be hurt!",
+        season: 2,
+        mode: 'gflower',
+        killsToWin: 0,
+        xpReward: 40,
+        accentColor: 0xff4081,
+        groundColor: 0x1b3a2a,
+        mapWidth: 1800,
+        // Pushti qo'ziqorin platformalar (bir tomonlama). Chapda 2 ta, o'ngda 3 ta (zinapoya)
+        platforms: [
+            { x: 1065, y: 340, w: 160, h: 12 },   // 0 chap tepa
+            { x: 1135, y: 455, w: 150, h: 12 },   // 1 chap o'rta
+            { x: 1485, y: 270, w: 145, h: 12 },   // 2 o'ng tepa (eng baland)
+            { x: 1430, y: 370, w: 145, h: 12 },   // 3 o'ng o'rta
+            { x: 1375, y: 470, w: 170, h: 12 }    // 4 o'ng past
+        ],
+        giantFlower: {
+            arenaX: 1000, arenaW: 800, triggerX: 1090,
+            stemX: 1340, headY: 225, headR: 58,
+            hpPerPlayer: 1600,
+            topPlats: [0, 2],
+            whipDamage: 18, whipEveryMs: 3200, whipGrowMs: 900,
+            thornDamage: 8, thornEveryMs: 4500, thornSpeed: 360,
+            rootDamage: 20, rootEveryMs: 4200, rootWarnMs: 800, rootUpMs: 600,
+            biteDamage: 25, biteEveryMs: 2300, biteWindMs: 600, biteRange: 72, biteReach: 270,
+            sproutEveryMs: 3500, sproutHp: 40, sproutMax: 4, sproutBiteDamage: 12
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // botlar (kichik gullar) yerdan chiqadi
     }
 ];
 
@@ -725,7 +786,10 @@ MAPS.push({
     platforms: [],
     gorilla: MAPS.find(m => m.gorilla)!.gorilla,
     fatElf: { ...MAPS.find(m => m.fatElf)!.fatElf!, x: 600, doorX: 780 },
-    arena: { killsPerBoss: 5, botCoins: 10, botXp: 5, bossCoins: 100, bossXp: 50, spawnIntervalMs: 1400, maxBots: 6 },
+    arena: { killsPerBoss: 5, botCoins: 10, botXp: 5, bossCoins: 100, bossXp: 50, spawnIntervalMs: 1400, maxBots: 4,
+        // Robot ilon: boshi chap eshikdan chiqadi (startX - to'xtaydigan joyi), oldinga yurmaydi
+        snake: { ...MAPS.find(m => m.boss)!.boss!, baseHp: 900, hpPerExtraPlayer: 600, startX: 150, advanceSpeed: 160,
+            contactDamage: 20, mineIntervalMs: 2600, fireIntervalMs: 6500, fireRange: 460, fireSafeY: 400 } },
     playerSpawns: [
         { x: 50, y: 500 }, { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }
     ],

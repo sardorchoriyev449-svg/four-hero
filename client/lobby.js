@@ -813,6 +813,8 @@ function updateHostControls() {
 }
 
 // Xarita/Chat ko'rsatish-yashirish tugmalari (lobbini toza ko'rinishda saqlash uchun)
+// Xaritalar oynasi bo'limi: 'bonus' | 's1' | 's2'
+let mapsTab = 's1';
 function setLobbyPopup(which) {
     const mapOpen = which === 'map' && levelSelectSection.classList.contains('hidden');
     const chatOpen = which === 'chat' && lobbyChatSection.classList.contains('hidden');
@@ -820,6 +822,15 @@ function setLobbyPopup(which) {
     lobbyChatSection.classList.toggle('hidden', !chatOpen);
     toggleMapBtn.classList.toggle('active', mapOpen);
     toggleChatBtn.classList.toggle('active', chatOpen);
+    // Xaritalar ochilganda - tanlangan xarita turgan bo'lim (mavsum) ko'rsatiladi
+    if (mapOpen) {
+        const cur = roomMaps.find(m => m.id === selectedLevel);
+        if (cur) {
+            mapsTab = mapSeasonOf(cur);
+            document.querySelectorAll('.maps-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === mapsTab));
+            renderLevelList();
+        }
+    }
     if (chatOpen) {
         toggleChatBtn.classList.remove('has-new');
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -863,7 +874,6 @@ socket.on('updateRoomLevel', (data) => {
 
 // Xaritalar ro'yxatini (qulf holati bilan) chizish
 // Xaritalar oynasi bo'limi: 's1' - 1-mavsum (hozirgi xaritalar), 'bonus' va 's2' - tez orada
-let mapsTab = 's1';
 document.querySelectorAll('.maps-tab').forEach((b) => {
     b.onclick = () => {
         mapsTab = b.dataset.tab;
@@ -872,13 +882,23 @@ document.querySelectorAll('.maps-tab').forEach((b) => {
     };
 });
 
+// Xarita raqami o'z mavsumi ichida: S1 - 1..10, S2 - yana 1 dan; bonus - yulduzcha
+function mapSeasonOf(m) { return m.bonus ? 'bonus' : (m.season || 1) === 2 ? 's2' : 's1'; }
+function mapNumberLabel(id) {
+    const m = roomMaps.find(x => x.id === id);
+    if (!m) return (id + 1) + '. ';
+    if (m.bonus) return '★ ';
+    const tab = mapSeasonOf(m);
+    return (roomMaps.filter(x => mapSeasonOf(x) === tab).findIndex(x => x.id === id) + 1) + '. ';
+}
+
 function renderLevelList() {
     const mapNameEl = document.getElementById('lobby-map-name');
-    if (mapNameEl) mapNameEl.innerText = (selectedLevel + 1) + '. ' + tMapName(selectedLevel);
+    if (mapNameEl) mapNameEl.innerText = mapNumberLabel(selectedLevel) + tMapName(selectedLevel);
     levelListDiv.innerHTML = '';
-    // BONUS - mashq xaritalari (doim ochiq); SEASON 1 - asosiy xaritalar ketma-ketligi; SEASON 2 - tez orada
-    const seasonMaps = roomMaps.filter(m => !m.bonus);
-    const shown = mapsTab === 'bonus' ? roomMaps.filter(m => m.bonus) : mapsTab === 's1' ? seasonMaps : [];
+    // BONUS - mashq xaritalari (doim ochiq); SEASON 1 - tugagan (10 ta); SEASON 2 - yangi xaritalar, oxirida "tez orada"
+    const seasonMaps = roomMaps.filter(m => mapSeasonOf(m) === 's2');
+    const shown = roomMaps.filter(m => mapSeasonOf(m) === mapsTab);
     if (!shown.length) {
         levelListDiv.innerHTML = `<div class="maps-soon"><i class="fa-solid fa-hourglass-half"></i>${t('coming_soon')}</div>`;
         return;
@@ -893,7 +913,7 @@ function renderLevelList() {
         const clearedTag = !m.bonus && m.id < unlockedLevel
             ? ` <span style="color:#aaa; font-size:12px;"><i class="fa-solid fa-flag-checkered"></i> ${t('level_cleared_tag')}</span>`
             : '';
-        item.innerHTML = `<span>${icon} <span class="level-name">${m.bonus ? '<i class="fa-solid fa-star" style="color:#ffd54f;"></i> ' : (m.id + 1) + '. '}${tMapName(m.id)}</span>${clearedTag}<span class="level-desc">${tMapDesc(m.id)}</span></span>`;
+        item.innerHTML = `<span>${icon} <span class="level-name">${m.bonus ? '<i class="fa-solid fa-star" style="color:#ffd54f;"></i> ' : mapNumberLabel(m.id)}${tMapName(m.id)}</span>${clearedTag}<span class="level-desc">${tMapDesc(m.id)}</span></span>`;
         if (isRoomHost && !locked) {
             item.onclick = () => {
                 socket.emit('selectLevelInRoom', { roomId: currentRoomId, levelIndex: m.id });
@@ -903,7 +923,7 @@ function renderLevelList() {
         levelListDiv.appendChild(item);
     });
     // Keyingi (hali chiqmagan) xarita - "TEZ ORADA": har yangilanishda o'zi bir raqam suriladi
-    if (mapsTab === 's1' && seasonMaps.length) {
+    if (mapsTab === 's2' && seasonMaps.length) {
         const soon = document.createElement('div');
         soon.className = 'level-item locked readonly level-soon';
         soon.innerHTML = `<span><i class="fa-solid fa-hourglass-half"></i> <span class="level-name">${seasonMaps.length + 1}. ${t('coming_soon')}</span><span class="level-desc">${t('coming_soon_desc')}</span></span>`;

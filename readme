@@ -1,14 +1,1 @@
-xop endi lobie xonaga xam settings qo'sh va semiz elf do'stini qo'lini yayatgani uncha o'zshamagan qo'lini yaxshiroq chiz va map-10 qo'sh lokatsiya bizda endi UnderWorld va uning ko'rinishi chiroyliy tabiyat xarxil mavjudotlar yashaydi To'rtburchak semiz mavjudot, daraxt to'rta qo'larbilan va trolar va uylar daraxt ichida va daraxt tepasida qo'ziqorinlardan uylar va aynan map-10 qanday boshlanadi blayer g'ordan chiqadi va ozgina yuradi va yo'lidan Og'zibor gul chiqadi vaxshi gul ko'zlari yoq va uning rangi dark-red barigi yashil va uni odiy zarbada o'ldirish mumkin lekin agar muzbiliy shar tegsa qotib qolsin gul va o'yinchi yana o'zgina yurgandan keyin aynan o'sha underworld shaxriga kelsin va u yerda bita troll bilan dialok qilsa bo'ladi:
-player: `Salom men adashib qoldim menga qanday qilib skyland ga borish yo'lini ko'rsata olasizmi`,
-troll: `Oi.. o'yinchi ana bo'lmasam juda uzoq yo'ldan kelding`,
-troll: `lekin bu yerdan xam skayland ga borsa bo'ladi`,
-troll: `Shu yerdan faqat va faqat to'griga ketsang`,
-troll: `va tebaga qarab yursang, Qizil va Sariq eshik chiqadi`,
-troll: `va sen aynan o'sha payt`,
-player: `...`,
-troll: `yana tepa chiqasan, o'shanda g'or teshigi chiqadi va o'sha yerdan chiqasan`,
-player: `Raxmat esimga turadi degan umitaman`,
-troll: `oq yo'l O'yinchi`,
-map-10 o'tildi,
-
-va endi menga map-3 da elf bor daraxt ustida va o'yinchi eshikni ochaman degan payt daraxt ustidagi elf dialog boshlasin aytsin boshiga `emm... salom, meni ikkita do'stim kata darxtga borib olma terish moqchi edi shun bilan do'slarim qaytmadi shunga...` va asosiy avalgi dialog boshlansin, va xamasini terib bo'lgandan so'ng oxirgi dialok ga qo'sh `do'stimni ko'rsang olmani tergani bita elf kutyabti denglar balkim menga lestnisa olib kelar...` bo'ldi 
+season-2 map-2:

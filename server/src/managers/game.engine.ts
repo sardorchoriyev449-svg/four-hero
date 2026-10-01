@@ -252,6 +252,9 @@ export class GameEngine {
             // 4i. ARENA (bonus) - cheksiz botlar va bosslar
             this.updateArena(room);
 
+            // 4j. GIGANT GUL (Season 2, map-1)
+            this.updateGiantFlower(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -297,6 +300,11 @@ export class GameEngine {
                 fatElf: room.fatElf || null,
                 acid: room.acid || [],
                 flowers: room.flowers || [],
+                gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
+                    side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
+                    whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                gfThorns: room.gfThorns || [],
+                gfRoots: (room.gfRoots || []).map(r => ({ id: r.id, x: r.x, y: r.y, phase: r.phase })),
                 arena: room.arena ? { kills: room.arena.kills, sinceBoss: room.arena.sinceBoss, boss: room.arena.boss, bossesBeaten: room.arena.bossesBeaten } : null,
                 uwTalk: room.uwTalk || null,
                 gPlats: room.gPlats || [],
@@ -480,7 +488,8 @@ export class GameEngine {
     private moveToward(bot: BotState, x: number, surfaces: Surface[]): void {
         const dx = x - bot.x;
         if (Math.abs(dx) < 1) return;
-        const speed = bot.kind === 'dog' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : this.DOG_SPEED) : this.BOT_SPEED;
+        const speed = bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 4.2)
+            : bot.kind === 'dog' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : this.DOG_SPEED) : this.BOT_SPEED;
         const newX = bot.x + Math.sign(dx) * Math.min(speed, Math.abs(dx));
         if (!this.blockedAt(surfaces, newX, bot)) bot.x = newX;
     }
@@ -530,6 +539,7 @@ export class GameEngine {
             }
             if (bot.attackCooldown > 0) bot.attackCooldown--;
             if ((bot.slowTicks || 0) > 0) bot.slowTicks!--;
+            if ((bot.emerge || 0) > 0) { bot.emerge!--; return; }
 
             // FIZIKA: tayanch bo'lmasa - gravitatsiya bilan tushadi. Platformalar
             // "bir tomonlama": pastdan sakrab o'tib ketadi, faqat TUSHAYOTGANDA
@@ -703,7 +713,8 @@ export class GameEngine {
                     } else {
                         // Yaqinda: raqibning SHU tomonida, tanasiga tegib to'xtaydi -
                         // ichiga kirib, uni itarib yubormaydi
-                        desiredX = p.x + (bot.x <= p.x ? -contactX : contactX);
+                        const spread = room.arena ? (Math.abs(this.botFormationOffset(bot.id)) / 24) * 5 : 0;
+                        desiredX = p.x + (bot.x <= p.x ? -(contactX + spread) : contactX + spread);
                     }
                     // Platformada - chetidan tasodifan yiqilib tushmasin
                     if (here.standY !== this.GROUND_Y) {
@@ -736,7 +747,8 @@ export class GameEngine {
                     if (isDog) bot.slowTicks = this.DOG_SLOW_TICKS; // tishladi - endi ~1s sekin
                     const shielded = p.characterType === 'knight' && p.isHoldingAbility;
                     if (inReach && !shielded) {
-                        p.hp -= isDog ? this.DOG_ATTACK_DAMAGE : this.BOT_ATTACK_DAMAGE;
+                        p.hp -= bot.skin === 'sprout' ? (getMapById(room.selectedLevel).giantFlower?.sproutBiteDamage ?? 12)
+                            : isDog ? this.DOG_ATTACK_DAMAGE : this.BOT_ATTACK_DAMAGE;
                         // O'YINCHI O'LDI: butun raund davomida arvoh holatiga o'tadi
                         if (p.hp <= 0 && !p.isDead) {
                             p.hp = 0;
@@ -774,7 +786,7 @@ export class GameEngine {
 
         // BOTLAR BIR-BIRINING ICHIGA KIRIB KETMASLIGI UCHUN
         // (ular orasidagi to'qnashuvni tekshirib, kerak bo'lsa ajratib qo'yamiz)
-        this.resolveBotCollisions(room);
+        if (!room.arena) this.resolveBotCollisions(room);
 
         // Itarish natijasida bot xaritadan tashqariga chiqib ketmasin
         const mapWidth = surfaces[0].xEnd;
@@ -896,6 +908,18 @@ export class GameEngine {
                 gor.hitFlash = 4;
                 gor.lastHitBy = bullet.playerId;
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
+            }
+
+            // GIGANT GUL: faqat BOSHI zarar oladi
+            const gfl = room.gflower;
+            const gfd = map.giantFlower;
+            if (!bulletDestroyed && gfl && gfd && (gfl.state === 'fight' || gfl.state === 'wake') &&
+                this.checkOverlap(hitRect, { x: gfl.hx - gfd.headR, y: gfl.hy - gfd.headR, w: gfd.headR * 2, h: gfd.headR * 2 })) {
+                bulletDestroyed = true;
+                gfl.hp = Math.max(0, gfl.hp - damage);
+                gfl.hitFlash = 4;
+                gfl.lastHitBy = bullet.playerId;
+                if (gfl.hp <= 0) this.giantFlowerDefeated(room, gfl);
             }
 
             // OG'ZIBOR GUL: oddiy zarba - o'ladi; muz shari - qotib qoladi (muzlagan gulni oddiy zarba o'ldiradi)
@@ -1453,6 +1477,15 @@ export class GameEngine {
         const uw = map.underworld;
         room.flowers = (uw?.flowers || []).map((f, i) => ({ id: 'flower_' + i, x: f.x, state: 'hidden' as const, timer: 0, cooldown: 0, bitten: false }));
         room.uwTalk = uw ? { state: 'idle', timer: 0, by: null } : null;
+        const gfd = map.giantFlower;
+        const gfHp = gfd ? gfd.hpPerPlayer * Math.max(1, Object.keys(room.players).length) : 0;
+        room.gflower = gfd ? {
+            state: 'sleep', hp: gfHp, maxHp: gfHp, timer: 0, tick: 0, hx: gfd.stemX - 75, hy: gfd.headY, side: -1,
+            hitFlash: 0, lastHitBy: null, bite: null, whip: null, nextWhip: 0, nextThorn: 0, nextRoot: 0, nextBite: 0, nextSprout: 0
+        } : null;
+        room.gfThorns = [];
+        room.gfRoots = [];
+        room.gfCounter = 0;
         if (map.arena) {
             room.gorilla = null;
             room.fatElf = null;
@@ -1775,7 +1808,7 @@ export class GameEngine {
         if (A.boss === 'squad' && !room.bots.some(b => b.elite)) { this.arenaBossBeaten(room); return; }
         if (A.boss) return;   // boss paytida yangi oddiy botlar chiqmaydi
         // Oddiy botlar: navbat bilan tepadan tushadi; har boss yengilgach - kuchliroq
-        const want = Math.min(ar.maxBots, 1 + players + A.bossesBeaten);
+        const want = Math.min(ar.maxBots, players);
         if (room.bots.length < want && A.tick >= A.nextSpawnTick) {
             const z = map.botSpawnZone;
             const hp = Math.round(GameEngine.BOT_MAX_HP * (1 + 0.2 * A.bossesBeaten));
@@ -1786,11 +1819,253 @@ export class GameEngine {
         }
     }
 
+    // ===== GIGANT GUL =====
+    // Qahramon qaysi sirtda turibdi: platforma indeksi, -1 = yer, null = havoda
+    private gfSurfaceOf(map: MapDef, p: PlayerState): number | null {
+        const feet = p.y + this.PLAYER_HALF_H;
+        if (feet >= 562) return -1;
+        const i = map.platforms.findIndex(pl => p.x >= pl.x - 8 && p.x <= pl.x + pl.w + 8 && Math.abs(feet - pl.y) <= 10);
+        return i >= 0 ? i : null;
+    }
+    // Qahramon ostidagi eng yaqin sirt tepasi (havoda bo'lsa - qo'nadigan joyi)
+    private gfSurfaceYUnder(map: MapDef, x: number, feet: number): number {
+        let best = 570;
+        map.platforms.forEach(pl => { if (x >= pl.x && x <= pl.x + pl.w && pl.y >= feet - 12 && pl.y < best) best = pl.y; });
+        return best;
+    }
+    private updateGiantFlower(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const d = map.giantFlower;
+        const g = room.gflower;
+        if (!d || !g || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        g.tick++;
+        if (g.hitFlash > 0) g.hitFlash--;
+        const thorns = room.gfThorns || (room.gfThorns = []);
+        const roots = room.gfRoots || (room.gfRoots = []);
+        const nextId = (k: string) => 'gf' + k + '_' + (room.gfCounter = (room.gfCounter || 0) + 1);
+
+        if (g.state === 'sleep') {
+            // Kimdir jang maydoniga yetdi - yo'llar tikon bilan yopiladi
+            if (!alive.some(p => p.x >= d.triggerX)) return;
+            g.state = 'wake';
+            g.timer = T(1800);
+            let slot = 0;
+            Object.values(room.players).forEach(p => {
+                if (p.x >= d.arenaX + 40 && p.x <= d.arenaX + d.arenaW - 40) return;
+                p.x = d.arenaX + 70 + (slot++) * 34;
+                p.y = 546;
+                this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+            });
+            this.io.to(roomId).emit('gflowerWake');
+            return;
+        }
+        if (g.state === 'dying') {
+            if (--g.timer <= 0) {
+                const winner = (g.lastHitBy && room.players[g.lastHitBy]) ? g.lastHitBy : (alive[0] || Object.values(room.players)[0])?.id;
+                if (winner) this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
+                g.timer = 1e9;   // g'olib bir marta e'lon qilinadi
+            }
+            return;
+        }
+        if (g.state === 'wake') {
+            if (--g.timer <= 0) {
+                g.state = 'fight';
+                g.nextWhip = g.tick + T(1200);
+                g.nextRoot = g.tick + T(2600);
+                g.nextThorn = g.tick + T(3500);
+                g.nextBite = g.tick;
+                g.nextSprout = g.tick + T(1500);
+            }
+            return;
+        }
+
+        // ---- JANG ----
+        const surf = new Map<string, number | null>();
+        alive.forEach(p => surf.set(p.id, this.gfSurfaceOf(map, p)));
+        const topPlayers = alive.filter(p => d.topPlats.includes(surf.get(p.id) as number));
+        const slow = topPlayers.length > 0 ? 1.6 : 1;   // tepada kimdir bo'lsa - boshqalarga hujum siyraklashadi
+        const stemTopY = d.headY + 20;
+
+        // BOSH: tishlamayotganda - eng yaqin qahramon tomonga o'tib turadi
+        if (!g.bite) {
+            const focus = alive.slice().sort((a, b) => Math.abs(a.x - d.stemX) - Math.abs(b.x - d.stemX))[0];
+            if (focus) g.side = focus.x < d.stemX ? -1 : 1;
+            const rx = d.stemX + g.side * 75, ry = d.headY;
+            const dx = rx - g.hx, dy = ry - g.hy, dist = Math.hypot(dx, dy);
+            const step = 4;
+            if (dist <= step) { g.hx = rx; g.hy = ry; } else { g.hx += dx / dist * step; g.hy += dy / dist * step; }
+        }
+
+        // 1) TISHLASH: eng tepa platformada kimdir bor - bosh o'ziga eng yaqin qahramonga otiladi
+        if (!g.bite && topPlayers.length && g.tick >= g.nextBite) {
+            const reachable = alive.filter(p => Math.hypot(p.x - d.stemX, p.y - stemTopY) <= d.biteReach + 40);
+            const target = reachable.sort((a, b) => Math.hypot(a.x - g.hx, a.y - g.hy) - Math.hypot(b.x - g.hx, b.y - g.hy))[0];
+            if (target) {
+                g.side = target.x < d.stemX ? -1 : 1;
+                let tx = target.x - g.side * 20, ty = target.y - 6;
+                const ddx = tx - d.stemX, ddy = ty - stemTopY, dd = Math.hypot(ddx, ddy);
+                if (dd > d.biteReach) { tx = d.stemX + ddx / dd * d.biteReach; ty = stemTopY + ddy / dd * d.biteReach; }
+                g.bite = { phase: 'wind', t: T(d.biteWindMs), tx, ty, fromX: g.hx, fromY: g.hy };
+            }
+        }
+        if (g.bite) {
+            const b = g.bite;
+            b.t--;
+            if (b.phase === 'wind') {
+                // Orqaga tortilib, og'zini ochadi
+                g.hx += (d.stemX - g.hx) * 0.04; g.hy -= 0.8;
+                if (b.t <= 0) { b.phase = 'lunge'; b.t = T(210); b.fromX = g.hx; b.fromY = g.hy; }
+            } else if (b.phase === 'lunge') {
+                const k = 1 - b.t / T(210);
+                g.hx = b.fromX + (b.tx - b.fromX) * k; g.hy = b.fromY + (b.ty - b.fromY) * k;
+                if (b.t <= 0) {
+                    g.hx = b.tx; g.hy = b.ty;
+                    alive.forEach(p => {
+                        if (Math.hypot(p.x - g.hx, p.y - g.hy) > d.biteRange) return;
+                        this.hurtPlayer(p, d.biteDamage);
+                        this.knockback(p, (p.x < d.stemX ? -1 : 1) * 260, -320);
+                    });
+                    this.io.to(roomId).emit('gflowerBite', { x: Math.round(g.hx), y: Math.round(g.hy) });
+                    b.phase = 'back'; b.t = T(450);
+                }
+            } else if (b.t <= 0) {
+                g.bite = null;
+                g.nextBite = g.tick + T(d.biteEveryMs);
+            }
+        }
+
+        // 2) NOVDA: qahramon turgan platformaga poyadan novda chiqib, urib uloqtiradi
+        if (!g.whip && g.tick >= g.nextWhip) {
+            const cands = alive.filter(p => surf.get(p.id) !== null && !(g.bite && topPlayers.includes(p)));
+            const p = cands[Math.floor(Math.random() * cands.length)];
+            if (p) {
+                const plat = surf.get(p.id) as number;
+                let x0: number, x1: number, y: number;
+                if (plat >= 0) {
+                    const pl = map.platforms[plat];
+                    const side = pl.x + pl.w / 2 < d.stemX ? -1 : 1;
+                    x0 = d.stemX + side * 16; x1 = side < 0 ? pl.x - 6 : pl.x + pl.w + 6; y = pl.y - 22;
+                } else {
+                    const side = p.x < d.stemX ? -1 : 1;
+                    x0 = d.stemX + side * 18; x1 = d.stemX + side * 360; y = 570 - 22;
+                }
+                g.whip = { plat, phase: 'grow', t: T(d.whipGrowMs), x0, x1, y, hit: [] };
+            } else {
+                g.nextWhip = g.tick + T(500);
+            }
+        }
+        if (g.whip) {
+            const w = g.whip;
+            w.t--;
+            if (w.phase === 'grow') {
+                if (w.t <= 0) { w.phase = 'lash'; w.t = T(380); }
+            } else {
+                // Novda chiziq bo'ylab o'tadi: shu sirtda, shu oraliqda turgan har kimga bir marta tegadi
+                const lo = Math.min(w.x0, w.x1), hi = Math.max(w.x0, w.x1);
+                alive.forEach(p => {
+                    if (w.hit.includes(p.id) || p.x < lo - 10 || p.x > hi + 10) return;
+                    if (Math.abs(p.y - (w.y - 2)) > 30) return;
+                    w.hit.push(p.id);
+                    this.hurtPlayer(p, d.whipDamage);
+                    this.knockback(p, (w.x1 > w.x0 ? 1 : -1) * 430, -330);
+                });
+                if (w.t <= 0) { g.whip = null; g.nextWhip = g.tick + Math.round(T(d.whipEveryMs) * slow); }
+            }
+        }
+
+        // 3) TIKANLAR: ba'zan - joyida turmagan (yugurayotgan/sakrayotgan) qahramonga 6 ta tikan sochadi
+        if (g.tick >= g.nextThorn) {
+            const moving = alive.filter(p => {
+                const m = this.playerMotion.get(p.id);
+                return m && (Math.abs(m.vx) > 40 || Math.abs(m.vy) > 60);
+            });
+            const p = moving[Math.floor(Math.random() * moving.length)];
+            if (p && !g.bite) {
+                const base = Math.atan2(p.y - g.hy, p.x - g.hx);
+                [-25, -15, -5, 5, 15, 25].forEach(a => {
+                    const ang = base + a * Math.PI / 180;
+                    thorns.push({ id: nextId('t'), x: g.hx, y: g.hy, vx: Math.cos(ang) * d.thornSpeed, vy: Math.sin(ang) * d.thornSpeed });
+                });
+                this.io.to(roomId).emit('gflowerThorns');
+                g.nextThorn = g.tick + Math.round(T(d.thornEveryMs) * slow);
+            } else {
+                g.nextThorn = g.tick + T(400);
+            }
+        }
+        for (let i = thorns.length - 1; i >= 0; i--) {
+            const th = thorns[i];
+            th.x += th.vx * this.TICK_SECONDS; th.y += th.vy * this.TICK_SECONDS;
+            const victim = alive.find(p => Math.abs(p.x - th.x) <= this.PLAYER_HALF_W + 4 && Math.abs(p.y - th.y) <= this.PLAYER_HALF_H + 4);
+            const blocked = th.y >= 570 || th.x < d.arenaX + 20 || th.x > d.arenaX + d.arenaW - 20 || th.y < 0 ||
+                map.platforms.some(pl => th.x >= pl.x && th.x <= pl.x + pl.w && th.y >= pl.y && th.y <= pl.y + pl.h + 4);
+            if (victim) this.hurtPlayer(victim, d.thornDamage);
+            if (victim || blocked) thorns.splice(i, 1);
+        }
+
+        // 4) TOMIR: istalgan joydan (qahramon ostidan) yerdan chiqib sanchiladi
+        if (g.tick >= g.nextRoot) {
+            const pool = alive.slice().sort(() => Math.random() - 0.5);
+            const n = Math.min(pool.length, g.hp < g.maxHp / 2 ? 2 : 1);
+            for (let k = 0; k < n; k++) {
+                const p = pool[k];
+                const y = this.gfSurfaceYUnder(map, p.x, p.y + this.PLAYER_HALF_H);
+                roots.push({ id: nextId('r'), x: Math.round(p.x), y, phase: 'warn', t: T(d.rootWarnMs), hit: [] });
+            }
+            g.nextRoot = g.tick + Math.round(T(d.rootEveryMs) * slow);
+        }
+        for (let i = roots.length - 1; i >= 0; i--) {
+            const r = roots[i];
+            r.t--;
+            if (r.phase === 'warn') {
+                if (r.t <= 0) { r.phase = 'up'; r.t = T(d.rootUpMs); }
+                continue;
+            }
+            alive.forEach(p => {
+                const feet = p.y + this.PLAYER_HALF_H;
+                if (r.hit.includes(p.id) || Math.abs(p.x - r.x) > 24 || feet < r.y - 110 || feet > r.y + 6) return;
+                r.hit.push(p.id);
+                this.hurtPlayer(p, d.rootDamage);
+                this.knockback(p, 0, -380);
+            });
+            if (r.t <= 0) roots.splice(i, 1);
+        }
+
+        // 5) KICHKINA GULLAR: qahramon yerda bo'lsa - yerdan sug'urilib chiqib, uni quvlaydi
+        const sprouts = room.bots.filter(b => b.skin === 'sprout').length;
+        const onGround = alive.filter(p => surf.get(p.id) === -1);
+        if (onGround.length && sprouts < Math.min(d.sproutMax, alive.length + 1) && g.tick >= g.nextSprout) {
+            let x = 0;
+            for (let tries = 0; tries < 12; tries++) {
+                x = d.arenaX + 70 + Math.random() * (d.arenaW - 140);
+                if (Math.abs(x - d.stemX) > 50 && onGround.every(p => Math.abs(p.x - x) > 110)) break;
+            }
+            const bot = GameEngine.createBots(room.id, [{ x, y: this.GROUND_Y }], 'dog', d.sproutHp)[0];
+            bot.id += '_s' + g.tick;
+            bot.skin = 'sprout';
+            bot.emerge = T(900);
+            room.bots.push(bot);
+            g.nextSprout = g.tick + T(d.sproutEveryMs);
+        }
+    }
+    private giantFlowerDefeated(room: RoomState, g: NonNullable<RoomState['gflower']>): void {
+        if (g.state === 'dying') return;
+        g.state = 'dying';
+        g.timer = Math.round(2600 / 30);
+        g.bite = null;
+        g.whip = null;
+        room.gfThorns = [];
+        room.gfRoots = [];
+        room.bots = room.bots.filter(b => b.skin !== 'sprout');   // kichkina gullar ham so'liydi
+        this.io.to(room.id).emit('gflowerDown');
+    }
+
     // Har 5 ta o'ldirishda: tasodifiy boss (oldingisi takrorlanmaydi); har yengilgan boss - keyingisi kuchliroq
     private startArenaBoss(room: RoomState): void {
         const map = getMapById(room.selectedLevel);
         const A = room.arena!;
-        const options = (['gorilla', 'fatelf', 'squad'] as const).filter(b => b !== A.lastBoss);
+        const options = (['gorilla', 'fatelf', 'squad', 'snake'] as const).filter(b => b !== A.lastBoss && (b !== 'snake' || !!map.arena?.snake));
         const boss = options[Math.floor(Math.random() * options.length)];
         const players = Math.max(1, Object.keys(room.players).length);
         const power = 1 + 0.25 * A.bossesBeaten;
@@ -1810,9 +2085,25 @@ export class GameEngine {
             room.fatElf = { hp, maxHp: hp, x: avgX < 400 ? 620 : 180, facingLeft: true, state: 'idle', timer: Math.round(1500 / 30),
                 targetId: null, hitFlash: 0, lastHitBy: null, grace: Math.round(1200 / 30) };
             room.acid = [];
+        } else if (boss === 'snake' && map.arena?.snake) {
+            // ROBOT ILON: boshi chap eshikdan chiqib keladi. Yo'lidagi qahramonlar o'ngga suriladi
+            const sd = map.arena.snake;
+            const hp = Math.round((sd.baseHp + sd.hpPerExtraPlayer * Math.max(0, players - 1)) * power);
+            room.snake = { x: -120, speed: sd.advanceSpeed };
+            room.boss = { hp, maxHp: hp, nextMineTick: 0, stallsSmashed: 0, fire: 'idle', fireTicks: 0, nextFireTick: 0, wallBroken: false,
+                dead: false, deathTicks: 0, hitFlash: 0, lastHitBy: null };
+            room.mines = [];
+            room.flyingMines = [];
+            room.levelTicks = room.levelTicks || 0;
+            let slot = 0;
+            Object.values(room.players).forEach(p => {
+                if (p.isDead || p.x > sd.startX + 90) return;
+                p.x = sd.startX + 120 + (slot++) * 40;
+                p.snakeHitCd = 30;
+            });
         } else {
             // ROBOT OTRYADI: bir nechta kuchli (4x jonli) robot bir vaqtda tushadi
-            const count = 2 + players;
+            const count = 1 + players;
             const spawns = Array.from({ length: count }, (_, i) => ({ x: 200 + i * (480 / Math.max(1, count - 1)), y: 90 }));
             const elites = GameEngine.createBots(room.id, spawns, 'robot', Math.round(GameEngine.BOT_MAX_HP * 4 * power));
             elites.forEach((b, i) => { b.elite = true; b.id += '_e' + A.tick + '_' + i; });
@@ -1836,6 +2127,10 @@ export class GameEngine {
         room.gorilla = null;
         room.fatElf = null;
         room.acid = [];
+        room.boss = null;
+        room.snake = null;
+        room.mines = [];
+        room.flyingMines = [];
         room.gSpikes = []; room.gRocks = [];
         // Gorilla platformalari joyiga qaytadi (gorilla yo'q paytda ularni hech kim qaytarmaydi)
         const gd = getMapById(room.selectedLevel).gorilla;
@@ -1950,7 +2245,8 @@ export class GameEngine {
     //  - joni tugasa: portlash animatsiyasi uchun biroz kutib, xarita o'tiladi
     private updateBoss(room: RoomState, roomId: string): void {
         const map = getMapById(room.selectedLevel);
-        const def = map.boss;
+        const inArena = !!room.arena && !!map.arena?.snake;
+        const def = map.boss || (inArena ? map.arena!.snake : undefined);
         const boss = room.boss;
         if (!def || !boss || !room.snake || room.isOver) return;
         room.levelTicks = (room.levelTicks || 0) + 1;
@@ -1958,6 +2254,7 @@ export class GameEngine {
 
         if (boss.dead) {
             boss.deathTicks--;
+            if (boss.deathTicks <= 0 && inArena) { this.arenaBossBeaten(room); return; }
             if (boss.deathTicks <= 0) {
                 const alive = Object.values(room.players).filter(p => !p.isDead);
                 const winner = (boss.lastHitBy && room.players[boss.lastHitBy]) ? boss.lastHitBy : (alive[0] || Object.values(room.players)[0])?.id;
@@ -1969,7 +2266,7 @@ export class GameEngine {
         // Harakat: faqat oldinga, to'xtamay (xarita oxirida to'xtaydi)
         const snake = room.snake;
         snake.speed = def.advanceSpeed;
-        snake.x = Math.min(map.mapWidth - 300, snake.x + snake.speed * this.TICK_SECONDS);
+        snake.x = Math.min(inArena ? def.startX : map.mapWidth - 300, snake.x + snake.speed * this.TICK_SECONDS);
         if (!boss.wallBroken && snake.x >= 0) {
             boss.wallBroken = true;
             boss.nextFireTick = room.levelTicks + Math.round(def.fireIntervalMs / 30);
@@ -2004,15 +2301,25 @@ export class GameEngine {
         // yoki taxta) va yugurayotgan bo'lsa - oldiroqqa. Joni yarmidan kam - ikkitadan
         const flying = room.flyingMines || (room.flyingMines = []);
         if (boss.wallBroken && room.levelTicks >= boss.nextMineTick) {
-            const count = boss.hp < boss.maxHp / 2 ? 2 : 1;
             const targets = Object.values(room.players)
                 .filter(p => !p.isDead && p.x > snake.x + 80 && p.x < snake.x + 1100)
                 .sort(() => Math.random() - 0.5);
+            const count = inArena ? Math.max(targets.length, boss.hp < boss.maxHp / 2 ? 2 : 1) : (boss.hp < boss.maxHp / 2 ? 2 : 1);
+            // Arenada maydonda yotgan eski minalar ko'payib ketmasin - eng eskisi o'chadi
+            if (inArena) while (room.mines.length > 4) room.mines.shift();
             for (let k = 0; k < count && room.mines.length + flying.length < this.BOSS_MAX_MINES; k++) {
                 const x0 = snake.x - 40, y0 = 440, g = 800;
                 let tx: number, ty: number, T: number;
                 const p = targets.length ? targets[k % targets.length] : null;
-                if (p) {
+                if (p && inArena) {
+                    // ANIQ MO'LJAL: qahramon hozir qayerga yugurayotganini hisoblab, u yetib boradigan joyga
+                    // tez (0.55-0.9 s) tushadi; sakrab turgan bo'lsa - qo'nadigan sirtiga (yer yoki platforma)
+                    const vx = this.playerMotion.get(p.id)?.vx || 0;
+                    T = Math.max(0.55, Math.min(0.9, (p.x - x0) / 700));
+                    tx = p.x + Math.max(-220, Math.min(220, vx * T)) + (k >= targets.length ? (Math.random() - 0.5) * 120 : 0);
+                    tx = Math.max(snake.x + 70, Math.min(map.mapWidth - 20, tx));
+                    ty = this.bossSurfaceUnder(map, tx, p.y + this.PLAYER_HALF_H, room) - 6;
+                } else if (p) {
                     T = Math.max(0.7, Math.min(1.2, (p.x - x0) / 550));
                     // Oldinga yugurayotgan bo'lsa - qayerga yetib borishini taxminlaymiz (+ ikkinchi mina biroz tarqoq)
                     const lead = Math.max(-150, Math.min(260, (this.playerMotion.get(p.id)?.vx || 0) * T * 0.8));
@@ -2103,9 +2410,10 @@ export class GameEngine {
     }
 
     // Boss xaritasida (x, feetY) nuqtadan PASTDAGI eng yaqin sirt tepasi: taxta, butun rasta tomi yoki yer
-    private bossSurfaceUnder(map: MapDef, x: number, feetY: number): number {
+    private bossSurfaceUnder(map: MapDef, x: number, feetY: number, room?: RoomState): number {
         let best = 570;
         const consider = (top: number) => { if (top >= feetY - 20 && top < best) best = top; };
+        if (room && room.arena) (room.gPlats || []).forEach(g => { if (g.state === 'idle' && x >= g.x && x <= g.x + g.w) consider(g.y); });
         (map.platforms || []).forEach(pl => { if (pl.h <= 12 && x >= pl.x && x <= pl.x + pl.w) consider(pl.y); });
         const stalls = map.market?.stalls || [];
         stalls.forEach(st => { if (Math.abs(x - st.x) <= STALL_ROOF_HALF_W) consider(STALL_ROOF_Y); });

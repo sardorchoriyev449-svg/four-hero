@@ -52,6 +52,8 @@ export interface PlayerState {
 
 export interface BotState {
     elite?: boolean;               // Arena: "Robot otryadi" bossining kuchli roboti
+    skin?: 'sprout';               // Gigant gul xaritasi: kichkina gul (it AI'si bilan, o'z rasmi)
+    emerge?: number;               // yerdan sug'urilib chiqish (tik) - shu vaqtda harakatlanmaydi
     id: string;
     x: number;
     y: number;
@@ -288,10 +290,14 @@ export interface RoomState {
     acid?: AcidState[];             // Semiz elf sepgan kislota tomchilari
     acidCounter?: number;
     flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
+    gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
+    gfThorns?: { id: string, x: number, y: number, vx: number, vy: number }[];
+    gfRoots?: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: string[] }[];
+    gfCounter?: number;
     arena?: {                       // Arena (bonus): hisob va joriy boss
         kills: number;
         sinceBoss: number;
-        boss: 'gorilla' | 'fatelf' | 'squad' | null;
+        boss: 'gorilla' | 'fatelf' | 'squad' | 'snake' | null;
         lastBoss: string | null;
         bossesBeaten: number;
         tick: number;
@@ -316,4 +322,23 @@ export interface RoomState {
     selectedLevel: number;        // Host hozir tanlagan (keyingi o'ynaladigan) xarita
     isPersistent: boolean;        // true bo'lsa, bu xona bazada saqlanadi (hisobli host)
     isPrivate: boolean;           // true bo'lsa, "Barcha xonalar" ro'yxatida ko'rinmaydi - faqat kod bilan qo'shiladi
+}
+export interface GiantFlowerState {
+    state: 'sleep' | 'wake' | 'fight' | 'dying';
+    hp: number;
+    maxHp: number;
+    timer: number;
+    tick: number;
+    hx: number;               // boshning hozirgi joyi (markazi)
+    hy: number;
+    side: 1 | -1;             // bosh poyaning qaysi tomonida (-1 chap)
+    hitFlash: number;
+    lastHitBy: string | null;
+    bite: { phase: 'wind' | 'lunge' | 'back', t: number, tx: number, ty: number, fromX: number, fromY: number } | null;
+    whip: { plat: number, phase: 'grow' | 'lash', t: number, x0: number, x1: number, y: number, hit: string[] } | null;
+    nextWhip: number;
+    nextThorn: number;
+    nextRoot: number;
+    nextBite: number;
+    nextSprout: number;
 }

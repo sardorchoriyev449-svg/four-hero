@@ -252,7 +252,7 @@ export class RoomManager {
             isPrivate: room.isPrivate,
             unlockedLevel: room.unlockedLevel,
             selectedLevel: room.selectedLevel,
-            maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor, bonus: !!m.bonus }))
+            maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor, bonus: !!m.bonus, season: m.season || 1 }))
         };
     }
 
@@ -770,6 +770,8 @@ export class RoomManager {
             fatElf: map.fatElf || null,
             underworld: map.underworld || null,
             arena: map.arena || null,
+            giantFlower: map.giantFlower || null,
+            season: map.season || 1,
             groundColor: map.groundColor,
             accentColor: map.accentColor
         };
