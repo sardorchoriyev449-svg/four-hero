@@ -31,7 +31,10 @@ export abstract class BaseCharacter {
         // yangilanadi (spendStamina orqali), shunchaki tugma bosib turilgani uchun
         // emas. Aks holda: Enter tugmasi stamina tugagandan keyin ham bosib
         // turilsa (zarba bermasa ham), tiklanish abadiy bloklanib qolar edi.
-        if (player.staminaRegenDelay > 0) {
+        // Kislota tekkan (semiz elf): 2 soniya stamina umuman tiklanmaydi
+        if ((player.acidTicks || 0) > 0) {
+            player.acidTicks!--;
+        } else if (player.staminaRegenDelay > 0) {
             player.staminaRegenDelay--;
         } else if (player.stamina < (player.maxStamina || 100)) {
             // "Stamina" ko'nikmasi tiklanishni ham tezlashtiradi: har daraja +20% (max +100%)

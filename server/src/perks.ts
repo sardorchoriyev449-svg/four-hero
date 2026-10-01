@@ -78,14 +78,14 @@ export function regenPerSecondOf(p: PlayerState): number {
     return REGEN_PER_LEVEL * charUpgrade(p, 'regen');
 }
 
-// KUCHAYTIRISH NARXI (hamma kuchaytirishlar uchun): har keyingi daraja - ball + tanga.
-// Indeks - hozirgi daraja (0 -> 1-darajaga o'tish narxi)
+// KUCHAYTIRISH NARXI (hamma kuchaytirishlar uchun): har keyingi daraja - YO ball bilan, YO tanga
+// bilan (o'yinchi o'zi tanlaydi). Indeks - hozirgi daraja (0 -> 1-darajaga o'tish narxi)
 export const UPGRADE_COSTS: { points: number, coins: number }[] = [
-    { points: 1, coins: 150 },
     { points: 1, coins: 300 },
-    { points: 1, coins: 500 },
-    { points: 2, coins: 800 },
-    { points: 2, coins: 1200 }
+    { points: 1, coins: 600 },
+    { points: 1, coins: 1000 },
+    { points: 2, coins: 1600 },
+    { points: 2, coins: 2400 }
 ];
 export const BASE_UPGRADES = ['damage', 'stamina', 'hp', 'regen'];
 

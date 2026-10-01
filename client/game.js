@@ -85,6 +85,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const isForest = !!map.forest; // o'rmon: bahaybat daraxt, robot itlar, qizil qutilar (map-6)
     const isStones = !!map.stones; // g'or: chuqurlik ustida tebranib, qulaydigan toshlar (map-7)
     const isGorilla = !!map.gorilla; // tosh gorilla boss (map-8)
+    const isFatElf = !!map.fatElf;   // semiz elf (map-9, "Vaxtida kelding")
 
     // Shu raundga xos holat (har raundda launchGame qaytadan chaqiriladi)
     let crateGroup;
@@ -131,6 +132,13 @@ function launchGame(socket, roomId, mapData, continued) {
     let gCrackGfx = null;
     let gFloor = null;         // zal poli (oxirida sinib, pastga qulaydi)
     let gTalk = { intro: false, outro: false };
+    let fatElfState = null;    // serverdan: { hp, maxHp, x, state, hitFlash, ... }
+    let fatElfSprite = null;
+    let fatElfBar = null;      // jon chizig'i (boshi tepasida - boss emas, oddiy jang)
+    let feTalkShown = false;
+    let feTalkHint = null;
+    let feDoor = null;         // o'ngdagi eshik (yengilgach ochiladi)
+    let acidSprites = {};
     let gPoundHit = false;     // yerni urish seriyasi: oxirgi kadr "urish" bo'lganmi
     let gCracks = [];          // urishlardan polda paydo bo'lgan yoriqlar
     let gRideId = null;        // shiftga otilayotgan platforma ustida qolgan bo'lsam - uning id si
@@ -1584,6 +1592,215 @@ function launchGame(socket, roomId, mapData, continued) {
     }
 
 
+    // ===== SEMIZ ELF (map-9 "Vaxtida kelding"): gorilla bilan qulagan toshlar ostidan chiqilgan
+    // g'or; chapda tosh uyumi (ostidan gorillaning qo'li chiqib turibdi), o'rtada boshqa elfni yeyayotgan
+    // semiz elf, yonida hushsiz yotgan elf (yarim yuzi va bir qo'li yo'q), o'ngda - yer osti eshigi =====
+    const FE_SKIN = [0x4fa3d1, 0x81d4fa, 0xb3e5fc], FE_TUNIC = [0x2e7d32, 0x43a047, 0x66bb6a];
+    // pose: 'eat1' | 'eat2' (boshqa elfning qo'lini kemiryapti) | 'idle' | 'charge' (og'zi yashil
+    // cho'g'lanadi) | 'spit' (kislota sepadi) | 'down' (yengildi). Old tomondan, 34x40 katak
+    function fatElfGrid(pose) {
+        const W = 34, H = 40;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const rect = (x, y, w, h, c) => gridRect(g, x, y, w, h, c);
+        // Qalpoq (yashil, sariq popuk) va hoshiyasi
+        rect(16, 0, 2, 1, 0xffeb3b);
+        [[15, 1, 4], [14, 2, 6], [13, 3, 8], [12, 4, 10]].forEach(([x, y, w]) => { rect(x, y, w, 1, 0x2e7d32); rect(x, y, Math.ceil(w / 2), 1, 0x388e3c); });
+        rect(9, 5, 16, 2, 0xffe082); rect(9, 6, 3, 1, 0xffca28);
+        // Bosh va ikki qavat iyak
+        for (let y = 7; y < 17; y++) {
+            const hw = y < 13 ? 8 : y < 15 ? 9 : 8;
+            for (let x = 17 - hw; x < 17 + hw; x++) set(x, y, shade(0.9 - (x - 17 + hw) / (hw * 3) - y / 60, x, y, FE_SKIN));
+        }
+        rect(9, 15, 16, 1, FE_SKIN[0]);
+        // O'tkir quloqlar
+        rect(5, 9, 4, 1, FE_SKIN[1]); rect(6, 10, 3, 1, FE_SKIN[0]); rect(25, 9, 4, 1, FE_SKIN[1]); rect(25, 10, 3, 1, FE_SKIN[0]);
+        // Ko'zlar (yengilganda - "X"), qizil yonoqlar
+        if (pose === 'down') {
+            [[12, 9], [14, 9], [13, 10], [12, 11], [14, 11], [19, 9], [21, 9], [20, 10], [19, 11], [21, 11]].forEach(([x, y]) => set(x, y, 0x0d1b3e));
+        } else {
+            const angry = pose === 'charge' || pose === 'spit';
+            rect(13, 10, 2, angry ? 1 : 2, 0x0d1b3e); rect(19, 10, 2, angry ? 1 : 2, 0x0d1b3e);
+            if (angry) { rect(12, 8, 3, 1, 0x0d1b3e); rect(19, 8, 3, 1, 0x0d1b3e); }
+        }
+        rect(11, 12, 2, 1, 0xf48fb1); rect(21, 12, 2, 1, 0xf48fb1);
+        // Og'iz
+        if (pose === 'charge' || pose === 'spit') {
+            rect(14, 12, 6, 4, 0x1b0000);
+            rect(15, 13, 4, 2, pose === 'spit' ? 0xccff90 : 0x76ff03);
+            set(14, 12, 0xffffff); set(19, 12, 0xffffff);
+        } else if (pose === 'down') {
+            rect(15, 13, 4, 2, 0x1b0000); rect(16, 14, 2, 2, 0xe57373);
+        } else if (pose === 'eat1' || pose === 'eat2') {
+            rect(15, 13, 4, pose === 'eat1' ? 2 : 1, 0x5d0000);
+        } else {
+            rect(15, 13, 4, 1, 0x5d0000); set(18, 14, 0x76ff03);   // og'zidan yashil so'lak
+        }
+        // Katta qorin (cho'zilgan yashil ko'ylak), kamar, chiqib ketgan tugmalar
+        for (let y = 16; y < 35; y++) for (let x = 2; x < 32; x++) {
+            const d = ((x - 17) / 15) ** 2 + ((y - 25.5) / 10) ** 2;
+            if (d > 1) continue;
+            set(x, y, d < 0.25 && x < 20 ? FE_TUNIC[2] : shade(0.85 - (x - 2) / 50 - (y - 16) / 50, x, y, FE_TUNIC));
+        }
+        rect(8, 16, 18, 1, 0x66bb6a);
+        rect(5, 28, 24, 2, 0x6d4c41); rect(15, 28, 4, 2, 0xffca28);
+        [[17, 20], [17, 24], [16, 32]].forEach(([x, y]) => set(x, y, 0xffeb3b));
+        set(14, 33, FE_SKIN[1]); set(15, 34, FE_SKIN[1]);   // ko'ylak ostidan qorin ko'rinadi
+        // Kalta oyoqlar
+        rect(10, 35, 5, 3, 0x5d4037); rect(19, 35, 5, 3, 0x5d4037);
+        rect(9, 38, 6, 2, 0x3e2723); rect(19, 38, 6, 2, 0x3e2723);
+        // Qo'llar
+        if (pose === 'eat1' || pose === 'eat2') {
+            // O'ng qo'li og'zida: yeyilayotgan elfning qo'lini ushlab turibdi (ko'k teri, yashil yeng, tishlangan joy - qizil)
+            const lift = pose === 'eat1' ? 0 : 1;
+            rect(27, 18, 3, 6, FE_TUNIC[0]); rect(24, 15 + lift, 4, 3, FE_SKIN[1]);
+            rect(10, 13 + lift, 14, 2, 0x81d4fa); rect(10, 13 + lift, 3, 2, 0x43a047);
+            rect(22, 13 + lift, 2, 2, 0xc62828); set(23, 12 + lift, 0xffffff);
+            rect(8, 13 + lift, 2, 2, 0x81d4fa);   // barmoqlar
+            rect(1, 19, 3, 9, FE_TUNIC[0]); rect(1, 28, 3, 2, FE_SKIN[1]);
+        } else if (pose === 'spit' || pose === 'charge') {
+            rect(0, 17, 3, 7, FE_TUNIC[0]); rect(0, 15, 3, 2, FE_SKIN[1]);
+            rect(31, 17, 3, 7, FE_TUNIC[0]); rect(31, 15, 3, 2, FE_SKIN[1]);
+        } else {
+            rect(1, 19, 3, 9, FE_TUNIC[0]); rect(1, 28, 3, 2, FE_SKIN[1]);
+            rect(30, 19, 3, 9, FE_TUNIC[0]); rect(30, 28, 3, 2, FE_SKIN[1]);
+        }
+        return gridOutline(g, 0x0b1d33);
+    }
+    // Hushsiz yotgan elf: yarim yuzi va o'ng qo'li yo'q (semiz elf yeb qo'ygan)
+    function victimElfGrid() {
+        const g = elfGrid(false, false);
+        const set = (x, y, c) => { if (g[y] && g[y][x] !== undefined) g[y][x] = c; };
+        // (kontur qo'shilgan grid - koordinatalar +1)
+        for (let y = 7; y < 13; y++) for (let x = 10; x < 15; x++) set(x, y, (x + y) % 3 ? 0x5d0000 : 0x2b0000);
+        set(11, 9, 0xeeeeee); set(12, 10, 0xeeeeee);
+        [[7, 8], [9, 8], [8, 9], [7, 10], [9, 10]].forEach(([x, y]) => set(x, y, 0x0d1b3e));
+        for (let y = 14; y < 21; y++) for (let x = 14; x < 17; x++) set(x, y, null);
+        set(14, 14, 0xc62828); set(14, 15, 0x8e0000);
+        return g;
+    }
+    // Gorillaning toshlar ostidan chiqib turgan qo'li (kaft va barmoqlar tepaga qaragan)
+    function gorillaHandGrid() {
+        const g = gridNew(16, 22);
+        const fill = (x, y, w, h) => {
+            for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) g[yy][xx] = shade(0.8 - (xx - x) / (w * 3) - yy / 60, xx, yy, STONE);
+        };
+        fill(4, 14, 8, 8); fill(2, 8, 12, 7);
+        [[2, 1, 6], [5, 0, 7], [8, 1, 6], [11, 3, 5]].forEach(([x, y, h]) => fill(x, y, 2, h + 1));
+        fill(0, 9, 2, 4);
+        [[3, 2], [6, 1], [12, 4], [5, 11]].forEach(([x, y]) => { g[y][x] = 0x4ea24a; });
+        [[4, 10], [9, 12], [7, 16]].forEach(([x, y]) => { g[y][x] = STONE[0]; });
+        return gridOutline(g, 0x111114);
+    }
+    // Qulagan toshlar uyumi (chapda, qattiq): notekis tepalik, yoriqlar, mox, singan plitalar
+    function rubbleGrid(wc, hc) {
+        const g = gridNew(wc, hc);
+        for (let x = 0; x < wc; x++) {
+            const top = Math.max(0, Math.round(3 + 4 * Math.abs(Math.sin(x * 0.37)) + 3 * Math.abs(Math.sin(x * 0.11 + 1)) + (x / wc) * 6));
+            for (let y = top; y < hc; y++) {
+                let c = shade(0.85 - (y - top) / (hc * 1.3) - Math.abs(Math.sin(x * 0.5 + y * 0.3)) * 0.12, x, y, STONE);
+                if ((x * 7 + y * 11) % 19 === 0) c = STONE[0];
+                if (y === top && x % 5 === 2) c = 0x4ea24a;
+                g[y][x] = c;
+            }
+        }
+        return gridOutline(g, 0x111114);
+    }
+    function acidGrid() {
+        const g = gridNew(6, 7);
+        [[2, 0, 2], [1, 1, 4], [0, 2, 6], [0, 3, 6], [0, 4, 6], [1, 5, 4], [2, 6, 2]].forEach(([x, y, w]) => {
+            for (let i = 0; i < w; i++) g[y][x + i] = (x + i < 3 && y < 4) ? 0xccff90 : y > 4 ? 0x33691e : 0x76ff03;
+        });
+        g[2][1] = 0xffffff;
+        return gridOutline(g, 0x1b3a05);
+    }
+    // ZARYAD YO'Q: bo'sh batareya (qizil chiziq, ustida qizil "X")
+    function deadBatteryGrid() {
+        const g = gridNew(14, 8);
+        gridRect(g, 0, 0, 12, 8, 0x37474f); gridRect(g, 1, 1, 10, 6, 0x101418); gridRect(g, 12, 2, 2, 4, 0x37474f);
+        gridRect(g, 2, 2, 2, 4, 0xff1744);
+        [[5, 1], [6, 2], [7, 3], [8, 4], [9, 5], [10, 6], [10, 1], [9, 2], [8, 3], [6, 5], [5, 6]].forEach(([x, y]) => { g[y][x] = 0xff5252; });
+        return gridOutline(g, 0x000000);
+    }
+    function buildFatElfScene(scene) {
+        const W = mapWidth, fd = map.fatElf;
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        ['eat1', 'eat2', 'idle', 'charge', 'spit', 'down'].forEach(pose => mk('px_fe_' + pose, fatElfGrid(pose), 3));
+        mk('px_fatelf_face', fatElfGrid('eat1').slice(0, 19).map(row => row.slice(3, 33)), 4);
+        mk('px_fe_victim', victimElfGrid(), 3);
+        mk('px_gor_hand', gorillaHandGrid(), 4);
+        mk('px_rubble', rubbleGrid(40, 48), 4);
+        mk('px_acid', acidGrid(), 3);
+        mk('px_slab_150', slabGrid(38), 4);
+        [3, 2, 3].forEach((P, i) => mk('px_boulder_small' + i, boulderGrid(), P));
+        mk('px_slab_170', slabGrid(43), 4);
+        // Orqa fon: yer osti g'ori (zulmat, stalaktitlar, kristallar)
+        drawPixelBackdrop(scene, {
+            sky: [0x07070d, 0x0a0a14, 0x0d0d1b, 0x101022, 0x14142a, 0x181833],
+            clouds: false, mountains: false, width: W
+        });
+        bakeTile(scene, 'bg_cave', 570, 0, (g, w) => caveBackInto(g, w));
+        scene.add.tileSprite(0, 0, W, 570, 'bg_cave').setOrigin(0, 0).setScrollFactor(0.6, 1).setDepth(-3);
+        if (!scene.textures.exists('px_cavefloor')) gridToTexture(scene, 'px_cavefloor', caveFloorGrid(), 2);
+        scene.add.tileSprite(0, 570, W, 30, 'px_cavefloor').setOrigin(0, 0).setDepth(1);
+        // Tepadan tushgan yorug'lik (gorilla zalidan qulab tushilgan teshik)
+        const hole = scene.add.graphics().setDepth(-2);
+        [[90, 0.10], [60, 0.16], [34, 0.24]].forEach(([w, a]) => { hole.fillStyle(0xfff3c4, a); hole.fillRect(80 - w, 0, w * 2, 400); });
+        // Chapdagi toshlar uyumi va undan chiqib turgan gorilla qo'li
+        scene.add.image(84, 394, 'px_gor_hand').setOrigin(0.5, 1).setDepth(0.5);
+        scene.add.image(-6, 570, 'px_rubble').setOrigin(0, 1).setDepth(1);
+        [[150, 556], [178, 562], [128, 548]].forEach(([x, y], i) => scene.add.image(x, y, 'px_boulder_small' + i).setDepth(1.2));
+        // Tosh tokchalar (bir tomonlama)
+        (map.platforms || []).forEach((p) => {
+            if (p.h > 14) return;
+            scene.add.image(p.x + p.w / 2, p.y, 'px_slab_' + p.w).setOrigin(0.5, 4 / 28).setDepth(1.5);
+        });
+        // Yeyilayotgan elf: yerda hushsiz yotibdi, atrofida qon dog'i
+        const blood = scene.add.graphics().setDepth(1.4);
+        blood.fillStyle(0x5d0000, 0.85); blood.fillEllipse(fd.victimX, 571, 120, 10);
+        blood.fillStyle(0x8e0000, 0.9); blood.fillEllipse(fd.victimX - 20, 571, 50, 6);
+        // Yonboshlab yotibdi (boshi semiz elf tomonda); rasm 60x84 - 90 gradusga burilgach balandligi 60
+        scene.add.image(fd.victimX, 540, 'px_fe_victim').setAngle(-90).setDepth(1.5);
+        // Semiz elf
+        fatElfSprite = scene.add.image(fd.x, 574, 'px_fe_eat1').setOrigin(0.5, 1).setDepth(2);
+        fatElfBar = scene.add.graphics().setDepth(4);
+        feTalkHint = scene.add.text(fd.x, 574 - 140, '[E]', {
+            fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(5).setVisible(false);
+        scene.tweens.add({ targets: feTalkHint, y: feTalkHint.y - 6, duration: 400, yoyo: true, repeat: -1 });
+        // O'ngda - UNDERWORLD eshigi (yengilgach ochiladi)
+        const dx = fd.doorX + 10;
+        const glow = scene.add.graphics().setDepth(-0.5);
+        glow.fillStyle(0xff1744, 0.08); glow.fillRect(dx - 40, 440, 124, 130);
+        feDoor = makeDoor(scene, dx, 570);
+        feDoor.open.setAlpha(0);
+        feDoor.closed.setAlpha(1);
+        scene.add.text(dx + 22, 470, 'UNDERWORLD', {
+            fontFamily: PIXEL_FONT, fontSize: '9px', color: '#ff5252', stroke: '#000000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(2);
+    }
+    function openFatElfDoor(scene) {
+        if (!feDoor) return;
+        feDoor.closed.setAlpha(0);
+        feDoor.open.setAlpha(1);
+        scene.cameras.main.shake(300, 0.006);
+        // Ochilgan eshikdan qizil nur
+        const ray = scene.add.rectangle(map.fatElf.doorX + 32, 530, 44, 80, 0xff1744, 0.35).setDepth(1.6);
+        scene.tweens.add({ targets: ray, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
+    }
+    // Kislota tomchisi tushdi/tegdi: yashil sachrash va bir zum qoladigan ko'lmak
+    function acidSplash(scene, x, y) {
+        for (let k = 0; k < 8; k++) {
+            const d = scene.add.rectangle(x, y, 5, 5, k % 2 ? 0x76ff03 : 0xccff90).setDepth(5);
+            scene.tweens.add({ targets: d, x: x + Phaser.Math.Between(-40, 40), y: y - Phaser.Math.Between(5, 40), alpha: 0,
+                duration: Phaser.Math.Between(300, 600), onComplete: () => d.destroy() });
+        }
+        if (y > 540) {
+            const puddle = scene.add.ellipse(x, 569, 46, 6, 0x76ff03, 0.7).setDepth(1.3);
+            scene.tweens.add({ targets: puddle, alpha: 0, scaleX: 1.4, delay: 600, duration: 900, onComplete: () => puddle.destroy() });
+        }
+    }
+
     // ===== TOSH GORILLA (map-8): shiftli tosh zal, chap pastda eshik, 5 ta tosh platforma =====
     const STONE = [0x3a3a40, 0x55555d, 0x72727a, 0x8f8f96, 0xadadb3];
     // Gorilla (old tomondan): pose - 'idle' | 'roar' | 'slam' | 'push' | 'rest'
@@ -2331,6 +2548,7 @@ function launchGame(socket, roomId, mapData, continued) {
             ? { fill: 0xffb300, light: 0xffe082, dark: 0xb26a00, empty: 0x2b0f14 }
             : { fill: 0xe53935, light: 0xff8a80, dark: 0x8e1b1b, empty: 0x2b0f14 };
     const STAMINA_PALETTE = { fill: 0xffc93c, light: 0xfff1a8, dark: 0xb7791f, empty: 0x2b2410 };
+    const ACID_STAMINA_PALETTE = { fill: 0x76ff03, light: 0xccff90, dark: 0x33691e, empty: 0x12230a };
 
     // O'ZINING HP, STAMINA VA MAQSAD HUD PANELI (piksel uslubda): ekran chetida, sobit joyda
     // HUD'ning 4-qatori: Q (joriy qurol) va R (maxsus qobiliyat, tayyor yoki qolgan soniya)
@@ -2353,7 +2571,7 @@ function launchGame(socket, roomId, mapData, continued) {
         return parts.join('   ');
     }
 
-    function drawHUD(scene, hp, stamina, progressText, perkText = '', maxHp = 100) {
+    function drawHUD(scene, hp, stamina, progressText, perkText = '', maxHp = 100, acid = false) {
         if (!scene.hud) {
             buildHudTextures(scene);
             const fixed = (o, d) => o.setScrollFactor(0).setDepth(d);
@@ -2392,11 +2610,12 @@ function launchGame(socket, roomId, mapData, continued) {
             drawHudPanel(H.panel, HUD_X, HUD_Y, panelW, panelH);
         }
 
-        if (hpFrac !== H.lastHp || safeSt !== H.lastSt) {
-            H.lastHp = hpFrac; H.lastSt = safeSt;
+        if (hpFrac !== H.lastHp || safeSt !== H.lastSt || acid !== H.lastAcid) {
+            H.lastHp = hpFrac; H.lastSt = safeSt; H.lastAcid = acid;
             H.bars.clear();
             drawPixelBar(H.bars, HP_BAR, hpFrac, hpPalette(hpFrac), 10);
-            drawPixelBar(H.bars, ST_BAR, safeSt / 100, STAMINA_PALETTE, 10);
+            // Kislota tekkan: stamina yashil (tiklanmaydi)
+            drawPixelBar(H.bars, ST_BAR, safeSt / 100, acid ? ACID_STAMINA_PALETTE : STAMINA_PALETTE, 10);
         }
 
         // Jon kam qolganda yurakcha lipillaydi
@@ -2464,7 +2683,7 @@ function launchGame(socket, roomId, mapData, continued) {
             platforms.add(plat);
             // Bozorda: devor/taxtalar o'z piksel rasmi bilan chiziladi; taxtalar bir tomonlama
             // (pastdan sakrab o'tib, ustiga qo'nish mumkin)
-            if (isMarket || isForest) {
+            if (isMarket || isForest || isFatElf) {
                 plat.setVisible(false);
                 if (p.h <= 14) makeOneWay(plat);
             }
@@ -2618,6 +2837,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isForest) buildForestScene(this);
         if (isStones) buildStonesScene(this);
         if (isGorilla) buildGorillaScene(this);
+        if (isFatElf) buildFatElfScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 3
@@ -2732,6 +2952,12 @@ function launchGame(socket, roomId, mapData, continued) {
             if (isStory && !cutsceneStarted && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - map.story.sellerX) <= map.story.talkRange) {
                 socket.emit('talkToSeller', roomId);
+                return;
+            }
+            // 3b) Semiz elf yonida - suhbat (hamma uchun umumiy)
+            if (isFatElf && fatElfState && fatElfState.state === 'eating' && currentCharacter && !currentCharacter.isDead &&
+                Math.abs(currentCharacter.x - fatElfState.x) <= map.fatElf.talkRange) {
+                socket.emit('talkFatElf', roomId);
                 return;
             }
             // 4) Yaqindagi tanga
@@ -2942,6 +3168,22 @@ function launchGame(socket, roomId, mapData, continued) {
             } });
         });
 
+        // ZARYAD YO'Q: hujum bosildi, lekin stamina yetmaydi - boshi tepasida bo'sh batareya
+        if (!this.textures.exists('px_battery_dead')) gridToTexture(this, 'px_battery_dead', deadBatteryGrid(), 3);
+        socket.off('noStamina');
+        socket.on('noStamina', () => {
+            if (!currentCharacter || !currentCharacter.active || currentCharacter.isDead) return;
+            if (currentCharacter.batteryIcon) currentCharacter.batteryIcon.destroy();
+            const icon = this.add.image(currentCharacter.x, currentCharacter.y - 58, 'px_battery_dead').setDepth(1004);
+            currentCharacter.batteryIcon = icon;
+            icon.follow = currentCharacter;
+            this.tweens.add({ targets: icon, alpha: 0.25, duration: 120, yoyo: true, repeat: 3 });
+            this.tweens.add({ targets: icon, alpha: 0, delay: 900, duration: 250, onComplete: () => {
+                icon.destroy();
+                if (currentCharacter && currentCharacter.batteryIcon === icon) currentCharacter.batteryIcon = null;
+            } });
+        });
+
         // GORILLA ITARDI / YERDAN TOSH OTILDI: qahramon shu tezlik bilan uchib ketadi
         socket.off('knockback');
         socket.on('knockback', (d) => {
@@ -3004,6 +3246,48 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             }
             checkpointReached = data.checkpointReached || [];
+
+            // SEMIZ ELF: holat, suhbat, kislota tomchilari, eshik
+            if (isFatElf && data.fatElf) {
+                const prev = fatElfState ? fatElfState.state : null;
+                fatElfState = data.fatElf;
+                const st = fatElfState.state;
+                if (st === 'talk' && !feTalkShown && currentCharacter) {
+                    feTalkShown = true;
+                    if (feTalkHint) feTalkHint.setVisible(false);
+                    startDialog(this, [
+                        { who: 'elf', text: t('fe_d1') },
+                        { who: 'player', text: t('fe_d2') },
+                        { who: 'elf', text: t('fe_d3') },
+                        { who: 'elf', text: t('fe_d4') },
+                        { who: 'elf', text: t('fe_d5') },
+                        { who: 'elf', text: t('fe_d6'), fx: 'scream' },
+                        { who: 'player', text: t('fe_d7') }
+                    ], () => socket.emit('dialogDone', roomId), { elfName: t('fatelf_name'), voice: 'deep', elfFace: 'px_fatelf_face' });
+                }
+                if (prev !== st && st === 'spit') this.cameras.main.shake(140, 0.004);
+                if (prev !== st && st === 'down') {
+                    this.cameras.main.shake(400, 0.012);
+                    gDust(this, fatElfState.x, 566, 8);
+                }
+                if (data.doorOpen && !doorIsOpen) {
+                    doorIsOpen = true;
+                    openFatElfDoor(this);
+                }
+                const list = data.acid || [];
+                const ids = new Set(list.map(a => a.id));
+                list.forEach((a) => {
+                    let sp = acidSprites[a.id];
+                    if (!sp) sp = acidSprites[a.id] = this.add.image(a.x, a.y, 'px_acid').setDepth(4.5);
+                    sp.tx = a.x; sp.ty = a.y;
+                });
+                Object.keys(acidSprites).forEach((id) => {
+                    if (ids.has(id)) return;
+                    acidSplash(this, acidSprites[id].tx, acidSprites[id].ty);
+                    acidSprites[id].destroy();
+                    delete acidSprites[id];
+                });
+            }
 
             // TOSH GORILLA: holat, platformalar, yerdan chiqadigan va tepadan tushadigan toshlar
             if (isGorilla && data.gorilla) {
@@ -3268,6 +3552,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.ammo = myData.ammo || 0;
                 currentCharacter.maxAmmo = myData.maxAmmo || 7;
                 currentCharacter.reloading = !!myData.reloading;
+                currentCharacter.acid = !!myData.acid;
                 setHeroLook(currentCharacter, myData.look);
 
                 if (myData.isDead) {
@@ -3526,6 +3811,10 @@ function launchGame(socket, roomId, mapData, continued) {
     function musicMode() {
         if (dialog || isStory) return 'calm';
         if (isForest) return (forestTriggered && botsKilled < (currentCharacter ? currentCharacter.killsToWin : 1)) ? 'action' : 'calm';
+        if (isFatElf) {
+            const st = fatElfState ? fatElfState.state : 'eating';
+            return ['idle', 'charge', 'spit'].includes(st) ? 'action' : 'calm';
+        }
         if (isGorilla) {
             const st = gorillaState ? gorillaState.state : 'intro';
             return ['idle', 'roar', 'push', 'slam', 'rest'].includes(st) ? 'action' : 'calm';
@@ -3639,6 +3928,66 @@ function launchGame(socket, roomId, mapData, continued) {
                 sp.angle += 6;
             });
         }
+        // SEMIZ ELF
+        if (isFatElf && fatElfState && fatElfSprite) {
+            const fs = fatElfState;
+            const now = this.time.now;
+            fatElfSprite.x = Phaser.Math.Linear(fatElfSprite.x, fs.x, 0.25);
+            let pose = 'idle';
+            if (fs.state === 'eating') pose = Math.floor(now / 280) % 2 ? 'eat1' : 'eat2';
+            else if (fs.state === 'charge') pose = 'charge';
+            else if (fs.state === 'spit') pose = 'spit';
+            else if (fs.state === 'down') pose = 'down';
+            fatElfSprite.setTexture('px_fe_' + pose);
+            if (fs.state === 'down') {
+                // Yerga cho'zilib yotadi: markazi atrofida buriladi (oyog'i atrofida emas - aks holda yarmi polga kirib ketardi)
+                if (fatElfSprite.originY !== 0.5) fatElfSprite.setOrigin(0.5, 0.5);
+                fatElfSprite.setAngle(Phaser.Math.Linear(fatElfSprite.angle, -90, 0.15));
+                fatElfSprite.y = Phaser.Math.Linear(fatElfSprite.y, 570 - fatElfSprite.width / 2, 0.2);
+                fatElfSprite.scaleY = 1;
+            } else {
+                if (fatElfSprite.originY !== 1) fatElfSprite.setOrigin(0.5, 1).setPosition(fatElfSprite.x, 574);
+                fatElfSprite.setAngle(0);
+                // Yurganda chayqaladi, kislota yig'ayotganda titraydi
+                fatElfSprite.scaleY = fs.state === 'idle' ? 1 + 0.025 * Math.sin(now / 110) : 1;
+                if (fs.state === 'charge') {
+                    fatElfSprite.x += Phaser.Math.Between(-2, 2);
+                    if (Math.random() < 0.5) {
+                        const b = this.add.rectangle(fs.x + Phaser.Math.Between(-10, 10), 574 - 76, 4, 4, 0x76ff03).setDepth(4);
+                        this.tweens.add({ targets: b, y: b.y + Phaser.Math.Between(15, 40), alpha: 0, duration: 400, onComplete: () => b.destroy() });
+                    }
+                }
+            }
+            if (fs.hitFlash > 0 && Math.floor(now / 60) % 2) fatElfSprite.setTint(0xffffff); else fatElfSprite.clearTint();
+            // Jon chizig'i - faqat jang paytida (boss emas: boshi tepasida, kichik)
+            fatElfBar.clear();
+            if (fs.state === 'idle' || fs.state === 'charge' || fs.state === 'spit') {
+                const bx = Math.round(fatElfSprite.x - 50), by = 574 - 132;
+                const frac = Math.max(0, fs.hp / fs.maxHp);
+                fatElfBar.fillStyle(0x000000, 1); fatElfBar.fillRect(bx - 2, by - 2, 104, 10);
+                fatElfBar.fillStyle(0x33691e, 1); fatElfBar.fillRect(bx, by, 100, 6);
+                fatElfBar.fillStyle(0x76ff03, 1); fatElfBar.fillRect(bx, by, Math.round(100 * frac), 6);
+                fatElfBar.fillStyle(0xccff90, 1); fatElfBar.fillRect(bx, by, Math.round(100 * frac), 2);
+            }
+            if (feTalkHint) {
+                feTalkHint.x = fatElfSprite.x;
+                feTalkHint.setVisible(fs.state === 'eating' && !dialog && currentCharacter && !currentCharacter.isDead &&
+                    Math.abs(currentCharacter.x - fs.x) <= map.fatElf.talkRange);
+            }
+            Object.values(acidSprites).forEach((sp) => {
+                sp.x = Phaser.Math.Linear(sp.x, sp.tx, 0.6);
+                sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6);
+                if (Math.random() < 0.25) {
+                    const d = this.add.rectangle(sp.x, sp.y + 6, 3, 3, 0x76ff03, 0.8).setDepth(4.4);
+                    this.tweens.add({ targets: d, y: d.y + 20, alpha: 0, duration: 350, onComplete: () => d.destroy() });
+                }
+            });
+        }
+        // Bo'sh batareya belgisi qahramon bilan birga yuradi
+        if (currentCharacter && currentCharacter.batteryIcon && currentCharacter.batteryIcon.active) {
+            currentCharacter.batteryIcon.setPosition(currentCharacter.x, currentCharacter.y - 58);
+        }
+
         // Toshlar: server joyiga silliq, titraganda - chayqaladi va qizaradi
         Object.values(stoneSprites).forEach((sp) => {
             if (sp.state === 'gone') return;
@@ -3786,6 +4135,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 const gst = gorillaState ? gorillaState.state : 'idle';
                 progressText = gst === 'rest' ? t('hud_gorilla_rest') : gst === 'roar' ? t('hud_gorilla_roar')
                     : (gst === 'defeat' || gst === 'smash' || gst === 'fall') ? t('hud_gorilla_down') : t('hud_gorilla');
+            } else if (isFatElf) {
+                const fst = fatElfState ? fatElfState.state : 'eating';
+                progressText = fst === 'eating' ? t('hud_fe_talk') : fst === 'talk' ? '' : fst === 'down' ? t('hud_fe_door') : t('hud_fe_fight');
             } else if (isStones) {
                 const passed = map.stones.stones.filter(st => st.x + st.w / 2 < currentCharacter.x).length;
                 progressText = checkpointReached.includes(socket.id) ? t('hud_safe')
@@ -3800,7 +4152,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 progressText = t('hud_bots') + ': ' + botsKilled + ' / ' + currentCharacter.killsToWin;
             }
             const stPct = 100 * (currentCharacter.stamina || 0) / (currentCharacter.maxStamina || 100);
-            drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText(), currentCharacter.maxHp);
+            drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText(), currentCharacter.maxHp, !!currentCharacter.acid);
 
             // Qurol, ritsar qalqoni va qarash tomoni (ko'rinmas kamonchida qurol ham xiralashadi)
             updateHeroWeaponVisuals(this, currentCharacter, currentCharacter.characterType, lastDirection === 'right');

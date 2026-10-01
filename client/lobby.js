@@ -817,6 +817,13 @@ function renderLevelList() {
         }
         levelListDiv.appendChild(item);
     });
+    // Keyingi (hali chiqmagan) xarita - "TEZ ORADA": har yangilanishda o'zi bir raqam suriladi
+    if (roomMaps.length) {
+        const soon = document.createElement('div');
+        soon.className = 'level-item locked readonly level-soon';
+        soon.innerHTML = `<span><i class="fa-solid fa-hourglass-half"></i> <span class="level-name">${roomMaps.length + 1}. ${t('coming_soon')}</span><span class="level-desc">${t('coming_soon_desc')}</span></span>`;
+        levelListDiv.appendChild(soon);
+    }
 }
 
 // Lobbidagi o'yinchilar ro'yxati yangilanganda
@@ -998,7 +1005,9 @@ function showLevelComplete(levelIndex, isLoss = false, onBack = null) {
     const name = tMapName(levelIndex);
     el.querySelector('.lc-map').textContent = name;
     el.querySelector('.lc-text').textContent = t(isLoss ? 'loss_title' : 'level_complete_sub');
-    el.querySelector('.lc-ach-name').textContent = name;
+    // Ba'zi xaritalarning yutug'i o'z nomiga ega (masalan map-9 - "UnderWorld")
+    const achKey = 'map' + levelIndex + '_ach', ach = t(achKey);
+    el.querySelector('.lc-ach-name').textContent = (!isLoss && ach !== achKey) ? ach : name;
     el.querySelector('.lc-ach').title = t(isLoss ? 'loss_sub1' : 'achievement_unlocked');
     // Nur ichida tepaga ko'tariluvchi yorug' zarrachalar (chekpointdagidek)
     for (let i = 0; i < 12; i++) {
@@ -1264,10 +1273,10 @@ function renderPerks() {
     });
 }
 
-// Kuchaytirish narxi (indeks - hozirgi daraja): server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil
+// Kuchaytirish narxi - YO ball, YO tanga (indeks - hozirgi daraja): server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil
 const UPGRADE_COSTS = [
-    { points: 1, coins: 150 }, { points: 1, coins: 300 }, { points: 1, coins: 500 },
-    { points: 2, coins: 800 }, { points: 2, coins: 1200 }
+    { points: 1, coins: 300 }, { points: 1, coins: 600 }, { points: 1, coins: 1000 },
+    { points: 2, coins: 1600 }, { points: 2, coins: 2400 }
 ];
 
 function renderUpgrades() {
@@ -1312,26 +1321,37 @@ function renderUpgrades() {
         row.appendChild(info);
 
         // Kuchaytirish hisobga bog'liq - bosh menyudan ham, lobbidan ham qilish mumkin
-        const btn = document.createElement('button');
-        if (stat.locked) {
-            row.classList.add('locked-upgrade');
-            btn.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('perk_level')} ${stat.needLevel}`;
+        if (stat.locked || level >= 5) {
+            const btn = document.createElement('button');
+            if (stat.locked) {
+                row.classList.add('locked-upgrade');
+                btn.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('perk_level')} ${stat.needLevel}`;
+            } else {
+                btn.innerText = t('char_maxed');
+            }
             btn.disabled = true;
-        } else if (level >= 5) {
-            btn.innerText = t('char_maxed');
-            btn.disabled = true;
+            row.appendChild(btn);
         } else {
-            // Narx: ball + tanga (server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil)
+            // Narx: YO ball, YO tanga - o'yinchi tanlaydi (server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil)
             const cost = UPGRADE_COSTS[level];
-            const canPay = points >= cost.points && (currentUser.coins || 0) >= cost.coins;
-            btn.className = 'upgrade-cost-btn';
-            btn.innerHTML = `<span><i class="fa-solid fa-plus"></i> ${t('char_upgrade_btn')}</span>` +
-                `<span class="upgrade-cost"><i class="fa-solid fa-star"></i>${cost.points} <i class="fa-solid fa-coins"></i>${cost.coins}</span>`;
-            btn.title = t('upgrade_cost_hint').replace('{p}', cost.points).replace('{c}', cost.coins);
-            btn.disabled = !canPay;
-            btn.onclick = () => withBusy(btn, () => upgradeStat(stat.key));
+            const pay = document.createElement('div');
+            pay.className = 'upgrade-pay';
+            const byPoints = document.createElement('button');
+            byPoints.className = 'upgrade-pay-points';
+            byPoints.innerHTML = `<i class="fa-solid fa-star"></i> ${cost.points}`;
+            byPoints.title = t('upgrade_pay_points').replace('{n}', cost.points);
+            byPoints.disabled = points < cost.points;
+            byPoints.onclick = () => withBusy(byPoints, () => upgradeStat(stat.key, 'points'));
+            const byCoins = document.createElement('button');
+            byCoins.className = 'upgrade-pay-coins';
+            byCoins.innerHTML = `<i class="fa-solid fa-coins"></i> ${cost.coins}`;
+            byCoins.title = t('upgrade_pay_coins').replace('{n}', cost.coins);
+            byCoins.disabled = (currentUser.coins || 0) < cost.coins;
+            byCoins.onclick = () => withBusy(byCoins, () => upgradeStat(stat.key, 'coins'));
+            pay.appendChild(byPoints);
+            pay.appendChild(byCoins);
+            row.appendChild(pay);
         }
-        row.appendChild(btn);
 
         upgradesContent.appendChild(row);
     });
@@ -1345,12 +1365,12 @@ function renderUpgrades() {
     }
 }
 
-async function upgradeStat(stat) {
+async function upgradeStat(stat, payWith = 'points') {
     try {
         const res = await fetch('/api/character/' + currentUser.id + '/upgrade', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ characterType: selectedCharTab, stat, roomId: currentRoomId })
+            body: JSON.stringify({ characterType: selectedCharTab, stat, roomId: currentRoomId, payWith })
         });
         const data = await res.json();
         if (data.success) {

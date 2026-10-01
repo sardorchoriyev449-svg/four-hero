@@ -825,11 +825,12 @@
         button.busy { pointer-events: none; opacity: .75; }
         button.busy::after { content: ''; display: inline-block; width: 3ch; text-align: left; animation: ld-dots 1s steps(4) infinite; }
         #character-panel.is-loading .char-stage { opacity: .4; }
-        /* Kuchaytirish tugmasi: pastida narxi (ball + tanga) */
-        .upgrade-row .upgrade-cost-btn { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 104px; }
-        .upgrade-cost { font-size: 8px; color: #3b2a00; display: flex; gap: 4px; align-items: center; }
-        .upgrade-cost .fa-star { color: #6a1b9a; }
-        .upgrade-cost-btn:disabled .upgrade-cost { color: inherit; }
+        /* Kuchaytirish: ikki tugma - ball BILAN yoki tanga BILAN */
+        .upgrade-pay { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+        .upgrade-row .upgrade-pay button { min-width: 92px; margin: 0; padding: 7px 10px; font-size: 9px; }
+        .upgrade-row .upgrade-pay-points { background: #b388ff; color: #1a0640; box-shadow: inset -3px -3px 0 #7c4dff, 0 3px 0 var(--px-ink); }
+        .upgrade-row .upgrade-pay-coins { background: var(--px-gold); color: #3b2a00; box-shadow: inset -3px -3px 0 var(--px-gold-d), 0 3px 0 var(--px-ink); }
+        .level-item.level-soon .level-name { color: var(--px-gold); }
 
         /* ===== DETALLAR (bosh kiyimi, yuz, qurol ko'rinishlari) ===== */
         .cos-note { text-align: left; margin: 0 0 10px; }

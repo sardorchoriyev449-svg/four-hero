@@ -473,7 +473,14 @@ export class RoomManager {
 
         const charLogic = getCharacterLogic(player.characterType);
         if (!charLogic.canAttack(player)) return;
-        if (player.stamina < BaseCharacter.staminaCost(player, charLogic.attackStaminaCost)) return;
+        if (player.stamina < BaseCharacter.staminaCost(player, charLogic.attackStaminaCost)) {
+            const now = Date.now();
+            if (now - (player.lastNoStaminaAt || 0) >= 800) {
+                player.lastNoStaminaAt = now;
+                this.io.to(player.id).emit('noStamina');
+            }
+            return;
+        }
 
         BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
         player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
@@ -759,6 +766,7 @@ export class RoomManager {
             forest: map.forest || null,
             stones: map.stones || null,
             gorilla: map.gorilla || null,
+            fatElf: map.fatElf || null,
             groundColor: map.groundColor,
             accentColor: map.accentColor
         };

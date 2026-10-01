@@ -208,6 +208,30 @@ export interface GorillaDef {
     platforms: PlatformDef[];
 }
 
+// SEMIZ ELF (map-9, "Vaxtida kelding"): gorilla toshlari ostidan chiqqan qahramonlar oldida -
+// boshqa elfni yeyayotgan semiz elf. Oldiga borib E bosilsa (yoki yonidan o'tib ketilsa) - suhbat,
+// keyin oddiy jang (boss emas). Og'zidan KISLOTA sepadi: tekkan qahramon maksimal jonining 30% ini
+// yo'qotadi va 2 soniya staminasi tiklanmaydi. Yengilgach o'ngdagi eshik ochiladi - hamma tirik
+// qahramon eshikka yetsa, xarita o'tiladi ("UnderWorld" yutug'i)
+export interface FatElfDef {
+    x: number;               // ovqatlanayotgan joyi (boshlang'ich)
+    victimX: number;         // yeyilayotgan elf (hushsiz yotibdi) - klientda rasm
+    halfW: number;           // tanasi (o'q tegadigan qism) - markazdan yarim kengligi
+    height: number;
+    baseHp: number;
+    hpPerExtraPlayer: number;
+    talkRange: number;       // shu masofada E bosilsa - suhbat; undan yaqin kelsa yoki o'tib ketsa - o'zi boshlanadi
+    walkSpeed: number;       // px/s - hujumlar orasida eng yaqin qahramon tomon
+    contactDamage: number;
+    contactSpeed: number;
+    spitIntervalMs: number;  // kislota sepishlar oralig'i
+    spitChargeMs: number;    // og'zi yashil cho'g'lanadi - ogohlantirish
+    acidPerSpit: number;     // har sepishda nechta tomchi
+    acidDamagePct: number;   // maksimal jonning shuncha ulushi
+    acidStaminaLockMs: number;
+    doorX: number;           // yengilgach: tirik qahramonlarning hammasi shu X dan o'tsa - xarita o'tildi
+}
+
 export interface MapDef {
     id: number;              // 0-based ketma-ket indeks (ochilish tartibi)
     name: string;
@@ -217,7 +241,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
     groundColor: number;
@@ -235,6 +259,7 @@ export interface MapDef {
     forest?: ForestDef;         // Faqat o'rmon xaritasi (map-6)
     stones?: StonesDef;         // Faqat yuruvchi toshlar (map-7)
     gorilla?: GorillaDef;       // Faqat tosh gorilla (map-8)
+    fatElf?: FatElfDef;         // Faqat semiz elf (map-9)
     pits?: PitDef[];
     mines?: PointDef[];         // Mina markazi
     forks?: ForkDef[];
@@ -577,6 +602,47 @@ export const MAPS: MapDef[] = [
         // Chap pastdagi eshikdan kirib kelishadi
         playerSpawns: [
             { x: 50, y: 500 }, { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // ishlatilmaydi - bu xaritada bot yo'q
+    },
+    {
+        id: 8,
+        name: "Right on time",
+        description: "You fell under the Gorilla's rocks. A Fat Elf is having lunch down here... and you're next on the menu!",
+        mode: 'fatelf',
+        killsToWin: 0,
+        accentColor: 0x76ff03,
+        groundColor: 0x2a2838,
+        mapWidth: 1700,
+        platforms: [
+            // Chapda - gorilla bilan birga qulagan toshlar uyumi (qattiq; ostida gorillaning qo'li)
+            { x: 0, y: 380, w: 150, h: 190 },
+            // Kislotadan qochish uchun tosh tokchalar (bir tomonlama)
+            { x: 640, y: 450, w: 150, h: 14 },
+            { x: 880, y: 340, w: 170, h: 14 },
+            { x: 1150, y: 450, w: 150, h: 14 }
+        ],
+        fatElf: {
+            x: 980,
+            victimX: 1090,
+            halfW: 48,
+            height: 112,
+            baseHp: 600,              // Har o'yinchiga 600 jon (oddiy jang - boss emas)
+            hpPerExtraPlayer: 600,
+            talkRange: 140,
+            walkSpeed: 55,
+            contactDamage: 12,
+            contactSpeed: 700,
+            spitIntervalMs: 2600,
+            spitChargeMs: 700,
+            acidPerSpit: 3,
+            acidDamagePct: 0.3,
+            acidStaminaLockMs: 2000,
+            doorX: 1580
+        },
+        // Toshlar uyumining yonida (o'ngida) - tepadan qulab tushgan joy
+        playerSpawns: [
+            { x: 200, y: 500 }, { x: 240, y: 500 }, { x: 280, y: 500 }, { x: 320, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // ishlatilmaydi - bu xaritada bot yo'q
     }

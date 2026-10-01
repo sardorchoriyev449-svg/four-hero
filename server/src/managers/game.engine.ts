@@ -206,6 +206,8 @@ export class GameEngine {
                         BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
                         player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
                         charLogic.handleAttack(player, room, player.lastAttackAngle);
+                    } else if (player.attackCooldown <= 0 && charLogic.canAttack(player)) {
+                        this.signalNoStamina(player);
                     }
                 }
             });
@@ -237,6 +239,9 @@ export class GameEngine {
             // 4f. TOSH GORILLA (faqat map-8)
             this.updateGorilla(room, roomId);
 
+            // 4g. SEMIZ ELF (faqat map-9)
+            this.updateFatElf(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -259,7 +264,8 @@ export class GameEngine {
                     weaponColor: p.weaponColor, look: p.look || '', nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main',
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
-                    ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0
+                    ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0,
+                    acid: (p.acidTicks || 0) > 0
                 };
             });
             this.io.to(roomId).emit('gameStateUpdate', {
@@ -278,6 +284,8 @@ export class GameEngine {
                 redBoxes: room.redBoxes || [],
                 stones: room.stones || [],
                 gorilla: room.gorilla || null,
+                fatElf: room.fatElf || null,
+                acid: room.acid || [],
                 gPlats: room.gPlats || [],
                 gSpikes: room.gSpikes || [],
                 gRocks: room.gRocks || [],
@@ -835,7 +843,7 @@ export class GameEngine {
             if (bullet.bulletType === 'fireball') baseDamage = 30;       // Sehrgar: kuchli, lekin stamina tez ketadi
             else if (bullet.bulletType === 'arrow') baseDamage = 10;     // Kamonchi: yengil zarba
             else if (bullet.bulletType === 'melee') baseDamage = 20;     // Ritsar/Samuray: o'rtacha, stamina sekin ketadi
-            if (bullet.bulletType === 'ice') baseDamage = 20;            // Mage muz shari: kamroq, lekin muzlatadi
+            if (bullet.bulletType === 'ice') baseDamage = 40;            // Mage muz shari: olovlidan +10 kuchli va muzlatadi
             else if (bullet.bulletType === 'pellet') baseDamage = 9 + (owner ? weaponUpgradeLevel(owner, 'shotgunDamage') * SHOTGUN_DMG_PER_LEVEL : 0);   // drobovik (+kuchaytirish)
             else if (bullet.bulletType === 'kunai') baseDamage = 22 + (owner ? weaponUpgradeLevel(owner, 'kunaiDamage') * KUNAI_DMG_PER_LEVEL : 0);      // kunai (+kuchaytirish)
             // + daraja imkoniyati "DAMAGE +5"
@@ -866,6 +874,18 @@ export class GameEngine {
                 gor.hitFlash = 4;
                 gor.lastHitBy = bullet.playerId;
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
+            }
+
+            // SEMIZ ELF: jang paytida (suhbatdan keyin) tanasiga tegsa - jonini oladi
+            const fe = room.fatElf;
+            const fdef = map.fatElf;
+            if (!bulletDestroyed && fe && fdef && (fe.state === 'idle' || fe.state === 'charge' || fe.state === 'spit') &&
+                this.checkOverlap(hitRect, { x: fe.x - fdef.halfW, y: 570 - fdef.height, w: fdef.halfW * 2, h: fdef.height })) {
+                bulletDestroyed = true;
+                fe.hp = Math.max(0, fe.hp - damage);
+                fe.hitFlash = 4;
+                fe.lastHitBy = bullet.playerId;
+                if (fe.hp <= 0) this.fatElfDefeated(room, fe);
             }
 
             for (let j = room.bots.length - 1; j >= 0 && !bulletDestroyed; j--) {
@@ -1370,6 +1390,14 @@ export class GameEngine {
         room.gPlats = (gd?.platforms || []).map((pl, i) => ({ id: 'gp_' + i, x: pl.x, y: pl.y, w: pl.w, state: 'idle' as const, timer: 0, riders: [] as string[] }));
         room.gSpikes = [];
         room.gRocks = [];
+        const fd = map.fatElf;
+        const fHp = fd ? fd.baseHp + fd.hpPerExtraPlayer * Math.max(0, Object.keys(room.players).length - 1) : 0;
+        room.fatElf = fd ? {
+            hp: fHp, maxHp: fHp, x: fd.x, facingLeft: true, state: 'eating', timer: 0, targetId: null, hitFlash: 0, lastHitBy: null
+        } : null;
+        room.acid = [];
+        room.acidCounter = 0;
+        Object.values(room.players).forEach(p => { p.acidTicks = 0; });
         // O'rmonda itlar darhol emas - daraxt yoniga yetilganda chiqadi
         if (map.mode === 'waves' && !map.forest) GameEngine.spawnWave(room, map);
     }
@@ -1471,6 +1499,143 @@ export class GameEngine {
     }
 
     // Elf dialogini oxirigacha o'qidi (hamma o'qib bo'lsa - olma otish boshlanadi)
+    // "ZARYAD YO'Q": hujum bosilgan, lekin stamina yetmaydi - o'sha qahramonga bo'sh batareya
+    // belgisi ko'rsatiladi (bosib turilsa ham ko'pi bilan ~0.8s da bir marta)
+    public signalNoStamina(p: PlayerState): void {
+        const now = Date.now();
+        if (now - (p.lastNoStaminaAt || 0) < 800) return;
+        p.lastNoStaminaAt = now;
+        this.io.to(p.id).emit('noStamina');
+    }
+
+    // ===== SEMIZ ELF (map-9) =====
+    // E bosildi: yaqinda bo'lsa - suhbat boshlanadi (hamma ko'radi)
+    public talkFatElf(room: RoomState, playerId: string): void {
+        const def = getMapById(room.selectedLevel).fatElf;
+        const fe = room.fatElf;
+        const p = room.players[playerId];
+        if (!def || !fe || !p || p.isDead || fe.state !== 'eating') return;
+        if (Math.abs(p.x - fe.x) <= def.talkRange) this.startFatElfTalk(room, fe);
+    }
+    private startFatElfTalk(room: RoomState, fe: NonNullable<RoomState['fatElf']>): void {
+        fe.state = 'talk';
+        fe.timer = Math.round(GameEngine.GORILLA_TALK_MAX_MS / 30);
+        Object.values(room.players).forEach(p => { p.introDone = false; });
+    }
+    private fatElfDefeated(room: RoomState, fe: NonNullable<RoomState['fatElf']>): void {
+        fe.hp = 0;
+        fe.state = 'down';
+        fe.timer = 0;
+        room.acid = [];
+        room.doorOpen = true;   // o'ngdagi eshik ochiladi
+    }
+    // Kislota tegdi: maksimal jonning 30% i, 2 soniya stamina tiklanmaydi
+    private acidHit(p: PlayerState, def: NonNullable<MapDef['fatElf']>): void {
+        this.hurtPlayer(p, Math.round((p.maxHp || 100) * def.acidDamagePct));
+        p.acidTicks = Math.round(def.acidStaminaLockMs / 30);
+    }
+
+    private updateFatElf(room: RoomState, roomId: string): void {
+        const def = getMapById(room.selectedLevel).fatElf;
+        const fe = room.fatElf;
+        if (!def || !fe || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        if (fe.hitFlash > 0) fe.hitFlash--;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        // Elf old tomondan chizilgan - og'zi tanasining o'rtasida
+        const mouthX = () => fe.x;
+        const mouthY = 570 - def.height + 40;
+
+        // --- Kislota tomchilari: yoy bo'ylab uchadi ---
+        const acid = room.acid || (room.acid = []);
+        for (let i = acid.length - 1; i >= 0; i--) {
+            const a = acid[i];
+            const prevY = a.y;
+            a.vy += 900 * this.TICK_SECONDS;
+            a.x += a.vx * this.TICK_SECONDS;
+            a.y += a.vy * this.TICK_SECONDS;
+            const hit = alive.find(p => this.checkOverlap({ x: a.x - 9, y: a.y - 9, w: 18, h: 18 },
+                { x: p.x - this.PLAYER_HALF_W, y: p.y - this.PLAYER_HALF_H, w: this.PLAYER_HALF_W * 2, h: this.PLAYER_HALF_H * 2 }));
+            if (hit) { this.acidHit(hit, def); acid.splice(i, 1); continue; }
+            // Yerga yoki tosh tokcha ustiga tushdi - sachrab yo'qoladi
+            const onLedge = a.vy > 0 && getMapById(room.selectedLevel).platforms.some(pl => pl.h <= 14 &&
+                a.x >= pl.x && a.x <= pl.x + pl.w && prevY <= pl.y && a.y >= pl.y);
+            if (a.y >= 566 || onLedge || a.x < 0 || a.x > getMapById(room.selectedLevel).mapWidth) acid.splice(i, 1);
+        }
+
+        // --- Ovqatlanyapti: yaqin kelgan yoki yonidan o'tib ketgan qahramon bo'lsa - suhbat o'zi boshlanadi ---
+        if (fe.state === 'eating') {
+            if (alive.some(p => Math.abs(p.x - fe.x) < 70 || p.x > fe.x + 60)) this.startFatElfTalk(room, fe);
+            return;
+        }
+        // --- Suhbat: hamma o'qib bo'lguncha (ko'pi bilan 20s) hujum yo'q ---
+        if (fe.state === 'talk') {
+            if ((alive.length > 0 && alive.every(p => p.introDone)) || --fe.timer <= 0) { fe.state = 'idle'; fe.timer = T(1200); }
+            return;
+        }
+        // --- Yengildi: tirik qahramonlarning hammasi eshikka yetsa - xarita o'tildi ("UnderWorld") ---
+        if (fe.state === 'down') {
+            if (alive.length > 0 && alive.every(p => p.x >= def.doorX)) {
+                const winner = (fe.lastHitBy && room.players[fe.lastHitBy]) ? fe.lastHitBy : alive[0].id;
+                this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        if (alive.length === 0) return;
+
+        // Tegsa - zarar va itarib yuboradi
+        alive.forEach(p => {
+            if ((p.snakeHitCd || 0) > 0) { p.snakeHitCd!--; return; }
+            const touching = Math.abs(p.x - fe.x) < def.halfW + this.PLAYER_HALF_W - 6 && p.y + this.PLAYER_HALF_H > 570 - def.height + 10;
+            if (!touching) return;
+            const dir = p.x >= fe.x ? 1 : -1;
+            this.hurtPlayer(p, def.contactDamage);
+            this.knockback(p, dir * def.contactSpeed, -320);
+            p.snakeHitCd = 30;
+        });
+        const nearest = alive.reduce((a, p) => Math.abs(p.x - fe.x) < Math.abs(a.x - fe.x) ? p : a, alive[0]);
+
+        if (fe.state === 'idle') {
+            fe.facingLeft = nearest.x < fe.x;
+            if (Math.abs(nearest.x - fe.x) > def.halfW + 30) {
+                fe.x += Math.sign(nearest.x - fe.x) * def.walkSpeed * this.TICK_SECONDS;
+                fe.x = Math.max(200, Math.min(def.doorX - 120, fe.x));
+            }
+            if (--fe.timer <= 0) {
+                // Tasodifiy qahramonga mo'ljal oladi
+                const target = alive[Math.floor(Math.random() * alive.length)];
+                fe.targetId = target.id;
+                fe.facingLeft = target.x < fe.x;
+                fe.state = 'charge';
+                fe.timer = T(def.spitChargeMs);
+            }
+        } else if (fe.state === 'charge') {
+            const target = fe.targetId ? room.players[fe.targetId] : null;
+            if (target && !target.isDead) fe.facingLeft = target.x < fe.x;
+            if (--fe.timer <= 0) {
+                // KISLOTA: nishon tomon yoy bo'ylab (biroz tarqoq) bir nechta tomchi
+                const t = target && !target.isDead ? target : nearest;
+                const sx = mouthX(), sy = mouthY;
+                for (let k = 0; k < def.acidPerSpit; k++) {
+                    const tx = t.x + (k - (def.acidPerSpit - 1) / 2) * 46;
+                    const flight = Math.max(0.55, Math.min(1.3, Math.abs(tx - sx) / 520)) + k * 0.06;
+                    const vx = (tx - sx) / flight;
+                    const vy = (t.y - sy - 0.5 * 900 * flight * flight) / flight;
+                    room.acidCounter = (room.acidCounter || 0) + 1;
+                    acid.push({ id: 'acid_' + room.acidCounter, x: sx, y: sy, vx, vy });
+                }
+                fe.state = 'spit';
+                fe.timer = T(450);
+            }
+        } else if (fe.state === 'spit') {
+            if (--fe.timer <= 0) {
+                fe.state = 'idle';
+                // Joni kam qolganda tezroq sepadi
+                fe.timer = T(def.spitIntervalMs * (fe.hp < fe.maxHp / 2 ? 0.7 : 1));
+            }
+        }
+    }
+
     public markIntroDone(room: RoomState, playerId: string): void {
         const p = room.players[playerId];
         if (p) p.introDone = true;

@@ -156,7 +156,7 @@ app.post('/api/character/:userId/default', async (req, res) => {
 // MUHIM: bu FAQAT lobbida/xonada, aynan o'sha personaj hozir tanlangan bo'lsa ishlaydi -
 // "Mening Personajim" ekranini bosh menyudan ochib kuchaytirib bo'lmaydi (faqat ko'rish mumkin)
 app.post('/api/character/:userId/upgrade', async (req, res) => {
-    const { characterType, stat, roomId } = req.body || {};
+    const { characterType, stat, roomId, payWith } = req.body || {};
     if (typeof stat !== 'string' || typeof characterType !== 'string') {
         res.status(400).json({ success: false, message: 'err_bad_skill' });
         return;
@@ -168,7 +168,7 @@ app.post('/api/character/:userId/upgrade', async (req, res) => {
     const playerInRoom = room ? Object.values(room.players).find(p => p.userId === req.params.userId) : null;
 
     try {
-        const result = await db.upgradeStat(req.params.userId, characterType, stat);
+        const result = await db.upgradeStat(req.params.userId, characterType, stat, payWith === 'coins' ? 'coins' : 'points');
         if (result.success && playerInRoom) {
             roomManager.refreshCharacterInRoom(playerInRoom.id, roomId);
         }
@@ -512,6 +512,10 @@ io.on('connection', (socket) => {
     socket.on('dialogDone', (roomId: string) => {
         const room = activeRooms[roomId];
         if (room && room.isStarted) gameEngine.markIntroDone(room, socket.id);
+    });
+    socket.on('talkFatElf', (roomId: string) => {
+        const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
+        if (room && room.isStarted) gameEngine.talkFatElf(room, socket.id);
     });
     socket.on('useBigDoor', (roomId: string) => {
         const room = activeRooms[roomId];

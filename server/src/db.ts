@@ -360,7 +360,7 @@ export async function awardSkillPointIfNew(userId: string, levelId: number, char
 // "stamina" darajasini oshirish (max 5). Boshqa personajlarga ta'sir qilmaydi.
 // Qurol kuchaytirishlari (drobovik, kunai) - faqat o'sha qurol ochilgan 15-darajadan (perks.ts)
 
-export async function upgradeStat(userId: string, characterType: string, stat: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+export async function upgradeStat(userId: string, characterType: string, stat: string, payWith: 'points' | 'coins' = 'points'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     if (!CHARACTER_TYPES.includes(characterType)) {
         return { success: false, message: 'err_bad_character' };
     }
@@ -379,19 +379,27 @@ export async function upgradeStat(userId: string, characterType: string, stat: s
     if (currentLevel >= MAX_UPGRADE_LEVEL) {
         return { success: false, message: 'err_skill_max' };
     }
-    // Narx: ball + tanga (daraja oshgan sari qimmatlashadi)
+    // Narx: YO ball, YO tanga - o'yinchi tanlaydi (daraja oshgan sari qimmatlashadi)
     const cost = UPGRADE_COSTS[currentLevel];
-    const points = ((doc.skillPoints || {}) as any)[characterType] || 0;
-    if (points < cost.points) return { success: false, message: 'err_no_points_n|' + cost.points };
-    if (doc.coins < cost.coins) return { success: false, message: 'err_not_enough_coins' };
-
-    // Bitta atomar yozuv: daraja hali o'zgarmagan, ball va tanga yetarli bo'lsagina - ikki marta
-    // tez bosilsa ham ikki marta yechilmaydi
     const levelPath = `upgrades.${characterType}.${stat}`;
     const pointsPath = `skillPoints.${characterType}`;
+    let filter: any, spend: any;
+    if (payWith === 'coins') {
+        if (doc.coins < cost.coins) return { success: false, message: 'err_not_enough_coins' };
+        filter = { coins: { $gte: cost.coins } };
+        spend = { coins: -cost.coins };
+    } else {
+        const points = ((doc.skillPoints || {}) as any)[characterType] || 0;
+        if (points < cost.points) return { success: false, message: 'err_no_points_n|' + cost.points };
+        filter = { [pointsPath]: { $gte: cost.points } };
+        spend = { [pointsPath]: -cost.points };
+    }
+
+    // Bitta atomar yozuv: daraja hali o'zgarmagan va to'lov yetarli bo'lsagina - ikki marta
+    // tez bosilsa ham ikki marta yechilmaydi
     const updated = await UserModel.findOneAndUpdate(
-        { _id: doc._id, [levelPath]: currentLevel === 0 ? { $in: [0, null] } : currentLevel, [pointsPath]: { $gte: cost.points }, coins: { $gte: cost.coins } },
-        { $set: { [levelPath]: currentLevel + 1 }, $inc: { [pointsPath]: -cost.points, coins: -cost.coins } },
+        { _id: doc._id, [levelPath]: currentLevel === 0 ? { $in: [0, null] } : currentLevel, ...filter },
+        { $set: { [levelPath]: currentLevel + 1 }, $inc: spend },
         { returnDocument: 'after' }
     );
     if (!updated) return { success: false, message: 'err_upgrade_failed' };

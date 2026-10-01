@@ -19,6 +19,8 @@ export interface PlayerState {
     appleImmunity?: number;        // Olma sochilgandan keyin qisqa vaqt (tik) qayta sochilmaydi
     introDone?: boolean;           // Elf bilan tanishuv dialogini oxirigacha o'qidimi
     snakeHitCd?: number;           // Robot-ilonga tegib zarar olgach, qayta zarar olguncha tiklar
+    acidTicks?: number;            // Kislota tekkan: shuncha tik stamina tiklanmaydi
+    lastNoStaminaAt?: number;      // "Zaryad yo'q" (bo'sh batareya) belgisi oxirgi marta yuborilgan vaqt (ms)
     nickname: string;             // Ekranda ko'rinadigan ism
     kills: number;                // G'alabani aniqlash uchun: nechta bot o'ldirgani
     skinId: string;               // Joriy personaj uchun kiyilgan skin
@@ -99,6 +101,28 @@ export interface GorillaState {
     crushPlat: number;          // crush: qaysi platforma (indeks), -1 - yo'q
     hitFlash: number;
     lastHitBy: string | null;
+}
+// SEMIZ ELF (map-9): eating - boshqa elfni yeyapti (qahramonlarni kutadi); talk - suhbat;
+// idle - eng yaqin qahramon tomon yuradi; charge - og'zi yashil cho'g'lanadi; spit - kislota sepadi;
+// down - yengildi (o'ngdagi eshik ochiladi)
+export interface FatElfState {
+    hp: number;
+    maxHp: number;
+    x: number;
+    facingLeft: boolean;
+    state: 'eating' | 'talk' | 'idle' | 'charge' | 'spit' | 'down';
+    timer: number;
+    targetId: string | null;    // kislota kimga qarab sepiladi
+    hitFlash: number;
+    lastHitBy: string | null;
+}
+// Kislota tomchisi: yoy bo'ylab uchadi, qahramonga tegsa - jonining 30% i va 2s staminasiz
+export interface AcidState {
+    id: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
 }
 // Gorilla harakatlantiradigan platforma: idle -> shake -> launch (shiftga) -> hold -> back
 export interface GPlatState {
@@ -248,6 +272,9 @@ export interface RoomState {
     loadDeadline?: number;        // Ko'pi bilan shu vaqtgacha kutiladi (ms) - qotib qolgan o'yinchi hammani to'xtatmasin
     stones?: StoneState[];        // Yuruvchi toshlar (map-7)
     gorilla?: GorillaState | null;  // Tosh gorilla (map-8)
+    fatElf?: FatElfState | null;    // Semiz elf (map-9)
+    acid?: AcidState[];             // Semiz elf sepgan kislota tomchilari
+    acidCounter?: number;
     gPlats?: GPlatState[];
     gSpikes?: GSpikeState[];
     gRocks?: GRockState[];
