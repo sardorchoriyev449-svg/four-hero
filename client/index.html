@@ -652,6 +652,30 @@
         .pixel-logo .logo-sub { display: block; margin-top: 10px; font-size: 8px; color: var(--px-accent); letter-spacing: 3px; text-shadow: 2px 2px 0 var(--px-ink); }
         @keyframes px-logo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
         .hero-row { display: flex; justify-content: center; gap: 18px; margin: 4px 0 18px; }
+
+        /* ===== KICHIK EKRANLAR (telefon, ayniqsa yotiq holatda) ===== */
+        /* Ekrandan baland panel: tepasi kesilib qolmasin - o'rtaga "xavfsiz" tekislanadi (sig'sa o'rtada, sig'masa tepadan aylantiriladi) */
+        body { align-items: flex-start; }
+        .panel, #game-wrapper { margin-top: auto; margin-bottom: auto; }
+        @media (max-height: 600px) {
+            body { padding: 10px 10px; }
+            .panel { padding: 14px 18px 16px; }
+            .panel::before, .panel::after { display: none; }
+            .pixel-logo { margin-bottom: 6px; }
+            .pixel-logo .logo-main { font-size: 20px; }
+            .pixel-logo .logo-sub { margin-top: 4px; }
+            .hero-row { display: none; }
+            h2 { font-size: 13px; margin-bottom: 10px; }
+            .user-bar { margin-bottom: 8px; padding: 6px 10px; }
+            .hub-btn { padding: 7px 12px; margin: 5px 0; }
+            .hub-btn i { width: 28px; height: 28px; line-height: 28px; font-size: 13px; }
+            input, button { margin: 6px 0; }
+            /* Bosh menyu va "Play": tugmalar ikki ustunda */
+            #main-menu-panel, #play-hub-panel { width: min(640px, calc(100vw - 20px)); display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; align-content: start; }
+            #main-menu-panel > :not(.hub-btn), #play-hub-panel > :not(.hub-btn) { grid-column: 1 / -1; }
+            #play-hub-panel > .back-btn { justify-self: start; }
+            #main-menu-panel .control-scheme-row { margin-top: 6px !important; margin-bottom: 0; }
+        }
         .mini-hero {
             width: 22px; height: 32px; background: var(--c); border: 3px solid var(--px-ink); position: relative;
             box-shadow: inset -4px 0 0 rgba(0,0,0,.25);
@@ -877,6 +901,34 @@
         .cos-icon { width: 88px; height: 72px; image-rendering: pixelated; background: var(--px-bg); border: 2px solid var(--px-ink); }
         .cos-name { font-size: 8px; line-height: 1.5; min-height: 24px; text-align: center; color: var(--px-text); }
         .cos-card button { width: 100%; margin: 0; }
+        /* LOBBI kichik balandlikdagi ekranda (telefon yotiq): 4 ta o'rin bir qatorda, ixcham */
+        @media (max-height: 600px) {
+            #lobby-panel { width: min(860px, calc(100vw - 20px)); }
+            .lobby-slots { grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 4px; }
+            .slot { min-height: 0; }
+            .slot-name { height: 22px; font-size: 8px; }
+            .slot-card { width: 60px; height: 82px; margin-top: 2px; }
+            .slot-hero { width: 60px; height: 75px; }
+            .slot-level { margin-top: 6px; font-size: 8px; }
+            .slot-status, .slot-hint { margin-top: 4px; font-size: 7px; }
+            .lobby-map-line { margin: 8px 0 4px; font-size: 9px; padding-bottom: 4px; }
+            .lobby-bottom { margin-top: 4px; flex-wrap: nowrap; }
+            #lobby-panel .back-btn, #leave-lobby-btn { padding: 8px 12px; margin: 0; }
+            .lobby-bottom-left .lobby-toggle-btn { padding: 8px 10px; font-size: 9px; }
+            .lobby-bottom-right { width: auto; }
+            .lobby-bottom-right button { min-width: 150px; width: auto; padding: 10px 16px; font-size: 13px; }
+            /* Xarita va chat oynalari ekran balandligiga sig'adi */
+            .lobby-popup { top: 4px; padding: 10px; }
+            #level-list { max-height: calc(100vh - 160px); }
+            #lobby-chat-section #chat-box { height: calc(100vh - 170px); min-height: 90px; }
+        }
+        /* Tik telefon: o'rinlar 2x2, rasmlari biroz kichikroq */
+        @media (max-width: 520px) {
+            .slot { min-height: 0; }
+            .slot-card { width: 72px; height: 104px; }
+            .slot-hero { width: 72px; height: 90px; }
+            .lobby-slots { gap: 10px; margin: 12px 0 6px; }
+        }
     </style>
 </head>
 <body>
