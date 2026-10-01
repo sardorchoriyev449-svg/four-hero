@@ -767,6 +767,7 @@ export class RoomManager {
             stones: map.stones || null,
             gorilla: map.gorilla || null,
             fatElf: map.fatElf || null,
+            underworld: map.underworld || null,
             groundColor: map.groundColor,
             accentColor: map.accentColor
         };

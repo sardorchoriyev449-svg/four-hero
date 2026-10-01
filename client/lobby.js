@@ -474,19 +474,28 @@ navPlayBtn.onclick = () => {
 navCharacterBtn.onclick = () => {
     openCharacterScreen({ locked: false, returnPanel: mainMenuPanel });
 };
-navSettingsBtn.onclick = () => {
+// Sozlamalar: bosh menyudan ham, xona (lobbi) ichidan ham ochiladi - "Orqaga" qayerdan ochilgan bo'lsa o'sha yerga qaytaradi
+let settingsReturnPanel = null;
+function openSettings(returnPanel) {
+    settingsReturnPanel = returnPanel;
     updateLangButtons();
     showPanel(settingsPanel);
-};
+}
+navSettingsBtn.onclick = () => openSettings(mainMenuPanel);
+document.getElementById('lobby-settings-btn').onclick = () => { setLobbyPopup(null); openSettings(lobbyPanel); };
 navDonateBtn.onclick = () => {
     showPanel(donatePanel);
 };
-[settingsBackBtn, donateBackBtn].forEach(btn => {
-    btn.onclick = () => {
-        coinBalance.innerText = currentUser.coins;
-        showPanel(mainMenuPanel);
-    };
-});
+settingsBackBtn.onclick = () => {
+    // Xonadan ochilgan bo'lsa va hali o'sha xonada bo'lsak - lobbiga qaytamiz
+    if (settingsReturnPanel === lobbyPanel && currentRoomId) { showPanel(lobbyPanel); return; }
+    coinBalance.innerText = currentUser.coins;
+    showPanel(mainMenuPanel);
+};
+donateBackBtn.onclick = () => {
+    coinBalance.innerText = currentUser.coins;
+    showPanel(mainMenuPanel);
+};
 characterBackBtn.onclick = () => {
     coinBalance.innerText = currentUser.coins;
     showPanel(characterReturnPanel);

@@ -244,6 +244,9 @@ export class GameEngine {
             // 4g. SEMIZ ELF (faqat map-9)
             this.updateFatElf(room, roomId);
 
+            // 4h. UNDERWORLD - og'zibor gul va trol (faqat map-10)
+            this.updateUnderworld(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -288,6 +291,8 @@ export class GameEngine {
                 gorilla: room.gorilla || null,
                 fatElf: room.fatElf || null,
                 acid: room.acid || [],
+                flowers: room.flowers || [],
+                uwTalk: room.uwTalk || null,
                 gPlats: room.gPlats || [],
                 gSpikes: room.gSpikes || [],
                 gRocks: room.gRocks || [],
@@ -878,6 +883,23 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
+            // OG'ZIBOR GUL: oddiy zarba - o'ladi; muz shari - qotib qoladi (muzlagan gulni oddiy zarba o'ldiradi)
+            const uwDef = map.underworld;
+            if (!bulletDestroyed && uwDef && room.flowers) {
+                const fl = room.flowers.find(f => f.state !== 'hidden' && f.state !== 'dead' &&
+                    this.checkOverlap(hitRect, { x: f.x - 32, y: 570 - 150, w: 64, h: 150 }));
+                if (fl) {
+                    bulletDestroyed = true;
+                    if (bullet.bulletType === 'ice') {
+                        fl.state = 'frozen';
+                        fl.timer = Math.round(uwDef.flowerFreezeMs / 30);
+                    } else {
+                        fl.state = 'dead';
+                        fl.timer = 0;
+                    }
+                }
+            }
+
             // SEMIZ ELF: jang paytida (suhbatdan keyin) tanasiga tegsa - jonini oladi
             const fe = room.fatElf;
             const fdef = map.fatElf;
@@ -1399,6 +1421,9 @@ export class GameEngine {
         } : null;
         room.acid = [];
         room.acidCounter = 0;
+        const uw = map.underworld;
+        room.flowers = (uw?.flowers || []).map((f, i) => ({ id: 'flower_' + i, x: f.x, state: 'hidden' as const, timer: 0, cooldown: 0, bitten: false }));
+        room.uwTalk = uw ? { state: 'idle', timer: 0, by: null } : null;
         Object.values(room.players).forEach(p => { p.acidTicks = 0; });
         // O'rmonda itlar darhol emas - daraxt yoniga yetilganda chiqadi
         if (map.mode === 'waves' && !map.forest) GameEngine.spawnWave(room, map);
@@ -1643,6 +1668,61 @@ export class GameEngine {
                 fe.state = 'idle';
                 // Joni kam qolganda tezroq sepadi
                 fe.timer = T(def.spitIntervalMs * (fe.hp < fe.maxHp / 2 ? 0.7 : 1));
+            }
+        }
+    }
+
+    // ===== UNDERWORLD (map-10) =====
+    // E: trol yonida - suhbat boshlanadi (hamma ko'radi)
+    public talkTroll(room: RoomState, playerId: string): void {
+        const def = getMapById(room.selectedLevel).underworld;
+        const t = room.uwTalk;
+        const p = room.players[playerId];
+        if (!def || !t || !p || p.isDead || t.state !== 'idle') return;
+        if (Math.abs(p.x - def.trollX) > def.talkRange) return;
+        t.state = 'talk';
+        t.timer = Math.round(GameEngine.FATELF_TALK_MAX_MS / 30);
+        t.by = playerId;
+        Object.values(room.players).forEach(pl => { pl.introDone = false; });
+    }
+
+    private updateUnderworld(room: RoomState, roomId: string): void {
+        const def = getMapById(room.selectedLevel).underworld;
+        if (!def || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        // Og'zibor gullar
+        (room.flowers || []).forEach((f) => {
+            if (f.cooldown > 0) f.cooldown--;
+            const near = (r: number) => alive.filter(p => Math.abs(p.x - f.x) < r && p.y + this.PLAYER_HALF_H > 570 - 160);
+            if (f.state === 'hidden') {
+                if (near(def.flowerWakeRange).length) { f.state = 'emerge'; f.timer = T(700); }
+            } else if (f.state === 'emerge') {
+                if (--f.timer <= 0) { f.state = 'idle'; f.cooldown = T(400); }
+            } else if (f.state === 'idle') {
+                if (f.cooldown <= 0 && near(def.flowerBiteRange).length) { f.state = 'bite'; f.timer = T(450); f.bitten = false; }
+            } else if (f.state === 'bite') {
+                f.timer--;
+                // Og'iz yopiladigan payt - yaqindagilar tishlanadi va nari otiladi
+                if (!f.bitten && f.timer <= T(220)) {
+                    f.bitten = true;
+                    near(def.flowerBiteRange + 15).forEach(p => {
+                        this.hurtPlayer(p, def.flowerBiteDamage);
+                        this.knockback(p, (p.x >= f.x ? 1 : -1) * 520, -260);
+                    });
+                }
+                if (f.timer <= 0) { f.state = 'idle'; f.cooldown = T(900); }
+            } else if (f.state === 'frozen') {
+                if (--f.timer <= 0) { f.state = 'idle'; f.cooldown = T(600); }
+            }
+        });
+        // Trol bilan suhbat: hamma o'qib bo'lgach (ko'pi bilan 60s) - xarita o'tildi
+        const t = room.uwTalk;
+        if (t && t.state === 'talk') {
+            if ((alive.length > 0 && alive.every(p => p.introDone)) || --t.timer <= 0) {
+                t.state = 'done';
+                const winner = (t.by && room.players[t.by]) ? t.by : (alive[0] || Object.values(room.players)[0])?.id;
+                if (winner) this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
             }
         }
     }

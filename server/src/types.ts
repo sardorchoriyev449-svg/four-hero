@@ -117,6 +117,16 @@ export interface FatElfState {
     hitFlash: number;
     lastHitBy: string | null;
 }
+// OG'ZIBOR GUL (map-10): hidden - yer ostida; emerge - chiqyapti; idle - chayqaladi; bite - tishlayapti;
+// frozen - muz shari tekkan (qotib qolgan); dead - o'ldirildi
+export interface FlowerState {
+    id: string;
+    x: number;
+    state: 'hidden' | 'emerge' | 'idle' | 'bite' | 'frozen' | 'dead';
+    timer: number;
+    cooldown: number;
+    bitten: boolean;
+}
 // Kislota tomchisi: yoy bo'ylab uchadi, qahramonga tegsa - jonining 30% i va 2s staminasiz
 export interface AcidState {
     id: string;
@@ -276,6 +286,8 @@ export interface RoomState {
     fatElf?: FatElfState | null;    // Semiz elf (map-9)
     acid?: AcidState[];             // Semiz elf sepgan kislota tomchilari
     acidCounter?: number;
+    flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
+    uwTalk?: { state: 'idle' | 'talk' | 'done', timer: number, by: string | null } | null; // trol bilan suhbat
     gPlats?: GPlatState[];
     gSpikes?: GSpikeState[];
     gRocks?: GRockState[];

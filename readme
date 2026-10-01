@@ -1,32 +1,14 @@
-yoq endi update qilish ball bilan va pul bilan yaniy xoxlasa ball bilan kuchaytiradi xoxlasa pul bilan,
+xop endi lobie xonaga xam settings qo'sh va semiz elf do'stini qo'lini yayatgani uncha o'zshamagan qo'lini yaxshiroq chiz va map-10 qo'sh lokatsiya bizda endi UnderWorld va uning ko'rinishi chiroyliy tabiyat xarxil mavjudotlar yashaydi To'rtburchak semiz mavjudot, daraxt to'rta qo'larbilan va trolar va uylar daraxt ichida va daraxt tepasida qo'ziqorinlardan uylar va aynan map-10 qanday boshlanadi blayer g'ordan chiqadi va ozgina yuradi va yo'lidan Og'zibor gul chiqadi vaxshi gul ko'zlari yoq va uning rangi dark-red barigi yashil va uni odiy zarbada o'ldirish mumkin lekin agar muzbiliy shar tegsa qotib qolsin gul va o'yinchi yana o'zgina yurgandan keyin aynan o'sha underworld shaxriga kelsin va u yerda bita troll bilan dialok qilsa bo'ladi:
+player: `Salom men adashib qoldim menga qanday qilib skyland ga borish yo'lini ko'rsata olasizmi`,
+troll: `Oi.. o'yinchi ana bo'lmasam juda uzoq yo'ldan kelding`,
+troll: `lekin bu yerdan xam skayland ga borsa bo'ladi`,
+troll: `Shu yerdan faqat va faqat to'griga ketsang`,
+troll: `va tebaga qarab yursang, Qizil va Sariq eshik chiqadi`,
+troll: `va sen aynan o'sha payt`,
+player: `...`,
+troll: `yana tepa chiqasan, o'shanda g'or teshigi chiqadi va o'sha yerdan chiqasan`,
+player: `Raxmat esimga turadi degan umitaman`,
+troll: `oq yo'l O'yinchi`,
+map-10 o'tildi,
 
-personaj mage ice boll odiy olovliy shardan kuchliroq bo'lsin taxminan +10.
-
-va stamina bo'magan payt o'yinchi atack bosaversa o'lgan batareyani rasmi chiqsin yaniy zaryad yoq degani, nega bu qo'shilyabti menga ko'p kishi yozdi stamina tugaganini bimay qolyapmiz dyapti o'yinchilar
-
-map-9: Vaxtida kelding:
-
-boshlanish player oldida singan toshlar va toshlardan iborat bo'lib bosib qolgan Gorila Rock toshlar orasida qo'li ko'rinib tursin,
-
-player ozgina yuradi va yo'lidan semiz Elf chiqadi, Semiz elf elfni yeyatgan bo'lad, Semiz elf qo'lini yeyatgan bo'ladi va yarim yuzi yoq elf xushsiz yotibti va player Semiz elf oldiga borib [E] va dialog boshlanadi:
-Semiz Elf:`wow sen tushlik payti vaxtida kelding`,
-player: `Sen nima balosan, Bro senga yordam kerakmi?`
-Semiz Elf:`Yordam kerak man do'stim bilan bu yerga adashib tushib ketik`,
-Semiz Elf:`Bu Xamasi Axmoq kuchuklarni deb bo'ldi`,
-Semiz Elf:`Toxta sen xaqiqiymisan Seni xiding kelyapti`,
-Semiz elf:`Bita.. Bita.. Tishlay seni keyin qoyvoraman`,
-player:`FUCK...`.
-
-Bu boss emas odiy jang
-lekin uni qobilyatlari bor: ogzidan kislata sepadi va satmina 2 sonya to'lmay turadi va joni -30% olsin,
-player uni yutgandan so'ng player eshik tomon chiqadi va UnderWorld dastijenya chiqadi va map-9 tugaydi
-
-va xar safar yangi obnavlenya kelgan payt masaln map-9 chiqdimi sen coming soon deb map-10 ni ko'rsat
-
-
-keyingi ish:
-
-ko'p kishi aytyapti o'yin ekrani kichik shuni 'settings' ichiga full ekran qilish tugma qo'shish yaniy standart va full ekran
- 
-va endi telefon uchun xam to'girlash kerak xozir men telefon bilan kirsam ekranimga sigmayabti
-
+va endi menga map-3 da elf bor daraxt ustida va o'yinchi eshikni ochaman degan payt daraxt ustidagi elf dialog boshlasin aytsin boshiga `emm... salom, meni ikkita do'stim kata darxtga borib olma terish moqchi edi shun bilan do'slarim qaytmadi shunga...` va asosiy avalgi dialog boshlansin, va xamasini terib bo'lgandan so'ng oxirgi dialok ga qo'sh `do'stimni ko'rsang olmani tergani bita elf kutyabti denglar balkim menga lestnisa olib kelar...` bo'ldi 

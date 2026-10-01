@@ -232,6 +232,22 @@ export interface FatElfDef {
     doorX: number;           // yengilgach: tirik qahramonlarning hammasi shu X dan o'tsa - xarita o'tildi
 }
 
+// UNDERWORLD (map-10): qahramonlar g'ordan chiqib, yer osti dunyosiga keladi. Yo'lda OG'ZIBOR GUL
+// yerdan chiqib, yaqinlashganni tishlaydi (ko'zi yo'q, to'q qizil, bargi yashil). Oddiy zarba bilan
+// o'ladi; muz shari tegsa - muzlab qotib qoladi. Undan keyin UnderWorld shahri: trol bilan [E] -
+// suhbat; hamma o'qib bo'lgach xarita o'tiladi
+export interface UnderworldDef {
+    caveExitX: number;        // chapdagi g'or og'zi (klientda rasm)
+    flowers: { x: number }[];
+    flowerWakeRange: number;  // shu masofaga kelinsa gul yerdan chiqadi
+    flowerBiteRange: number;
+    flowerBiteDamage: number;
+    flowerFreezeMs: number;
+    cityX: number;            // shahar boshlanishi (klientda - daraxt uylar, mavjudotlar)
+    trollX: number;           // gaplashadigan trol
+    talkRange: number;
+}
+
 export interface MapDef {
     id: number;              // 0-based ketma-ket indeks (ochilish tartibi)
     name: string;
@@ -241,7 +257,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
@@ -261,6 +277,7 @@ export interface MapDef {
     stones?: StonesDef;         // Faqat yuruvchi toshlar (map-7)
     gorilla?: GorillaDef;       // Faqat tosh gorilla (map-8)
     fatElf?: FatElfDef;         // Faqat semiz elf (map-9)
+    underworld?: UnderworldDef; // Faqat UnderWorld (map-10)
     pits?: PitDef[];
     mines?: PointDef[];         // Mina markazi
     forks?: ForkDef[];
@@ -646,6 +663,33 @@ export const MAPS: MapDef[] = [
         // Toshlar uyumining yonida (o'ngida) - tepadan qulab tushgan joy
         playerSpawns: [
             { x: 200, y: 500 }, { x: 240, y: 500 }, { x: 280, y: 500 }, { x: 320, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // ishlatilmaydi - bu xaritada bot yo'q
+    },
+    {
+        id: 9,
+        name: "UnderWorld",
+        description: "Out of the cave and into the UnderWorld: glowing nature, tree houses and strange creatures. Watch out for the man-eating flower!",
+        mode: 'underworld',
+        killsToWin: 0,
+        accentColor: 0xb388ff,
+        groundColor: 0x1b3a2a,
+        mapWidth: 2600,
+        platforms: [],
+        underworld: {
+            caveExitX: 150,
+            flowers: [{ x: 760 }],
+            flowerWakeRange: 260,
+            flowerBiteRange: 95,
+            flowerBiteDamage: 22,
+            flowerFreezeMs: 3500,
+            cityX: 1150,
+            trollX: 2000,
+            talkRange: 140
+        },
+        // G'or og'zidan chiqib kelishadi
+        playerSpawns: [
+            { x: 70, y: 500 }, { x: 105, y: 500 }, { x: 140, y: 500 }, { x: 175, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // ishlatilmaydi - bu xaritada bot yo'q
     }
