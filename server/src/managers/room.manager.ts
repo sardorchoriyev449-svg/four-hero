@@ -639,7 +639,7 @@ export class RoomManager {
     // XARITANI BOSHLASH: lobbidan (xo'jayin "Start" bosganda) ham, oldingi xarita
     // o'tilgach AVTOMATIK davom etganda ham shu ishlatiladi. Davom etganda
     // qahramonlar o'sha joyida qoladi (xaritalar bir-biriga ulangan)
-    public startLevel(roomId: string, continued: { fromLevel: number, winnerNickname: string, coinsAwarded: number } | null = null): void {
+    public startLevel(roomId: string, continued: { fromLevel: number, winnerNickname: string, coinsAwarded: number, xpGained?: number } | null = null): void {
         const room = this.activeRooms[roomId];
         if (!room) return;
         const map = getMapById(room.selectedLevel);
@@ -795,18 +795,20 @@ export class RoomManager {
         // xaritaga o'tish shunga tayanadi), bazada - hisobli o'yinchilar uchun
         const clearedId = room.selectedLevel;
         const maxLevel = MAPS.length - 1;
+        // Tajriba: oddiy xarita +10, boss xaritalari ko'proq (maps.ts: xpReward)
+        const xpGain = getMapById(clearedId).xpReward ?? db.XP_PER_MAP;
         let levelCleared = false;
         Object.values(room.players).forEach((p) => {
-            p.xp = (p.xp || 0) + db.XP_PER_MAP;
+            p.xp = (p.xp || 0) + xpGain;
             p.charXp = { ...(p.charXp || {}) };
-            p.charXp[p.characterType] = (p.charXp[p.characterType] || 0) + db.XP_PER_MAP;
+            p.charXp[p.characterType] = (p.charXp[p.characterType] || 0) + xpGain;
             RoomManager.refreshPerks(p);
             if (p.unlockedLevel === clearedId && p.unlockedLevel < maxLevel) {
                 p.unlockedLevel++;
                 if (p.id === room.hostId) levelCleared = true;
             }
             if (p.userId !== null) {
-                db.recordMapClear(p.userId, clearedId, maxLevel, p.characterType).catch(err => console.error('recordMapClear xatosi:', err));
+                db.recordMapClear(p.userId, clearedId, maxLevel, p.characterType, xpGain).catch(err => console.error('recordMapClear xatosi:', err));
                 // KO'NIKMA BALLI: shu xaritani shu PERSONAJ bilan hisobda birinchi marta o'tganda +1
                 // (qayta o'ynasa - ball yo'q; bazada personaj bo'yicha tekshiriladi)
                 db.awardSkillPointIfNew(p.userId, clearedId, p.characterType).catch(err => {
@@ -828,13 +830,14 @@ export class RoomManager {
                 this.io.to(winnerId).emit('coinsUpdated', { amount: coinsAwarded, totalCoins: updatedCoins });
             }
             this.broadcastLevelInfo(roomId);
-            this.startLevel(roomId, { fromLevel, winnerNickname: winner.nickname, coinsAwarded });
+            this.startLevel(roomId, { fromLevel, winnerNickname: winner.nickname, coinsAwarded, xpGained: xpGain });
             return;
         }
 
         this.io.to(roomId).emit('gameOver', {
             isLoss: false,
             fromLevel: room.selectedLevel,   // hozirgina yutilgan xarita (klientda "o'tildi" tantanasi)
+            xpGained: xpGain,
             winnerId: winnerId,
             winnerNickname: winner.nickname,
             coinsAwarded: winner.userId !== null ? RoomManager.WIN_REWARD_COINS : 0,

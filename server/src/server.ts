@@ -117,6 +117,7 @@ app.get('/api/character/:userId', async (req, res) => {
         res.json({
             success: true,
             defaultCharacter: user.defaultCharacter,
+            coins: user.coins,
             // Daraja - tanlangan (default) personajniki; har personajning tajribasi alohida
             level: db.xpLevel(user.charXp[user.defaultCharacter] || 0),
             xp: user.charXp[user.defaultCharacter] || 0,

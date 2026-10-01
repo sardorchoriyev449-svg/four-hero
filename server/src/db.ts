@@ -487,16 +487,16 @@ export async function getRoomsByHost(hostUserId: string): Promise<RoomRecord[]> 
 
 // XARITA O'TILDI (hisob progressi): +XP; aynan o'z "chegara" xaritasini o'tgan bo'lsa -
 // keyingi xarita ochiladi (maxLevel - oxirgi mavjud xarita indeksi)
-export async function recordMapClear(userId: string, levelId: number, maxLevel: number, characterType: string): Promise<UserRecord | null> {
+export async function recordMapClear(userId: string, levelId: number, maxLevel: number, characterType: string, xpGain: number = XP_PER_MAP): Promise<UserRecord | null> {
     try {
         const doc: any = await UserModel.findById(userId);
         if (!doc) return null;
         await migrateRoomProgress(doc);
         // Eski hisob bo'lsa - avval tarixdan hisoblangan qiymatdan boshlaymiz
         const before = docToUser(doc);
-        doc.xp = before.xp + XP_PER_MAP;
+        doc.xp = before.xp + xpGain;
         const charXp = { ...before.charXp };
-        if (CHARACTER_TYPES.includes(characterType)) charXp[characterType] = (charXp[characterType] || 0) + XP_PER_MAP;
+        if (CHARACTER_TYPES.includes(characterType)) charXp[characterType] = (charXp[characterType] || 0) + xpGain;
         doc.charXp = charXp;
         doc.markModified('charXp');
         const unlocked = before.unlockedLevel;

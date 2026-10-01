@@ -230,6 +230,8 @@ let createRoomIsPrivate = false; // "Create Lobby" ekranida tanlangan ko'rinish 
 function showPanel(panel) {
     ALL_PANELS.forEach(p => p.classList.add('hidden'));
     panel.classList.remove('hidden');
+    // Bosh menyuga qaytilganda (o'yindan, lobbidan, sozlamalardan) - daraja va tangalar yangilanadi
+    if (panel === mainMenuPanel && currentUser && typeof refreshMenuStats === 'function') refreshMenuStats();
     sessionStorage.setItem('lastPanel', panel.id);
 }
 
@@ -335,16 +337,34 @@ async function enterMainMenu() {
     coinBalance.innerText = currentUser.coins;
     showPanel(mainMenuPanel);
     updateControlSchemeButtons();
+    await refreshMenuStats();
+}
 
-    // "Daraja" - joriy (default) personajning necha xil xaritani tugatganiga qarab hisoblanadi
+// BOSH MENYUDAGI DARAJA, XP va TANGA: har safar bosh menyu ochilganda serverdan yangilanadi (ilgari faqat
+// kirishda olinardi - o'yindan qaytgach eski daraja ko'rinib qolardi). Daraja - tanlangan personajniki
+// (har personajning tajribasi alohida), shuning uchun yonida personaj nomi ham yoziladi
+let menuStatsPromise = null;
+function refreshMenuStats() {
+    if (!currentUser) return Promise.resolve();
+    // Bir vaqtda ikki marta chaqirilsa (menyu ochilishi + kirish) - bitta so'rov
+    if (!menuStatsPromise) menuStatsPromise = loadMenuStats().finally(() => { menuStatsPromise = null; });
+    return menuStatsPromise;
+}
+async function loadMenuStats() {
     try {
         const res = await fetch('/api/character/' + currentUser.id);
         const data = await res.json();
-        if (data.success) {
-            currentUser.defaultCharacter = data.defaultCharacter;
-            playerLevelSpan.innerText = data.level;
-            renderXpBar(data.xp || 0);
+        if (!data.success || !currentUser) return;
+        currentUser.defaultCharacter = data.defaultCharacter;
+        currentUser.charXp = data.charXp || currentUser.charXp;
+        if (typeof data.coins === 'number') {
+            currentUser.coins = data.coins;
+            coinBalance.innerText = data.coins;
         }
+        playerLevelSpan.innerText = data.level;
+        const heroEl = document.getElementById('player-level-hero');
+        if (heroEl) heroEl.innerText = tCharName(data.defaultCharacter).toUpperCase();
+        renderXpBar(data.xp || 0);
     } catch (e) { /* internetsiz bo'lsa ham menyu ochilaversin */ }
 }
 
@@ -1037,7 +1057,7 @@ const LEVEL_COMPLETE_MS = 3200;
 let levelCompleteTimers = [];
 // isLoss - mag'lubiyat varianti (to'q qizil, "GAME OVER", bosh suyagi)
 // onBack berilsa (mag'lubiyat) - sahna o'zi yo'qolmaydi, "Lobbiga qaytish" tugmasini kutadi
-function showLevelComplete(levelIndex, isLoss = false, onBack = null) {
+function showLevelComplete(levelIndex, isLoss = false, onBack = null, xpGained = 0) {
     const host = document.getElementById('game-container');
     if (!host || typeof levelIndex !== 'number' || levelIndex < 0) return;
     const old = document.getElementById('level-complete');
@@ -1050,7 +1070,7 @@ function showLevelComplete(levelIndex, isLoss = false, onBack = null) {
     if (isLoss) el.classList.add('loss');
     el.innerHTML = `
         <div class="lc-beam"></div>
-        <div class="lc-title"><span class="lc-map"></span><span class="lc-text"></span></div>
+        <div class="lc-title"><span class="lc-map"></span><span class="lc-text"></span>${!isLoss && xpGained > 0 ? `<span class="lc-xp">+${xpGained} XP</span>` : ''}</div>
         <div class="lc-ach">
             <div class="lc-ach-icon"><i class="fa-solid ${isLoss ? 'fa-skull' : 'fa-trophy'}"></i></div>
             <div class="lc-ach-name"></div>
@@ -1119,7 +1139,7 @@ socket.on('gameStarted', (data) => {
         launchGame(socket, currentRoomId, data && data.map, data && data.continued);
     }
     // Oldingi xarita o'tilib, avtomatik keyingisiga o'tildi
-    if (data && data.continued) showLevelComplete(data.continued.fromLevel);
+    if (data && data.continued) showLevelComplete(data.continued.fromLevel, false, null, data.continued.xpGained || 0);
 });
 
 // --- 4. G'ALABA VA TANGA MUKOFOTI ---
@@ -1147,7 +1167,7 @@ socket.on('gameOver', (data) => {
                 gameoverOkBtn.onclick();
             });
         } else {
-            showLevelComplete(data.fromLevel);
+            showLevelComplete(data.fromLevel, false, null, data.xpGained || 0);
             setTimeout(() => finishGameOver(data), LEVEL_COMPLETE_MS);
         }
         return;

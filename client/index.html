@@ -432,6 +432,7 @@
         #level-complete.loss .lc-mote { top: -10px; bottom: auto; background: #3b0508; box-shadow: 0 0 0 2px #e53935; animation-name: lc-fall; }
         @keyframes lc-fall { from { transform: translateY(0); opacity: 1; } to { transform: translateY(640px); opacity: 0; } }
         #level-complete.loss .lc-title { color: #3b0508; }
+        #level-complete .lc-xp { display: block; margin-top: 10px; font-size: 12px; color: #1a237e; text-shadow: none; }
         #level-complete.loss .lc-map { color: #b71c1c; }
         #level-complete.loss.show .lc-title { animation: lc-pop .5s cubic-bezier(.2, 1.6, .4, 1) .35s forwards, lc-shake .4s linear .85s 2; }
         @keyframes lc-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
@@ -486,7 +487,7 @@
                 inset 0 0 0 4px var(--px-edge),
                 inset 0 8px 0 4px var(--px-panel-3),
                 10px 10px 0 rgba(0, 0, 0, 0.55);
-            animation: px-panel-in .22s steps(4) both;
+            animation: px-panel-in .22s steps(4) backwards;   /* "both" emas: tugagach transform qolmasin - aks holda ichidagi "fixed" oynalar ekranga emas, panelga bog'lanib qolardi */
         }
         @keyframes px-panel-in { from { transform: translateY(10px); } to { transform: none; } }
         /* Burchak "vintlari" */
@@ -929,6 +930,19 @@
             .slot-hero { width: 72px; height: 90px; }
             .lobby-slots { gap: 10px; margin: 12px 0 6px; }
         }
+        /* LOBBI OYNALARI (xarita, chat) telefonda: ekranga mahkamlangan oyna - doim ko'rinadi va sig'adi
+           (lobbi paneli ichida "absolute" bo'lsa, panel aylantirilganda ekrandan chiqib ketardi) */
+        @media (max-width: 700px), (max-height: 600px) {
+            .lobby-popup {
+                position: fixed; z-index: 200; left: 50%; top: 10px; transform: translateX(-50%);
+                width: calc(100vw - 20px); max-width: 720px; box-sizing: border-box; padding: 10px;
+                max-height: calc(100vh - 20px); max-height: calc(100dvh - 20px); overflow-y: auto;
+                box-shadow: inset 0 0 0 4px var(--px-edge), 0 0 0 100vmax rgba(0, 0, 0, 0.6);
+            }
+            #level-list { max-height: calc(100vh - 200px); max-height: calc(100dvh - 200px); }
+            #lobby-chat-section #chat-box { height: calc(100vh - 150px); height: calc(100dvh - 150px); min-height: 80px; }
+            .maps-tab { padding: 8px 6px; font-size: 9px; }
+        }
     </style>
 </head>
 <body>
@@ -972,7 +986,7 @@
         </div>
         <div class="user-bar">
             <span><i class="fa-solid fa-user icon"></i><b id="welcome-nickname"></b></span>
-            <span class="level-badge"><i class="fa-solid fa-star icon"></i><span data-i18n="level_label">Level</span> <b id="player-level">0</b>
+            <span class="level-badge"><i class="fa-solid fa-star icon"></i><span id="player-level-hero"></span> <span data-i18n="level_label">Level</span> <b id="player-level">0</b>
                 <span class="xp-bar" id="player-xp-bar" title=""><span id="player-xp-fill"></span></span></span>
             <span class="coin-badge"><i class="fa-solid fa-coins icon"></i><span id="coin-balance">0</span></span>
         </div>

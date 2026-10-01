@@ -243,6 +243,7 @@ export interface MapDef {
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
     mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
+    xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
     groundColor: number;
     mapWidth: number;        // dunyoning to'liq kengligi (800 dan katta bo'lsa, kamera o'yinchini kuzatib suriladi)
@@ -464,6 +465,7 @@ export const MAPS: MapDef[] = [
         description: "The giant robot snake smashed into the market. Shoot it until it dies!",
         mode: 'boss',
         killsToWin: 0,
+        xpReward: 40,
         accentColor: 0xff5252,
         groundColor: 0x5d5566,
         // "Cheksiz" bozor: rastalar va taxtalar ilon o'lguncha davom etadi. Boshidagi
@@ -563,6 +565,7 @@ export const MAPS: MapDef[] = [
         description: "The lair of a giant stone gorilla: it roars, shoves, bursts rocks from the ground and smashes platforms into the ceiling!",
         mode: 'gorilla',
         killsToWin: 0,
+        xpReward: 40,
         accentColor: 0xffab40,
         groundColor: 0x3a3440,
         mapWidth: 800,
