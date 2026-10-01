@@ -4,7 +4,7 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getWeaponSkinColor } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
 import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf } from '../perks';
@@ -236,10 +236,10 @@ export class RoomManager {
     private applyHostProgress(room: RoomState, freshHost: boolean): void {
         const host = room.players[room.hostId];
         if (!host || typeof host.unlockedLevel !== 'number') return;
-        room.unlockedLevel = Math.min(host.unlockedLevel, MAPS.length - 1);
+        room.unlockedLevel = Math.min(host.unlockedLevel, SEASON_MAP_COUNT - 1);
         // O'yin ketayotganda xarita almashmaydi - faqat lobbida moslanadi
         if (room.isStarted) return;
-        if (freshHost || room.selectedLevel > room.unlockedLevel) room.selectedLevel = room.unlockedLevel;
+        if (freshHost || (room.selectedLevel > room.unlockedLevel && !getMapById(room.selectedLevel).bonus)) room.selectedLevel = room.unlockedLevel;
         room.killsToWin = getMapById(room.selectedLevel).killsToWin;
     }
 
@@ -252,7 +252,7 @@ export class RoomManager {
             isPrivate: room.isPrivate,
             unlockedLevel: room.unlockedLevel,
             selectedLevel: room.selectedLevel,
-            maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor }))
+            maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor, bonus: !!m.bonus }))
         };
     }
 
@@ -396,7 +396,8 @@ export class RoomManager {
         if (room.hostId !== socket.id) return; // Faqat xo'jayin tanlay oladi
 
         // Butun son bo'lishi shart (matn/NaN kelsa - tekshiruvlar o'tib ketib, START da xato berardi)
-        if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || levelIndex > room.unlockedLevel) return;
+        // Bonus xaritalar doim ochiq; mavsum xaritalari - faqat ochilganlari
+        if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || (levelIndex > room.unlockedLevel && !MAPS[levelIndex].bonus)) return;
 
         room.selectedLevel = levelIndex;
         // Tanlovni hammaga yuboramiz (avval o'yinchilar ro'yxati yuborilardi -
@@ -768,6 +769,7 @@ export class RoomManager {
             gorilla: map.gorilla || null,
             fatElf: map.fatElf || null,
             underworld: map.underworld || null,
+            arena: map.arena || null,
             groundColor: map.groundColor,
             accentColor: map.accentColor
         };
@@ -795,7 +797,7 @@ export class RoomManager {
         // "chegara" xaritasini o'tgan bo'lsa - keyingi xarita ochiladi. Xotirada darhol (keyingi
         // xaritaga o'tish shunga tayanadi), bazada - hisobli o'yinchilar uchun
         const clearedId = room.selectedLevel;
-        const maxLevel = MAPS.length - 1;
+        const maxLevel = SEASON_MAP_COUNT - 1;
         // Tajriba: oddiy xarita +10, boss xaritalari ko'proq (maps.ts: xpReward)
         const xpGain = getMapById(clearedId).xpReward ?? db.XP_PER_MAP;
         let levelCleared = false;
@@ -824,7 +826,7 @@ export class RoomManager {
         // o'sha joydan davom etiladi. Keyin hamma yutqazsa - lobbida aynan shu
         // (keyingi) xarita tanlangan bo'lib qoladi, ya'ni o'sha joydan qayta boshlanadi
         const coinsAwarded = winner.userId !== null ? RoomManager.WIN_REWARD_COINS : 0;
-        if (room.selectedLevel + 1 < MAPS.length) {
+        if (room.selectedLevel + 1 < SEASON_MAP_COUNT) {
             const fromLevel = room.selectedLevel;
             room.selectedLevel++;
             if (updatedCoins !== null) {
@@ -874,6 +876,25 @@ export class RoomManager {
             if (updated) totalCoins = updated.coins;
         }
         this.io.to(playerId).emit('coinsUpdated', { amount, totalCoins });
+    }
+
+    // O'LDIRISH / BOSS MUKOFOTI: o'yinchiga tanga va XP (hisobi bo'lsa - bazaga ham)
+    public async awardReward(roomId: string, playerId: string, coins: number, xp: number): Promise<void> {
+        const player = this.activeRooms[roomId]?.players[playerId];
+        if (!player) return;
+        if (xp > 0) {
+            player.xp = (player.xp || 0) + xp;
+            player.charXp = { ...(player.charXp || {}) };
+            player.charXp[player.characterType] = (player.charXp[player.characterType] || 0) + xp;
+            RoomManager.refreshPerks(player);
+            this.io.to(playerId).emit('xpGained', { amount: xp });
+        }
+        let totalCoins: number | null = null;
+        if (player.userId !== null) {
+            const updated = await db.addRewards(player.userId, coins, xp, player.characterType);
+            if (updated) totalCoins = updated.coins;
+        }
+        if (coins > 0) this.io.to(playerId).emit('coinsUpdated', { amount: coins, totalCoins });
     }
 
     // MAG'LUBIYAT: xonadagi BARCHA o'yinchilar o'lganda (arvoh bo'lganda) chaqiriladi.

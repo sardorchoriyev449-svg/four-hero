@@ -51,6 +51,7 @@ export interface PlayerState {
 }
 
 export interface BotState {
+    elite?: boolean;               // Arena: "Robot otryadi" bossining kuchli roboti
     id: string;
     x: number;
     y: number;
@@ -287,6 +288,15 @@ export interface RoomState {
     acid?: AcidState[];             // Semiz elf sepgan kislota tomchilari
     acidCounter?: number;
     flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
+    arena?: {                       // Arena (bonus): hisob va joriy boss
+        kills: number;
+        sinceBoss: number;
+        boss: 'gorilla' | 'fatelf' | 'squad' | null;
+        lastBoss: string | null;
+        bossesBeaten: number;
+        tick: number;
+        nextSpawnTick: number;
+    } | null;
     uwTalk?: { state: 'idle' | 'talk' | 'done', timer: number, by: string | null } | null; // trol bilan suhbat
     gPlats?: GPlatState[];
     gSpikes?: GSpikeState[];

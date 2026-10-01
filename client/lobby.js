@@ -876,21 +876,24 @@ function renderLevelList() {
     const mapNameEl = document.getElementById('lobby-map-name');
     if (mapNameEl) mapNameEl.innerText = (selectedLevel + 1) + '. ' + tMapName(selectedLevel);
     levelListDiv.innerHTML = '';
-    if (mapsTab !== 's1') {
+    // BONUS - mashq xaritalari (doim ochiq); SEASON 1 - asosiy xaritalar ketma-ketligi; SEASON 2 - tez orada
+    const seasonMaps = roomMaps.filter(m => !m.bonus);
+    const shown = mapsTab === 'bonus' ? roomMaps.filter(m => m.bonus) : mapsTab === 's1' ? seasonMaps : [];
+    if (!shown.length) {
         levelListDiv.innerHTML = `<div class="maps-soon"><i class="fa-solid fa-hourglass-half"></i>${t('coming_soon')}</div>`;
         return;
     }
-    roomMaps.forEach((m) => {
-        const locked = m.id > unlockedLevel;
+    shown.forEach((m) => {
+        const locked = !m.bonus && m.id > unlockedLevel;
         const isSelected = m.id === selectedLevel;
         const item = document.createElement('div');
         item.className = 'level-item' + (isSelected ? ' selected' : '') + (locked ? ' locked' : '') + (isRoomHost ? '' : ' readonly');
         const icon = locked ? '<i class="fa-solid fa-lock"></i>' : (isSelected ? '<i class="fa-solid fa-circle-check" style="color:#00ffcc;"></i>' : '<i class="fa-solid fa-circle"></i>');
         // Avval o'tilgan xarita: qayta o'ynasa bo'ladi, lekin ball berilmaydi
-        const clearedTag = m.id < unlockedLevel
+        const clearedTag = !m.bonus && m.id < unlockedLevel
             ? ` <span style="color:#aaa; font-size:12px;"><i class="fa-solid fa-flag-checkered"></i> ${t('level_cleared_tag')}</span>`
             : '';
-        item.innerHTML = `<span>${icon} <span class="level-name">${m.id + 1}. ${tMapName(m.id)}</span>${clearedTag}<span class="level-desc">${tMapDesc(m.id)}</span></span>`;
+        item.innerHTML = `<span>${icon} <span class="level-name">${m.bonus ? '<i class="fa-solid fa-star" style="color:#ffd54f;"></i> ' : (m.id + 1) + '. '}${tMapName(m.id)}</span>${clearedTag}<span class="level-desc">${tMapDesc(m.id)}</span></span>`;
         if (isRoomHost && !locked) {
             item.onclick = () => {
                 socket.emit('selectLevelInRoom', { roomId: currentRoomId, levelIndex: m.id });
@@ -900,10 +903,10 @@ function renderLevelList() {
         levelListDiv.appendChild(item);
     });
     // Keyingi (hali chiqmagan) xarita - "TEZ ORADA": har yangilanishda o'zi bir raqam suriladi
-    if (roomMaps.length) {
+    if (mapsTab === 's1' && seasonMaps.length) {
         const soon = document.createElement('div');
         soon.className = 'level-item locked readonly level-soon';
-        soon.innerHTML = `<span><i class="fa-solid fa-hourglass-half"></i> <span class="level-name">${roomMaps.length + 1}. ${t('coming_soon')}</span><span class="level-desc">${t('coming_soon_desc')}</span></span>`;
+        soon.innerHTML = `<span><i class="fa-solid fa-hourglass-half"></i> <span class="level-name">${seasonMaps.length + 1}. ${t('coming_soon')}</span><span class="level-desc">${t('coming_soon_desc')}</span></span>`;
         levelListDiv.appendChild(soon);
     }
 }

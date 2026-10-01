@@ -156,6 +156,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const isGorilla = !!map.gorilla; // tosh gorilla boss (map-8)
     const isFatElf = !!map.fatElf;   // semiz elf (map-9, "Vaxtida kelding")
     const isUnderworld = !!map.underworld; // UnderWorld (map-10): og'zibor gul, shahar, trol
+    const isArena = !!map.arena;     // Arena (bonus): cheksiz botlar, har 5 o'ldirishda boss
 
     // Shu raundga xos holat (har raundda launchGame qaytadan chaqiriladi)
     let crateGroup;
@@ -214,6 +215,7 @@ function launchGame(socket, roomId, mapData, continued) {
     let uwTalkState = null;    // trol bilan suhbat: { state, ... }
     let uwTalkShown = false;
     let trollHint = null;
+    let arenaState = null;     // serverdan: { kills, sinceBoss, boss, bossesBeaten }
     let gPoundHit = false;     // yerni urish seriyasi: oxirgi kadr "urish" bo'lganmi
     let gCracks = [];          // urishlardan polda paydo bo'lgan yoriqlar
     let gRideId = null;        // shiftga otilayotgan platforma ustida qolgan bo'lsam - uning id si
@@ -1829,7 +1831,7 @@ function launchGame(socket, roomId, mapData, continued) {
         [[5, 1], [6, 2], [7, 3], [8, 4], [9, 5], [10, 6], [10, 1], [9, 2], [8, 3], [6, 5], [5, 6]].forEach(([x, y]) => { g[y][x] = 0xff5252; });
         return gridOutline(g, 0x000000);
     }
-    function buildFatElfScene(scene) {
+    function buildFatElfScene(scene, arenaOnly = false) {
         const W = mapWidth, fd = map.fatElf;
         const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
         ['eat1', 'eat2', 'idle', 'charge', 'spit', 'down'].forEach(pose => mk('px_fe_' + pose, fatElfGrid(pose), 3));
@@ -1841,6 +1843,12 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_slab_150', slabGrid(38), 4);
         [3, 2, 3, 5, 4, 6].forEach((P, i) => mk('px_boulder_small' + i, boulderGrid(), P));
         mk('px_slab_170', slabGrid(43), 4);
+        if (arenaOnly) {
+            // Arena: semiz elf boss sifatida chaqirilgunicha ko'rinmaydi
+            fatElfSprite = scene.add.image(fd.x, 574, 'px_fe_idle').setOrigin(0.5, 1).setDepth(2).setVisible(false);
+            fatElfBar = scene.add.graphics().setDepth(4);
+            return;
+        }
         // Orqa fon: yer osti g'ori (zulmat, stalaktitlar, kristallar)
         drawPixelBackdrop(scene, {
             sky: [0x07070d, 0x0a0a14, 0x0d0d1b, 0x101022, 0x14142a, 0x181833],
@@ -3283,7 +3291,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isForest) buildForestScene(this);
         if (isStones) buildStonesScene(this);
         if (isGorilla) buildGorillaScene(this);
-        if (isFatElf) buildFatElfScene(this);
+        if (isFatElf) buildFatElfScene(this, isArena);
         if (isUnderworld) buildUnderworldScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
@@ -3661,6 +3669,38 @@ function launchGame(socket, roomId, mapData, continued) {
             } });
         });
 
+        // ARENA: boss jangi boshlandi / boss yengildi - ekran o'rtasida katta yozuv
+        const arenaBanner = (text, color, sub) => {
+            const big = this.add.text(400, 230, text, { fontFamily: PIXEL_FONT, fontSize: '26px', color, stroke: '#000000', strokeThickness: 6 })
+                .setOrigin(0.5).setScrollFactor(0).setDepth(1500).setScale(0.3);
+            this.tweens.add({ targets: big, scale: 1, duration: 300, ease: 'Back.Out' });
+            this.tweens.add({ targets: big, alpha: 0, delay: 2200, duration: 500, onComplete: () => big.destroy() });
+            if (sub) {
+                const small = this.add.text(400, 274, sub, { fontFamily: PIXEL_FONT, fontSize: '12px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 4 })
+                    .setOrigin(0.5).setScrollFactor(0).setDepth(1500);
+                this.tweens.add({ targets: small, alpha: 0, delay: 2200, duration: 500, onComplete: () => small.destroy() });
+            }
+        };
+        socket.off('arenaBoss');
+        socket.on('arenaBoss', (d) => {
+            const nm = d.boss === 'gorilla' ? t('gorilla_name') : d.boss === 'fatelf' ? t('fatelf_name') : t('arena_boss_squad');
+            this.cameras.main.shake(400, 0.01);
+            arenaBanner(t('arena_boss_in'), '#ff5252', nm);
+        });
+        socket.off('arenaBossDown');
+        socket.on('arenaBossDown', (d) => {
+            arenaBanner(t('arena_boss_down'), '#69f0ae', '+' + d.coins + ' ' + t('coins_word') + '   +' + d.xp + ' XP');
+        });
+        // Tajriba olindi (bot o'ldirildi va h.k.) - qahramon tepasida "+5 XP"
+        socket.off('xpGained');
+        socket.on('xpGained', (d) => {
+            if (!currentCharacter || !currentCharacter.active || !d) return;
+            const txt = this.add.text(currentCharacter.x + 24, currentCharacter.y - 56, '+' + d.amount + ' XP', {
+                fontFamily: PIXEL_FONT, fontSize: '10px', color: '#b388ff', stroke: '#000000', strokeThickness: 4
+            }).setOrigin(0.5).setDepth(1003);
+            this.tweens.add({ targets: txt, y: txt.y - 34, alpha: 0, duration: 1100, onComplete: () => txt.destroy() });
+        });
+
         // GORILLA ITARDI / YERDAN TOSH OTILDI: qahramon shu tezlik bilan uchib ketadi
         socket.off('knockback');
         socket.on('knockback', (d) => {
@@ -3723,6 +3763,16 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             }
             checkpointReached = data.checkpointReached || [];
+
+            // ARENA: hisob, joriy boss; boss yo'q bo'lsa - gorilla/semiz elf yo'q (yashiriladi)
+            if (isArena) {
+                arenaState = data.arena || null;
+                if (!data.gorilla) gorillaState = null;
+                if (!data.fatElf) fatElfState = null;
+                if (!data.gorilla) {
+                    (data.gPlats || []).forEach((st) => { const sp = gPlatSprites[st.id]; if (sp) { sp.state = st.state; sp.ty = st.y; } });
+                }
+            }
 
             // UNDERWORLD: og'zibor gullar va trol bilan suhbat
             if (isUnderworld) {
@@ -4208,6 +4258,8 @@ function launchGame(socket, roomId, mapData, continued) {
                     b.targetX = bot.x; b.targetY = bot.y; b.hp = bot.hp; b.maxHp = bot.maxHp;
                     b.isBlocking = bot.isBlocking; b.isAttacking = bot.isAttacking; b.facingLeft = bot.facingLeft;
                     b.isJetting = bot.isJetting;
+                    b.elite = !!bot.elite;
+                    if (b.elite) b.setTint(0xff8a80);
                     enemyBots[bot.id] = b;
                 } else {
                     if (enemyBots[bot.id].hp > bot.hp) {
@@ -4215,6 +4267,7 @@ function launchGame(socket, roomId, mapData, continued) {
                         this.time.delayedCall(100, () => {
                             if (enemyBots[bot.id]) {
                                 if (bot.freezeDuration > 0) enemyBots[bot.id].setTint(0x00ffff);
+                                else if (bot.elite) enemyBots[bot.id].setTint(0xff8a80);
                                 else enemyBots[bot.id].clearTint();
                             }
                         });
@@ -4306,6 +4359,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function musicMode() {
         if (dialog || isStory) return 'calm';
         if (isForest) return (forestTriggered && botsKilled < (currentCharacter ? currentCharacter.killsToWin : 1)) ? 'action' : 'calm';
+        if (isArena) return 'action';
         if (isUnderworld) {
             return Object.values(flowerSprites).some(f => f.state !== 'hidden' && f.state !== 'dead') ? 'action' : 'calm';
         }
@@ -4425,6 +4479,26 @@ function launchGame(socket, roomId, mapData, continued) {
                 sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6);
                 sp.angle += 6;
             });
+        }
+        if (isArena) {
+            if (gorillaSprite) gorillaSprite.setVisible(!!gorillaState);
+            if (fatElfSprite) fatElfSprite.setVisible(!!fatElfState);
+            if (fatElfBar && !fatElfState) fatElfBar.clear();
+            // Boss chizig'i: gorilla o'zi chizadi; robot otryadi - kuchli robotlar jonlari yig'indisi
+            const elites = Object.values(enemyBots).filter(b => b.elite);
+            if (arenaState && arenaState.boss === 'squad' && elites.length) {
+                drawBossBar(this, elites.reduce((a, b) => a + Math.max(0, b.hp), 0), elites.reduce((a, b) => a + (b.maxHp || 1), 0), t('arena_boss_squad'));
+            } else if (arenaState && arenaState.boss === 'fatelf' && fatElfState) {
+                drawBossBar(this, fatElfState.hp, fatElfState.maxHp, t('fatelf_name'));
+            }
+            if (this.bossBar) {
+                const show = !!(arenaState && arenaState.boss);
+                [this.bossBar.panel, this.bossBar.bar, this.bossBar.name].forEach(o => o.setVisible(show));
+                if (arenaState && arenaState.boss) {
+                    const nm = arenaState.boss === 'gorilla' ? t('gorilla_name') : arenaState.boss === 'fatelf' ? t('fatelf_name') : t('arena_boss_squad');
+                    if (this.bossBar.name.text !== nm) this.bossBar.name.setText(nm);
+                }
+            }
         }
         // SEMIZ ELF
         if (isFatElf && fatElfState && fatElfSprite) {
@@ -4633,6 +4707,10 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (myApples >= need && !hudKey) {
                     hudKey = this.add.image(22, 134, 'px_key').setOrigin(0, 0.5).setScrollFactor(0).setDepth(1002);
                 }
+            } else if (isArena) {
+                const A = arenaState || { kills: 0, sinceBoss: 0, boss: null };
+                progressText = A.boss ? t('hud_arena_boss')
+                    : t('hud_arena').replace('{k}', A.kills).replace('{n}', Math.max(0, map.arena.killsPerBoss - A.sinceBoss));
             } else if (isGorilla) {
                 const gst = gorillaState ? gorillaState.state : 'idle';
                 progressText = gst === 'rest' ? t('hud_gorilla_rest') : gst === 'roar' ? t('hud_gorilla_roar')

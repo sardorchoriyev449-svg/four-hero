@@ -89,6 +89,8 @@ export class GameEngine {
     private readonly BOSS_DEATH_TICKS = 100;
     // Gorilla suhbatlari: hamma o'qib bo'lguncha (lekin ko'pi bilan shuncha) kutiladi
     public static readonly GORILLA_TALK_MAX_MS = 45000;
+    // Har xaritada bot o'ldirgan qahramonga beriladigan tajriba
+    public static readonly KILL_XP = 5;
     // Semiz elf suhbati uzun (7 qator) - sekin o'qiydiganni dialog ochiq turganda urib qo'ymasin
     public static readonly FATELF_TALK_MAX_MS = 60000;          // ~3s - o'lim portlashlari ko'rinib ulgursin
     private readonly COIN_PICKUP_RANGE = 70;          // Tangani E bilan olish uchun shu masofagacha yaqin turish kerak
@@ -247,6 +249,9 @@ export class GameEngine {
             // 4h. UNDERWORLD - og'zibor gul va trol (faqat map-10)
             this.updateUnderworld(room, roomId);
 
+            // 4i. ARENA (bonus) - cheksiz botlar va bosslar
+            this.updateArena(room);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -292,6 +297,7 @@ export class GameEngine {
                 fatElf: room.fatElf || null,
                 acid: room.acid || [],
                 flowers: room.flowers || [],
+                arena: room.arena ? { kills: room.arena.kills, sinceBoss: room.arena.sinceBoss, boss: room.arena.boss, bossesBeaten: room.arena.bossesBeaten } : null,
                 uwTalk: room.uwTalk || null,
                 gPlats: room.gPlats || [],
                 gSpikes: room.gSpikes || [],
@@ -998,6 +1004,19 @@ export class GameEngine {
         room.botsKilled++;
         const killer = killerId ? room.players[killerId] : null;
         if (killer && !room.isOver) killer.kills++;
+        const ar = getMapById(room.selectedLevel).arena;
+        // Har bot uchun o'ldirganga tajriba (arenada - tanga ham)
+        if (killer && !room.isOver) {
+            this.roomManager.awardReward(room.id, killer.id, ar ? ar.botCoins : 0, ar ? ar.botXp : GameEngine.KILL_XP)
+                .catch(err => console.error('awardReward xatosi:', err));
+        }
+        if (ar && room.arena && !room.isOver) {
+            room.arena.kills++;
+            if (!room.arena.boss) {
+                room.arena.sinceBoss++;
+                if (room.arena.sinceBoss >= ar.killsPerBoss) this.startArenaBoss(room);
+            }
+        }
     }
 
     // O'RMON: daraxt yoniga yetilganda itlar chiqadi; so'ng tepadan qizil qutilar
@@ -1123,6 +1142,7 @@ export class GameEngine {
 
     // Gorilla yengildi: hujumlar to'xtaydi, xavflar yo'qoladi, so'nggi suhbat boshlanadi
     private gorillaDefeated(room: RoomState, g: NonNullable<RoomState['gorilla']>): void {
+        if (room.arena) { this.arenaBossBeaten(room); return; }
         g.hp = 0;
         g.state = 'defeat';
         g.attack = null;
@@ -1424,6 +1444,13 @@ export class GameEngine {
         const uw = map.underworld;
         room.flowers = (uw?.flowers || []).map((f, i) => ({ id: 'flower_' + i, x: f.x, state: 'hidden' as const, timer: 0, cooldown: 0, bitten: false }));
         room.uwTalk = uw ? { state: 'idle', timer: 0, by: null } : null;
+        if (map.arena) {
+            room.gorilla = null;
+            room.fatElf = null;
+            room.arena = { kills: 0, sinceBoss: 0, boss: null, lastBoss: null, bossesBeaten: 0, tick: 0, nextSpawnTick: 30 };
+        } else {
+            room.arena = null;
+        }
         Object.values(room.players).forEach(p => { p.acidTicks = 0; });
         // O'rmonda itlar darhol emas - daraxt yoniga yetilganda chiqadi
         if (map.mode === 'waves' && !map.forest) GameEngine.spawnWave(room, map);
@@ -1550,6 +1577,7 @@ export class GameEngine {
         Object.values(room.players).forEach(p => { p.introDone = false; });
     }
     private fatElfDefeated(room: RoomState, fe: NonNullable<RoomState['fatElf']>): void {
+        if (room.arena) { this.arenaBossBeaten(room); return; }
         fe.hp = 0;
         fe.state = 'down';
         fe.timer = 0;
@@ -1725,6 +1753,88 @@ export class GameEngine {
                 if (winner) this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
             }
         }
+    }
+
+    // ===== ARENA (bonus) =====
+    private updateArena(room: RoomState): void {
+        const map = getMapById(room.selectedLevel);
+        const ar = map.arena, A = room.arena;
+        if (!ar || !A || room.isOver) return;
+        A.tick++;
+        const players = Math.max(1, Object.values(room.players).filter(p => !p.isDead).length);
+        // Robot otryadi: kuchli robotlar qolmasa - boss yengildi
+        if (A.boss === 'squad' && !room.bots.some(b => b.elite)) { this.arenaBossBeaten(room); return; }
+        if (A.boss) return;   // boss paytida yangi oddiy botlar chiqmaydi
+        // Oddiy botlar: navbat bilan tepadan tushadi; har boss yengilgach - kuchliroq
+        const want = Math.min(ar.maxBots, 1 + players + A.bossesBeaten);
+        if (room.bots.length < want && A.tick >= A.nextSpawnTick) {
+            const z = map.botSpawnZone;
+            const hp = Math.round(GameEngine.BOT_MAX_HP * (1 + 0.2 * A.bossesBeaten));
+            const bot = GameEngine.createBots(room.id, [{ x: z.xStart + Math.random() * (z.xEnd - z.xStart), y: z.y }], 'robot', hp)[0];
+            bot.id += '_' + A.tick;
+            room.bots.push(bot);
+            A.nextSpawnTick = A.tick + Math.round(ar.spawnIntervalMs / 30);
+        }
+    }
+
+    // Har 5 ta o'ldirishda: tasodifiy boss (oldingisi takrorlanmaydi); har yengilgan boss - keyingisi kuchliroq
+    private startArenaBoss(room: RoomState): void {
+        const map = getMapById(room.selectedLevel);
+        const A = room.arena!;
+        const options = (['gorilla', 'fatelf', 'squad'] as const).filter(b => b !== A.lastBoss);
+        const boss = options[Math.floor(Math.random() * options.length)];
+        const players = Math.max(1, Object.keys(room.players).length);
+        const power = 1 + 0.25 * A.bossesBeaten;
+        A.boss = boss;
+        A.sinceBoss = 0;
+        if (boss === 'gorilla' && map.gorilla) {
+            const gd = map.gorilla;
+            const hp = Math.round(gd.baseHp * 0.6 * players * power);
+            room.gorilla = { hp, maxHp: hp, x: gd.startX, facingLeft: true, state: 'idle', timer: Math.round(1200 / 30), attack: null, crushPlat: -1, hitFlash: 0, lastHitBy: null };
+            room.gPlats = gd.platforms.map((pl, i) => ({ id: 'gp_' + i, x: pl.x, y: pl.y, w: pl.w, state: 'idle' as const, timer: 0, riders: [] as string[] }));
+            room.gSpikes = []; room.gRocks = [];
+        } else if (boss === 'fatelf' && map.fatElf) {
+            const fd = map.fatElf;
+            const hp = Math.round(fd.baseHp * players * power);
+            const alive = Object.values(room.players).filter(p => !p.isDead);
+            const avgX = alive.length ? alive.reduce((a, p) => a + p.x, 0) / alive.length : 200;
+            room.fatElf = { hp, maxHp: hp, x: avgX < 400 ? 620 : 180, facingLeft: true, state: 'idle', timer: Math.round(1500 / 30),
+                targetId: null, hitFlash: 0, lastHitBy: null, grace: Math.round(1200 / 30) };
+            room.acid = [];
+        } else {
+            // ROBOT OTRYADI: bir nechta kuchli (4x jonli) robot bir vaqtda tushadi
+            const count = 2 + players;
+            const spawns = Array.from({ length: count }, (_, i) => ({ x: 200 + i * (480 / Math.max(1, count - 1)), y: 90 }));
+            const elites = GameEngine.createBots(room.id, spawns, 'robot', Math.round(GameEngine.BOT_MAX_HP * 4 * power));
+            elites.forEach((b, i) => { b.elite = true; b.id += '_e' + A.tick + '_' + i; });
+            room.bots.push(...elites);
+            A.boss = 'squad';
+        }
+        this.io.to(room.id).emit('arenaBoss', { boss: A.boss });
+    }
+
+    // Boss yengildi: tirik qahramonlarga +100 tanga, +50 XP; oddiy botlar yana chiqa boshlaydi
+    private arenaBossBeaten(room: RoomState): void {
+        const ar = getMapById(room.selectedLevel).arena;
+        const A = room.arena;
+        if (!ar || !A || !A.boss) return;
+        const boss = A.boss;
+        A.lastBoss = boss;
+        A.boss = null;
+        A.bossesBeaten++;
+        A.sinceBoss = 0;
+        A.nextSpawnTick = A.tick + Math.round(2500 / 30);
+        room.gorilla = null;
+        room.fatElf = null;
+        room.acid = [];
+        room.gSpikes = []; room.gRocks = [];
+        // Gorilla platformalari joyiga qaytadi (gorilla yo'q paytda ularni hech kim qaytarmaydi)
+        const gd = getMapById(room.selectedLevel).gorilla;
+        (room.gPlats || []).forEach((pl, i) => { pl.state = 'idle'; pl.timer = 0; pl.riders = []; if (gd) pl.y = gd.platforms[i].y; });
+        Object.values(room.players).filter(p => !p.isDead).forEach(p => {
+            this.roomManager.awardReward(room.id, p.id, ar.bossCoins, ar.bossXp).catch(err => console.error('awardReward xatosi:', err));
+        });
+        this.io.to(room.id).emit('arenaBossDown', { boss, coins: ar.bossCoins, xp: ar.bossXp });
     }
 
     public markIntroDone(room: RoomState, playerId: string): void {

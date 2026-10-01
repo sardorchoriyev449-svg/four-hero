@@ -248,6 +248,19 @@ export interface UnderworldDef {
     talkRange: number;
 }
 
+// ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
+// +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
+// Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
+export interface ArenaDef {
+    killsPerBoss: number;
+    botCoins: number;
+    botXp: number;
+    bossCoins: number;
+    bossXp: number;
+    spawnIntervalMs: number;
+    maxBots: number;
+}
+
 export interface MapDef {
     id: number;              // 0-based ketma-ket indeks (ochilish tartibi)
     name: string;
@@ -257,7 +270,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
@@ -278,6 +291,8 @@ export interface MapDef {
     gorilla?: GorillaDef;       // Faqat tosh gorilla (map-8)
     fatElf?: FatElfDef;         // Faqat semiz elf (map-9)
     underworld?: UnderworldDef; // Faqat UnderWorld (map-10)
+    arena?: ArenaDef;           // Faqat Arena (bonus)
+    bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
     mines?: PointDef[];         // Mina markazi
     forks?: ForkDef[];
@@ -694,6 +709,31 @@ export const MAPS: MapDef[] = [
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // ishlatilmaydi - bu xaritada bot yo'q
     }
 ];
+
+// ARENA (BONUS): Gorila Rock zalida; bosslar - mavsum xaritalaridagi gorilla va semiz elf
+// (ular arenada yer ostidan emas, chaqirilganda paydo bo'ladi)
+MAPS.push({
+    id: MAPS.length,
+    name: "Arena",
+    description: "Endless training: bots keep coming. Every kill gives coins and XP, every 5 kills a random boss appears!",
+    mode: 'arena',
+    bonus: true,
+    killsToWin: 0,
+    accentColor: 0xff5252,
+    groundColor: 0x3a3440,
+    mapWidth: 800,
+    platforms: [],
+    gorilla: MAPS.find(m => m.gorilla)!.gorilla,
+    fatElf: { ...MAPS.find(m => m.fatElf)!.fatElf!, x: 600, doorX: 780 },
+    arena: { killsPerBoss: 5, botCoins: 10, botXp: 5, bossCoins: 100, bossXp: 50, spawnIntervalMs: 1400, maxBots: 6 },
+    playerSpawns: [
+        { x: 50, y: 500 }, { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }
+    ],
+    botSpawnZone: { xStart: 260, xEnd: 740, y: 90 }
+});
+
+// Mavsum xaritalari soni (bonus xaritalarsiz) - ochilish ketma-ketligi shular bo'yicha
+export const SEASON_MAP_COUNT = MAPS.filter(m => !m.bonus).length;
 
 export function getMapById(id: number): MapDef {
     return MAPS[id] || MAPS[0];

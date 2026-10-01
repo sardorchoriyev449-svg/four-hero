@@ -227,6 +227,18 @@ export async function loginUser(nicknameRaw: unknown, passwordRaw: unknown): Pro
     return { success: true, user: docToUser(doc) };
 }
 
+// O'LDIRISH / BOSS MUKOFOTI: tanga va tajriba (umumiy va shu personajning) - bitta atomar yozuv
+export async function addRewards(userId: string, coins: number, xp: number, characterType: string): Promise<UserRecord | null> {
+    const inc: any = { coins, xp };
+    if (CHARACTER_TYPES.includes(characterType)) inc['charXp.' + characterType] = xp;
+    try {
+        const doc = await UserModel.findByIdAndUpdate(userId, { $inc: inc }, { returnDocument: 'after' });
+        return doc ? docToUser(doc) : null;
+    } catch {
+        return null;
+    }
+}
+
 // G'ALABA UCHUN TANGA QO'SHISH
 export async function addCoins(userId: string, amount: number): Promise<UserRecord | null> {
     const doc = await UserModel.findByIdAndUpdate(
