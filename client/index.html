@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>4 Heroes - Multiplayer Arena</title>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
@@ -118,7 +118,27 @@
         #game-container {
             border: 4px solid #333;
             border-radius: 8px;
+            /* Ekranga sig'adigan 4:3 quti (o'yin ichidagi rasm unga moslashadi - Phaser FIT) */
+            width: min(800px, calc(100vw - 32px), calc((100vh - 56px) * 4 / 3));
+            aspect-ratio: 4 / 3;
+            box-sizing: content-box;
         }
+        #game-container canvas { display: block; touch-action: none; }
+        /* TO'LIQ EKRAN: o'yin butun oynani egallaydi (qora chetlar - 4:3 ga sig'magan joy) */
+        body.screen-full #game-wrapper { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; align-items: center; justify-content: center; }
+        body.screen-full #game-container { width: min(100vw, calc(100vh * 4 / 3)); border: 0 !important; box-shadow: none !important; }
+        /* Telefonni tik ushlaganda - yon tomonga burish maslahati */
+        #rotate-hint { display: none; }
+        @media (orientation: portrait) and (pointer: coarse) {
+            #rotate-hint {
+                display: flex; align-items: center; gap: 10px; position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 60;
+                padding: 8px 12px; background: rgba(14, 11, 26, 0.88); border: 3px solid #000; color: #ffca28; line-height: 1.5;
+                font: 9px "Press Start 2P", monospace; white-space: nowrap; pointer-events: none; animation: rotate-hint-out 0.6s 6s forwards;
+            }
+            #rotate-hint i { font-size: 16px; animation: rotate-hint-spin 1.4s ease-in-out infinite; }
+        }
+        @keyframes rotate-hint-spin { 50% { transform: rotate(-90deg); } }
+        @keyframes rotate-hint-out { to { opacity: 0; } }
 
         /* PHONE rejimida ko'rinadigan ekrandagi virtual boshqaruv */
         #touch-controls {
@@ -783,7 +803,8 @@
         #pause-btn:hover { opacity: 1; }
         #pause-menu { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
             background: rgba(14, 11, 26, 0.72); line-height: normal; font-family: "Press Start 2P", "Courier New", monospace; }
-        #pause-menu .pm-box { width: 320px; max-width: calc(100% - 32px); background: var(--px-panel); border: 4px solid var(--px-ink); padding: 22px;
+        #pause-menu .pm-box { width: 320px; max-width: calc(100% - 32px); max-height: calc(100% - 16px); overflow-y: auto; box-sizing: border-box;
+            background: var(--px-panel); border: 4px solid var(--px-ink); padding: 22px;
             box-shadow: inset 0 0 0 4px var(--px-edge), 10px 10px 0 rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 12px; }
         #pause-menu .pm-title { text-align: center; font-size: 18px; color: var(--px-gold); text-shadow: 3px 3px 0 var(--px-ink); margin-bottom: 6px; }
         #pause-menu .pm-note { text-align: center; font-size: 8px; color: var(--px-muted); line-height: 1.7; }
@@ -1001,6 +1022,14 @@
         </div>
 
         <div class="settings-row">
+            <label data-i18n="settings_screen">Screen size</label>
+            <div class="lang-options">
+                <button class="lang-btn" id="screen-standard-btn"><i class="fa-solid fa-compress"></i> <span data-i18n="screen_standard">Standard</span></button>
+                <button class="lang-btn" id="screen-full-btn"><i class="fa-solid fa-expand"></i> <span data-i18n="screen_full">Full screen</span></button>
+            </div>
+        </div>
+
+        <div class="settings-row">
             <label data-i18n="settings_language">Language</label>
             <div class="lang-options">
                 <button class="lang-btn" id="lang-en-btn">English</button>
@@ -1091,6 +1120,7 @@
 
     <div id="game-wrapper" class="hidden">
         <div id="game-container"></div>
+        <div id="rotate-hint"><i class="fa-solid fa-mobile-screen-button"></i><span data-i18n="rotate_hint">Turn your phone sideways</span></div>
         <div id="touch-controls" class="hidden">
             <div class="touch-dpad">
                 <button id="touch-left-btn" class="touch-btn"><i class="fa-solid fa-caret-left"></i></button>

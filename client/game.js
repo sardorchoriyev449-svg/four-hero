@@ -156,9 +156,15 @@ function launchGame(socket, roomId, mapData, continued) {
 
     const config = {
         type: Phaser.AUTO,
-        width: 800,
-        height: 600,
         parent: 'game-container', // O'yin aynan index.html dagi shu div ichiga tushadi
+        // Ichki o'lcham doim 800x600; ekrandagi o'lchami - #game-container qutisiga moslashadi
+        // (telefonga sig'adi, "To'liq ekran" rejimida butun oynani egallaydi)
+        scale: {
+            mode: Phaser.Scale.FIT,
+            autoCenter: Phaser.Scale.CENTER_BOTH,
+            width: 800,
+            height: 600
+        },
         physics: {
             default: 'arcade',
             arcade: {
@@ -3029,6 +3035,11 @@ function launchGame(socket, roomId, mapData, continued) {
                 <div class="pm-settings hidden">
                     <label>${t('settings_volume')}</label>
                     <input type="range" min="0" max="100" value="${vol}" class="pm-vol">
+                    <label>${t('settings_screen')}</label>
+                    <div class="pm-langs">
+                        <button class="pm-lang" data-screen-btn="standard">${t('screen_standard')}</button><button class="pm-lang" data-screen-btn="full">${t('screen_full')}</button>
+                    </div>
+                    <label>${t('settings_language')}</label>
                     <div class="pm-langs">
                         <button class="pm-lang" data-lang="en">English</button><button class="pm-lang" data-lang="ru">Русский</button>
                     </div>
@@ -3039,7 +3050,12 @@ function launchGame(socket, roomId, mapData, continued) {
             el.querySelector('[data-act="resume"]').onclick = closePauseMenu;
             el.querySelector('[data-act="settings"]').onclick = () => el.querySelector('.pm-settings').classList.toggle('hidden');
             el.querySelector('.pm-vol').oninput = (e) => { if (window.setGameVolume) window.setGameVolume(e.target.value); };
-            el.querySelectorAll('.pm-lang').forEach((b) => {
+            // Ekran o'lchami: standart / to'liq ekran (lobby.js - setScreenMode)
+            el.querySelectorAll('[data-screen-btn]').forEach((b) => {
+                b.classList.toggle('active', document.body.classList.contains('screen-full') === (b.dataset.screenBtn === 'full'));
+                b.onclick = () => { if (window.setScreenMode) window.setScreenMode(b.dataset.screenBtn); };
+            });
+            el.querySelectorAll('.pm-lang[data-lang]').forEach((b) => {
                 b.classList.toggle('active', b.dataset.lang === getLang());
                 b.onclick = () => {
                     setLang(b.dataset.lang);

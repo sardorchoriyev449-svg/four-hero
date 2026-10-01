@@ -381,17 +381,70 @@ async function enterMainMenu() {
 
 // --- BOSHQARUV TURI: PC (klaviatura) yoki PHONE (ekrandagi virtual boshqaruv) ---
 
+// Sensorli ekran (telefon/planshet)
+const isTouchDevice = () => window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+const storeGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const storeSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* xotira yopiq - shu sessiya uchun */ } };
+
 function getControlScheme() {
-    const saved = localStorage.getItem('controlScheme');
-    return saved === 'phone' ? 'phone' : 'pc';
+    const saved = storeGet('controlScheme');
+    if (saved === 'phone' || saved === 'pc') return saved;
+    // Tanlanmagan bo'lsa: telefonda - ekrandagi tugmalar, kompyuterda - klaviatura
+    return isTouchDevice() ? 'phone' : 'pc';
 }
 function updateControlSchemeButtons() {
     const scheme = getControlScheme();
     controlPcBtn.classList.toggle('active', scheme === 'pc');
     controlPhoneBtn.classList.toggle('active', scheme === 'phone');
 }
-controlPcBtn.onclick = () => { localStorage.setItem('controlScheme', 'pc'); updateControlSchemeButtons(); };
-controlPhoneBtn.onclick = () => { localStorage.setItem('controlScheme', 'phone'); updateControlSchemeButtons(); };
+controlPcBtn.onclick = () => { storeSet('controlScheme', 'pc'); updateControlSchemeButtons(); };
+controlPhoneBtn.onclick = () => { storeSet('controlScheme', 'phone'); updateControlSchemeButtons(); };
+
+// --- EKRAN O'LCHAMI: Standart (o'yin oynasi 800px gacha) yoki To'liq ekran (butun oyna) ---
+// Tanlanmagan bo'lsa: telefonda - to'liq ekran, kompyuterda - standart
+function getScreenMode() {
+    const saved = storeGet('screenMode');
+    if (saved === 'full' || saved === 'standard') return saved;
+    return isTouchDevice() ? 'full' : 'standard';
+}
+function applyScreenMode() {
+    const mode = getScreenMode();
+    document.body.classList.toggle('screen-full', mode === 'full');
+    document.querySelectorAll('[data-screen-btn]').forEach(b => b.classList.toggle('active', b.dataset.screenBtn === mode));
+    // O'yin ketayotgan bo'lsa - Phaser yangi quti o'lchamiga moslashadi
+    requestAnimationFrame(() => {
+        if (typeof phaserGame !== 'undefined' && phaserGame && phaserGame.scale) phaserGame.scale.refresh();
+    });
+}
+// Tugma bosilganda (foydalanuvchi harakati - brauzer haqiqiy to'liq ekranga faqat shunda ruxsat beradi)
+window.setScreenMode = (mode) => {
+    storeSet('screenMode', mode);
+    try {
+        if (mode === 'full' && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+        } else if (mode === 'standard' && document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        }
+    } catch (e) { /* brauzer to'liq ekranni qo'llamaydi - oyna ichida kattalashadi */ }
+    applyScreenMode();
+};
+document.getElementById('screen-standard-btn').dataset.screenBtn = 'standard';
+document.getElementById('screen-full-btn').dataset.screenBtn = 'full';
+document.getElementById('screen-standard-btn').onclick = () => window.setScreenMode('standard');
+document.getElementById('screen-full-btn').onclick = () => window.setScreenMode('full');
+// TELEFONDA: o'yin paytidagi birinchi teginishda - haqiqiy to'liq ekran (brauzer manzil satri yashirinadi)
+// va iloji bo'lsa ekran yotiq holatga qotiriladi (Android). Brauzer buni faqat teginishda ruxsat beradi
+document.addEventListener('pointerdown', () => {
+    if (!isTouchDevice() || getScreenMode() !== 'full' || document.fullscreenElement) return;
+    if (gameWrapper.classList.contains('hidden') || !document.documentElement.requestFullscreen) return;
+    document.documentElement.requestFullscreen().then(() => {
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    }).catch(() => {});
+}, true);
+document.addEventListener('fullscreenchange', () => {
+    requestAnimationFrame(() => { if (typeof phaserGame !== 'undefined' && phaserGame && phaserGame.scale) phaserGame.scale.refresh(); });
+});
+applyScreenMode();
 
 // --- HUB NAVIGATSIYASI ---
 

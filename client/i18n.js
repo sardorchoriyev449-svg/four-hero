@@ -129,6 +129,10 @@ const TRANSLATIONS = {
         settings_title: 'Settings',
         settings_volume: 'Music Volume',
         settings_language: 'Language',
+        settings_screen: 'Screen size',
+        screen_standard: 'Standard',
+        screen_full: 'Full screen',
+        rotate_hint: 'Turn your phone sideways',
         settings_no_music_note: 'Menu and level music, calm tunes and dialog sounds.',
 
         // Donate
@@ -483,6 +487,10 @@ const TRANSLATIONS = {
         settings_title: 'Настройки',
         settings_volume: 'Громкость музыки',
         settings_language: 'Язык',
+        settings_screen: 'Размер экрана',
+        screen_standard: 'Стандарт',
+        screen_full: 'Полный экран',
+        rotate_hint: 'Поверните телефон боком',
         settings_no_music_note: 'Музыка меню и уровней, спокойные мелодии и звуки диалогов.',
 
         donate_title: 'Поддержать автора',
