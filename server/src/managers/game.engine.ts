@@ -353,6 +353,15 @@ export class GameEngine {
                 thin: p.h <= 14
             });
         });
+        // Arena: tosh platformalar gorilla platformalari (room.gPlats) - botlar ham ularga chiqadi.
+        // Joriy balandligi olinadi; shiftga ko'tarilgan/qaytayotgan platforma hisobga olinmaydi
+        if (map.arena && map.gorilla) {
+            (room.gPlats || []).forEach((g, i) => {
+                if (g.state !== 'idle') return;
+                const h = map.gorilla!.platforms[i]?.h ?? 14;
+                surfaces.push({ xStart: g.x, xEnd: g.x + g.w, standY: g.y - this.BOT_HALF_H, underY: g.y + h + this.BOT_HALF_H, thin: true });
+            });
+        }
         return surfaces;
     }
 
