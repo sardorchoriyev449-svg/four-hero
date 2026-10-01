@@ -143,18 +143,22 @@
         /* PHONE rejimida ko'rinadigan ekrandagi virtual boshqaruv */
         #touch-controls {
             position: absolute;
-            left: 0; right: 0; bottom: 16px;
+            left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom));
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            padding: 0 16px;
+            padding: 0 max(14px, env(safe-area-inset-left)) 0 max(14px, env(safe-area-inset-right));
             pointer-events: none; /* faqat ichidagi tugmalar bosiladi, orasidan hujum uchun bosish o'tadi */
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            z-index: 40;
         }
-        .touch-dpad { display: flex; gap: 10px; pointer-events: auto; }
-        .touch-btn, .touch-action-btn {
-            width: 58px; height: 58px;
+        .touch-dpad { display: flex; gap: 6px; pointer-events: auto; touch-action: none; }
+        .touch-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+        .touch-row { display: flex; gap: 6px; align-items: flex-end; pointer-events: auto; touch-action: none; }
+        .touch-btn {
+            width: 56px; height: 56px;
             border-radius: 50%;
             background: rgba(40, 40, 40, 0.75);
             border: 2px solid rgba(0, 255, 204, 0.5);
@@ -165,9 +169,13 @@
             display: flex; align-items: center; justify-content: center;
             pointer-events: auto;
             touch-action: none;
+            -webkit-tap-highlight-color: transparent;
         }
-        .touch-btn:active, .touch-action-btn:active { background: rgba(0, 255, 204, 0.35); }
-        .touch-action-btn { width: 68px; height: 68px; font-size: 26px; }
+        .touch-btn.touch-lg { width: 66px; height: 66px; font-size: 26px; }
+        .touch-btn.touch-sm { width: 44px; height: 44px; font-size: 14px; font-family: "Press Start 2P", monospace; }
+        .touch-btn.touch-attack { color: #ff8a80; }
+        .touch-btn.pressed { background: rgba(0, 255, 204, 0.45) !important; transform: translateY(2px); }
+        .touch-btn.locked { opacity: 0.3; }
 
         /* Lobbi ro'yxati (Play sahifasi) */
         #room-list {
@@ -660,10 +668,13 @@
         #gameover-title.gameover-title-win { font-size: 20px; color: var(--px-gold); }
         #gameover-text { font-size: 11px !important; line-height: 2; }
         #game-container { border: 4px solid var(--px-ink); border-radius: 0; box-shadow: 0 0 0 4px var(--px-edge), 10px 10px 0 rgba(0,0,0,.55); }
-        .touch-btn, .touch-action-btn {
-            border-radius: 0; border: 4px solid var(--px-ink); background: rgba(27, 22, 48, 0.85); color: var(--px-accent);
+        .touch-btn {
+            border-radius: 0; border: 4px solid var(--px-ink); background: rgba(27, 22, 48, 0.72); color: var(--px-accent);
             box-shadow: inset -4px -4px 0 rgba(0,0,0,.4), inset 4px 4px 0 var(--px-panel-3);
         }
+        .touch-btn.touch-attack { color: #ff8a80; }
+        /* Telefonda pauza tugmasi kattaroq (barmoq bilan bosish oson) */
+        @media (pointer: coarse) { #pause-btn { width: 46px; height: 40px; font-size: 16px; } }
 
         /* Piksel aylantirish chizig'i */
         ::-webkit-scrollbar { width: 12px; height: 12px; }
@@ -1121,13 +1132,26 @@
     <div id="game-wrapper" class="hidden">
         <div id="game-container"></div>
         <div id="rotate-hint"><i class="fa-solid fa-mobile-screen-button"></i><span data-i18n="rotate_hint">Turn your phone sideways</span></div>
+        <!-- PHONE boshqaruvi: chapda yurish, o'ngda harakatlar. Barmoqni ko'tarmasdan boshqa tugmaga
+             surish mumkin (data-touch-tap - faqat bosilganda ishlaydigan, surib o'tganda ishlamaydigan tugmalar) -->
         <div id="touch-controls" class="hidden">
             <div class="touch-dpad">
-                <button id="touch-left-btn" class="touch-btn"><i class="fa-solid fa-caret-left"></i></button>
-                <button id="touch-jump-btn" class="touch-btn"><i class="fa-solid fa-caret-up"></i></button>
-                <button id="touch-right-btn" class="touch-btn"><i class="fa-solid fa-caret-right"></i></button>
+                <button data-touch="left" class="touch-btn touch-lg"><i class="fa-solid fa-caret-left"></i></button>
+                <button data-touch="right" class="touch-btn touch-lg"><i class="fa-solid fa-caret-right"></i></button>
             </div>
-            <button id="touch-ability-btn" class="touch-action-btn"><i class="fa-solid fa-bolt"></i></button>
+            <div class="touch-actions">
+                <div class="touch-row">
+                    <button data-touch="emote" data-touch-tap class="touch-btn touch-sm"><i class="fa-solid fa-face-smile"></i></button>
+                    <button data-touch="interact" data-touch-tap class="touch-btn touch-sm">E</button>
+                    <button data-touch="weapon" data-touch-tap class="touch-btn touch-sm">Q</button>
+                    <button data-touch="special" data-touch-tap class="touch-btn touch-sm">R</button>
+                </div>
+                <div class="touch-row">
+                    <button data-touch="ability" class="touch-btn"><i class="fa-solid fa-bolt"></i></button>
+                    <button data-touch="jump" class="touch-btn touch-lg"><i class="fa-solid fa-caret-up"></i></button>
+                    <button data-touch="attack" class="touch-btn touch-lg touch-attack"><i class="fa-solid fa-hand-fist"></i></button>
+                </div>
+            </div>
         </div>
     </div>
 

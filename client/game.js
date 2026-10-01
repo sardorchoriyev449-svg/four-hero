@@ -8,6 +8,73 @@ let botGroup;
 let lastDirection = 'right';
 let phaserGame = null; // Joriy Phaser o'yin nusxasi (raundlar orasida tozalanadi)
 let touchState = { left: false, right: false, jump: false }; // PHONE rejimidagi virtual tugmalar holati
+// PHONE tugmalarining amallari: { nomi: [bosilganda, qo'yib yuborilganda] } - har raundda create() yangilaydi
+let touchActions = {};
+
+// PHONE TUGMALARI: har barmoq alohida kuzatiladi va qaysi tugma ustida turgani JOYIGA qarab aniqlanadi -
+// barmoqni ko'tarmasdan boshqa tugmaga sursa, eskisi qo'yib yuboriladi va yangisi bosiladi (masalan
+// chapdan o'ngga yoki yurishdan sakrashga). Bir necha barmoq bir vaqtda ishlaydi (yurish + hujum).
+// data-touch-tap tugmalari (E, Q, R, emotsiya) faqat to'g'ridan-to'g'ri bosilganda ishlaydi - surib
+// o'tib ketganda tasodifan qurol almashmasin
+(function initTouchControls() {
+    const root = document.getElementById('touch-controls');
+    if (!root) return;
+    const fingers = new Map();   // pointerId -> tugma nomi
+    const held = {};             // tugma nomi -> nechta barmoq ushlab turibdi
+    const btnAt = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        const b = el && el.closest ? el.closest('[data-touch]') : null;
+        return b && root.contains(b) ? b : null;
+    };
+    const mark = (name, on) => root.querySelectorAll('[data-touch="' + name + '"]').forEach(b => b.classList.toggle('pressed', on));
+    const press = (name) => {
+        held[name] = (held[name] || 0) + 1;
+        if (held[name] !== 1) return;
+        mark(name, true);
+        const a = touchActions[name];
+        if (a && a[0]) a[0]();
+    };
+    const release = (name) => {
+        if (!held[name]) return;
+        if (--held[name] > 0) return;
+        mark(name, false);
+        const a = touchActions[name];
+        if (a && a[1]) a[1]();
+    };
+    root.addEventListener('pointerdown', (e) => {
+        const b = btnAt(e.clientX, e.clientY);
+        if (!b) return;
+        e.preventDefault();
+        fingers.set(e.pointerId, b.dataset.touch);
+        press(b.dataset.touch);
+    });
+    window.addEventListener('pointermove', (e) => {
+        if (!fingers.has(e.pointerId)) return;
+        const b = btnAt(e.clientX, e.clientY);
+        const name = b && !b.hasAttribute('data-touch-tap') ? b.dataset.touch : null;
+        const old = fingers.get(e.pointerId);
+        if (name === old) return;
+        if (old) release(old);
+        fingers.set(e.pointerId, name);
+        if (name) press(name);
+    }, { passive: true });
+    const end = (e) => {
+        if (!fingers.has(e.pointerId)) return;
+        const old = fingers.get(e.pointerId);
+        fingers.delete(e.pointerId);
+        if (old) release(old);
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    // Uzun bosilganda telefon menyusi (nusxa olish va h.k.) chiqmasin
+    root.addEventListener('contextmenu', (e) => e.preventDefault());
+    // O'yin to'xtaganda/tab yashirilganda - hamma tugma qo'yib yuboriladi (yopishib qolmasin)
+    window.resetTouchControls = () => {
+        fingers.clear();
+        Object.keys(held).forEach((name) => { if (held[name]) { held[name] = 1; release(name); } });
+    };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) window.resetTouchControls(); });
+})();
 
 // Raund tugaganda (g'alaba yoki mag'lubiyat) chaqiriladi: Phaser'ni butunlay
 // o'chirib, keyingi raund uchun holatni tozalaydi. Shu bo'lmasa, har yangi
@@ -66,6 +133,8 @@ function stopGame() {
     enemyBots = {};
     bulletSprites = {};
     lastDirection = 'right';
+    if (window.resetTouchControls) window.resetTouchControls();
+    touchActions = {};
     touchState = { left: false, right: false, jump: false };
 }
 
@@ -2558,6 +2627,25 @@ function launchGame(socket, roomId, mapData, continued) {
 
     // O'ZINING HP, STAMINA VA MAQSAD HUD PANELI (piksel uslubda): ekran chetida, sobit joyda
     // HUD'ning 4-qatori: Q (joriy qurol) va R (maxsus qobiliyat, tayyor yoki qolgan soniya)
+    // PHONE: Q (ikkinchi qurol), R (maxsus) va SHIFT (qobiliyat) tugmalari - shu personajda hali
+    // ochilmagan bo'lsa xira ko'rinadi (faqat holat o'zgarganda DOM ga yoziladi)
+    let touchLockKey = '';
+    function updateTouchLocks() {
+        const c = currentCharacter;
+        if (!c) return;
+        const alt = ALT_WEAPON_PERK[c.characterType], sp = SPECIAL_PERK[c.characterType];
+        const locks = {
+            weapon: !(alt && hasPerkClient(c.characterType, c.level, alt)),
+            special: !(sp && hasPerkClient(c.characterType, c.level, sp)),
+            ability: !hasPerkClient(c.characterType, c.level, 'shift')
+        };
+        const key = JSON.stringify(locks);
+        if (key === touchLockKey) return;
+        touchLockKey = key;
+        Object.entries(locks).forEach(([name, locked]) => {
+            document.querySelectorAll('#touch-controls [data-touch="' + name + '"]').forEach(b => b.classList.toggle('locked', locked));
+        });
+    }
     function perkHudText() {
         const c = currentCharacter;
         if (!c) return '';
@@ -2943,8 +3031,9 @@ function launchGame(socket, roomId, mapData, continued) {
             console.log("Qahramon muvaffaqiyatli yaratildi va harakatga tayyor:", currentCharacter);
         });
 
-        // E - yaqindagi tangani olish (server masofani qayta tekshiradi)
-        this.input.keyboard.on('keydown-E', () => {
+        // E - dialog, gaplashish, eshik, yaqindagi tanga (klaviaturada E, telefonda "E" tugmasi)
+        const interact = () => {
+            if (pauseMenuOpen) return;
             // 1) Dialog ochiq bo'lsa - keyingi gap
             if (dialog) { advanceDialog(); return; }
             // 2) Katta eshik oldida: kalit (12 ta olma) bo'lsa - ochadi, bo'lmasa "qulflangan"
@@ -2969,7 +3058,8 @@ function launchGame(socket, roomId, mapData, continued) {
             // 4) Yaqindagi tanga
             const coin = findNearestCoin();
             if (coin) socket.emit('pickupCoin', { roomId: roomId, coinId: coin.coinId });
-        });
+        };
+        this.input.keyboard.on('keydown-E', interact);
 
         // XARITALAR ULANGAN: oldingi xarita o'tilib, shu xaritaga avtomatik
         // o'tilgan bo'lsa - ekran o'rtasida qisqa e'lon
@@ -3101,8 +3191,12 @@ function launchGame(socket, roomId, mapData, continued) {
             socket.emit('stopAbilityInRoom', roomId);
         });
         // Xavfsizlik: brauzer tabidan chiqib ketilsa ham effekt "yopishib qolmasin"
+        // (hujum ham: Enter/sichqoncha bosilgan holda boshqa oynaga o'tilsa, qahramon to'xtamay urib turardi)
         window.onblur = () => {
-            if (currentCharacter) socket.emit('stopAbilityInRoom', roomId);
+            if (!currentCharacter) return;
+            socket.emit('stopAbilityInRoom', roomId);
+            socket.emit('stopAttackInRoom', roomId);
+            if (window.resetTouchControls) window.resetTouchControls();
         };
 
         // ENTER: bosib turilgancha avtomatik hujum qiladi, stamina ketaveradi
@@ -3118,6 +3212,8 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // SICHQONCHA: bosib turilgancha avtomatik hujum qiladi
         this.input.on('pointerdown', () => {
+            // Dialog ochiq bo'lsa - ekranga teginish keyingi gapga o'tkazadi (telefonda E tugmasini qidirmasdan)
+            if (dialog) { advanceDialog(); return; }
             if (!currentCharacter || pauseMenuOpen) return;
             let angle = (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
@@ -3131,21 +3227,25 @@ function launchGame(socket, roomId, mapData, continued) {
         // `on...` xossasiga to'g'ridan-to'g'ri yozish avvalgi ulanishni almashtiradi,
         // shuning uchun har raund `roomId`/`socket`ni "eskirib qolgan" holda ushlab
         // qolmaydi - har safar joriy yopishuv (closure) bilan qayta yoziladi.
-        const bindTouchBtn = (id, onDown, onUp) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.onpointerdown = (e) => { e.preventDefault(); onDown(); };
-            el.onpointerup = (e) => { e.preventDefault(); onUp(); };
-            el.onpointercancel = (e) => { onUp(); };
-            el.onpointerleave = (e) => { onUp(); };
+        const canAct = () => currentCharacter && !pauseMenuOpen && !dialog && !currentCharacter.isDead;
+        const attackAngle = () => (lastDirection === 'right') ? 0 : Math.PI;
+        touchActions = {
+            left: [() => { touchState.left = true; }, () => { touchState.left = false; }],
+            right: [() => { touchState.right = true; }, () => { touchState.right = false; }],
+            jump: [() => { touchState.jump = true; }, () => { touchState.jump = false; }],
+            attack: [
+                () => { if (currentCharacter && !pauseMenuOpen) socket.emit('startAttackInRoom', { roomId, angle: attackAngle() }); },
+                () => { if (currentCharacter) socket.emit('stopAttackInRoom', roomId); }
+            ],
+            ability: [
+                () => { if (currentCharacter && !pauseMenuOpen) socket.emit('startAbilityInRoom', roomId); },
+                () => { if (currentCharacter) socket.emit('stopAbilityInRoom', roomId); }
+            ],
+            weapon: [() => { if (canAct()) socket.emit('toggleWeapon', roomId); }],
+            special: [() => { if (canAct()) socket.emit('useSpecial', roomId); }],
+            // E: dialogda ham ishlaydi (keyingi gap)
+            interact: [() => interact()]
         };
-        bindTouchBtn('touch-left-btn', () => { touchState.left = true; }, () => { touchState.left = false; });
-        bindTouchBtn('touch-right-btn', () => { touchState.right = true; }, () => { touchState.right = false; });
-        bindTouchBtn('touch-jump-btn', () => { touchState.jump = true; }, () => { touchState.jump = false; });
-        bindTouchBtn('touch-ability-btn',
-            () => { if (currentCharacter) socket.emit('startAbilityInRoom', roomId); },
-            () => { if (currentCharacter) socket.emit('stopAbilityInRoom', roomId); }
-        );
 
         // DARAJA IMKONIYATLARI: Q - ikkinchi qurol (almashtirish/qaytarish), R - maxsus qobiliyat
         this.input.keyboard.on('keydown-Q', () => {
@@ -3165,6 +3265,7 @@ function launchGame(socket, roomId, mapData, continued) {
         };
         this.input.keyboard.on('keydown-ONE', sendEmote);
         this.input.keyboard.on('keydown-NUMPAD_ONE', sendEmote);
+        touchActions.emote = [sendEmote];
         socket.off('emote');
         socket.on('emote', (d) => {
             if (!this.textures.exists('emote_' + d.id)) return;
@@ -4169,6 +4270,7 @@ function launchGame(socket, roomId, mapData, continued) {
             }
             const stPct = 100 * (currentCharacter.stamina || 0) / (currentCharacter.maxStamina || 100);
             drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText(), currentCharacter.maxHp, !!currentCharacter.acid);
+            updateTouchLocks();
 
             // Qurol, ritsar qalqoni va qarash tomoni (ko'rinmas kamonchida qurol ham xiralashadi)
             updateHeroWeaponVisuals(this, currentCharacter, currentCharacter.characterType, lastDirection === 'right');
