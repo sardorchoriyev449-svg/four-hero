@@ -149,7 +149,10 @@ function legacyProgress(doc: any, credited: { [c: string]: number[] }): { unlock
     const isDefault = (path: string) => typeof doc.$isDefault === 'function' ? doc.$isDefault(path) : doc[path] === undefined;
     const ids = new Set<number>();
     Object.values(credited).forEach(list => list.forEach(id => ids.add(id)));
-    const unlockedLevel = isDefault('unlockedLevel') ? (ids.size ? Math.max(...ids) + 1 : 0) : (doc.unlockedLevel || 0);
+    // O'tilgan xaritalar tarixi (creditedLevels) bo'yicha ham tekshiriladi: ilgari oxirgi xaritani o'tgan
+    // o'yinchining progressi o'sha xaritada "qotib" qolardi - endi keyingi (yangi) xarita ochiq
+    const fromHistory = ids.size ? Math.max(...ids) + 1 : 0;
+    const unlockedLevel = isDefault('unlockedLevel') ? fromHistory : Math.max(doc.unlockedLevel || 0, fromHistory);
     const xp = isDefault('xp') ? Object.values(credited).reduce((a, list) => a + list.length, 0) * XP_PER_MAP : (doc.xp || 0);
     // Personaj tajribasi yo'q (eski hisob) - shu personaj bilan o'tilgan xaritalar tarixidan
     const charXp: { [c: string]: number } = {};
@@ -486,8 +489,8 @@ export async function getRoomsByHost(hostUserId: string): Promise<RoomRecord[]> 
 }
 
 // XARITA O'TILDI (hisob progressi): +XP; aynan o'z "chegara" xaritasini o'tgan bo'lsa -
-// keyingi xarita ochiladi (maxLevel - oxirgi mavjud xarita indeksi)
-export async function recordMapClear(userId: string, levelId: number, maxLevel: number, characterType: string, xpGain: number = XP_PER_MAP): Promise<UserRecord | null> {
+// keyingi xarita ochiladi (hali chiqmagan bo'lsa ham - yangilanishda darhol ochiq bo'ladi)
+export async function recordMapClear(userId: string, levelId: number, characterType: string, xpGain: number = XP_PER_MAP): Promise<UserRecord | null> {
     try {
         const doc: any = await UserModel.findById(userId);
         if (!doc) return null;
@@ -499,8 +502,9 @@ export async function recordMapClear(userId: string, levelId: number, maxLevel: 
         if (CHARACTER_TYPES.includes(characterType)) charXp[characterType] = (charXp[characterType] || 0) + xpGain;
         doc.charXp = charXp;
         doc.markModified('charXp');
-        const unlocked = before.unlockedLevel;
-        doc.unlockedLevel = (levelId === unlocked && unlocked < maxLevel) ? unlocked + 1 : unlocked;
+        // Xarita o'tildi - keyingisi ochiladi. Oxirgi xarita bo'lsa ham (unlockedLevel = xaritalar soni):
+        // yangi xarita qo'shilganda u darhol ochiq bo'ladi, oldingisini qayta o'tish shart emas
+        doc.unlockedLevel = Math.max(before.unlockedLevel, levelId + 1);
         await doc.save();
         return docToUser(doc);
     } catch (err) {

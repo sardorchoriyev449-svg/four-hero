@@ -120,7 +120,7 @@ export class RoomManager {
                 return;
             }
             if (user) {
-                unlockedLevel = Math.min(user.unlockedLevel, MAPS.length - 1);
+                unlockedLevel = user.unlockedLevel;   // hisob progressi (xona uchun applyHostProgress cheklaydi)
                 xp = user.xp;
                 charXp = user.charXp;
                 equippedSkins = user.equippedSkins;
@@ -803,12 +803,12 @@ export class RoomManager {
             p.charXp = { ...(p.charXp || {}) };
             p.charXp[p.characterType] = (p.charXp[p.characterType] || 0) + xpGain;
             RoomManager.refreshPerks(p);
-            if (p.unlockedLevel === clearedId && p.unlockedLevel < maxLevel) {
-                p.unlockedLevel++;
-                if (p.id === room.hostId) levelCleared = true;
+            if (clearedId + 1 > p.unlockedLevel) {
+                p.unlockedLevel = clearedId + 1;
+                if (p.id === room.hostId && clearedId < maxLevel) levelCleared = true;
             }
             if (p.userId !== null) {
-                db.recordMapClear(p.userId, clearedId, maxLevel, p.characterType, xpGain).catch(err => console.error('recordMapClear xatosi:', err));
+                db.recordMapClear(p.userId, clearedId, p.characterType, xpGain).catch(err => console.error('recordMapClear xatosi:', err));
                 // KO'NIKMA BALLI: shu xaritani shu PERSONAJ bilan hisobda birinchi marta o'tganda +1
                 // (qayta o'ynasa - ball yo'q; bazada personaj bo'yicha tekshiriladi)
                 db.awardSkillPointIfNew(p.userId, clearedId, p.characterType).catch(err => {

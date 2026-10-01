@@ -113,6 +113,7 @@ export interface FatElfState {
     state: 'eating' | 'talk' | 'idle' | 'charge' | 'spit' | 'down';
     timer: number;
     targetId: string | null;    // kislota kimga qarab sepiladi
+    grace?: number;             // suhbatdan keyin jang boshlanishidagi tanaffus (tik) - darhol urmasin
     hitFlash: number;
     lastHitBy: string | null;
 }

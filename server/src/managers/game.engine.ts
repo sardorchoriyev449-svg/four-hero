@@ -88,7 +88,9 @@ export class GameEngine {
     private readonly BOSS_MAX_MINES = 10;             // Maydonda bir vaqtda ko'pi bilan shuncha ilon minasi
     private readonly BOSS_DEATH_TICKS = 100;
     // Gorilla suhbatlari: hamma o'qib bo'lguncha (lekin ko'pi bilan shuncha) kutiladi
-    public static readonly GORILLA_TALK_MAX_MS = 20000;          // ~3s - o'lim portlashlari ko'rinib ulgursin
+    public static readonly GORILLA_TALK_MAX_MS = 45000;
+    // Semiz elf suhbati uzun (7 qator) - sekin o'qiydiganni dialog ochiq turganda urib qo'ymasin
+    public static readonly FATELF_TALK_MAX_MS = 60000;          // ~3s - o'lim portlashlari ko'rinib ulgursin
     private readonly COIN_PICKUP_RANGE = 70;          // Tangani E bilan olish uchun shu masofagacha yaqin turish kerak
     // Yerda turgan qahramon markazi ~546; jarlikka tushgani (tubida ~576) - halok
     private readonly PIT_DEATH_Y = 560;
@@ -1519,7 +1521,7 @@ export class GameEngine {
     }
     private startFatElfTalk(room: RoomState, fe: NonNullable<RoomState['fatElf']>): void {
         fe.state = 'talk';
-        fe.timer = Math.round(GameEngine.GORILLA_TALK_MAX_MS / 30);
+        fe.timer = Math.round(GameEngine.FATELF_TALK_MAX_MS / 30);
         Object.values(room.players).forEach(p => { p.introDone = false; });
     }
     private fatElfDefeated(room: RoomState, fe: NonNullable<RoomState['fatElf']>): void {
@@ -1570,7 +1572,15 @@ export class GameEngine {
         }
         // --- Suhbat: hamma o'qib bo'lguncha (ko'pi bilan 20s) hujum yo'q ---
         if (fe.state === 'talk') {
-            if ((alive.length > 0 && alive.every(p => p.introDone)) || --fe.timer <= 0) { fe.state = 'idle'; fe.timer = T(1200); }
+            if ((alive.length > 0 && alive.every(p => p.introDone)) || --fe.timer <= 0) {
+                fe.state = 'idle';
+                fe.timer = T(2200);
+                // Jang boshida 1.5s tanaffus: yonida turgan qahramon darhol urilmasin - biroz nari itariladi
+                fe.grace = T(1500);
+                alive.forEach(p => {
+                    if (Math.abs(p.x - fe.x) < def.halfW + 60) this.knockback(p, (p.x >= fe.x ? 1 : -1) * 420, -220);
+                });
+            }
             return;
         }
         // --- Yengildi: tirik qahramonlarning hammasi eshikka yetsa - xarita o'tildi ("UnderWorld") ---
@@ -1582,6 +1592,7 @@ export class GameEngine {
             return;
         }
         if (alive.length === 0) return;
+        if ((fe.grace || 0) > 0) { fe.grace!--; return; }
 
         // Tegsa - zarar va itarib yuboradi
         alive.forEach(p => {

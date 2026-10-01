@@ -1754,17 +1754,28 @@ function launchGame(socket, roomId, mapData, continued) {
         set(14, 14, 0xc62828); set(14, 15, 0x8e0000);
         return g;
     }
-    // Gorillaning toshlar ostidan chiqib turgan qo'li (kaft va barmoqlar tepaga qaragan)
-    function gorillaHandGrid() {
-        const g = gridNew(16, 22);
-        const fill = (x, y, w, h) => {
-            for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) g[yy][xx] = shade(0.8 - (xx - x) / (w * 3) - yy / 60, xx, yy, STONE);
+    // Gorillaning toshlar ostidan chiqib qolgan qo'li: bilagi uyum ichiga kirib ketgan, kafti yerga
+    // tashlangan, barmoqlari bo'shashib pastga osilgan (o'ngga qaragan; ustiga toshlar qo'yiladi)
+    function gorillaArmGrid() {
+        const W = 32, H = 16;
+        const g = gridNew(W, H);
+        const fill = (x, y, w, h, light = 0) => {
+            for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) {
+                if (yy < 0 || yy >= H || xx < 0 || xx >= W) continue;
+                g[yy][xx] = shade(0.78 + light - (yy - y) / (h * 2.2), xx, yy, STONE);
+            }
         };
-        fill(4, 14, 8, 8); fill(2, 8, 12, 7);
-        [[2, 1, 6], [5, 0, 7], [8, 1, 6], [11, 3, 5]].forEach(([x, y, h]) => fill(x, y, 2, h + 1));
-        fill(0, 9, 2, 4);
-        [[3, 2], [6, 1], [12, 4], [5, 11]].forEach(([x, y]) => { g[y][x] = 0x4ea24a; });
-        [[4, 10], [9, 12], [7, 16]].forEach(([x, y]) => { g[y][x] = STONE[0]; });
+        fill(0, 4, 17, 8);                 // bilak (uyum ichidan chiqadi)
+        fill(16, 3, 7, 10, 0.06);          // kaft
+        fill(17, 1, 4, 2, 0.1);            // bosh barmoq
+        // To'rtta barmoq: uchlari pastga egilgan (bo'shashgan)
+        [[3, 0.08], [6, 0.04], [9, 0], [12, -0.04]].forEach(([y, l], i) => {
+            const len = 6 - (i === 3 ? 1 : 0);
+            fill(23, y, len, 2, l);
+            fill(23 + len, y + 1, 2, 2, l - 0.06);
+        });
+        [[2, 6], [9, 9], [18, 5], [24, 4], [5, 10]].forEach(([x, y]) => { g[y][x] = 0x4ea24a; });          // mox
+        [[6, 7], [11, 6], [12, 7], [19, 9], [20, 10]].forEach(([x, y]) => { g[y][x] = STONE[0]; });        // yoriqlar
         return gridOutline(g, 0x111114);
     }
     // Qulagan toshlar uyumi (chapda, qattiq): notekis tepalik, yoriqlar, mox, singan plitalar
@@ -1803,11 +1814,11 @@ function launchGame(socket, roomId, mapData, continued) {
         ['eat1', 'eat2', 'idle', 'charge', 'spit', 'down'].forEach(pose => mk('px_fe_' + pose, fatElfGrid(pose), 3));
         mk('px_fatelf_face', fatElfGrid('eat1').slice(0, 19).map(row => row.slice(3, 33)), 4);
         mk('px_fe_victim', victimElfGrid(), 3);
-        mk('px_gor_hand', gorillaHandGrid(), 4);
+        mk('px_gor_arm', gorillaArmGrid(), 5);
         mk('px_rubble', rubbleGrid(40, 48), 4);
         mk('px_acid', acidGrid(), 3);
         mk('px_slab_150', slabGrid(38), 4);
-        [3, 2, 3].forEach((P, i) => mk('px_boulder_small' + i, boulderGrid(), P));
+        [3, 2, 3, 5, 4, 6].forEach((P, i) => mk('px_boulder_small' + i, boulderGrid(), P));
         mk('px_slab_170', slabGrid(43), 4);
         // Orqa fon: yer osti g'ori (zulmat, stalaktitlar, kristallar)
         drawPixelBackdrop(scene, {
@@ -1822,9 +1833,11 @@ function launchGame(socket, roomId, mapData, continued) {
         const hole = scene.add.graphics().setDepth(-2);
         [[90, 0.10], [60, 0.16], [34, 0.24]].forEach(([w, a]) => { hole.fillStyle(0xfff3c4, a); hole.fillRect(80 - w, 0, w * 2, 400); });
         // Chapdagi toshlar uyumi va undan chiqib turgan gorilla qo'li
-        scene.add.image(84, 394, 'px_gor_hand').setOrigin(0.5, 1).setDepth(0.5);
         scene.add.image(-6, 570, 'px_rubble').setOrigin(0, 1).setDepth(1);
-        [[150, 556], [178, 562], [128, 548]].forEach(([x, y], i) => scene.add.image(x, y, 'px_boulder_small' + i).setDepth(1.2));
+        // Gorilla qo'li: bilagi uyum ostidan chiqib, kafti yerda yotibdi; ustiga katta toshlar bosib turibdi
+        scene.add.image(70, 524, 'px_gor_arm').setOrigin(0, 0.5).setAngle(3).setDepth(1.05);
+        [[96, 506, 5], [140, 500, 3], [176, 512, 4], [120, 546, 0], [246, 562, 1], [276, 564, 2]]
+            .forEach(([x, y, i]) => scene.add.image(x, y, 'px_boulder_small' + i).setDepth(1.1));
         // Tosh tokchalar (bir tomonlama)
         (map.platforms || []).forEach((p) => {
             if (p.h > 14) return;
@@ -3382,6 +3395,8 @@ function launchGame(socket, roomId, mapData, continued) {
                         { who: 'player', text: t('fe_d7') }
                     ], () => socket.emit('dialogDone', roomId), { elfName: t('fatelf_name'), voice: 'deep', elfFace: 'px_fatelf_face' });
                 }
+                // Jang boshlandi (hamma o'qib bo'ldi yoki vaqt tugadi) - ochiq qolgan suhbat yopiladi
+                if (prev === 'talk' && st !== 'talk' && dialog) closeDialog();
                 if (prev !== st && st === 'spit') this.cameras.main.shake(140, 0.004);
                 if (prev !== st && st === 'down') {
                     this.cameras.main.shake(400, 0.012);
@@ -3411,6 +3426,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 const prev = gorillaState ? gorillaState.state : null;
                 gorillaState = data.gorilla;
                 if (prev !== gorillaState.state) gorillaFx(this, prev, gorillaState);
+                if (prev === 'intro' && gorillaState.state !== 'intro' && dialog) closeDialog();
                 // JANG OLDIDAN SUHBAT va YENGILGANDAN KEYINGI so'nggi gap (o'qib bo'lgach - serverga xabar)
                 const talkOpts = { elfName: t('gorilla_speaker'), voice: 'deep' };
                 if (gorillaState.state === 'intro' && !gTalk.intro && currentCharacter) {
