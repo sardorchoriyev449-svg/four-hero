@@ -2418,14 +2418,30 @@ function launchGame(socket, roomId, mapData, continued) {
         bakeTile(scene, 'bg_uw', 570, 0, (g, w) => uwBackInto(g, w));
         scene.add.tileSprite(0, 0, W, 570, 'bg_uw').setOrigin(0, 0).setScrollFactor(0.5, 1).setDepth(-3);
         scene.add.tileSprite(0, 570, W, 30, 'px_uw_grass').setOrigin(0, 0).setDepth(1);
-        [[300, 1], [760, 0]].forEach(([x, v]) => scene.add.image(x, 572, 'px_treehouse_' + v).setOrigin(0.5, 1).setDepth(-0.5));
+        // Shahar (boshida): daraxt-uylar, trollar
+        [[300, 1], [760, 0], [1180, 1]].forEach(([x, v]) => scene.add.image(x, 572, 'px_treehouse_' + v).setOrigin(0.5, 1).setDepth(-0.5));
         scene.add.image(520, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6).setFlipX(true);
+        scene.add.image(980, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6);
+        // Shahardan keyin - yovvoyi yo'l: jang maydoniga yaqinlashgan sari tikonli butalar kattalashadi
+        const bush = scene.add.graphics().setDepth(-0.3);
+        for (let x = 1420; x < d.arenaX - 40; x += 90 + ((x * 7) % 50)) {
+            const k = (x - 1420) / (d.arenaX - 1420), h = Math.round(30 + k * 120);
+            for (let y = 0; y < h; y += 4) {
+                const cx = x + Math.round(Math.sin(y * 0.08 + x) * 5), w = Math.max(3, 8 - Math.floor(y / 25));
+                bush.fillStyle(0x0a0a0a, 1); bush.fillRect(cx - w / 2 - 2, 570 - y - 4, w + 4, 6);
+                bush.fillStyle(y % 12 < 6 ? 0x5d4037 : 0x4e342e, 1); bush.fillRect(cx - w / 2, 570 - y - 4, w, 4);
+                if (y % 16 === 8) {
+                    const sd = (y / 16) % 2 ? 1 : -1;
+                    bush.fillStyle(0xeeeeee, 1); bush.fillTriangle(cx + sd * w / 2, 570 - y - 4, cx + sd * w / 2, 570 - y + 1, cx + sd * (w / 2 + 9), 570 - y - 3);
+                }
+            }
+        }
         for (let x = 120; x < W - 40; x += 70 + ((x * 13) % 60)) {
             if (x > d.arenaX - 40 && Math.abs(x - d.stemX) < 80) continue;
             const m = scene.add.image(x, 572, 'px_uwm_' + (x % 3)).setOrigin(0.5, 1).setDepth(1.2);
             scene.tweens.add({ targets: m, alpha: 0.6, duration: 900 + (x % 5) * 200, yoyo: true, repeat: -1 });
         }
-        ['b', 'd'].forEach((k, i) => {
+        ['b', 'd', 'a'].forEach((k, i) => {
             const x0 = 180 + i * 420;
             const c = scene.add.image(x0, 572, 'px_blk_' + k + '0').setOrigin(0.5, 1).setDepth(1.6);
             scene.tweens.add({ targets: c, x: x0 + 90, duration: 2800 + i * 500, yoyo: true, repeat: -1, ease: 'Sine.InOut',
@@ -4723,14 +4739,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 else ownerSprite = otherPlayers[bData.playerId];
 
                 const isMeleeType = (bData.bulletType === 'melee');
-                // Qiya hujum (masalan, Gigant gul boshiga yo'naltirilgan): rasm ham shu burchakka buriladi
-                const ang = Math.atan2(bData.vy || 0, bData.vx || 0);
-                let tilt = facingLeft ? ang - Math.PI : ang;
-                while (tilt > Math.PI) tilt -= 2 * Math.PI;
-                while (tilt < -Math.PI) tilt += 2 * Math.PI;
-                if (Math.abs(tilt) < 0.05) tilt = 0;
-                const posX = (isMeleeType && ownerSprite) ? ownerSprite.x + (tilt ? Math.cos(ang) * 26 : dir * 26) : bData.x;
-                const posY = (isMeleeType && ownerSprite) ? ownerSprite.y - 2 + (tilt ? Math.sin(ang) * 26 : 0) : bData.y;
+                const posX = (isMeleeType && ownerSprite) ? ownerSprite.x + dir * 26 : bData.x;
+                const posY = (isMeleeType && ownerSprite) ? ownerSprite.y - 2 : bData.y;
 
                 if (!bulletSprites[bData.id]) {
                     const shooter = serverPlayers[bData.playerId];
@@ -4752,7 +4762,6 @@ function launchGame(socket, roomId, mapData, continued) {
                     let bSprite = this.add.sprite(posX, posY, currentTexture).setDepth(4);
                     // Chapga qarab hujum qilinganda qurol tasvirini gorizontal aylantirish
                     if (facingLeft) bSprite.setFlipX(true);
-                    if (tilt && bData.bulletType !== 'pellet') bSprite.setRotation(tilt);
 
                     // QUROL SKINI: egasi tanlagan qurol skinining rangini qo'llaymiz
                     // (alohida tekstura chizish o'rniga, tez va yengil "tint" usuli)

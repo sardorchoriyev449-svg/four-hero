@@ -744,18 +744,19 @@ export const MAPS: MapDef[] = [
         xpReward: 40,
         accentColor: 0xff4081,
         groundColor: 0x1b3a2a,
-        mapWidth: 1800,
+        mapWidth: 3000,
         // Pushti qo'ziqorin platformalar (bir tomonlama). Chapda 2 ta, o'ngda 3 ta (zinapoya)
         platforms: [
-            { x: 1065, y: 340, w: 160, h: 12 },   // 0 chap tepa
-            { x: 1135, y: 455, w: 150, h: 12 },   // 1 chap o'rta
-            { x: 1485, y: 270, w: 145, h: 12 },   // 2 o'ng tepa (eng baland)
-            { x: 1430, y: 370, w: 145, h: 12 },   // 3 o'ng o'rta
-            { x: 1375, y: 470, w: 170, h: 12 }    // 4 o'ng past
+            { x: 2265, y: 340, w: 160, h: 12 },   // 0 chap tepa
+            { x: 2335, y: 455, w: 150, h: 12 },   // 1 chap o'rta
+            { x: 2685, y: 270, w: 145, h: 12 },   // 2 o'ng tepa (eng baland)
+            { x: 2630, y: 370, w: 145, h: 12 },   // 3 o'ng o'rta
+            { x: 2575, y: 470, w: 170, h: 12 }    // 4 o'ng past
         ],
         giantFlower: {
-            arenaX: 1000, arenaW: 800, triggerX: 1090,
-            stemX: 1340, headY: 225, headR: 58,
+            // Shahardan uzoqda: shahar (daraxt-uylar) tugagach, tikonli yo'l, so'ng jang maydoni
+            arenaX: 2200, arenaW: 800, triggerX: 2290,
+            stemX: 2540, headY: 225, headR: 58,
             hpPerPlayer: 1600,
             topPlats: [0, 2],
             whipDamage: 18, whipEveryMs: 5200, whipGrowMs: 1300,

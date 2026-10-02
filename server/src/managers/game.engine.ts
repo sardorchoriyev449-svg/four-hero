@@ -1,4 +1,3 @@
-import { aimAssist } from './aim';
 import { Server } from 'socket.io';
 import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
@@ -210,7 +209,7 @@ export class GameEngine {
                     if (player.attackCooldown <= 0 && charLogic.canAttack(player) && player.stamina >= BaseCharacter.staminaCost(player, charLogic.attackStaminaCost)) {
                         BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
                         player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
-                        charLogic.handleAttack(player, room, aimAssist(room, player, player.lastAttackAngle));
+                        charLogic.handleAttack(player, room, player.lastAttackAngle);
                     } else if (player.attackCooldown <= 0 && charLogic.canAttack(player)) {
                         this.signalNoStamina(player);
                     }
@@ -842,6 +841,9 @@ export class GameEngine {
     private updateBullets(room: RoomState): void {
         for (let i = room.bullets.length - 1; i >= 0; i--) {
             const bullet = room.bullets[i];
+            // O'q bosib o'tgan YO'LNING boshlanishi: tez o'q (kamon - tikiga 30px) birinchi tikda
+            // tekshirilmagani uchun yonidagi botning ustidan "sakrab" o'tib ketardi
+            if (bullet.sx === undefined) { bullet.sx = bullet.x; bullet.sy = bullet.y; }
             bullet.x += bullet.vx * 0.03;
             bullet.y += bullet.vy * 0.03;
             bullet.lifetime--;
@@ -867,9 +869,12 @@ export class GameEngine {
             const isMelee = bullet.bulletType === 'melee';
             const hitW = isMelee ? 54 : 10;
             const hitH = isMelee ? 44 : 10;
-            const hitX = bullet.x - hitW / 2;
-            const hitY = bullet.y - hitH / 2;
-            const hitRect = { x: hitX, y: hitY, w: hitW, h: hitH };
+            // Oldingi tekshirilgan joydan hozirgi joygacha (supurib o'tgan yo'l) - hech narsa "sakrab" o'tilmaydi
+            const fx = bullet.sx ?? bullet.x, fy = bullet.sy ?? bullet.y;
+            const hitX = Math.min(fx, bullet.x) - hitW / 2;
+            const hitY = Math.min(fy, bullet.y) - hitH / 2;
+            const hitRect = { x: hitX, y: hitY, w: hitW + Math.abs(bullet.x - fx), h: hitH + Math.abs(bullet.y - fy) };
+            bullet.sx = bullet.x; bullet.sy = bullet.y;
 
             // Har bir o'q turiga qarab shaxsiy zarar miqdori (yangi balans)
             // + otgan o'yinchining hisobidagi "damage" ko'nikma darajasi (har daraja +15%, max +75%)

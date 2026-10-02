@@ -184,6 +184,8 @@ export interface BulletState {
     lifetime: number;
     bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai';
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
+    sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
+    sy?: number;
 }
 
 // Sindiriladigan quti: markaz (x, y), sindirilsa sindirgan o'yinchiga tanga beradi
