@@ -166,7 +166,11 @@
         fire:      (t, v, o) => { noise(t, 1.4, 0.5 * v, 'lowpass', 1500, 400, o); },
         roots:     (t, v, o) => { noise(t, 0.4, 0.4 * v, 'lowpass', 600, 150, o); [0, 0.1, 0.2].forEach(d => sweep(240, 120, t + d, 0.08, 'square', 0.04 * v, o)); },
         banner:    (t, v, o) => { tone(392, t, 0.15, 'square', 0.06 * v, o); tone(523, t + 0.15, 0.3, 'square', 0.06 * v, o); },
-        block:     (t, v, o) => { tone(1800, t, 0.12, 'triangle', 0.07 * v, o); tone(2400, t + 0.02, 0.1, 'triangle', 0.05 * v, o); }
+        block:     (t, v, o) => { tone(1800, t, 0.12, 'triangle', 0.07 * v, o); tone(2400, t + 0.02, 0.1, 'triangle', 0.05 * v, o); },
+        // Skrimer: keskin shovqin va pastga tushuvchi chiyillash
+        scream:    (t, v, o) => { noise(t, 0.6, 0.9 * v, 'bandpass', 2600, 900, o); sweep(1400, 220, t, 0.55, 'sawtooth', 0.22 * v, o); sweep(1900, 300, t + 0.03, 0.5, 'square', 0.12 * v, o); },
+        // G'orda suv tomchisi
+        drip:      (t, v, o) => { sweep(1500, 2600, t, 0.06, 'sine', 0.12 * v, o); tone(900, t + 0.07, 0.25, 'sine', 0.04 * v, o); }
     };
     const lastSfxAt = {};
     const SFX_GAP = { shotgun: 80, hit: 50, bossHit: 90, hurt: 150, coin: 60, xp: 80, click: 40, squish: 40, botDie: 60 };

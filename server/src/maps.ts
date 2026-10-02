@@ -354,23 +354,24 @@ export interface DoorsDef {
     rockEveryMs: number;
     rockWarnMs: number;
     rockDamagePct: number;
-    // Ichkari (xona)
+    // Ichkari - ulkan qorong'i g'or
     roomX0: number;
     roomX1: number;
     roomEntryX: number;
     elfX: number;
     elfY: number;
     leverX: number;
-    exitX: number;
     roomPlats: number[];
-    bombs: { x: number, y: number }[];
-    bombRadius: number;
-    bombDamage: number;
+    stalX: number[];          // shiftdagi stalaktitlar (har birida bomba yopishgan)
+    stalTipY: number;
+    stalRegrowMs: number;
+    stalPlayerDamage: number;
     bombPlayerDamage: number;
-    bombRespawnMs: number;
-    monsterHpBase: number;
-    monsterHpPerExtra: number;
-    exitAtPct: number;
+    hitsToBury: number;       // shuncha stalaktit tegsa - maxluqni toshlar bosib qoladi
+    surfaceMs: number;        // yer ustida quvlash
+    burrowMs: number;         // yerga kirish
+    underMs: number;          // yer ostida (ikkita kovlanayotgan joy ko'rinadi)
+    emergeDamage: number;
     monsterSpeed: number;
     monsterClimb: number;
     monsterDamage: number;
@@ -991,27 +992,27 @@ export const MAPS: MapDef[] = [
         xpReward: 25,
         accentColor: 0xffd600,
         groundColor: 0x2b2733,
-        mapWidth: 3000,
+        mapWidth: 3800,
         platforms: [
             // Tepaga chiqish (0-3, pastdan tepaga)
             { x: 1180, y: 470, w: 140, h: 12 },
             { x: 1400, y: 370, w: 140, h: 12 },
             { x: 1180, y: 270, w: 140, h: 12 },
             { x: 1400, y: 170, w: 140, h: 12 },
-            // Ichkari xona (4-6)
-            { x: 2290, y: 450, w: 150, h: 12 },
-            { x: 2720, y: 450, w: 150, h: 12 },
-            { x: 2500, y: 330, w: 160, h: 12 }
+            // G'or ichidagi tosh tokchalar (4-14): past, o'rta, baland (bombalarni otish uchun)
+            { x: 2480, y: 480, w: 100, h: 12 }, { x: 2880, y: 480, w: 100, h: 12 }, { x: 3280, y: 480, w: 100, h: 12 },
+            { x: 2280, y: 380, w: 120, h: 12 }, { x: 2620, y: 380, w: 120, h: 12 }, { x: 3020, y: 380, w: 120, h: 12 }, { x: 3420, y: 380, w: 120, h: 12 },
+            { x: 2420, y: 270, w: 100, h: 12 }, { x: 2820, y: 270, w: 100, h: 12 }, { x: 3220, y: 270, w: 100, h: 12 }, { x: 3600, y: 270, w: 100, h: 12 }
         ],
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
-            roomX0: 2200, roomX1: 3000, roomEntryX: 2270, elfX: 2580, elfY: 150, leverX: 2880, exitX: 2950,
-            roomPlats: [4, 5, 6],
-            bombs: [{ x: 2400, y: 570 }, { x: 2600, y: 570 }, { x: 2790, y: 570 }, { x: 2365, y: 450 }, { x: 2795, y: 450 }, { x: 2580, y: 330 }],
-            bombRadius: 120, bombDamage: 12, bombPlayerDamage: 15, bombRespawnMs: 3500,
-            monsterHpBase: 100, monsterHpPerExtra: 50, exitAtPct: 0.15,
+            roomX0: 2200, roomX1: 3800, roomEntryX: 2260, elfX: 2700, elfY: 200, leverX: 2380,
+            roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+            stalX: [2330, 2580, 2760, 2980, 3160, 3390, 3540, 3740], stalTipY: 250, stalRegrowMs: 6000,
+            stalPlayerDamage: 30, bombPlayerDamage: 15, hitsToBury: 10,
+            surfaceMs: 6500, burrowMs: 700, underMs: 1700, emergeDamage: 25,
             monsterSpeed: 3.4, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },
         playerSpawns: [

@@ -384,8 +384,12 @@ export interface DoorsState {
     nextWave: number;
     lastPlat: Record<string, number>;
     // Ichkari
-    sub: 'elf' | 'lever' | 'drop' | 'shock' | 'fight' | 'exit' | null;
-    monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop', facing: 1 | -1, hp: number, maxHp: number,
+    sub: 'elf' | 'lever' | 'drop' | 'shock' | 'fight' | 'buried' | null;
+    monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop' | 'dig' | 'hidden', facing: 1 | -1,
+        hits: number, maxHits: number, mode: 'surface' | 'burrow' | 'under' | 'emerge', modeT: number,
+        emergeAt: { x: number, y: number, kind: 'ground' | 'ceiling' | 'wall' } | null,
         climbTo: number | null, cd: number, attackT: number, hitFlash: number } | null;
-    bombs: { id: string, x: number, y: number, alive: boolean, respawn: number }[];
+    digs: { x: number, y: number, kind: 'ground' | 'ceiling' | 'wall' }[];
+    stal: { id: string, x: number, state: 'hang' | 'fall' | 'gone', y: number, vy: number, regrow: number, by: string | null }[];
+    lastHitBy: string | null;
 }
