@@ -2140,8 +2140,12 @@ export class GameEngine {
         for (let i = dr.hands.length - 1; i >= 0; i--) {
             const h = dr.hands[i];
             if (--h.t <= 0 && h.phase === 'warn') { h.phase = 'up'; h.t = T(d.handUpMs); continue; }
-            if (h.phase === 'up' && !h.hit) {
-                const p = alive.find(q => Math.abs(q.x - h.x) <= 24 && Math.abs(q.y + this.PLAYER_HALF_H - h.y) <= 12);
+            if (h.phase === 'up' && !h.hit && h.t >= T(d.handUpMs) - 5) {
+                const p = alive.find(q => {
+                    const vx = this.playerMotion.get(q.id)?.vx || 0;
+                    const qx = q.x + Math.max(-40, Math.min(40, vx * 0.12));
+                    return Math.abs(qx - h.x) <= 16 && Math.abs(q.y + this.PLAYER_HALF_H - h.y) <= 10;
+                });
                 if (p) {
                     h.hit = true;
                     this.hurtPlayer(p, d.handDamage);
@@ -2172,14 +2176,24 @@ export class GameEngine {
             if (!target) return;
             const feet = target.y + this.PLAYER_HALF_H;
             const r = Math.random();
-            const kind: 'left' | 'right' | 'top' | 'under' = r < 0.28 ? 'left' : r < 0.56 ? 'right' : r < 0.78 ? 'top' : 'under';
+            const kind: 'left' | 'right' | 'top' | 'under' | 'road' = r < 0.42 ? 'road' : r < 0.58 ? 'under' : r < 0.72 ? 'left' : r < 0.86 ? 'right' : 'top';
+            // Yo'l: qahramon yugurayotgan tomonda, sal oldinda (u yetib kelganda) - to'satdan
+            const vx = this.playerMotion.get(target.id)?.vx || 0;
+            const runDir = Math.abs(vx) > 30 ? Math.sign(vx) : (Math.random() < 0.5 ? -1 : 1);
+            const roadX = clampX(target.x + runDir * (110 + Math.min(120, Math.abs(vx) * 0.35)));
             const at = kind === 'left' ? { x: clampX(target.x - 360), y: 570, kind }
                 : kind === 'right' ? { x: clampX(target.x + 360), y: 570, kind }
                 : kind === 'top' ? { x: clampX(target.x), y: 60, kind }
+                : kind === 'road' ? { x: roadX, y: surfAt(roadX, feet), kind }
                 : { x: clampX(target.x), y: surfAt(target.x, feet), kind };
             mo.emergeAt = at;
             mo.targetId = target.id;
-            if (kind === 'under') { mo.mode = 'warn'; mo.modeT = T(d.underWarnMs); this.io.to(roomId).emit('underWarn', { x: Math.round(at.x), y: at.y }); return; }
+            if (kind === 'under' || kind === 'road') {
+                mo.mode = 'warn';
+                mo.modeT = T(kind === 'road' ? d.roadWarnMs : d.underWarnMs);
+                this.io.to(roomId).emit('underWarn', { x: Math.round(at.x), y: at.y, road: kind === 'road' });
+                return;
+            }
             this.emergeMonster(room, roomId, d, mo, alive, surfAt);
             return;
         }
@@ -2253,14 +2267,15 @@ export class GameEngine {
         mo.climbTo = null;
         mo.cd = T(300);
         if (e.kind === 'top') { mo.x = e.x; mo.y = 80; mo.vy = 0; mo.pose = 'drop'; }
-        else if (e.kind === 'under') { mo.x = e.x; mo.y = e.y; mo.pose = 'climb'; }
+        else if (e.kind === 'under' || e.kind === 'road') { mo.x = e.x; mo.y = e.y; mo.pose = 'climb'; mo.attackT = T(400); }
         else { mo.x = e.x; mo.y = 570; mo.pose = 'crawl'; mo.facing = e.kind === 'left' ? 1 : -1; }
         let hitIds: string[] = [];
-        if (e.kind === 'under' || e.kind === 'top') {
-            const landY = e.kind === 'under' ? e.y : surfAt(e.x, 0);
+        if (e.kind === 'under' || e.kind === 'top' || e.kind === 'road') {
+            // Chiqib tishlaydi: -30..-40
+            const landY = e.kind === 'top' ? surfAt(e.x, 0) : e.y;
             alive.forEach(p => {
                 if (Math.abs(p.x - e.x) <= 60 && Math.abs(p.y + this.PLAYER_HALF_H - landY) <= 40) {
-                    this.hurtPlayer(p, d.emergeDamage);
+                    this.hurtPlayer(p, d.emergeBiteMin + Math.round(Math.random() * (d.emergeBiteMax - d.emergeBiteMin)));
                     this.knockback(p, (p.x < e.x ? -1 : 1) * 260, -420);
                     hitIds.push(p.id);
                 }

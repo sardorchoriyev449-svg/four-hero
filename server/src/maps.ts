@@ -373,7 +373,10 @@ export interface DoorsDef {
     hiddenMinMs: number;      // hech qayerdan chiqmaydi (yerdan qo'llar chiqadi)
     hiddenMaxMs: number;
     underWarnMs: number;      // o'yinchi tagidan chiqishdan oldin yer yoriladi
-    emergeDamage: number;
+    emergeDamage: number;     // (eski) - endi tishlash: emergeBiteMin..emergeBiteMax
+    emergeBiteMin: number;    // yo'ldan / tagidan / tepadan chiqib tishlasa
+    emergeBiteMax: number;
+    roadWarnMs: number;       // yo'ldan to'satdan chiqishdan oldingi juda qisqa yoriq
     handEveryMs: number;      // yerdan chiqadigan qo'llar
     handWarnMs: number;
     handUpMs: number;
@@ -1034,8 +1037,9 @@ export const MAPS: MapDef[] = [
             roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
             bombX: [2700, 3200, 3700, 4200, 4700, 5200, 5700, 6200, 6700], bombRadius: 120, bombRespawnMs: 6000, bombPlayerDamage: 15, hitsToBury: 10,
             surfaceMs: 7000, retreatMs: 800, hiddenMinMs: 1000, hiddenMaxMs: 2000, underWarnMs: 650, emergeDamage: 25,
-            handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 8, grabMs: 1100,
-            monsterSpeed: 4.2, monsterClimb: 4, monsterDamage: 25, respectXp: 200
+            emergeBiteMin: 30, emergeBiteMax: 40, roadWarnMs: 250,
+            handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 15, grabMs: 1100,
+            monsterSpeed: 6.5, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

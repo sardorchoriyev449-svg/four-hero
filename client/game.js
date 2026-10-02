@@ -5569,7 +5569,7 @@ function launchGame(socket, roomId, mapData, continued) {
             sfx('roar', 0.2);
         });
         socket.off('underWarn');
-        socket.on('underWarn', (d) => { if (drObj) drObj.underWarn = { x: d.x, y: d.y, until: this.time.now + 700 }; sfx('rumble'); this.cameras.main.shake(600, 0.006); });
+        socket.on('underWarn', (d) => { if (drObj) drObj.underWarn = { x: d.x, y: d.y, until: this.time.now + (d.road ? 300 : 700) }; if (!d.road) { sfx('rumble'); this.cameras.main.shake(600, 0.006); } });
         socket.off('grabbed');
         socket.on('grabbed', (d) => { rootUntil = this.time.now + d.ms; this.cameras.main.shake(200, 0.008); });
         socket.off('handGrab');
@@ -5581,6 +5581,7 @@ function launchGame(socket, roomId, mapData, continued) {
             sfxAt('roar', d.x); this.cameras.main.shake(400, 0.012);
             // Skrimer faqat kerakli paytda: tagingdan yorib chiqib haqiqatan urganda (va kamdan-kam)
             if (d.kind === 'under' && (d.hit || []).includes(socket.id)) oqJumpscare(this);
+            if ((d.hit || []).includes(socket.id)) { sfx('chomp'); this.cameras.main.flash(180, 140, 0, 0); }
         });
         socket.off('monsterBuried');
         socket.on('monsterBuried', (d) => {

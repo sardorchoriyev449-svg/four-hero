@@ -387,7 +387,7 @@ export interface DoorsState {
     sub: 'elf' | 'lever' | 'drop' | 'shock' | 'fight' | 'buried' | null;
     monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop' | 'hidden', facing: 1 | -1,
         hits: number, maxHits: number, mode: 'surface' | 'retreat' | 'hidden' | 'warn' | 'emerge', modeT: number,
-        emergeAt: { x: number, y: number, kind: 'left' | 'right' | 'top' | 'under' } | null, targetId: string | null,
+        emergeAt: { x: number, y: number, kind: 'left' | 'right' | 'top' | 'under' | 'road' } | null, targetId: string | null,
         climbTo: number | null, cd: number, attackT: number, hitFlash: number } | null;
     bombs: { id: string, x: number, alive: boolean, respawn: number }[];
     hands: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: boolean }[];
