@@ -455,6 +455,8 @@ document.getElementById('screen-standard-btn').dataset.screenBtn = 'standard';
 document.getElementById('screen-full-btn').dataset.screenBtn = 'full';
 document.getElementById('screen-standard-btn').onclick = () => window.setScreenMode('standard');
 document.getElementById('screen-full-btn').onclick = () => window.setScreenMode('full');
+// Telefon tugmalarini joylashtirish (game.js - openTouchEditor)
+document.getElementById('touch-layout-btn').onclick = () => { if (window.openTouchEditor) window.openTouchEditor(); };
 // TELEFONDA: o'yin paytidagi birinchi teginishda - haqiqiy to'liq ekran (brauzer manzil satri yashirinadi)
 // va iloji bo'lsa ekran yotiq holatga qotiriladi (Android). Brauzer buni faqat teginishda ruxsat beradi
 document.addEventListener('pointerdown', () => {

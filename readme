@@ -1,23 +1,10 @@
 ```text
-    map-5:
-    boshlanish 10 metir yuradi va yo'lidan sariq va qora eshik chiqadi aynan va aynan shu payt dialog bo'ladi:
-    player: 'Troll menga ayti bu eshiklardan kirmasdan tepaga chiqishni',
-    *yer qimilaydi,
-    sariq eshik ortidan ovoz kelyabti ayol kishini avozi: 'YORDAAAAAM yordam bering',
-    player: 'oh menimcha yordam kerak',
-    tanlov paydo bo'ladi: kirish, blya yoq,
-    agar kirsa respekt dostijenya chiqsin va 200xp bersin faqat birmarta beriladi agar yutqasa va qayta kirsa 200xp berilmasin va yutsa xam va qayta kirsa 200xp berilmasin,
-    va lekin keyinchalik blya yoq ni tanlasa va yana qayta oxirgi diyalok o'zgarsin
-    player: 'Men kirmasam bo'lmaydi'
-    va sariq eshikga borib 'E' bosib kirsin,
-    ichkarida nima bo'ladi:
-    elf baglangan bo'ladi tepada va basta o'ng tomonda richak bo'ladi va dialog:
-    elf: 'AAAAAAA... YORDAM menga yordam bering u xozir keladi tezroq',
-    player: 'Qanday sizdi tushuray',
-    elf: 'To'grizda richak bor o'shani torting',
-    elf: 'TEZROQ u kelyapti',
-    player richaka borib 'e' xarifbilan tortsa o'sha elf'ni tepasidan rasimdagiday maxlux tushib kelsin o'lchami kata bo'lsin odiy player'dan 2 ta keladi uzunligi va malikani bosib qon sachrasin, maxluq nomi OQ YUZ,
-    player: 'FUCK....',
-    shunda boshlanadi player vazifasi platformalar da va yerda va tepa platformada bombalar bo'ladi o'shanga otib bomba bortlab maxluqni jonini olishi kerak odiy o'q va qurolar tasir qilmaydi yo'l toxtamastan paydo bo'laveradi toki maxluqni joni ozgina qolib o'yinchi ochiq yoruqlika chiqmagunicha shunda map-5 o'tildi,
-    agar kirmasa 100 metr balandlika chiqish kerak bo'ladi platforma 4 ta bo'ladi va xar safar bita platformaga chiqan payt yoki xar 2s yer silkinsinda 4 ta dan 3 ta siga kata tosh tushsin va 60% joni olsin, va map-5 o'tilsin
+    
+```
+
+```
+domen help
+```
+```
+Hello. My domain 4heroes.xyz was registered on Oct 2, 2026 (18:48 UTC). RDAP shows nameservers launch1/launch2.spaceship.net and my DNS records are set in Advanced DNS, but the .xyz TLD servers still don't return a delegation (NODATA), so the domain doesn't resolve anywhere. Could you please check if the domain is on hold or the delegation was not published? Thank you.
 ```

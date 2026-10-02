@@ -11,14 +11,95 @@ let touchState = { left: false, right: false, jump: false }; // PHONE rejimidagi
 // PHONE tugmalarining amallari: { nomi: [bosilganda, qo'yib yuborilganda] } - har raundda create() yangilaydi
 let touchActions = {};
 
-// PHONE TUGMALARI: har barmoq alohida kuzatiladi va qaysi tugma ustida turgani JOYIGA qarab aniqlanadi -
-// barmoqni ko'tarmasdan boshqa tugmaga sursa, eskisi qo'yib yuboriladi va yangisi bosiladi (masalan
-// chapdan o'ngga yoki yurishdan sakrashga). Bir necha barmoq bir vaqtda ishlaydi (yurish + hujum).
-// data-touch-tap tugmalari (E, Q, R, emotsiya) faqat to'g'ridan-to'g'ri bosilganda ishlaydi - surib
-// o'tib ketganda tasodifan qurol almashmasin
+// PHONE TUGMALARI (o'yinchi xohlagancha joylashtiradi - Sozlamalar -> "Tugmalarni joylashtirish"):
+// chapda joystick (chap/o'ng - yurish, yuqoriga - sakrash) va R; o'ngda emotsiyalar, Q, qobiliyat va
+// "zarba / E" (yaqinda E bilan qilinadigan narsa bo'lsa - E, bo'lmasa zarba). Joy - ekran ulushida (x, y),
+// hajm - s (asl o'lchamga ko'paytma)
+const TOUCH_CTLS = [
+    { id: 'joy', size: 128, x: 0.13, y: 0.72 },
+    { id: 'special', size: 52, x: 0.07, y: 0.38, touch: 'special', tap: true, cls: 'touch-txt', html: 'R' },
+    { id: 'emote', size: 48, x: 0.935, y: 0.30, touch: 'emotes', tap: true, html: '<i class="fa-solid fa-face-smile"></i>' },
+    { id: 'weapon', size: 60, x: 0.935, y: 0.49, touch: 'weapon', tap: true, cls: 'touch-txt', html: 'Q' },
+    { id: 'ability', size: 62, x: 0.935, y: 0.72, touch: 'ability', html: '<i class="fa-solid fa-bolt"></i>' },
+    { id: 'attack', size: 74, x: 0.82, y: 0.72, touch: 'attack', cls: 'touch-attack touch-hit', html: '<span class="hit-ico"><i class="fa-solid fa-hand-fist"></i></span><span class="hit-e">E</span>' }
+];
+const TOUCH_LAYOUT_KEY = 'touchLayout';
+function defaultTouchLayout() {
+    const items = {};
+    TOUCH_CTLS.forEach(c => { items[c.id] = { x: c.x, y: c.y, s: 1 }; });
+    return { items, opacity: 0.85 };
+}
+function loadTouchLayout() {
+    const def = defaultTouchLayout();
+    try {
+        const saved = JSON.parse(localStorage.getItem(TOUCH_LAYOUT_KEY) || 'null');
+        if (saved && saved.items) {
+            TOUCH_CTLS.forEach(c => {
+                const it = saved.items[c.id];
+                if (it && isFinite(it.x) && isFinite(it.y) && isFinite(it.s)) def.items[c.id] = { x: +it.x, y: +it.y, s: Math.max(0.6, Math.min(1.8, +it.s)) };
+            });
+            if (isFinite(saved.opacity)) def.opacity = Math.max(0.3, Math.min(1, +saved.opacity));
+        }
+    } catch (e) { }
+    return def;
+}
+function buildTouchControls(root) {
+    root.innerHTML = TOUCH_CTLS.map(c => c.id === 'joy'
+        ? '<div class="touch-joy" data-ctl="joy"><div class="joy-knob"></div></div>'
+        : `<button data-ctl="${c.id}" data-touch="${c.touch}"${c.tap ? ' data-touch-tap' : ''} class="touch-btn ${c.cls || ''}">${c.html}</button>`).join('');
+}
+// Tugmalarni joylashuv bo'yicha qo'yadi (ekrandan chiqib ketmaydi)
+function layoutTouchControls(root, layout) {
+    const W = root.clientWidth, H = root.clientHeight;
+    if (!W || !H) return;
+    TOUCH_CTLS.forEach(c => {
+        const el = root.querySelector('[data-ctl="' + c.id + '"]');
+        if (!el) return;
+        const it = layout.items[c.id];
+        const size = Math.round(c.size * it.s);
+        el.style.width = el.style.height = size + 'px';
+        el.style.fontSize = Math.round(size * (c.id === 'attack' ? 0.42 : 0.38)) + 'px';
+        el.style.left = Math.round(Math.max(2, Math.min(W - size - 2, it.x * W - size / 2))) + 'px';
+        el.style.top = Math.round(Math.max(2, Math.min(H - size - 2, it.y * H - size / 2))) + 'px';
+        el.style.opacity = layout.opacity;
+    });
+}
+
+// Har barmoq alohida kuzatiladi va qaysi tugma ustida turgani JOYIGA qarab aniqlanadi -
+// barmoqni ko'tarmasdan boshqa tugmaga sursa, eskisi qo'yib yuboriladi va yangisi bosiladi.
+// Bir necha barmoq bir vaqtda ishlaydi (joystick + hujum). data-touch-tap tugmalari (Q, R,
+// emotsiya) faqat to'g'ridan-to'g'ri bosilganda ishlaydi - surib o'tganda tasodifan ishlamasin
 (function initTouchControls() {
     const root = document.getElementById('touch-controls');
     if (!root) return;
+    buildTouchControls(root);
+    let layout = loadTouchLayout();
+    const relayout = () => layoutTouchControls(root, layout);
+    if (window.ResizeObserver) new ResizeObserver(relayout).observe(root);
+    window.addEventListener('resize', relayout);
+    window.applyTouchLayout = (l) => { layout = l || loadTouchLayout(); relayout(); };
+
+    // Emotsiyalar menyusi (yuz tugmasi bosilganda - ikkala emotsiya)
+    const emotes = document.createElement('div');
+    emotes.className = 'touch-emotes hidden';
+    emotes.innerHTML = '<button data-touch="emote" data-touch-tap class="touch-btn"><i class="fa-solid fa-hand-middle-finger"></i></button>'
+        + '<button data-touch="emote2" data-touch-tap class="touch-btn"><i class="fa-solid fa-hand-fist"></i></button>';
+    root.appendChild(emotes);
+    let emoteTimer = null;
+    const closeEmotes = () => { emotes.classList.add('hidden'); clearTimeout(emoteTimer); };
+    const toggleEmotes = () => {
+        if (!emotes.classList.contains('hidden')) { closeEmotes(); return; }
+        const b = root.querySelector('[data-ctl="emote"]');
+        emotes.classList.remove('hidden');
+        const W = root.clientWidth, H = root.clientHeight;
+        const bx = b.offsetLeft, by = b.offsetTop, bw = b.offsetWidth, ew = emotes.offsetWidth, eh = emotes.offsetHeight;
+        const left = bx + bw / 2 > W / 2 ? bx - ew - 8 : bx + bw + 8;
+        emotes.style.left = Math.max(2, Math.min(W - ew - 2, left)) + 'px';
+        emotes.style.top = Math.max(2, Math.min(H - eh - 2, by + (b.offsetHeight - eh) / 2)) + 'px';
+        clearTimeout(emoteTimer);
+        emoteTimer = setTimeout(closeEmotes, 3500);
+    };
+
     const fingers = new Map();   // pointerId -> tugma nomi
     const held = {};             // tugma nomi -> nechta barmoq ushlab turibdi
     const btnAt = (x, y) => {
@@ -31,6 +112,8 @@ let touchActions = {};
         held[name] = (held[name] || 0) + 1;
         if (held[name] !== 1) return;
         mark(name, true);
+        if (name === 'emotes') { toggleEmotes(); return; }
+        if (name === 'emote' || name === 'emote2') closeEmotes();
         const a = touchActions[name];
         if (a && a[0]) a[0]();
     };
@@ -41,7 +124,43 @@ let touchActions = {};
         const a = touchActions[name];
         if (a && a[1]) a[1]();
     };
+
+    // JOYSTICK: markazdan chapga/o'ngga - yurish, yuqoriga - sakrash (ushlab turilsa - balandroq)
+    const joy = root.querySelector('.touch-joy');
+    const knob = joy.querySelector('.joy-knob');
+    let joyId = null;
+    const joyDir = { left: false, right: false, jump: false };
+    const setJoy = (name, on) => {
+        if (joyDir[name] === on) return;
+        joyDir[name] = on;
+        if (on) press(name); else release(name);
+    };
+    const joyMove = (x, y) => {
+        const r = joy.getBoundingClientRect();
+        const rad = r.width / 2;
+        let nx = (x - (r.left + rad)) / rad, ny = (y - (r.top + rad)) / rad;
+        const len = Math.hypot(nx, ny);
+        if (len > 1) { nx /= len; ny /= len; }
+        knob.style.transform = `translate(calc(-50% + ${Math.round(nx * rad * 0.62)}px), calc(-50% + ${Math.round(ny * rad * 0.62)}px))`;
+        setJoy('left', nx < -0.3);
+        setJoy('right', nx > 0.3);
+        setJoy('jump', ny < -0.5);
+    };
+    const joyEnd = () => {
+        joyId = null;
+        joy.classList.remove('active');
+        knob.style.transform = '';
+        setJoy('left', false); setJoy('right', false); setJoy('jump', false);
+    };
+
     root.addEventListener('pointerdown', (e) => {
+        if (e.target.closest && e.target.closest('.touch-joy')) {
+            e.preventDefault();
+            joyId = e.pointerId;
+            joy.classList.add('active');
+            joyMove(e.clientX, e.clientY);
+            return;
+        }
         const b = btnAt(e.clientX, e.clientY);
         if (!b) return;
         e.preventDefault();
@@ -49,6 +168,7 @@ let touchActions = {};
         press(b.dataset.touch);
     });
     window.addEventListener('pointermove', (e) => {
+        if (e.pointerId === joyId) { joyMove(e.clientX, e.clientY); return; }
         if (!fingers.has(e.pointerId)) return;
         const b = btnAt(e.clientX, e.clientY);
         const name = b && !b.hasAttribute('data-touch-tap') ? b.dataset.touch : null;
@@ -59,6 +179,7 @@ let touchActions = {};
         if (name) press(name);
     }, { passive: true });
     const end = (e) => {
+        if (e.pointerId === joyId) { joyEnd(); return; }
         if (!fingers.has(e.pointerId)) return;
         const old = fingers.get(e.pointerId);
         fingers.delete(e.pointerId);
@@ -71,10 +192,103 @@ let touchActions = {};
     // O'yin to'xtaganda/tab yashirilganda - hamma tugma qo'yib yuboriladi (yopishib qolmasin)
     window.resetTouchControls = () => {
         fingers.clear();
+        if (joyId !== null) joyEnd();
+        closeEmotes();
         Object.keys(held).forEach((name) => { if (held[name]) { held[name] = 1; release(name); } });
     };
     document.addEventListener('visibilitychange', () => { if (document.hidden) window.resetTouchControls(); });
+
+    // "Zarba / E": yaqinda E bilan qilinadigan narsa bo'lsa - E sariq yonadi
+    const hit = root.querySelector('[data-ctl="attack"]');
+    setInterval(() => {
+        if (root.classList.contains('hidden')) return;
+        let can = false;
+        try { can = !!(touchInteractCheck && touchInteractCheck()); } catch (e) { }
+        hit.classList.toggle('can-e', can);
+    }, 200);
 })();
+// O'yin sahnasi beradi: hozir E bilan biror narsa qilsa bo'ladimi (dialog, eshik, sabzi, tanga...)
+let touchInteractCheck = null;
+
+// TUGMALARNI JOYLASHTIRISH MUHARRIRI: tugmani sudrab joyi, tanlab "-/+" bilan hajmi, umumiy shaffoflik.
+// Sozlamalar (lobbi) va pauza menyusidan ochiladi; saqlanganda o'yindagi tugmalar darrov yangilanadi
+window.openTouchEditor = function openTouchEditor() {
+    if (document.getElementById('tc-editor')) return;
+    const draft = JSON.parse(JSON.stringify(loadTouchLayout()));
+    const ed = document.createElement('div');
+    ed.id = 'tc-editor';
+    ed.innerHTML = `<div class="tce-frame"></div><div class="tce-stage"></div>
+        <div class="tce-bar">
+            <span class="tce-name">-</span>
+            <button data-a="minus">-</button><button data-a="plus">+</button>
+            <span>${t('tc_opacity')}</span><input type="range" min="30" max="100" value="${Math.round(draft.opacity * 100)}" class="tce-op">
+            <button data-a="reset">${t('tc_reset')}</button>
+            <button data-a="cancel">${t('tc_cancel')}</button>
+            <button data-a="save" class="tce-save">${t('tc_save')}</button>
+        </div>
+        <div class="tce-hint">${t('tc_hint')}</div>`;
+    document.body.appendChild(ed);
+    const stage = ed.querySelector('.tce-stage');
+    buildTouchControls(stage);
+    const relayout = () => layoutTouchControls(stage, draft);
+    relayout();
+    window.addEventListener('resize', relayout);
+    let sel = null, drag = null;
+    const select = (id) => {
+        sel = id;
+        stage.querySelectorAll('[data-ctl]').forEach(el => el.classList.toggle('sel', el.dataset.ctl === id));
+        ed.querySelector('.tce-name').innerText = id ? t('tc_' + id) : '-';
+    };
+    stage.addEventListener('pointerdown', (e) => {
+        const el = e.target.closest && e.target.closest('[data-ctl]');
+        if (!el) return;
+        e.preventDefault();
+        select(el.dataset.ctl);
+        const r = el.getBoundingClientRect();
+        drag = { id: el.dataset.ctl, pid: e.pointerId, dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - (r.top + r.height / 2) };
+    });
+    const move = (e) => {
+        if (!drag || e.pointerId !== drag.pid) return;
+        const W = stage.clientWidth, H = stage.clientHeight;
+        const it = draft.items[drag.id];
+        it.x = Math.max(0, Math.min(1, (e.clientX - drag.dx) / W));
+        it.y = Math.max(0, Math.min(1, (e.clientY - drag.dy) / H));
+        relayout();
+    };
+    const up = (e) => { if (drag && e.pointerId === drag.pid) drag = null; };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    const close = () => {
+        window.removeEventListener('resize', relayout);
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        ed.remove();
+    };
+    ed.querySelector('.tce-op').oninput = (e) => { draft.opacity = e.target.value / 100; relayout(); };
+    ed.querySelector('.tce-bar').addEventListener('click', (e) => {
+        const a = e.target.closest('button') && e.target.closest('button').dataset.a;
+        if (!a) return;
+        if (a === 'minus' || a === 'plus') {
+            if (!sel) return;
+            const it = draft.items[sel];
+            it.s = Math.max(0.6, Math.min(1.8, Math.round((it.s + (a === 'plus' ? 0.1 : -0.1)) * 10) / 10));
+            relayout();
+        } else if (a === 'reset') {
+            const d = defaultTouchLayout();
+            draft.items = d.items; draft.opacity = d.opacity;
+            ed.querySelector('.tce-op').value = Math.round(d.opacity * 100);
+            relayout();
+        } else if (a === 'cancel') {
+            close();
+        } else if (a === 'save') {
+            try { localStorage.setItem(TOUCH_LAYOUT_KEY, JSON.stringify(draft)); } catch (err) { }
+            if (window.applyTouchLayout) window.applyTouchLayout(draft);
+            close();
+        }
+    });
+};
 
 // Raund tugaganda (g'alaba yoki mag'lubiyat) chaqiriladi: Phaser'ni butunlay
 // o'chirib, keyingi raund uchun holatni tozalaydi. Shu bo'lmasa, har yangi
@@ -135,6 +349,7 @@ function stopGame() {
     lastDirection = 'right';
     if (window.resetTouchControls) window.resetTouchControls();
     touchActions = {};
+    touchInteractCheck = null;
     touchState = { left: false, right: false, jump: false };
 }
 
@@ -5183,32 +5398,37 @@ function launchGame(socket, roomId, mapData, continued) {
         });
 
         // E - dialog, gaplashish, eshik, yaqindagi tanga (klaviaturada E, telefonda "E" tugmasi)
-        const interact = () => {
-            if (pauseMenuOpen) return;
+        // dry = true: hech narsa qilmaydi - faqat E bilan biror narsa qilsa bo'ladimi (telefondagi "zarba / E")
+        const interact = (dry) => {
+            if (pauseMenuOpen) return false;
             // 1) Dialog ochiq bo'lsa - keyingi gap
-            if (dialog) { advanceDialog(); return; }
+            if (dialog) { if (dry) return true; advanceDialog(); return; }
             // 0) Sariq eshik: eshik oldida - kirish; ichkarida richag oldida - tortish
             if (isDoors && drState && currentCharacter && !currentCharacter.isDead &&
                 ((drState.state === 'free' && Math.abs(currentCharacter.x - map.doors.yellowX) <= 50) ||
                  (drState.state === 'room' && drState.sub === 'lever' && Math.abs(currentCharacter.x - map.doors.leverX) <= 50))) {
+                if (dry) return true;
                 socket.emit('doorsInteract', roomId);
                 return;
             }
             // 1a) Ferma: sabzi yonida - sug'urib olish
             if (isFarm && farmState && farmState.state === 'idle' && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - map.farm.carrotX) <= map.farm.talkRange) {
+                if (dry) return true;
                 socket.emit('pullCarrot', roomId);
                 return;
             }
             // 1b) Lift: platforma ustida - hamma chiqqan bo'lsa ko'tariladi
             if (isLift && liftState && liftState.state === 'ready' && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - (map.lift.x + map.lift.w / 2)) <= map.lift.w / 2 + 6) {
+                if (dry) return true;
                 socket.emit('useLift', roomId);
                 return;
             }
             // 2) Katta eshik oldida: kalit (12 ta olma) bo'lsa - ochadi, bo'lmasa "qulflangan"
             if (isApples && currentCharacter && !currentCharacter.isDead &&
                 currentCharacter.x >= map.apples.bigWall.x - 40) {
+                if (dry) return true;
                 if (myApples >= map.apples.applesToCollect) socket.emit('useBigDoor', roomId);
                 else startDialog(this, [t('door_locked')]);
                 return;
@@ -5216,26 +5436,32 @@ function launchGame(socket, roomId, mapData, continued) {
             // 3) Bozorda sotuvchi yonida - suhbatni boshlash (hamma uchun umumiy sahna)
             if (isStory && !cutsceneStarted && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - map.story.sellerX) <= map.story.talkRange) {
+                if (dry) return true;
                 socket.emit('talkToSeller', roomId);
                 return;
             }
             // 3b) Semiz elf yonida - suhbat (hamma uchun umumiy)
             if (isFatElf && fatElfState && fatElfState.state === 'eating' && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - fatElfState.x) <= map.fatElf.talkRange) {
+                if (dry) return true;
                 socket.emit('talkFatElf', roomId);
                 return;
             }
             // 3c) UnderWorld shahrida trol yonida - suhbat (hamma uchun umumiy)
             if (isUnderworld && uwTalkState && uwTalkState.state === 'idle' && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - map.underworld.trollX) <= map.underworld.talkRange) {
+                if (dry) return true;
                 socket.emit('talkTroll', roomId);
                 return;
             }
             // 4) Yaqindagi tanga
             const coin = findNearestCoin();
+            if (coin && dry) return true;
             if (coin) socket.emit('pickupCoin', { roomId: roomId, coinId: coin.coinId });
+            return false;
         };
-        this.input.keyboard.on('keydown-E', interact);
+        this.input.keyboard.on('keydown-E', () => interact());
+        touchInteractCheck = () => !!(currentCharacter && interact(true));
 
         // XARITALAR ULANGAN: oldingi xarita o'tilib, shu xaritaga avtomatik
         // o'tilgan bo'lsa - ekran o'rtasida qisqa e'lon
@@ -5308,6 +5534,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     <div class="pm-langs">
                         <button class="pm-lang" data-screen-btn="standard">${t('screen_standard')}</button><button class="pm-lang" data-screen-btn="full">${t('screen_full')}</button>
                     </div>
+                    <button class="pm-lang pm-tc" data-act="touch-layout"><i class="fa-solid fa-up-down-left-right"></i> ${t('tc_customize')}</button>
                     <label>${t('settings_language')}</label>
                     <div class="pm-langs">
                         <button class="pm-lang" data-lang="en">English</button><button class="pm-lang" data-lang="ru">Русский</button>
@@ -5321,6 +5548,7 @@ function launchGame(socket, roomId, mapData, continued) {
             el.querySelector('.pm-vol').oninput = (e) => { if (window.setGameVolume) window.setGameVolume(e.target.value); };
             el.querySelector('.pm-sfx').oninput = (e) => { if (window.setSfxVolume) window.setSfxVolume(e.target.value); };
             el.querySelector('.pm-sfx').onchange = () => sfx('coin');
+            el.querySelector('[data-act="touch-layout"]').onclick = () => { if (window.openTouchEditor) window.openTouchEditor(); };
             // Ekran o'lchami: standart / to'liq ekran (lobby.js - setScreenMode)
             el.querySelectorAll('[data-screen-btn]').forEach((b) => {
                 b.classList.toggle('active', document.body.classList.contains('screen-full') === (b.dataset.screenBtn === 'full'));
@@ -5410,13 +5638,22 @@ function launchGame(socket, roomId, mapData, continued) {
         // qolmaydi - har safar joriy yopishuv (closure) bilan qayta yoziladi.
         const canAct = () => currentCharacter && !pauseMenuOpen && !dialog && !currentCharacter.isDead;
         const attackAngle = () => (lastDirection === 'right') ? 0 : Math.PI;
+        let hitWasE = false;
         touchActions = {
             left: [() => { touchState.left = true; }, () => { touchState.left = false; }],
             right: [() => { touchState.right = true; }, () => { touchState.right = false; }],
             jump: [() => { touchState.jump = true; }, () => { touchState.jump = false; }],
+            // "Zarba / E": yaqinda E bilan qilinadigan narsa bo'lsa (dialog, eshik, sabzi, tanga...) - E, aks holda zarba
             attack: [
-                () => { if (currentCharacter && !pauseMenuOpen) socket.emit('startAttackInRoom', { roomId, angle: attackAngle() }); },
-                () => { if (currentCharacter) socket.emit('stopAttackInRoom', roomId); }
+                () => {
+                    if (!currentCharacter || pauseMenuOpen) return;
+                    if (interact(true)) { hitWasE = true; interact(); return; }
+                    socket.emit('startAttackInRoom', { roomId, angle: attackAngle() });
+                },
+                () => {
+                    if (hitWasE) { hitWasE = false; return; }
+                    if (currentCharacter) socket.emit('stopAttackInRoom', roomId);
+                }
             ],
             ability: [
                 () => { if (currentCharacter && !pauseMenuOpen) socket.emit('startAbilityInRoom', roomId); },
