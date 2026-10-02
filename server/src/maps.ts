@@ -926,9 +926,9 @@ export const MAPS: MapDef[] = [
             baseX: 2000, xAmp: 150, eyeBaseY: 340, eyeAmpY: 90, eyeR: 34,
             hpPerPlayer: 1600,
             arenaPlats: [6, 7, 8, 9, 10, 11, 12], lowY: 470, topY: 270,
-            slamDamage: 22, slamEveryMs: 4600, slamRaiseMs: 1000,
-            geyserDamage: 18, geyserEveryMs: 6200, geyserWarnMs: 900, geyserUpMs: 1000,
-            fishEveryMs: 7000, fishCount: 3, fishDamage: 15, fishRadius: 50
+            slamDamage: 32, slamEveryMs: 4600, slamRaiseMs: 1000,
+            geyserDamage: 28, geyserEveryMs: 6200, geyserWarnMs: 900, geyserUpMs: 1000,
+            fishEveryMs: 7000, fishCount: 3, fishDamage: 24, fishRadius: 50
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
