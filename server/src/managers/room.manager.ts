@@ -802,7 +802,9 @@ export class RoomManager {
         const clearedId = room.selectedLevel;
         const maxLevel = SEASON_MAP_COUNT - 1;
         // Tajriba: oddiy xarita +10, boss xaritalari ko'proq (maps.ts: xpReward)
-        const xpGain = getMapById(clearedId).xpReward ?? db.XP_PER_MAP;
+        // Season 2: har xarita 25 XP (boss - 50, xaritada ko'rsatilgan); Season 1 - XP_PER_MAP
+        const clearedMap = getMapById(clearedId);
+        const xpGain = clearedMap.xpReward ?? ((clearedMap.season || 1) >= 2 ? 25 : db.XP_PER_MAP);
         let levelCleared = false;
         Object.values(room.players).forEach((p) => {
             p.xp = (p.xp || 0) + xpGain;

@@ -759,7 +759,7 @@ export const MAPS: MapDef[] = [
         season: 2,
         mode: 'gflower',
         killsToWin: 0,
-        xpReward: 40,
+        xpReward: 70,          // Season 2 boss
         accentColor: 0xff4081,
         groundColor: 0x1b3a2a,
         mapWidth: 3000,
@@ -795,14 +795,14 @@ export const MAPS: MapDef[] = [
         season: 2,
         mode: 'lift',
         killsToWin: 0,
-        xpReward: 20,
+        xpReward: 25,          // Season 2 oddiy xarita
         accentColor: 0x40c4ff,
         groundColor: 0x1b3a2a,
         mapWidth: 1300,
         platforms: [],
         lift: {
             x: 860, w: 300, triggerX: 560,
-            readyY: 520, rideY: 380, liftOffMs: 2500, riseMs: 32000,
+            readyY: 520, rideY: 380, liftOffMs: 2500, riseMs: 50000,
             botsTotal: 3, botHp: 330, firstBotMs: 2500, nextBotMs: 2000
         },
         playerSpawns: [
