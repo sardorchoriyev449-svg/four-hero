@@ -705,7 +705,7 @@ export class GameEngine {
                 } else {
                     // Raqib bilan BIR sirtda (yoki unga yo'l yo'q - pastda kutadi)
                     let desiredX: number;
-                    const contactX = (isDog ? this.DOG_HALF_W : this.BOT_HALF_W) + this.PLAYER_HALF_W + 2;
+                    const contactX = (isDog && bot.skin !== 'sprout' ? this.DOG_HALF_W : this.BOT_HALF_W) + this.PLAYER_HALF_W + 2;
                     if (Math.abs(p.x - bot.x) > 60 && here.standY === this.GROUND_Y) {
                         // FORMATSIYA: uzoqda har bot o'z "joyi"ga intiladi - bir X'ga
                         // to'planib, bir-biriga urilib tebranmasligi uchun
@@ -738,7 +738,8 @@ export class GameEngine {
             // ZARBA: tegish endi jon olmaydi. Bot yaqin bo'lsa avval qilichini
             // ko'taradi (windup), so'ng uradi - zarba tushgan PAYTDA o'yinchi hali
             // yetib boradigan joyda bo'lsagina jon oladi
-            const inReach = Math.abs(p.x - bot.x) <= (isDog ? this.DOG_REACH_X : this.BOT_ATTACK_REACH_X) &&
+            // Kichkina gul rasmi itdan ancha tor - faqat haqiqatan yonida turganda tishlaydi
+            const inReach = Math.abs(p.x - bot.x) <= (bot.skin === 'sprout' ? 42 : isDog ? this.DOG_REACH_X : this.BOT_ATTACK_REACH_X) &&
                             Math.abs(pAsBotY - bot.y) <= this.BOT_ATTACK_REACH_Y;
             if (bot.windupTimer > 0) {
                 bot.windupTimer--;
@@ -1997,7 +1998,8 @@ export class GameEngine {
         for (let i = thorns.length - 1; i >= 0; i--) {
             const th = thorns[i];
             th.x += th.vx * this.TICK_SECONDS; th.y += th.vy * this.TICK_SECONDS;
-            const victim = alive.find(p => Math.abs(p.x - th.x) <= this.PLAYER_HALF_W + 4 && Math.abs(p.y - th.y) <= this.PLAYER_HALF_H + 4);
+            // Tikan kichkina - faqat tanaga aniq tekkanda (tarmoq kechikishi uchun o'yinchi foydasiga zaxira)
+            const victim = alive.find(p => Math.abs(p.x - th.x) <= this.PLAYER_HALF_W - 2 && Math.abs(p.y - th.y) <= this.PLAYER_HALF_H - 2);
             const blocked = th.y >= 570 || th.x < d.arenaX + 20 || th.x > d.arenaX + d.arenaW - 20 || th.y < 0 ||
                 map.platforms.some(pl => th.x >= pl.x && th.x <= pl.x + pl.w && th.y >= pl.y && th.y <= pl.y + pl.h + 4);
             if (victim) this.hurtPlayer(victim, d.thornDamage);
@@ -2024,7 +2026,9 @@ export class GameEngine {
             }
             alive.forEach(p => {
                 const feet = p.y + this.PLAYER_HALF_H;
-                if (r.hit.includes(p.id) || Math.abs(p.x - r.x) > 24 || feet < r.y - 110 || feet > r.y + 6) return;
+                if (r.hit.includes(p.id) || Math.abs(p.x - r.x) > 20 || feet < r.y - 100 || feet > r.y + 6) return;
+                // Tomir bilan qahramon orasida platforma bo'lsa - tomir unga yetmaydi (platforma ustida turgan tegmaydi)
+                if (map.platforms.some(pl => r.x >= pl.x && r.x <= pl.x + pl.w && pl.y < r.y - 4 && pl.y >= feet - 4)) return;
                 r.hit.push(p.id);
                 this.hurtPlayer(p, d.rootDamage);
                 this.knockback(p, 0, -380);

@@ -2573,7 +2573,7 @@ function launchGame(socket, roomId, mapData, continued) {
             }
             if (r.phase === 'up' && !o.img) {
                 if (o.warn) { o.warn.destroy(); o.warn = null; }
-                o.img = scene.add.image(r.x, r.y + 4, 'px_gf_root').setOrigin(0.5, 1).setDepth(3.4).setScale(1, 0.05);
+                o.img = scene.add.image(r.x, r.y + 4, 'px_gf_root').setOrigin(0.5, 1).setDepth(1.3).setScale(1, 0.05);
                 scene.tweens.add({ targets: o.img, scaleY: 1, duration: 110, ease: 'Back.Out' });
                 gDust(scene, r.x, r.y - 4, 6, 0x4e342e);
             }
