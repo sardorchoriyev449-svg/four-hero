@@ -2482,24 +2482,68 @@ function launchGame(socket, roomId, mapData, continued) {
         [[4, 15], [4, 16], [7, 15], [7, 16], [7, 17], [5, 15]].forEach(([x, y]) => set(x, y, 0xc62828));
         return gridOutline(g, 0x0a0a0a);
     }
-    // ZOMBI (o'ngga qaragan): yashil teri, qizil ko'zlar, yirtiq ko'ylak, qo'llari oldinga cho'zilgan
-    function zombieGrid(frame) {
+    // ZOMBI-SABZAVOTLAR (o'ngga qaragan): kind 0 - sabzi, 1 - qovoq, 2 - karam. Yovuz yuz (qizil ko'zlar,
+    // tishli og'iz), barg-qo'llar, ildiz-oyoqlar. frame 0/1 - yurish, 2 - hujum (og'iz ochiq, qo'llar tepada)
+    function zombieVegGrid(kind, frame) {
         const W = 16, H = 26;
         const g = gridNew(W, H);
         const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
-        const SKIN = [0x3b5229, 0x4e6b3a, 0x6b8e4e, 0x8bab6a];
-        for (let y = 0; y < 8; y++) for (let x = 4; x < 11; x++) set(x, y, shade(0.8 - (y) / 20 - (x - 4) / 30, x, y, SKIN));
-        [[4, 0], [5, 0], [7, 0], [9, 1], [4, 1]].forEach(([x, y]) => set(x, y, 0x263238));
-        set(7, 3, 0xff1744); set(9, 3, 0xff1744);
-        [[6, 6], [7, 5], [8, 6], [9, 5]].forEach(([x, y]) => set(x, y, 0x1b0000));
-        for (let y = 8; y < 17; y++) for (let x = 3; x < 11; x++) set(x, y, ((x * 3 + y * 5) % 11 === 0) ? SKIN[2] : shade(0.75 - y / 40, x, y, [0x263238, 0x37474f, 0x546e7a, 0x78909c]));
-        set(5, 16, 0); set(8, 16, 0);
-        const armY = frame === 2 ? 6 : 10;
-        for (let x = 10; x < 16; x++) { const y = frame === 2 ? 10 - Math.round((x - 10) * 0.7) : armY; set(x, y, SKIN[2]); set(x, y + 1, SKIN[1]); }
-        set(15, frame === 2 ? 6 : 9, SKIN[3]); set(15, frame === 2 ? 5 : 12, SKIN[3]);
-        const legs = frame === 1 ? [[5, 1], [8, -1]] : [[4, 0], [9, 0]];
-        legs.forEach(([lx, dx]) => { for (let y = 17; y < 25; y++) { const x = lx + Math.round((y - 17) * dx / 8); set(x, y, y % 3 ? 0x5d4037 : 0x4e342e); set(x + 1, y, 0x3e2723); } });
-        legs.forEach(([lx, dx]) => { set(lx + dx - 1, 25, 0x1b1b1b); set(lx + dx, 25, 0x1b1b1b); set(lx + dx + 1, 25, 0x1b1b1b); set(lx + dx + 2, 25, 0x1b1b1b); });
+        const ell = (cx, cy, rx, ry, pal, fn) => {
+            for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+                if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) set(x, y, fn ? fn(x, y) : shade(0.85 - (y - cy + ry) / (ry * 4) - (x - cx + rx) / (rx * 6), x, y, pal));
+            }
+        };
+        const ROT = 0x689f38;   // chirigan dog'lar
+        let faceY;
+        if (kind === 0) {
+            // Sabzi: uzun, tepasida barglar, chiziqlari bor
+            [[5, 0], [7, 0], [9, 1]].forEach(([x, y]) => { for (let yy = y; yy < 5; yy++) set(x + Math.round((yy - y) * (7 - x) / 6), yy, yy % 2 ? 0x558b2f : 0x7cb342); });
+            for (let y = 4; y < 19; y++) {
+                const half = Math.max(1, 4.5 - (y - 4) * 0.22);
+                for (let x = 0; x < W; x++) if (Math.abs(x - 7) <= half) set(x, y, (y % 4 === 1 && Math.abs(x - 7) < half - 0.5) ? 0xe65100 : (x * 3 + y) % 13 === 0 ? ROT : x < 7 ? 0xff9800 : 0xf57c00);
+            }
+            faceY = 7;
+        } else if (kind === 1) {
+            // Qovoq: yumaloq, qovurg'ali, tepasida bandi
+            set(7, 4, 0x33691e); set(8, 4, 0x33691e); set(8, 3, 0x558b2f); set(9, 2, 0x558b2f);
+            ell(7.5, 11, 7, 6, null, (x, y) => ((x - 7.5) % 3 === 0 || Math.abs(x - 7.5) === 3.5) ? 0xd84315 : (x * 5 + y) % 17 === 0 ? ROT : y < 9 ? 0xffa726 : 0xfb8c00);
+            faceY = 9;
+        } else {
+            // Karam: qatlam-qatlam barglar
+            ell(7.5, 10.5, 6.5, 6, null, (x, y) => {
+                const r = Math.hypot(x - 7.5, y - 10.5);
+                return r > 5.2 ? 0x33691e : (Math.round(r * 1.4) % 2 ? 0x7cb342 : 0x9ccc65);
+            });
+            [[1, 6], [14, 6], [2, 14], [13, 15]].forEach(([x, y]) => set(x, y, 0x558b2f));
+            faceY = 9;
+        }
+        // Yuz: qizil ko'zlar, qovoq qoshlar, tishli og'iz
+        set(5, faceY - 1, 0x3e2723); set(10, faceY - 1, 0x3e2723);
+        set(5, faceY, 0xff1744); set(10, faceY, 0xff1744);
+        if (frame === 2) {
+            for (let x = 5; x <= 10; x++) { set(x, faceY + 2, 0x1b0000); set(x, faceY + 3, 0x1b0000); set(x, faceY + 4, 0x1b0000); }
+            [5, 7, 9].forEach(x => { set(x, faceY + 2, 0xfafafa); set(x + 1, faceY + 4, 0xfafafa); });
+        } else {
+            for (let x = 5; x <= 10; x++) set(x, faceY + 3, 0x1b0000);
+            [5, 7, 9].forEach(x => set(x, faceY + 2, 0xfafafa));
+            [6, 8, 10].forEach(x => set(x, faceY + 4, 0xfafafa));
+        }
+        set(9, faceY + 5, 0xc62828);   // og'iz chetidan sharbat/qon tomadi
+        // Barg-qo'llar: oldinga cho'zilgan (hujumda - tepaga)
+        const armY = kind === 0 ? 11 : 12;
+        for (let k = 0; k < 4; k++) {
+            const x = 12 + k, y = frame === 2 ? armY - 1 - k : armY + (k % 2);
+            set(x, y, 0x558b2f); set(x, y + 1, 0x33691e);
+        }
+        for (let k = 0; k < 3; k++) { set(2 - k, armY + 1 + k, 0x558b2f); }
+        // Ildiz-oyoqlar
+        const legs = frame === 1 ? [[6, 1], [9, -1]] : [[5, -1], [10, 1]];
+        const topY = kind === 0 ? 19 : 17;
+        legs.forEach(([lx, dx]) => {
+            for (let y = topY; y < 25; y++) { const x = lx + Math.round((y - topY) * dx / 6); set(x, y, y % 2 ? 0x6d4c41 : 0x5d4037); }
+            const ex = lx + dx;
+            set(ex - 1, 25, 0x4e342e); set(ex, 25, 0x4e342e); set(ex + 1, 25, 0x4e342e); set(ex + 2, 24, 0x4e342e);
+        });
         return gridOutline(g, 0x0a0a0a);
     }
     function ensureFarmTextures(scene) {
@@ -2511,7 +2555,7 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_kennel', kennelGrid(), 4);
         mk('px_carrot_top', carrotGrid(false), 3);
         mk('px_carrot_evil', carrotGrid(true), 3);
-        [0, 1, 2].forEach(f => mk('px_zombie_' + f, zombieGrid(f), 3));
+        [0, 1, 2].forEach(k => [0, 1, 2].forEach(f => mk('px_zveg_' + k + '_' + f, zombieVegGrid(k, f), 3)));
     }
     function buildFarmScene(scene) {
         const W = mapWidth, F = map.farm;
@@ -5276,8 +5320,12 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (bot.skin === 'zombie') {
                         // ZOMBI: 48x78 rasm, oyog'i server hitboxi tagiga (y+20) to'g'ri keladi
                         ensureFarmTextures(this);
-                        b = this.physics.add.sprite(bot.x, bot.y, 'px_zombie_0').setDepth(3).setOrigin(0.5, 58 / 78);
+                        // Qaysi sabzavot - bot id'sidan (har o'yinchida bir xil ko'rinadi)
+                        let h = 0;
+                        for (let i = 0; i < bot.id.length; i++) h = (h * 31 + bot.id.charCodeAt(i)) % 997;
+                        b = this.physics.add.sprite(bot.x, bot.y, 'px_zveg_' + (h % 3) + '_0').setDepth(3).setOrigin(0.5, 58 / 78);
                         b.isZombie = true;
+                        b.zKind = h % 3;
                         b.animT = 0;
                         b.animFrame = 0;
                     } else if (bot.skin === 'sprout') {
@@ -5744,7 +5792,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     const moving = Math.abs(b.targetX - b.x) > 0.4;
                     b.animT += this.game.loop.delta;
                     if (b.animT > 260) { b.animT = 0; b.animFrame = 1 - b.animFrame; }
-                    b.setTexture(b.isAttacking ? 'px_zombie_2' : moving ? 'px_zombie_' + b.animFrame : 'px_zombie_0');
+                    b.setTexture('px_zveg_' + b.zKind + '_' + (b.isAttacking ? 2 : moving ? b.animFrame : 0));
                     if (b.healthBar) b.healthBar.clear();   // bitta zarbada o'ladi - jon chizig'i kerak emas
                 } else if (b.isSprout) {
                     // Yerdan sug'urilib chiqmoqda: faqat yer ustidagi qismi ko'rinadi
