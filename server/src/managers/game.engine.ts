@@ -488,7 +488,7 @@ export class GameEngine {
     private moveToward(bot: BotState, x: number, surfaces: Surface[]): void {
         const dx = x - bot.x;
         if (Math.abs(dx) < 1) return;
-        const speed = bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 3.2)
+        const speed = bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 3.7)
             : bot.kind === 'dog' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : this.DOG_SPEED) : this.BOT_SPEED;
         const newX = bot.x + Math.sign(dx) * Math.min(speed, Math.abs(dx));
         if (!this.blockedAt(surfaces, newX, bot)) bot.x = newX;
@@ -1879,9 +1879,9 @@ export class GameEngine {
         if (g.state === 'wake') {
             if (--g.timer <= 0) {
                 g.state = 'fight';
-                g.nextWhip = g.tick + T(2000);
-                g.nextRoot = g.tick + T(3500);
-                g.nextThorn = g.tick + T(5000);
+                g.nextWhip = g.tick + T(1600);
+                g.nextRoot = g.tick + T(3000);
+                g.nextThorn = g.tick + T(4200);
                 g.nextBite = g.tick;
                 g.nextSprout = g.tick + T(1500);
             }
@@ -1901,7 +1901,7 @@ export class GameEngine {
             if (focus) g.side = focus.x < d.stemX ? -1 : 1;
             const rx = d.stemX + g.side * 75, ry = d.headY;
             const dx = rx - g.hx, dy = ry - g.hy, dist = Math.hypot(dx, dy);
-            const step = 2.5;   // bosh sekin o'tadi (o'yinchi ko'zlab ulgursin)
+            const step = 3;   // bosh sekin o'tadi (o'yinchi ko'zlab ulgursin)
             if (dist <= step) { g.hx = rx; g.hy = ry; } else { g.hx += dx / dist * step; g.hy += dy / dist * step; }
         }
 
@@ -1923,9 +1923,9 @@ export class GameEngine {
             if (b.phase === 'wind') {
                 // Orqaga tortilib, og'zini ochadi
                 g.hx += (d.stemX - g.hx) * 0.04; g.hy -= 0.8;
-                if (b.t <= 0) { b.phase = 'lunge'; b.t = T(320); b.fromX = g.hx; b.fromY = g.hy; }
+                if (b.t <= 0) { b.phase = 'lunge'; b.t = T(260); b.fromX = g.hx; b.fromY = g.hy; }
             } else if (b.phase === 'lunge') {
-                const k = 1 - b.t / T(320);
+                const k = 1 - b.t / T(260);
                 g.hx = b.fromX + (b.tx - b.fromX) * k; g.hy = b.fromY + (b.ty - b.fromY) * k;
                 if (b.t <= 0) {
                     g.hx = b.tx; g.hy = b.ty;
@@ -1935,7 +1935,7 @@ export class GameEngine {
                         this.knockback(p, (p.x < d.stemX ? -1 : 1) * 260, -320);
                     });
                     this.io.to(roomId).emit('gflowerBite', { x: Math.round(g.hx), y: Math.round(g.hy) });
-                    b.phase = 'back'; b.t = T(700);
+                    b.phase = 'back'; b.t = T(560);
                 }
             } else if (b.t <= 0) {
                 g.bite = null;
