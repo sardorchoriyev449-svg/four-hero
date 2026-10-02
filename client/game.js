@@ -4655,7 +4655,7 @@ function launchGame(socket, roomId, mapData, continued) {
             g.fillCircle(cx, cy, 4.5); // Ichki yorqin yadro
             g.generateTexture('projectile_fireball', 26, 26); g.destroy();
         }
-        // 4b. Kunai (samurai 15-daraja): kulrang tig', qora dasta, qizil halqa
+        // 4b. Kunai (samurai 3-daraja): kulrang tig', qora dasta, qizil halqa
         if (!this.textures.exists('projectile_kunai')) {
             let g = this.add.graphics();
             g.fillStyle(0x1a1a1a, 1); g.fillRect(0, 4, 10, 4);

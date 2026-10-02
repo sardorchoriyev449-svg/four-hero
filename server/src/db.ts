@@ -373,7 +373,7 @@ export async function awardSkillPointIfNew(userId: string, levelId: number, char
 
 // Tanlangan PERSONAJNING yig'ilgan ballaridan birini sarflab, "damage" yoki
 // "stamina" darajasini oshirish (max 5). Boshqa personajlarga ta'sir qilmaydi.
-// Qurol kuchaytirishlari (drobovik, kunai) - faqat o'sha qurol ochilgan 15-darajadan (perks.ts)
+// Qurol kuchaytirishlari (drobovik, kunai) - faqat o'sha qurol ochilgan 3-darajadan (perks.ts)
 
 export async function upgradeStat(userId: string, characterType: string, stat: string, payWith: 'points' | 'coins' = 'points'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     if (!CHARACTER_TYPES.includes(characterType)) {

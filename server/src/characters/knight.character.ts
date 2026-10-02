@@ -13,7 +13,7 @@ export class KnightCharacter extends BaseCharacter {
     }
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
-        // 15-daraja: Q bilan DROBOVIK - yaqin masofaga 5 ta sochma o'q (yelpig'ich); har otish -1 o'q,
+        // 3-daraja: Q bilan DROBOVIK - yaqin masofaga 5 ta sochma o'q (yelpig'ich); har otish -1 o'q,
         // magazin bo'shasa qayta o'qlanadi
         if (player.weaponMode === 'alt') {
             player.ammo = (player.ammo ?? shotgunMagOf(player)) - 1;

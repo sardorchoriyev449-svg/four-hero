@@ -1417,14 +1417,14 @@ function renderUpgrades() {
         { key: 'damage', icon: 'fa-hand-fist', nameKey: 'char_damage', descKey: 'char_damage_desc' },
         { key: 'stamina', icon: 'fa-bolt', nameKey: 'char_stamina', descKey: 'char_stamina_desc' }
     ];
-    // 15-darajadan: qurol kuchaytirishlari (knight - drobovik, samurai - kunai)
+    // 3-darajadan: qurol kuchaytirishlari (knight - drobovik, samurai - kunai)
     const WEAPON_STATS = {
         knight: [{ key: 'shotgunDamage', icon: 'fa-burst', nameKey: 'up_shotgun_dmg', descKey: 'up_shotgun_dmg_d' },
                  { key: 'shotgunMag', icon: 'fa-box', nameKey: 'up_shotgun_mag', descKey: 'up_shotgun_mag_d' }],
         samurai: [{ key: 'kunaiDamage', icon: 'fa-khanda', nameKey: 'up_kunai_dmg', descKey: 'up_kunai_dmg_d' }]
     };
     const charLevel = xpProgress((currentUser.charXp && currentUser.charXp[selectedCharTab]) || 0).level;
-    (WEAPON_STATS[selectedCharTab] || []).forEach(st => stats.push({ ...st, needLevel: 15, locked: charLevel < 15 }));
+    (WEAPON_STATS[selectedCharTab] || []).forEach(st => stats.push({ ...st, needLevel: 3, locked: charLevel < 3 }));
 
     const charUpgrades = (currentUser.upgrades && currentUser.upgrades[selectedCharTab]) || { damage: 0, stamina: 0 };
 

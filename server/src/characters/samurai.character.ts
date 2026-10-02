@@ -6,7 +6,7 @@ export class SamuraiCharacter extends BaseCharacter {
     public attackStaminaCost = 8;
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
-        // 15-daraja: Q bilan KUNAI - uzoqqa otiladigan pichoq
+        // 3-daraja: Q bilan KUNAI - uzoqqa otiladigan pichoq
         if (player.weaponMode === 'alt') {
             room.bulletIdCounter++;
             room.bullets.push({

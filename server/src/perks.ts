@@ -17,8 +17,8 @@ export type PerkId =
 
 export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] } = {
     mage: [{ level: 1, id: 'shift' }, { level: 2, id: 'ice' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'heal' }, { level: 15, id: 'stam5' }],
-    knight: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'fly' }, { level: 15, id: 'shotgun' }],
-    samurai: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'djump' }, { level: 15, id: 'kunai' }],
+    knight: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'shotgun' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'fly' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
+    samurai: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'kunai' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'djump' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }]
 };
 
@@ -39,18 +39,19 @@ export function hasPerk(p: PlayerState, id: PerkId): boolean {
 export function maxStaminaOf(characterType: string, level: number): number {
     return 100 + 5 * unlocked(characterType, level).filter(id => id === 'stam5').length;
 }
+// Har ochilgan "dmg5" uchun +5 (knight/samurai 5 va 15-darajada - jami +10)
 export function bonusDamageOf(p: PlayerState): number {
-    return hasPerk(p, 'dmg5') ? 5 : 0;
+    return 5 * unlocked(p.characterType, p.level || 0).filter(id => id === 'dmg5').length;
 }
 
-// QUROL KUCHAYTIRISHLARI (ball bilan, 5 darajagacha) - faqat shu qurol ochilgan (15-daraja) personajga:
+// QUROL KUCHAYTIRISHLARI (ball bilan, 5 darajagacha) - faqat shu qurol ochilgan (3-daraja) personajga:
 //   knight: drobovik zarari (+2 har sochma o'qqa) va magazin (7 ta, har daraja +2)
 //   samurai: kunai zarari (+4)
 export const WEAPON_UPGRADES: { [character: string]: string[] } = {
     knight: ['shotgunDamage', 'shotgunMag'],
     samurai: ['kunaiDamage']
 };
-export const WEAPON_UPGRADE_LEVEL = 15;
+export const WEAPON_UPGRADE_LEVEL = 3;
 export const SHOTGUN_BASE_MAG = 7;
 export const SHOTGUN_MAG_PER_LEVEL = 2;
 export const SHOTGUN_DMG_PER_LEVEL = 2;
