@@ -160,6 +160,26 @@ function launchGame(socket, roomId, mapData, continued) {
     const isGFlower = !!map.giantFlower; // Season 2 map-1: Gigant gul
     const isLift = !!map.lift;           // Season 2 map-2: tog'ga ko'tariluvchi platforma
     const isFarm = !!map.farm;           // Season 2 map-3: zombi poliz
+    // O'YIN OVOZLARI: sfx - har doim bir xil balandlikda; sfxAt - qahramondan uzoqlashgan sari pasayadi
+    const sfx = (name, v = 1) => { if (window.GameAudio) GameAudio.sfx(name, v); };
+    const sfxAt = (name, x, v = 1) => {
+        if (!window.GameAudio) return;
+        const cx = currentCharacter ? currentCharacter.x : x;
+        const d = Math.abs(x - cx);
+        if (d > 900) return;
+        GameAudio.sfx(name, v * Math.max(0.2, 1 - d / 900));
+    };
+    const bossHpSeen = {};
+    // Boss joni kamaydi - zarba ovozi (har boss uchun alohida kuzatiladi)
+    const bossHitSound = (key, hp, x) => {
+        if (typeof hp !== 'number') return;
+        if (bossHpSeen[key] !== undefined && hp < bossHpSeen[key] - 0.5) sfxAt('bossHit', x);
+        bossHpSeen[key] = hp;
+    };
+    let prevSnakeFire = 'idle';
+    const tongueSeen = {};
+    let prevWhipPhase = null;
+    const rootUpSeen = new Set();
     const isSnakeArena = isArena && !!map.arena.snake; // arenada Robot ilon boss bo'lib chiqishi mumkin
     const snakeDef = map.boss || (isSnakeArena ? map.arena.snake : null);
 
@@ -195,6 +215,9 @@ function launchGame(socket, roomId, mapData, continued) {
     let stoneSprites = {};
     let lastGroundedAt = -1e9; // toshlarda: tosh pastga ketayotganda ham sakrab ulgurish (coyote)
     let stunUntil = 0;         // gorilla itarib yuborganda - qisqa vaqt boshqaruv yo'q (uchib ketadi)
+    let rootUntil = 0;         // ferma: ildiz oyoqdan ushlab turibdi - yurolmaydi, sakrolmaydi
+    let farmRootGfx = null;
+    let zTongueGfx = null;
     let airJumpsLeft = 0;      // samurai 10-daraja: havoda ikkinchi sakrash
     let jumpWasDown = false;
     let wasFlying = false;     // knight 10-daraja: uchuvchi etik (R)
@@ -235,6 +258,7 @@ function launchGame(socket, roomId, mapData, continued) {
     let farmState = null;
     let farmObj = null;        // { top, hint, carrot }
     let farmTalkShown = false;
+    let serverBotsLast = [];
     let carrotOut = false;
     let gPoundHit = false;     // yerni urish seriyasi: oxirgi kadr "urish" bo'lganmi
     let gCracks = [];          // urishlardan polda paydo bo'lgan yoriqlar
@@ -693,6 +717,7 @@ function launchGame(socket, roomId, mapData, continued) {
     // MINA PORTLASHI: chaqnash, olov halqasi, parchalar, tutun; ekranda
     // ko'rinsa - ekran silkinadi; yaqin turgan o'z qahramonimiz tepaga otiladi
     function explodeMine(scene, x, y) {
+        sfxAt('explosion', x);
         const cam = scene.cameras.main;
         const flash = scene.add.circle(x, y, 12, 0xffeb3b, 1).setDepth(7);
         scene.tweens.add({ targets: flash, scale: 6, alpha: 0, duration: 320, onComplete: () => flash.destroy() });
@@ -2636,6 +2661,57 @@ function launchGame(socket, roomId, mapData, continued) {
         scene.tweens.add({ targets: hint, y: 494, duration: 400, yoyo: true, repeat: -1 });
         farmObj = { top, hint, carrot: null };
     }
+    // Har kadr: oyog'idan ildiz ushlagan qahramonlar va zombi-sabzavotlarning igna-tili
+    function drawFarmHazards(scene, bots) {
+        if (!farmRootGfx) farmRootGfx = scene.add.graphics().setDepth(3.3);
+        if (!zTongueGfx) zTongueGfx = scene.add.graphics().setDepth(3.4);
+        const g = farmRootGfx, t = scene.time.now;
+        g.clear();
+        ((farmState && farmState.rooted) || []).forEach((r) => {
+            const spr = r.id === socket.id ? currentCharacter : otherPlayers[r.id];
+            const x = spr ? spr.x : r.x;
+            for (let k = 0; k < 4; k++) {
+                const bx = x - 16 + k * 10, sway = Math.sin(t / 120 + k) * 3;
+                g.fillStyle(0x0a0a0a, 1); g.fillRect(bx - 1, 538 + (k % 2) * 6, 7, 34);
+                g.fillStyle(k % 2 ? 0x6d4c41 : 0x5d4037, 1); g.fillRect(bx, 540 + (k % 2) * 6, 5, 32);
+                g.fillStyle(0x8d6e63, 1); g.fillRect(bx + sway, 536 + (k % 2) * 6, 4, 6);
+            }
+            g.fillStyle(0x4e342e, 1); g.fillRect(x - 20, 552, 40, 5); g.fillRect(x - 18, 544, 36, 4);
+        });
+        const tg = zTongueGfx;
+        tg.clear();
+        (bots || []).forEach((b) => {
+            if (b.skin !== 'zombie' || !b.tongue) return;
+            const spr = enemyBots[b.id];
+            const mx = (spr ? spr.x : b.x) + (b.facingLeft ? -8 : 8), my = (spr ? spr.y : b.y) - 26;
+            if (b.tongue.phase === 'aim') {
+                // Og'zidan igna uchi chiqib titraydi, nishon tomonga qizil nuqtalar
+                const dx = b.tongue.tx - mx, dy = b.tongue.ty - my, L = Math.hypot(dx, dy) || 1;
+                const ux = dx / L, uy = dy / L, j = Math.sin(t / 40) * 2;
+                tg.fillStyle(0xec407a, 1); tg.fillRect(Math.round(mx + ux * 6 + j) - 2, Math.round(my + uy * 6) - 2, 5, 5);
+                tg.fillStyle(0xeeeeee, 1); tg.fillRect(Math.round(mx + ux * 12 + j) - 1, Math.round(my + uy * 12) - 1, 3, 3);
+                if (Math.floor(t / 120) % 2) {
+                    tg.fillStyle(0xff1744, 0.6);
+                    for (let d = 30; d < Math.min(L, 240); d += 26) tg.fillRect(Math.round(mx + ux * d) - 2, Math.round(my + uy * d) - 2, 4, 4);
+                }
+            } else {
+                // Sanchish: pushti til, uchida o'tkir oq igna
+                const ex = b.tongue.tx, ey = b.tongue.ty, L = Math.hypot(ex - mx, ey - my) || 1;
+                const n = Math.ceil(L / 4);
+                for (let i = 0; i <= n; i++) {
+                    const x = mx + (ex - mx) * i / n, y = my + (ey - my) * i / n + Math.sin(i * 0.6 + t / 30) * 1.5;
+                    tg.fillStyle(0x0a0a0a, 1); tg.fillRect(Math.round(x) - 3, Math.round(y) - 3, 7, 7);
+                }
+                for (let i = 0; i <= n; i++) {
+                    const x = mx + (ex - mx) * i / n, y = my + (ey - my) * i / n + Math.sin(i * 0.6 + t / 30) * 1.5;
+                    tg.fillStyle(i % 3 ? 0xec407a : 0xf48fb1, 1); tg.fillRect(Math.round(x) - 2, Math.round(y) - 2, 5, 5);
+                }
+                const ux = (ex - mx) / L, uy = (ey - my) / L;
+                tg.fillStyle(0x0a0a0a, 1); tg.fillTriangle(ex - uy * 6, ey + ux * 6, ex + uy * 6, ey - ux * 6, ex + ux * 20, ey + uy * 20);
+                tg.fillStyle(0xfafafa, 1); tg.fillTriangle(ex - uy * 4, ey + ux * 4, ex + uy * 4, ey - ux * 4, ex + ux * 16, ey + uy * 16);
+            }
+        });
+    }
     // Sabzi sug'urildi: og'zidan qon oqayotgan yovuz sabzi, polizlar silkinadi
     function pullCarrotAnim(scene, instant) {
         if (carrotOut || !farmObj) return;
@@ -3378,6 +3454,10 @@ function launchGame(socket, roomId, mapData, continued) {
     // Holat o'zgarganda - bir martalik effektlar
     function gorillaFx(scene, prev, cur) {
         const gx = cur.x;
+        if (cur.state === 'roar') sfxAt('roar', gx);
+        else if (cur.state === 'push') sfxAt('whoosh', gx);
+        else if (cur.state === 'slam') sfxAt('explosion', gx, 0.7);
+        else if (cur.state === 'defeat' && prev !== 'defeat') sfx('bossDown');
         if (cur.state === 'roar') {
             scene.cameras.main.shake(400, 0.006);
             for (let k = 0; k < 3; k++) {
@@ -4433,6 +4513,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // QUTI SINDIRGANDA: qahramon tepasida "+10" tanga yozuvi suzib chiqadi
         window.onCoinsGained = (amount) => {
             if (!currentCharacter || !currentCharacter.active) return;
+            sfx('coin');
             const txt = this.add.text(currentCharacter.x, currentCharacter.y - 40, '+' + amount, {
                 font: 'bold 18px Arial', fill: '#ffcc00', stroke: '#000000', strokeThickness: 4
             }).setOrigin(0.5).setDepth(1003);
@@ -4481,6 +4562,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 <div class="pm-settings hidden">
                     <label>${t('settings_volume')}</label>
                     <input type="range" min="0" max="100" value="${vol}" class="pm-vol">
+                    <label>${t('settings_sfx')}</label>
+                    <input type="range" min="0" max="100" value="${localStorage.getItem('sfxVolume') || '80'}" class="pm-sfx">
                     <label>${t('settings_screen')}</label>
                     <div class="pm-langs">
                         <button class="pm-lang" data-screen-btn="standard">${t('screen_standard')}</button><button class="pm-lang" data-screen-btn="full">${t('screen_full')}</button>
@@ -4496,6 +4579,8 @@ function launchGame(socket, roomId, mapData, continued) {
             el.querySelector('[data-act="resume"]').onclick = closePauseMenu;
             el.querySelector('[data-act="settings"]').onclick = () => el.querySelector('.pm-settings').classList.toggle('hidden');
             el.querySelector('.pm-vol').oninput = (e) => { if (window.setGameVolume) window.setGameVolume(e.target.value); };
+            el.querySelector('.pm-sfx').oninput = (e) => { if (window.setSfxVolume) window.setSfxVolume(e.target.value); };
+            el.querySelector('.pm-sfx').onchange = () => sfx('coin');
             // Ekran o'lchami: standart / to'liq ekran (lobby.js - setScreenMode)
             el.querySelectorAll('[data-screen-btn]').forEach((b) => {
                 b.classList.toggle('active', document.body.classList.contains('screen-full') === (b.dataset.screenBtn === 'full'));
@@ -4646,6 +4731,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('noStamina');
         socket.on('noStamina', () => {
             if (!currentCharacter || !currentCharacter.active || currentCharacter.isDead) return;
+            sfx('noStamina');
             if (currentCharacter.batteryIcon) currentCharacter.batteryIcon.destroy();
             const icon = this.add.image(currentCharacter.x, currentCharacter.y - 58, 'px_battery_dead').setDepth(1004);
             currentCharacter.batteryIcon = icon;
@@ -4674,18 +4760,28 @@ function launchGame(socket, roomId, mapData, continued) {
         // FERMA: sabzi sug'urildi (zombilar chiqa boshlaydi) / itxonadan robot it chiqdi
         socket.off('carrotPulled');
         socket.on('carrotPulled', () => {
+            sfx('pop'); sfx('rumble');
             if (dialog) closeDialog();
             pullCarrotAnim(this, false);
             arenaBanner(t('farm_banner'), '#8bc34a', t('farm_banner_sub'));
         });
+        socket.off('farmRoot');
+        socket.on('farmRoot', (d) => {
+            sfxAt('roots', d.x);
+            gDust(this, d.x, 566, 8, 0x4e342e);
+            this.cameras.main.shake(200, 0.005);
+            if (d.id === socket.id) rootUntil = this.time.now + 300;
+        });
         socket.off('farmDog');
         socket.on('farmDog', () => {
+            if (map.farm) sfxAt('bark', map.farm.kennelX);
             if (!map.farm) return;
             this.cameras.main.shake(300, 0.006);
             gDust(this, map.farm.kennelX - 40, 566, 6, 0x6d4c41);
         });
         socket.off('liftEmerge');
         socket.on('liftEmerge', () => {
+            sfx('rumble');
             this.cameras.main.shake(900, 0.008);
             if (map.lift) gDust(this, map.lift.x + map.lift.w / 2, 566, 14, 0x4e342e);
         });
@@ -4699,23 +4795,28 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         socket.off('liftStart');
         socket.on('liftStart', () => {
+            sfx('rumble'); sfx('banner');
             startLiftRide(this);
             arenaBanner(t('lift_banner'), '#40c4ff', t('lift_banner_sub'));
         });
         socket.off('liftArrived');
         socket.on('liftArrived', () => {
+            sfx('bossDown');
             liftArrive(this);
             arenaBanner(t('lift_top_banner'), '#69f0ae', null);
         });
         socket.off('gflowerWake');
         socket.on('gflowerWake', () => {
+            sfx('roar'); sfx('bossStart'); sfx('rumble');
             raiseGfWalls(this, false);
             arenaBanner(t('gf_banner'), '#ff4081', t('gf_banner_sub'));
         });
         socket.off('gflowerBite');
-        socket.on('gflowerBite', () => this.cameras.main.shake(180, 0.008));
+        socket.on('gflowerBite', () => { this.cameras.main.shake(180, 0.008); sfx('chomp'); });
         socket.off('gflowerDown');
-        socket.on('gflowerDown', () => gfDeathAnim(this));
+        socket.on('gflowerDown', () => { gfDeathAnim(this); sfx('bossDown'); });
+        socket.off('gflowerThorns');
+        socket.on('gflowerThorns', () => sfx('whoosh'));
         // Server qahramonni boshqa joyga o'tkazdi (masalan, jang maydoni yopilganda tashqarida qolgan)
         socket.off('teleport');
         socket.on('teleport', (d) => {
@@ -4725,17 +4826,20 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         socket.off('arenaBoss');
         socket.on('arenaBoss', (d) => {
+            sfx('bossStart'); if (d && d.boss !== 'squad') sfx('roar', 0.8);
             const nm = arenaBossName(d.boss);
             this.cameras.main.shake(400, 0.01);
             arenaBanner(t('arena_boss_in'), '#ff5252', nm);
         });
         socket.off('arenaBossDown');
         socket.on('arenaBossDown', (d) => {
+            sfx('bossDown');
             arenaBanner(t('arena_boss_down'), '#69f0ae', '+' + d.coins + ' ' + t('coins_word') + '   +' + d.xp + ' XP');
         });
         // Tajriba olindi (bot o'ldirildi va h.k.) - qahramon tepasida "+5 XP"
         socket.off('xpGained');
         socket.on('xpGained', (d) => {
+            sfx('xp', 0.7);
             if (!currentCharacter || !currentCharacter.active || !d) return;
             const txt = this.add.text(currentCharacter.x + 24, currentCharacter.y - 56, '+' + d.amount + ' XP', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#b388ff', stroke: '#000000', strokeThickness: 4
@@ -4749,6 +4853,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!currentCharacter || !currentCharacter.body) return;
             currentCharacter.setVelocity(d.vx, d.vy);
             stunUntil = this.time.now + 380;
+            sfx('thud');
         });
 
         // SUHBAT SAHNASI: server hozirgi qatorni yuboradi - hamma bir xil qatorni ko'radi
@@ -4774,6 +4879,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('gameStateUpdate', (data) => {
             const serverPlayers = data.players;
             const serverBots = data.bots || [];
+            serverBotsLast = serverBots;
             const serverBullets = data.bullets || [];
 
             if (data.snake) {
@@ -4795,7 +4901,9 @@ function launchGame(socket, roomId, mapData, continued) {
             if ((isBoss || isSnakeArena) && data.boss) {
                 bossState = data.boss;
                 if (isBoss && bossState.wallBroken && !bossFx.wall) { bossFx.wall = true; breakMarketWall(this); }
-                if (bossState.dead && !bossFx.dead) { bossFx.dead = true; bossDeathAnim(this); }
+                if (bossState.dead && !bossFx.dead) { bossFx.dead = true; bossDeathAnim(this); sfx('bossDown'); }
+                if (bossState.fire !== prevSnakeFire) { if (bossState.fire === 'fire') sfx('fire'); else if (bossState.fire === 'charge') sfx('roar', 0.6); prevSnakeFire = bossState.fire; }
+                bossHitSound('snake', bossState.hp, snakeDisplayX || 0);
                 const fl = data.flyingMines || [];
                 const ids = new Set(fl.map(f => f.id));
                 fl.forEach((f) => {
@@ -4818,6 +4926,7 @@ function launchGame(socket, roomId, mapData, continued) {
             // FERMA: holat; suhbat (hammaga); sabzi sug'urilgan bo'lsa (kech qo'shilgan) - darhol
             if (isFarm) {
                 farmState = data.farm || null;
+                if (farmState && (farmState.rooted || []).some(r => r.id === socket.id)) rootUntil = this.time.now + 200;
                 if (farmState && farmState.state === 'talk' && !farmTalkShown && currentCharacter) {
                     farmTalkShown = true;
                     if (farmObj) farmObj.hint.setVisible(false);
@@ -4843,6 +4952,23 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (gfState && gfState.state === 'dying' && !gfDying) gfDeathAnim(this);
                 syncGfHazards(this, data);
             }
+
+            if (data.gorilla) bossHitSound('gorilla', data.gorilla.hp, data.gorilla.x);
+            if (data.gflower) {
+                bossHitSound('gflower', data.gflower.hp, data.gflower.hx);
+                const wp = data.gflower.whip ? data.gflower.whip.phase : null;
+                if (wp === 'lash' && prevWhipPhase !== 'lash') sfx('whip');
+                prevWhipPhase = wp;
+            }
+            if (isArena && data.fatElf) bossHitSound('fatelf', data.fatElf.hp, data.fatElf.x);
+            // Tomir sanchildi (gigant gul) - yangi "up" holatidagi tomirlar
+            (data.gfRoots || []).forEach((r) => { if (r.phase === 'up' && !rootUpSeen.has(r.id)) { rootUpSeen.add(r.id); sfxAt('stab', r.x); } });
+            // Zombi-sabzavot igna-til sanchdi
+            (data.bots || []).forEach((b) => {
+                const ph = b.tongue ? b.tongue.phase : null;
+                if (ph === 'stab' && tongueSeen[b.id] !== 'stab') sfxAt('stab', b.x);
+                tongueSeen[b.id] = ph;
+            });
 
             // ARENA: hisob, joriy boss; boss yo'q bo'lsa - gorilla/semiz elf yo'q (yashiriladi)
             if (isArena) {
@@ -4889,7 +5015,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 }
                 // Jang boshlandi (hamma o'qib bo'ldi yoki vaqt tugadi) - ochiq qolgan suhbat yopiladi
                 if (prev === 'talk' && st !== 'talk' && dialog) closeDialog();
-                if (prev !== st && st === 'spit') this.cameras.main.shake(140, 0.004);
+                if (prev !== st && st === 'spit') { this.cameras.main.shake(140, 0.004); sfxAt('spit', fatElfState.x); }
+                if (prev !== st && st === 'down' && !isArena) sfx('bossDown');
+                bossHitSound('fatelf', fatElfState.hp, fatElfState.x);
                 if (prev !== st && st === 'down') {
                     this.cameras.main.shake(400, 0.012);
                     gDust(this, fatElfState.x, 566, 8);
@@ -5161,6 +5289,8 @@ function launchGame(socket, roomId, mapData, continued) {
             // 1. O'ZIMIZNING PERSONAJ HOLATI (Tezlik va effektlar)
             if (currentCharacter && serverPlayers[socket.id]) {
                 const myData = serverPlayers[socket.id];
+                if (!myData.isDead && typeof currentCharacter.hp === 'number' && myData.hp < currentCharacter.hp - 0.5) sfx('hurt');
+                if (myData.isDead && !currentCharacter.isDead) sfx('death');
                 currentCharacter.hp = myData.hp;
                 currentCharacter.maxHp = myData.maxHp || 100;
                 currentCharacter.stamina = myData.stamina;
@@ -5293,6 +5423,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 const exists = serverBots.some(b => b.id === id);
                 if (!exists) {
                     let deadBot = enemyBots[id];
+                    sfxAt(deadBot.isZombie || deadBot.isSprout ? 'squish' : deadBot.isDog ? 'dogDie' : 'botDie', deadBot.x);
                     if (deadBot.healthBar) deadBot.healthBar.destroy();
                     if (deadBot.weaponGfx) deadBot.weaponGfx.destroy();
                     // O'lim animatsiyasi paytida endi to'siq bo'lmasin
@@ -5365,6 +5496,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 } else {
                     if (enemyBots[bot.id].hp > bot.hp) {
                         enemyBots[bot.id].setTint(0xffffff);
+                        sfxAt('hit', bot.x, 0.8);
                         this.time.delayedCall(100, () => {
                             if (enemyBots[bot.id]) {
                                 if (bot.freezeDuration > 0) enemyBots[bot.id].setTint(0x00ffff);
@@ -5446,6 +5578,10 @@ function launchGame(socket, roomId, mapData, continued) {
                     }
                     // Egasining qurolida zarba animatsiyasi
                     playHeroAttack(this, ownerSprite, bData.bulletType);
+                    const bt = bData.bulletType;
+                    const shotName = bt === 'melee' ? (shooter && shooter.characterType === 'samurai' ? 'katana' : 'sword')
+                        : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' ? 'kunai' : bt === 'fireball' ? 'fireball' : 'arrow';
+                    sfxAt(shotName, bData.x, bData.playerId === socket.id ? 1 : 0.6);
 
                     bulletSprites[bData.id] = bSprite;
                 } else {
@@ -5456,7 +5592,7 @@ function launchGame(socket, roomId, mapData, continued) {
         });
     }
 
-    // MUSIQA: jang/harakat ketayotgan bo'lsa - xarita musiqasi (toq xarita - map-1.wav, juft - map 2.wav),
+    // MUSIQA: jang/harakat ketayotgan bo'lsa - jang musiqasi (fight-music.ogg),
     // suhbat, bozor, o'rmon yo'li, g'or yo'li va gorilla yengilgandan keyin - sokin ohang
     function musicMode() {
         if (dialog || isStory) return 'calm';
@@ -5528,6 +5664,7 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
         if (isLift) updateLift(this);
+        if (isFarm) drawFarmHazards(this, serverBotsLast);
         if (isGFlower) {
             drawGiantFlower(this);
             Object.values(gfThornSprites).forEach((sp) => { sp.x = Phaser.Math.Linear(sp.x, sp.tx, 0.6); sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6); });
@@ -5855,7 +5992,8 @@ function launchGame(socket, roomId, mapData, continued) {
             } else if (isFarm) {
                 const st = farmState ? farmState.state : 'idle';
                 const near = Math.abs(currentCharacter.x - map.farm.carrotX) <= map.farm.talkRange;
-                progressText = st === 'idle' ? (near ? t('hud_farm_carrot') : t('hud_farm_go').replace('{m}', Math.max(0, Math.ceil(Math.abs(map.farm.carrotX - currentCharacter.x) / 50))))
+                const past = currentCharacter.x > map.farm.carrotX + 60;
+                progressText = st === 'idle' ? (near ? t('hud_farm_carrot') : past ? t('hud_farm_back') : t('hud_farm_go').replace('{m}', Math.max(0, Math.ceil(Math.abs(map.farm.carrotX - currentCharacter.x) / 50))))
                     : st === 'fight' ? t('hud_farm_fight').replace('{k}', farmState.kills).replace('{n}', farmState.target) : '';
                 if (farmObj) farmObj.hint.setVisible(st === 'idle' && near && !dialog && !currentCharacter.isDead);
             } else if (isLift) {
@@ -5938,6 +6076,9 @@ function launchGame(socket, roomId, mapData, continued) {
         // Dialog paytida qahramon qimirlamaydi (Undertale'dagidek)
         if (dialog) {
             currentCharacter.setVelocityX(0);
+        } else if (this.time.now < rootUntil) {
+            // Ferma: ildiz oyog'idan ushlab turibdi
+            currentCharacter.setVelocityX(0);
         } else if (this.time.now < stunUntil) {
             // Gorilla itarib yubordi - uchib ketyapti
         } else if (cursors.left.isDown || this.input.keyboard.addKey('A').isDown || touchState.left) {
@@ -5955,7 +6096,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (isGrounded) lastGroundedAt = this.time.now;
             else if (this.time.now - lastGroundedAt < 120 && currentCharacter.body.velocity.y >= 0) isGrounded = true;
         }
-        const jumpDown = !dialog && (cursors.up.isDown || this.input.keyboard.addKey('W').isDown || touchState.jump);
+        const jumpDown = !dialog && this.time.now >= rootUntil && (cursors.up.isDown || this.input.keyboard.addKey('W').isDown || touchState.jump);
         const jumpPressed = jumpDown && !jumpWasDown;
         jumpWasDown = jumpDown;
         const c = currentCharacter;
@@ -5973,6 +6114,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (isGrounded) airJumpsLeft = (c.characterType === 'samurai' && hasPerkClient('samurai', c.level, 'djump')) ? 1 : 0;
             if (jumpDown && isGrounded) {
                 c.setVelocityY(-400);
+                if (jumpPressed) sfx('jump');
                 lastGroundedAt = -1e9;
             } else if (jumpPressed && !isGrounded && airJumpsLeft > 0) {
                 // SAMURAI 10-daraja: havoda ikkinchi sakrash (tugmani qayta bosganda)

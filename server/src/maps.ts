@@ -305,6 +305,11 @@ export interface FarmDef {
     dogHp: number;
     dogCooldownMs: number;
     noSpawn: [number, number][]; // quduq, itxona - zombi chiqmaydigan joylar
+    rootPastCarrot: number;   // E bosmay sabzidan shuncha o'tib ketsa - yerdan ildiz oyog'idan ushlaydi
+    rootMs: number;
+    kennelRange: number;      // itxona yonidan (shu masofada) o'tsa ham it chiqadi
+    tongueRange: number;      // tepadagi qahramonga igna-til yetadigan masofa
+    tongueDamage: number;
 }
 
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
@@ -854,7 +859,8 @@ export const MAPS: MapDef[] = [
             fieldX0: 650, fieldX1: 2520,
             killsPerPlayer: 15, aliveZombies: 3, zombieDamage: 12, zombieEmergeMs: 1300,
             kennelX: 2400, kennelRoof: 3, dogHp: 200, dogCooldownMs: 6000,
-            noSpawn: [[2060, 2240], [2330, 2470]]
+            noSpawn: [[2060, 2240], [2330, 2470]],
+            rootPastCarrot: 250, rootMs: 2000, kennelRange: 70, tongueRange: 240, tongueDamage: 14
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

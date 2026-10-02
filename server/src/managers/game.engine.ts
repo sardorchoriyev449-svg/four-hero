@@ -309,7 +309,8 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
-                farm: room.farm ? { state: room.farm.state, kills: room.farm.kills, target: room.farm.target } : null,
+                farm: room.farm ? { state: room.farm.state, kills: room.farm.kills, target: room.farm.target,
+                    rooted: Object.keys(room.farm.rooted).map(id => ({ id, x: Math.round(room.players[id]?.x ?? 0) })) } : null,
                 lift: room.lift ? { state: room.lift.state, y: Math.round(room.lift.y), progress: this.liftProgress(room) } : null,
                 gfThorns: room.gfThorns || [],
                 gfRoots: (room.gfRoots || []).map(r => ({ id: r.id, x: r.x, y: r.y, phase: r.phase })),
@@ -557,6 +558,7 @@ export class GameEngine {
             if (bot.attackCooldown > 0) bot.attackCooldown--;
             if ((bot.slowTicks || 0) > 0) bot.slowTicks!--;
             if ((bot.emerge || 0) > 0) { bot.emerge!--; return; }
+            if (bot.tongue) return;   // zombi-sabzavot igna-til sanchayapti - joyida turadi
 
             // FIZIKA: tayanch bo'lmasa - gravitatsiya bilan tushadi. Platformalar
             // "bir tomonlama": pastdan sakrab o'tib ketadi, faqat TUSHAYOTGANDA
@@ -1517,7 +1519,7 @@ export class GameEngine {
         room.gfRoots = [];
         room.gfCounter = 0;
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
-            spawned: 0, nextSpawnTick: 0, lastDogTick: -100000 } : null;
+            spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
         if (map.arena) {
             room.gorilla = null;
@@ -1882,6 +1884,46 @@ export class GameEngine {
         room.bots.push(bot);
         room.farm!.spawned++;
     }
+    private updateZombieTongues(room: RoomState, F: NonNullable<MapDef['farm']>): void {
+        const T = (ms: number) => Math.round(ms / 30);
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        room.bots.forEach(b => {
+            if (b.skin !== 'zombie' || (b.emerge || 0) > 0) return;
+            if (b.freezeDuration > 0) { b.tongue = null; return; }
+            const mouthX = b.x + (b.facingLeft ? -8 : 8), mouthY = b.y - 26;
+            if (b.tongue) {
+                const tg = b.tongue;
+                if (--tg.t > 0) return;
+                if (tg.phase === 'aim') {
+                    tg.phase = 'stab';
+                    tg.t = T(260);
+                    // Til nishon nuqtagacha (ko'pi bilan tongueRange) chiziq bo'ylab sanchadi
+                    const dx = tg.tx - mouthX, dy = tg.ty - mouthY, len = Math.hypot(dx, dy) || 1;
+                    const k = Math.min(1, F.tongueRange / len);
+                    tg.tx = mouthX + dx * k; tg.ty = mouthY + dy * k;
+                    alive.forEach(p => {
+                        const ex = tg.tx - mouthX, ey = tg.ty - mouthY, L2 = ex * ex + ey * ey || 1;
+                        const u = Math.max(0, Math.min(1, ((p.x - mouthX) * ex + (p.y - mouthY) * ey) / L2));
+                        const d = Math.hypot(p.x - (mouthX + ex * u), p.y - (mouthY + ey * u));
+                        if (d > 22) return;
+                        this.hurtPlayer(p, F.tongueDamage);
+                        this.knockback(p, (p.x < b.x ? -1 : 1) * 160, -260);
+                    });
+                } else {
+                    b.tongue = null;
+                    b.tongueCd = T(2600);
+                }
+                return;
+            }
+            if ((b.tongueCd || 0) > 0) { b.tongueCd!--; return; }
+            // Nishon: zombi TEPASIDA turgan (tom, soyabon, quduq) va yetadigan masofadagi qahramon
+            const target = alive.find(p => p.y + this.PLAYER_HALF_H < b.y + this.BOT_HALF_H - 40 &&
+                Math.hypot(p.x - mouthX, p.y - mouthY) <= F.tongueRange + 20);
+            if (!target) return;
+            b.facingLeft = target.x < b.x;
+            b.tongue = { phase: 'aim', t: T(650), tx: target.x, ty: target.y };
+        });
+    }
     private updateFarm(room: RoomState, roomId: string): void {
         const map = getMapById(room.selectedLevel);
         const F = map.farm, farm = room.farm;
@@ -1892,13 +1934,27 @@ export class GameEngine {
         // Itxona tomiga chiqqanga robot it hujum qiladi (oldingi itlardan qattiqroq)
         const roof = map.platforms[F.kennelRoof];
         const onRoof = alive.some(p => p.x >= roof.x - 6 && p.x <= roof.x + roof.w + 6 && Math.abs(p.y + this.PLAYER_HALF_H - roof.y) <= 10);
-        if (onRoof && !room.bots.some(b => b.kind === 'dog') && farm.tick - farm.lastDogTick >= T(F.dogCooldownMs) && farm.state !== 'done') {
+        const passing = alive.some(p => Math.abs(p.x - F.kennelX) <= F.kennelRange);
+        if ((onRoof || passing) && !room.bots.some(b => b.kind === 'dog') && farm.tick - farm.lastDogTick >= T(F.dogCooldownMs) && farm.state !== 'done') {
             const dog = GameEngine.createBots(room.id, [{ x: F.kennelX - 50, y: this.GROUND_Y }], 'dog', F.dogHp)[0];
             dog.id += '_dog' + farm.tick;
             room.bots.push(dog);
             farm.lastDogTick = farm.tick;
             this.io.to(roomId).emit('farmDog');
         }
+        // E bosmay sabzidan 5 m o'tib ketsa: yerdan ildiz chiqib oyog'idan ushlaydi (2 s yura olmaydi)
+        Object.keys(farm.rooted).forEach(id => { if (--farm.rooted[id] <= 0 || !room.players[id] || room.players[id].isDead) delete farm.rooted[id]; });
+        Object.keys(farm.rootCd).forEach(id => { if (--farm.rootCd[id] <= 0) delete farm.rootCd[id]; });
+        if (farm.state === 'idle') {
+            alive.forEach(p => {
+                if (p.x < F.carrotX + F.rootPastCarrot || farm.rooted[p.id] || farm.rootCd[p.id]) return;
+                farm.rooted[p.id] = T(F.rootMs);
+                farm.rootCd[p.id] = T(F.rootMs + 1500);
+                this.io.to(roomId).emit('farmRoot', { id: p.id, x: Math.round(p.x) });
+            });
+        }
+        // Zombi-sabzavotlar: tepada (tom/platformada) turgan qahramonga og'zidan o'tkir igna-til otadi
+        this.updateZombieTongues(room, F);
         if (farm.state === 'talk') {
             if (--farm.timer <= 0 || alive.every(p => p.introDone)) {
                 farm.state = 'fight';

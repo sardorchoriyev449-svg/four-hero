@@ -180,6 +180,7 @@ const charDetailsDesc = document.getElementById('char-details-desc');
 
 // --- SOZLAMALAR ---
 const volumeSlider = document.getElementById('volume-slider');
+const sfxSlider = document.getElementById('sfx-slider');
 const langEnBtn = document.getElementById('lang-en-btn');
 const langRuBtn = document.getElementById('lang-ru-btn');
 
@@ -396,7 +397,9 @@ async function loadMenuStats() {
     const savedVolume = localStorage.getItem('gameVolume');
     if (savedVolume !== null) volumeSlider.value = savedVolume;
     // O'yindan tashqarida - menyu musiqasi (brauzer birinchi bosishdan keyin chaladi)
-    if (window.GameAudio) { GameAudio.setVolume(volumeSlider.value / 100); GameAudio.setMode('menu'); }
+    const savedSfx = localStorage.getItem('sfxVolume');
+    if (savedSfx !== null && sfxSlider) sfxSlider.value = savedSfx;
+    if (window.GameAudio) { GameAudio.setVolume(volumeSlider.value / 100); if (sfxSlider) GameAudio.setSfxVolume(sfxSlider.value / 100); GameAudio.setMode('menu'); }
 })();
 
 // --- BOSHQARUV TURI: PC (klaviatura) yoki PHONE (ekrandagi virtual boshqaruv) ---
@@ -694,6 +697,18 @@ async function fetchMySavedRoom() {
 
 // --- SOZLAMALAR: OVOZ VA TIL ---
 
+// O'yin ovozlari (effektlar) balandligi - qo'yib yuborilganda namuna ovoz chiqadi
+if (sfxSlider) {
+    sfxSlider.addEventListener('input', () => {
+        localStorage.setItem('sfxVolume', sfxSlider.value);
+        if (window.GameAudio) GameAudio.setSfxVolume(sfxSlider.value / 100);
+    });
+    sfxSlider.addEventListener('change', () => { if (window.GameAudio) GameAudio.sfx('coin'); });
+}
+// Menyu va lobbidagi tugmalar - yengil "chiq" ovozi
+document.addEventListener('click', (e) => {
+    if (window.GameAudio && e.target && e.target.closest && e.target.closest('button, .level-item, .maps-tab')) GameAudio.sfx('click');
+}, true);
 volumeSlider.addEventListener('input', () => {
     localStorage.setItem('gameVolume', volumeSlider.value);
     if (window.GameAudio) GameAudio.setVolume(volumeSlider.value / 100);
@@ -1062,6 +1077,11 @@ window.setGameVolume = (v) => {
     localStorage.setItem('gameVolume', v);
     if (window.GameAudio) GameAudio.setVolume(v / 100);
 };
+window.setSfxVolume = (v) => {
+    if (sfxSlider) sfxSlider.value = v;
+    localStorage.setItem('sfxVolume', v);
+    if (window.GameAudio) GameAudio.setSfxVolume(v / 100);
+};
 
 // "Tayyor" tugmasi bosilganda
 readyBtn.onclick = () => {
@@ -1092,6 +1112,7 @@ let levelCompleteTimers = [];
 function showLevelComplete(levelIndex, isLoss = false, onBack = null, xpGained = 0) {
     const host = document.getElementById('game-container');
     if (!host || typeof levelIndex !== 'number' || levelIndex < 0) return;
+    if (window.GameAudio) GameAudio.sfx(isLoss ? 'lose' : 'win');
     const old = document.getElementById('level-complete');
     if (old) old.remove();
     levelCompleteTimers.forEach(clearTimeout);
