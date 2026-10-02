@@ -313,7 +313,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function preload() {
         // Emotsiya ("1" tugmasi) - qahramon tepasida ko'rinadi
         this.load.image('emote_1', 'public/emotions/emotion-1.png');
-        // emote_2 - qo'l ishorasi (piksel rasm, create'da chiziladi)
+        // emote_hand - qo'l ishorasi (piksel rasm, create'da chiziladi)
     }
 
     // O'YINCHI QAHRAMON TANASI (chizma bo'yicha, piksel): skin rangidagi tik to'rtburchak
@@ -505,7 +505,8 @@ function launchGame(socket, roomId, mapData, continued) {
         const custom = cosTexture(scene, pose.slot, sprite.look && sprite.look[pose.slot]);
         const w = sprite.weaponSpr;
         const hidden = sprite.isDead || sprite.alpha <= 0.01;
-        w.setVisible(!hidden);
+        // Qo'l ishorasi ko'rsatilayotganda qurol qo'lda emas (qo'l - ishora)
+        w.setVisible(!hidden && !(scene.time.now < (sprite.gestureUntil || 0)));
         if (!hidden) {
             const texKey = custom ? custom.key : 'w_' + pose.kind;
             if (w.texture.key !== texKey) w.setTexture(texKey);
@@ -4959,7 +4960,8 @@ function launchGame(socket, roomId, mapData, continued) {
         });
 
         // EMOTSIYA: "1" - rasmli (bosh ustida), "2" - qo'l ishorasi (tana oldida) - xonadagi hammaga ko'rinadi
-        if (!this.textures.exists('emote_2')) gridToTexture(this, 'emote_2', handGestureGrid(), 2);
+        // 1 - qo'l ishorasi (qahramon qo'li bilan ko'rsatadi), 2 - rasmli emotsiya (bosh ustida)
+        if (!this.textures.exists('emote_hand')) gridToTexture(this, 'emote_hand', handGestureGrid(), 2);
         const sendEmote = (id = 1) => {
             if (!currentCharacter || dialog || this.time.now - lastEmoteAt < 1500) return;
             lastEmoteAt = this.time.now;
@@ -4973,22 +4975,32 @@ function launchGame(socket, roomId, mapData, continued) {
         touchActions.emote2 = [() => sendEmote(2)];
         socket.off('emote');
         socket.on('emote', (d) => {
-            if (!this.textures.exists('emote_' + d.id)) return;
+            const onBody = d.id === 1;   // qo'l ishorasi - qahramonning qo'li: tanasi oldida ko'tariladi
+            const tex = onBody ? 'emote_hand' : 'emote_1';
+            if (!this.textures.exists(tex)) return;
             // Shu qahramonning oldingi emotsiyasi bo'lsa - almashtiriladi
             emotes.filter(e => e.playerId === d.playerId).forEach(e => e.img.destroy());
             emotes = emotes.filter(e => e.playerId !== d.playerId);
-            // Darhol egasining boshi ustida paydo bo'ladi (keyin update() u bilan birga yurgizadi)
             const owner = d.playerId === socket.id ? currentCharacter : otherPlayers[d.playerId];
-            const onBody = d.id === 2;   // qo'l ishorasi - boshi ustida emas, tanasi oldida (qahramon ko'rsatyapti)
-            const img = this.add.image(owner ? owner.x : 0, owner ? owner.y - (onBody ? -2 : 62) : 0, 'emote_' + d.id).setDepth(onBody ? 3.6 : 1005).setScale(0);
-            const size = onBody ? 1 : 56 / Math.max(img.width, img.height);
-            const e = { img, playerId: d.playerId, onBody };
+            const img = this.add.image(owner ? owner.x : 0, owner ? owner.y - (onBody ? -2 : 62) : 0, tex).setDepth(onBody ? 3.6 : 1005).setScale(0);
+            const e = { img, playerId: d.playerId, onBody, lift: 1 };
             emotes.push(e);
-            this.tweens.add({ targets: img, scale: size, duration: 180, ease: 'Back.Out' });
-            this.tweens.add({ targets: img, y: '-=0', alpha: 0, delay: 1900, duration: 300, onComplete: () => {
-                img.destroy();
-                emotes = emotes.filter(x => x !== e);
-            } });
+            const done = () => { img.destroy(); emotes = emotes.filter(x => x !== e); };
+            if (onBody) {
+                // ANIMATSIYA: qo'l pastdan (beldan) ko'tarilib chiqadi, ikki marta "silkitib" ko'rsatadi,
+                // biroz turadi va yana pastga tushib yo'qoladi
+                img.setOrigin(0.5, 1);
+                this.tweens.add({ targets: img, scale: 1, duration: 200, ease: 'Back.Out' });
+                this.tweens.add({ targets: e, lift: 0, duration: 260, ease: 'Back.Out' });
+                this.tweens.add({ targets: img, angle: { from: -10, to: 10 }, delay: 280, duration: 120, yoyo: true, repeat: 2, ease: 'Sine.InOut',
+                    onComplete: () => { img.angle = 0; } });
+                this.tweens.add({ targets: e, lift: 1, delay: 1750, duration: 250, ease: 'Quad.In' });
+                this.tweens.add({ targets: img, alpha: 0, delay: 1850, duration: 200, onComplete: done });
+            } else {
+                const size = 56 / Math.max(img.width, img.height);
+                this.tweens.add({ targets: img, scale: size, duration: 180, ease: 'Back.Out' });
+                this.tweens.add({ targets: img, alpha: 0, delay: 1900, duration: 300, onComplete: done });
+            }
         });
 
         // ZARYAD YO'Q: hujum bosildi, lekin stamina yetmaydi - boshi tepasida bo'sh batareya
@@ -5942,9 +5954,11 @@ function launchGame(socket, roomId, mapData, continued) {
             const owner = e.playerId === socket.id ? currentCharacter : otherPlayers[e.playerId];
             if (!owner || !owner.active) { e.img.setVisible(false); return; }
             if (e.onBody) {
-                // Qahramon qaragan tomonga: tanasi oldida, u bilan birga buriladi
+                // Qahramonning qo'li: qaragan tomonida, tanasi oldida; u bilan birga buriladi.
+                // lift: 1 - qo'l pastda (belda), 0 - ko'tarilgan (ko'krak balandligida)
                 const left = owner === currentCharacter ? lastDirection === 'left' : owner.facingRight === false;
-                e.img.setFlipX(left).setPosition(owner.x + (left ? -14 : 14), owner.y + 2);
+                owner.gestureUntil = this.time.now + 80;
+                e.img.setVisible(true).setFlipX(left).setPosition(owner.x + (left ? -12 : 12), owner.y + 16 + e.lift * 22);
             } else e.img.setPosition(owner.x, owner.y - 62);
         });
         // ILON QUVISHI: ilon silliq siljiydi, KAMERA u bilan bir xil suriladi
