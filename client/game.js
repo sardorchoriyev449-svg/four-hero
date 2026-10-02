@@ -160,6 +160,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const isGFlower = !!map.giantFlower; // Season 2 map-1: Gigant gul
     const isLift = !!map.lift;           // Season 2 map-2: tog'ga ko'tariluvchi platforma
     const isFarm = !!map.farm;           // Season 2 map-3: zombi poliz
+    const isSquid = !!map.squid;         // Season 2 map-4: daryo va Kalmar
     // O'YIN OVOZLARI: sfx - har doim bir xil balandlikda; sfxAt - qahramondan uzoqlashgan sari pasayadi
     const sfx = (name, v = 1) => { if (window.GameAudio) GameAudio.sfx(name, v); };
     const sfxAt = (name, x, v = 1) => {
@@ -255,6 +256,12 @@ function launchGame(socket, roomId, mapData, continued) {
     let liftState = null;
     let liftObj = null;        // { sprite, piston, hole, hint, groundOff, layer: {...} }
     // FERMA
+    // KALMAR
+    let sqState = null;
+    let sqObj = null;          // { body, eye, glow, tent, walls, slam, geyser, fog1, fog2, disp, wallGroup }
+    let sqWallsUp = false;
+    let sqDying = false;
+    let sqFishSprites = {};
     let farmState = null;
     let farmObj = null;        // { top, hint, carrot }
     let farmTalkShown = false;
@@ -2420,6 +2427,242 @@ function launchGame(socket, roomId, mapData, continued) {
         }
     }
 
+    // ===== KALMAR (Season 2, map-4) =====
+    const SQ = [0x3a0a1e, 0x5c1230, 0x7f1d3f, 0xa52a52];
+    // Mantiya (tanasi): tepasida qanotchalar, pastida ko'z o'rni. 44x58
+    function squidBodyGrid() {
+        const W = 44, H = 58;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        for (let y = 0; y < H; y++) {
+            let half;
+            if (y < 11) half = 1 + y * 2;                    // qanotlar kengayadi
+            else if (y < 15) half = 21 - (y - 10) * 2;       // qanot tugaydi
+            else half = 14 + Math.round((y - 15) * 0.1);    // tana
+            for (let x = 22 - half; x < 22 + half; x++) {
+                const spot = ((x * 7 + y * 11) % 23 === 0) || ((x * 5 + y * 3) % 29 === 0);
+                set(x, y, spot ? 0xd46a8a : shade(0.82 - Math.abs(x - 22) / (half * 2.2) - y / 260, x, y, SQ));
+            }
+        }
+        // Ko'z o'rni (qoramtir halqa) - ko'zning o'zi alohida rasm
+        for (let y = 38; y < 56; y++) for (let x = 13; x < 31; x++) if (((x - 22) / 8.5) ** 2 + ((y - 47) / 8.5) ** 2 <= 1) set(x, y, 0x2a0612);
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // Katta qizil ko'z (zaif joyi): sariq oq, qizil gavhar, vertikal qora qorachiq
+    function squidEyeGrid() {
+        const g = gridNew(14, 14);
+        for (let y = 0; y < 14; y++) for (let x = 0; x < 14; x++) {
+            const r = Math.hypot(x - 6.5, y - 6.5);
+            if (r <= 6.6) g[y][x] = r > 5.6 ? 0x3e0a14 : r > 4.3 ? 0xfff3c4 : r > 2.4 ? 0xd50000 : 0xff1744;
+        }
+        for (let y = 3; y <= 10; y++) { g[y][6] = 0x0a0a0a; g[y][7] = 0x0a0a0a; }
+        g[4][9] = 0xffffff; g[5][9] = 0xffffff; g[4][10] = 0xffcdd2;
+        return g;
+    }
+    // Tikanli baliq (o'ngga qaragan)
+    function spikeFishGrid() {
+        const g = gridNew(13, 9);
+        for (let y = 1; y < 8; y++) for (let x = 2; x < 11; x++) if (((x - 6.5) / 4.5) ** 2 + ((y - 4) / 3.2) ** 2 <= 1) g[y][x] = y < 4 ? 0xd4e157 : 0xafb42b;
+        [[1, 4], [0, 2], [0, 6], [6, 0], [4, 0], [8, 0], [6, 8], [4, 8], [8, 8], [11, 1], [11, 7]].forEach(([x, y]) => { g[y][x] = 0x33691e; });
+        g[3][9] = 0xffffff; g[3][8] = 0x0a0a0a; g[5][10] = 0xc62828; g[5][11] = 0xc62828;
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function ensureSquidTextures(scene) {
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        mk('px_sq_body', squidBodyGrid(), 5);
+        mk('px_sq_eye', squidEyeGrid(), 5);
+        mk('px_fish', spikeFishGrid(), 3);
+        mk('px_farm_soil', farmSoilGrid(), 2);
+        if (!scene.textures.exists('px_fog')) {
+            const g = scene.add.graphics();
+            for (let i = 0; i < 26; i++) {
+                const x = (i * 157) % 800, y = 40 + (i * 89) % 420, r = 40 + (i * 37) % 70;
+                g.fillStyle(0xe0f2f1, 0.18); g.fillCircle(x, y, r);
+                g.fillStyle(0xe0f2f1, 0.12); g.fillCircle(x + r * 0.6, y + 10, r * 0.8);
+            }
+            g.generateTexture('px_fog', 800, 600);
+            g.destroy();
+        }
+    }
+    // Kalmar qo'li: nuqtalar bo'ylab qalin (w0 -> w1) qizil qo'l, bir tomonida och so'rg'ichlar
+    function drawTentacle(g, pts, w0, w1) {
+        const n = pts.length;
+        pts.forEach(([x, y], i) => { const w = w0 + (w1 - w0) * i / (n - 1); g.fillStyle(0x0a0a0a, 1); g.fillCircle(x, y, w / 2 + 2); });
+        pts.forEach(([x, y], i) => {
+            const w = w0 + (w1 - w0) * i / (n - 1);
+            g.fillStyle(i % 2 ? SQ[2] : SQ[1], 1); g.fillCircle(x, y, w / 2);
+            if (i % 3 === 1 && w > 10) { g.fillStyle(0xf8bbd0, 1); g.fillCircle(x + w * 0.22, y, Math.max(2, w * 0.14)); }
+        });
+    }
+    function buildSquidScene(scene) {
+        const W = mapWidth, d = map.squid, water = map.pits[0];
+        ensureSquidTextures(scene);
+        // Tumanli kulrang-ko'k osmon, uzoqda daraxtlar
+        drawPixelBackdrop(scene, { sky: [0x1c2b33, 0x24363f, 0x2e434d, 0x3a505a, 0x4a5f68, 0x5b6f77], clouds: false, mountains: false, width: W });
+        const far = scene.add.graphics().setScrollFactor(0.4, 1).setDepth(-3.5);
+        for (let x = 0; x < W; x += 34) {
+            const h = 120 + ((x * 13) % 90);
+            far.fillStyle(0x22333a, 1); far.fillTriangle(x, 570, x + 17, 570 - h, x + 34, 570);
+            far.fillStyle(0x1b2a30, 1); far.fillRect(x + 15, 560, 4, 10);
+        }
+        // Qirg'oqlar (boshida va oxirida)
+        scene.add.tileSprite(0, 570, water.x, 30, 'px_farm_soil').setOrigin(0, 0).setDepth(1);
+        scene.add.tileSprite(water.x + water.w, 570, W - water.x - water.w, 30, 'px_farm_soil').setOrigin(0, 0).setDepth(1);
+        const reeds = scene.add.graphics().setDepth(1.3);
+        [[water.x - 60, 8], [water.x + water.w + 20, 6]].forEach(([x0, n]) => {
+            for (let k = 0; k < n; k++) {
+                const x = x0 + k * 7, h = 30 + (k * 13) % 26;
+                reeds.fillStyle(0x0a0a0a, 1); reeds.fillRect(x - 1, 570 - h, 4, h);
+                reeds.fillStyle(0x558b2f, 1); reeds.fillRect(x, 570 - h, 2, h);
+                if (k % 2) { reeds.fillStyle(0x6d4c41, 1); reeds.fillRect(x - 1, 570 - h - 8, 4, 10); }
+            }
+        });
+        // Suv: to'q yashil-ko'k, yuzasida to'lqin chiziqlari
+        const wat = scene.add.graphics().setDepth(1.15);
+        wat.fillStyle(0x0b2a33, 1); wat.fillRect(water.x, 562, water.w, 38);
+        wat.fillStyle(0x12404d, 1); wat.fillRect(water.x, 562, water.w, 8);
+        const waves = scene.add.graphics().setDepth(1.16);
+        sqObj = { waves, water };
+        // Sol platformalar (yog'och xodalar, mox, arqon)
+        map.platforms.forEach((pl) => {
+            const g = scene.add.graphics().setDepth(1.4);
+            g.fillStyle(0x0a0a0a, 1); g.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 18);
+            for (let x = pl.x; x < pl.x + pl.w; x += 16) {
+                g.fillStyle(((x - pl.x) / 16) % 2 ? 0x795548 : 0x6d4c41, 1); g.fillRect(x, pl.y, Math.min(15, pl.x + pl.w - x), 14);
+                g.fillStyle(0x8d6e63, 1); g.fillRect(x, pl.y + 2, Math.min(15, pl.x + pl.w - x), 2);
+            }
+            g.fillStyle(0x689f38, 1); for (let x = pl.x + 4; x < pl.x + pl.w - 4; x += 11) g.fillRect(x, pl.y - 2, 5, 3);
+            g.fillStyle(0xd7ccc8, 1); g.fillRect(pl.x + 10, pl.y, 3, 14); g.fillRect(pl.x + pl.w - 14, pl.y, 3, 14);
+            // Suvdagi ustuncha (sol suv ustida turadi)
+            g.fillStyle(0x0a0a0a, 1); g.fillRect(pl.x + pl.w / 2 - 5, pl.y + 14, 10, 570 - pl.y - 14);
+            g.fillStyle(0x4e342e, 1); g.fillRect(pl.x + pl.w / 2 - 3, pl.y + 14, 6, 570 - pl.y - 14);
+        });
+        // Kalmar (suv ostida yashiringan): tanasi, ko'zi (orqasida qizil nur), qo'llari
+        const tent = scene.add.graphics().setDepth(-0.25);
+        const body = scene.add.image(d.baseX, 800, 'px_sq_body').setOrigin(112 / 220, 237 / 290).setDepth(-0.2);
+        const glow = scene.add.circle(d.baseX, 800, 46, 0xff1744, 0.35).setDepth(-0.16).setBlendMode(Phaser.BlendModes.ADD);
+        scene.tweens.add({ targets: glow, alpha: 0.6, scale: 1.2, duration: 700, yoyo: true, repeat: -1 });
+        const eye = scene.add.image(d.baseX, 800, 'px_sq_eye').setDepth(-0.15);
+        const walls = scene.add.graphics().setDepth(3.6);
+        const slam = scene.add.graphics().setDepth(3.55);
+        const geyser = scene.add.graphics().setDepth(3.5);
+        // Tuman: orqada va oldinda (sekin suzadi)
+        const fog1 = scene.add.tileSprite(0, 0, 800, 600, 'px_fog').setOrigin(0, 0).setScrollFactor(0).setDepth(-0.9).setAlpha(0.55);
+        const fog2 = scene.add.tileSprite(0, 0, 800, 600, 'px_fog').setOrigin(0, 0).setScrollFactor(0).setDepth(4.2).setAlpha(0.28);
+        const wallGroup = scene.physics.add.staticGroup();
+        Object.assign(sqObj, { body, eye, glow, tent, walls, slam, geyser, fog1, fog2, wallGroup, disp: { x: d.baseX, y: 800 }, wallRise: 0 });
+    }
+    function raiseSquidWalls(scene, instant) {
+        if (sqWallsUp || !sqObj) return;
+        sqWallsUp = true;
+        const d = map.squid;
+        [d.arenaX + 16, d.arenaX + d.arenaW - 16].forEach((x) => sqObj.wallGroup.add(scene.add.rectangle(x, 300, 34, 600, 0x000000, 0)));
+        if (instant) sqObj.wallRise = 1;
+        else scene.tweens.add({ targets: sqObj, wallRise: 1, duration: 1100, ease: 'Back.Out' });
+        scene.cameras.main.setBounds(d.arenaX, 0, d.arenaW, 600);
+        if (!instant) scene.cameras.main.shake(900, 0.01);
+    }
+    function drawSquid(scene) {
+        if (!sqObj) return;
+        const t = scene.time.now, d = map.squid, o = sqObj;
+        // To'lqinlar va tuman
+        o.waves.clear();
+        for (let x = o.water.x; x < o.water.x + o.water.w; x += 12) {
+            const y = 562 + Math.round(Math.sin(x * 0.05 + t / 400) * 2);
+            o.waves.fillStyle(0x4dd0e1, 0.5); o.waves.fillRect(x, y, 6, 2);
+        }
+        if (o.fog1) { o.fog1.tilePositionX += 0.15; o.fog2.tilePositionX -= 0.3; }
+        if (!sqState) return;
+        const S = sqState;
+        if (!sqDying) {
+            o.disp.x = Phaser.Math.Linear(o.disp.x, S.x, 0.3);
+            o.disp.y = Phaser.Math.Linear(o.disp.y, S.state === 'sleep' ? 800 : S.eyeY, 0.2);
+        } else o.disp.y += 2.5;
+        const ex = o.disp.x, ey = o.disp.y;
+        o.body.setPosition(ex, ey);
+        o.eye.setPosition(ex, ey);
+        o.glow.setPosition(ex, ey);
+        if (S.hitFlash > 0 && Math.floor(t / 60) % 2) o.eye.setTint(0xffffff); else o.eye.clearTint();
+        // Kalmar qo'llari (tanadan suvga) - chayqaladi
+        o.tent.clear();
+        if (ey < 760) for (let k = 0; k < 6; k++) {
+            const bx = ex - 75 + k * 30, pts = [];
+            for (let i = 0; i <= 12; i++) {
+                const y = ey + 50 + i * ((600 - ey - 50) / 12);
+                pts.push([bx + Math.sin(t / 380 + k * 1.3 + i * 0.5) * (6 + i * 1.6) + (k - 2.5) * i * 2, y]);
+            }
+            drawTentacle(o.tent, pts, 28, 14);
+        }
+        // Yo'lni yopgan ulkan qo'llar (ikki chetda)
+        o.walls.clear();
+        if (o.wallRise > 0.01) [d.arenaX + 16, d.arenaX + d.arenaW - 16].forEach((wx, side) => {
+            const top = 600 - 600 * o.wallRise, pts = [];
+            for (let i = 0; i <= 18; i++) {
+                const k = i / 18, y = 600 - (600 - top) * k;
+                const curl = k > 0.8 ? (k - 0.8) * 5 : 0;
+                pts.push([wx + Math.sin(t / 500 + i * 0.4 + side) * 5 + (side ? -1 : 1) * curl * 40, y + curl * 30]);
+            }
+            drawTentacle(o.walls, pts, 40, 16);
+        });
+        // Urish: avval qo'l ko'tariladi (platformada qizil ogohlantirish), keyin platforma ustiga yotqiziladi
+        o.slam.clear();
+        const sl = S.slam;
+        if (sl && !sqDying) {
+            const mid = (sl.x0 + sl.x1) / 2, side = mid < ex ? -1 : 1;
+            if (sl.phase === 'raise') {
+                if (Math.floor(t / 120) % 2) { o.slam.fillStyle(0xff1744, 0.35); o.slam.fillRect(sl.x0, sl.y - 150, sl.x1 - sl.x0, 150); }
+                const bx = side < 0 ? sl.x0 - 30 : sl.x1 + 30, pts = [];
+                for (let i = 0; i <= 14; i++) { const k = i / 14; pts.push([bx + Math.sin(k * 3 + t / 150) * 10 - side * k * k * 60, 600 - k * (600 - (sl.y - 190))]); }
+                drawTentacle(o.slam, pts, 34, 16);
+            } else {
+                const bx = side < 0 ? sl.x0 - 30 : sl.x1 + 30, pts = [];
+                for (let i = 0; i <= 10; i++) { const k = i / 10; pts.push([bx, 600 - k * (600 - (sl.y - 14))]); }
+                const n = Math.ceil((sl.x1 - sl.x0 + 30) / 10);
+                for (let i = 0; i <= n; i++) pts.push([bx - side * i * 10, sl.y - 14 + Math.sin(i * 0.7 + t / 60) * 2]);
+                drawTentacle(o.slam, pts, 34, 14);
+            }
+        }
+        // Geyzerlar: ogohlantirish (pufakchalar) va suv ustuni
+        o.geyser.clear();
+        ((S.geysers) || []).forEach((g) => {
+            if (g.phase === 'warn') {
+                o.geyser.fillStyle(0x0a1a1f, 0.8); o.geyser.fillEllipse(g.x, 566, 60, 10);
+                for (let k = 0; k < 6; k++) {
+                    const by = 566 - ((t / 4 + k * 30) % 60);
+                    o.geyser.fillStyle(0xb2ebf2, 0.9); o.geyser.fillCircle(g.x - 20 + k * 8, by, 3);
+                }
+            } else {
+                const top = g.topY + Math.sin(t / 50) * 6;
+                o.geyser.fillStyle(0x0a0a0a, 0.6); o.geyser.fillRect(g.x - 28, top, 56, 600 - top);
+                o.geyser.fillStyle(0x4fc3f7, 0.9); o.geyser.fillRect(g.x - 25, top, 50, 600 - top);
+                o.geyser.fillStyle(0xb3e5fc, 1); o.geyser.fillRect(g.x - 14, top, 28, 600 - top);
+                o.geyser.fillStyle(0xffffff, 1); o.geyser.fillRect(g.x - 5, top, 10, 600 - top);
+                for (let k = 0; k < 8; k++) {
+                    const a = (t / 90 + k * 0.8), r = 20 + (k * 7) % 22;
+                    o.geyser.fillStyle(0xe1f5fe, 0.9); o.geyser.fillCircle(g.x + Math.cos(a) * r, top + Math.sin(a) * 8 - 6, 5);
+                }
+            }
+        });
+        // Baliqlar silliq harakatlanadi
+        Object.values(sqFishSprites).forEach((sp) => { sp.x = Phaser.Math.Linear(sp.x, sp.tx, 0.6); sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6); });
+    }
+    function syncSquidFish(scene, list) {
+        const ids = new Set(list.map(f => f.id));
+        list.forEach((f) => {
+            let sp = sqFishSprites[f.id];
+            if (!sp) sp = sqFishSprites[f.id] = scene.add.image(f.x, f.y, 'px_fish').setDepth(4);
+            sp.tx = f.x; sp.ty = f.y;
+            sp.setRotation(Math.atan2(f.vy, f.vx));
+        });
+        Object.keys(sqFishSprites).forEach((id) => { if (!ids.has(id)) { sqFishSprites[id].destroy(); delete sqFishSprites[id]; } });
+    }
+    function waterSplash(scene, x, n = 10) {
+        for (let k = 0; k < n; k++) {
+            const d = scene.add.rectangle(x + Phaser.Math.Between(-30, 30), 564, 5, 5, [0xb3e5fc, 0x4fc3f7, 0xffffff][k % 3]).setDepth(4);
+            scene.tweens.add({ targets: d, y: 564 - Phaser.Math.Between(30, 110), x: d.x + Phaser.Math.Between(-40, 40), alpha: 0, duration: Phaser.Math.Between(400, 700), ease: 'Quad.Out', onComplete: () => d.destroy() });
+        }
+    }
+
     // ===== FERMA (Season 2, map-3) =====
     function farmSoilGrid() {
         const g = gridNew(16, 15);
@@ -4187,7 +4430,7 @@ function launchGame(socket, roomId, mapData, continued) {
             platforms.add(plat);
             // Bozorda: devor/taxtalar o'z piksel rasmi bilan chiziladi; taxtalar bir tomonlama
             // (pastdan sakrab o'tib, ustiga qo'nish mumkin)
-            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower || isFarm) {
+            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower || isFarm || isSquid) {
                 plat.setVisible(false);
                 if (p.h <= 14) makeOneWay(plat);
             }
@@ -4347,6 +4590,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isGFlower) buildGiantFlowerScene(this);
         if (isLift) buildLiftScene(this);
         if (isFarm) buildFarmScene(this);
+        if (isSquid) buildSquidScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 3
@@ -4439,6 +4683,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (flowerBlockGroup) this.physics.add.collider(currentCharacter, flowerBlockGroup);
             if (gfObj) this.physics.add.collider(currentCharacter, gfObj.wallGroup);
             if (liftObj) this.physics.add.collider(currentCharacter, liftObj.sprite);
+            if (sqObj && sqObj.wallGroup) this.physics.add.collider(currentCharacter, sqObj.wallGroup);
 
             // XARITA EKRANDAN KENGROQ BO'LSA: kamera o'yinchini kuzatib boradi
             // (ilon quvishida esa kamerani ilon suradi - update() ichida)
@@ -4758,6 +5003,32 @@ function launchGame(socket, roomId, mapData, continued) {
         // GIGANT GUL: jang boshlandi (yo'llar tikon bilan yopildi) / tishladi / yengildi
         // LIFT: yerdan chiqdi / hamma chiqmagan / ko'tarilish / cho'qqiga yetildi
         // FERMA: sabzi sug'urildi (zombilar chiqa boshlaydi) / itxonadan robot it chiqdi
+        // KALMAR: chiqdi / urdi / suvni urdi / baliq portladi / yengildi
+        socket.off('squidRise');
+        socket.on('squidRise', () => {
+            raiseSquidWalls(this, false);
+            arenaBanner(t('sq_banner'), '#ff1744', t('sq_banner_sub'));
+            sfx('roar'); sfx('bossStart'); sfx('rumble');
+            if (map.squid) waterSplash(this, map.squid.baseX, 24);
+        });
+        socket.off('squidSlam');
+        socket.on('squidSlam', (d) => { this.cameras.main.shake(250, 0.01); sfxAt('thud', d.x); sfxAt('whip', d.x, 0.7); });
+        socket.off('squidSplash');
+        socket.on('squidSplash', (d) => { waterSplash(this, d.x, 16); sfxAt('whoosh', d.x); sfxAt('thud', d.x, 0.6); });
+        socket.off('squidFishBoom');
+        socket.on('squidFishBoom', (d) => { if (d.water) { waterSplash(this, d.x, 6); sfxAt('pop', d.x, 0.6); } else explodeMine(this, d.x, d.y); });
+        socket.off('squidDown');
+        socket.on('squidDown', () => {
+            sqDying = true;
+            sfx('bossDown');
+            this.cameras.main.shake(900, 0.012);
+            if (sqObj) {
+                sqObj.eye.setTint(0x5d4037);
+                this.tweens.add({ targets: sqObj, wallRise: 0, delay: 1000, duration: 1400 });
+                sqObj.wallGroup.clear(true, true);
+                if (map.squid) for (let k = 0; k < 5; k++) this.time.delayedCall(k * 250, () => waterSplash(this, map.squid.baseX + Phaser.Math.Between(-120, 120), 12));
+            }
+        });
         socket.off('carrotPulled');
         socket.on('carrotPulled', () => {
             sfx('pop'); sfx('rumble');
@@ -4922,6 +5193,13 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             }
             checkpointReached = data.checkpointReached || [];
+
+            // KALMAR: holat, baliqlar; jang boshlangan bo'lsa (kech qo'shilgan) - devorlar darhol
+            if (isSquid) {
+                sqState = data.squid || null;
+                if (sqState && sqState.state !== 'sleep' && sqState.state !== 'dying' && !sqWallsUp) raiseSquidWalls(this, true);
+                if (sqState) { syncSquidFish(this, sqState.fish || []); bossHitSound('squid', sqState.hp, sqState.x); }
+            }
 
             // FERMA: holat; suhbat (hammaga); sabzi sug'urilgan bo'lsa (kech qo'shilgan) - darhol
             if (isFarm) {
@@ -5601,6 +5879,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isGFlower) return gfState && gfState.state !== 'sleep' ? 'action' : 'calm';
         if (isLift) return liftState && liftState.state === 'rising' ? 'action' : 'calm';
         if (isFarm) return farmState && farmState.state === 'fight' ? 'action' : 'calm';
+        if (isSquid) return sqState && sqState.state !== 'sleep' ? 'action' : 'calm';
         if (isUnderworld) {
             return Object.values(flowerSprites).some(f => f.state !== 'hidden' && f.state !== 'dead') ? 'action' : 'calm';
         }
@@ -5664,6 +5943,10 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
         if (isLift) updateLift(this);
+        if (isSquid) {
+            drawSquid(this);
+            if (sqState && sqState.state !== 'sleep') drawBossBar(this, sqState.hp, sqState.maxHp, t('sq_name'));
+        }
         if (isFarm) drawFarmHazards(this, serverBotsLast);
         if (isGFlower) {
             drawGiantFlower(this);
@@ -5989,6 +6272,10 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (myApples >= need && !hudKey) {
                     hudKey = this.add.image(22, 134, 'px_key').setOrigin(0, 0.5).setScrollFactor(0).setDepth(1002);
                 }
+            } else if (isSquid) {
+                const st = sqState ? sqState.state : 'sleep';
+                progressText = st === 'sleep' ? t('hud_sq_go').replace('{m}', Math.max(0, Math.ceil((map.squid.triggerX - currentCharacter.x) / 50)))
+                    : st === 'rise' ? t('hud_sq_rise') : st === 'fight' ? t('hud_sq_fight') : '';
             } else if (isFarm) {
                 const st = farmState ? farmState.state : 'idle';
                 const near = Math.abs(currentCharacter.x - map.farm.carrotX) <= map.farm.talkRange;

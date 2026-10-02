@@ -773,6 +773,7 @@ export class RoomManager {
             giantFlower: map.giantFlower || null,
             lift: map.lift || null,
             farm: map.farm || null,
+            squid: map.squid || null,
             season: map.season || 1,
             groundColor: map.groundColor,
             accentColor: map.accentColor

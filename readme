@@ -1,4 +1,6 @@
 ```text
-    map-3: Ferma, // zombie poliz ekinlar, polizlar ustidan yuryatgan 30 metr payt sabzi ustud 'E' chiqadi va dialog chiqadi: player:'menimcha bita sabzini olsam xechkim sezmaydi', sabsini oladi uni esa ogzidan qon oqyabti va polizlar asta asta chiqib boshlaydi 3 ta zombie chiqadi xar bita kill ga yerdan 1 ta zombie chiqadi 15xPlayer o'yinchilariga qarab ta kill bo'lgunicha,
-    orqa tomonda ferma va Saray, Kalodis tepasiga tomiga chiqsa bo'ladi va kuchuk uychasi bo'ladi u yerda xam kuchuk uyini tomiga chiqsa bo'ladi va agar kuchuk tomiga chiqsa robot kuchuk chiqadi va atack qiladi va fermani zanaveskasibor va unga xam chiqsa bo'ladi zombi bita zarbada o'ladi itlarni joni oldingi itlarga qaraganda joni qatiqroq
+    map-4: 
+    10 matir yuradi yo'lidan platformalar va daryo ko'l chiqadi tuman bo'lsin va platformalardan sakrab o'tayotgan payti yana 20 metr sakrab o'tgan payt yo'larni kalmar qo'lari chiqib va yopadi va boss fight boshlanadi Kalmar suv ichidan chiqadi Nimalar qiladi va uni jonini qanday olish mumkin:
+    Kalmar atack: o'yinchi turgan platformaga qarab uradi tepadan va pastan geyzer tepagacha birinchi va tepadagi platformagacha chiqib xaf tugdiradi 1s turadi va kalmar suvni ursa uchli baliqlar chiqib portaly boshlaydi,
+    Klamar Nozik joyi Qizil ko'zi, 
 ```

@@ -295,6 +295,7 @@ export interface RoomState {
     acidCounter?: number;
     flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
     gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
+    squid?: SquidState | null;
     farm?: { state: 'idle' | 'talk' | 'fight' | 'done', timer: number, tick: number, kills: number, target: number, spawned: number, nextSpawnTick: number, lastDogTick: number,
         rooted: Record<string, number>, rootCd: Record<string, number> } | null;
     lift?: { state: 'hidden' | 'emerge' | 'ready' | 'rising' | 'arrived' | 'done', y: number, t: number, spawned: number, nextBotTick: number } | null;
@@ -348,4 +349,24 @@ export interface GiantFlowerState {
     nextRoot: number;
     nextBite: number;
     nextSprout: number;
+}
+
+export interface SquidState {
+    state: 'sleep' | 'rise' | 'fight' | 'dying';
+    hp: number;
+    maxHp: number;
+    timer: number;
+    tick: number;
+    x: number;                 // ko'z markazi
+    eyeY: number;
+    hitFlash: number;
+    lastHitBy: string | null;
+    slam: { plat: number, phase: 'raise' | 'slam', t: number, x0: number, x1: number, y: number, hit: string[] } | null;
+    geysers: { id: string, x: number, topY: number, phase: 'warn' | 'up', t: number, hit: string[] }[];
+    fish: { id: string, x: number, y: number, vx: number, vy: number }[];
+    splashX: number | null;    // suvni urgan joy (klient effekti uchun, bir necha tik)
+    nextSlam: number;
+    nextGeyser: number;
+    nextFish: number;
+    counter: number;
 }

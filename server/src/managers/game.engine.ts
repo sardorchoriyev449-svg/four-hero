@@ -261,6 +261,9 @@ export class GameEngine {
             // 4l. FERMA (Season 2, map-3)
             this.updateFarm(room, roomId);
 
+            // 4m. KALMAR (Season 2, map-4)
+            this.updateSquid(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -309,6 +312,11 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                squid: room.squid ? { state: room.squid.state, hp: room.squid.hp, maxHp: room.squid.maxHp, x: Math.round(room.squid.x), eyeY: Math.round(room.squid.eyeY),
+                    hitFlash: room.squid.hitFlash, slam: room.squid.slam ? { plat: room.squid.slam.plat, phase: room.squid.slam.phase, x0: room.squid.slam.x0, x1: room.squid.slam.x1, y: room.squid.slam.y } : null,
+                    geysers: room.squid.geysers.map(g => ({ id: g.id, x: g.x, topY: g.topY, phase: g.phase })),
+                    fish: room.squid.fish.map(f => ({ id: f.id, x: Math.round(f.x), y: Math.round(f.y), vx: Math.round(f.vx), vy: Math.round(f.vy) })),
+                    splashX: room.squid.splashX } : null,
                 farm: room.farm ? { state: room.farm.state, kills: room.farm.kills, target: room.farm.target,
                     rooted: Object.keys(room.farm.rooted).map(id => ({ id, x: Math.round(room.players[id]?.x ?? 0) })) } : null,
                 lift: room.lift ? { state: room.lift.state, y: Math.round(room.lift.y), progress: this.liftProgress(room) } : null,
@@ -937,6 +945,18 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
+            // KALMAR: faqat QIZIL KO'ZI zarar oladi
+            const sq = room.squid;
+            const sqd = map.squid;
+            if (!bulletDestroyed && sq && sqd && (sq.state === 'fight' || sq.state === 'rise') &&
+                this.checkOverlap(hitRect, { x: sq.x - sqd.eyeR, y: sq.eyeY - sqd.eyeR, w: sqd.eyeR * 2, h: sqd.eyeR * 2 })) {
+                bulletDestroyed = true;
+                sq.hp = Math.max(0, sq.hp - damage);
+                sq.hitFlash = 4;
+                sq.lastHitBy = bullet.playerId;
+                if (sq.hp <= 0) this.squidDefeated(room, sq);
+            }
+
             // GIGANT GUL: faqat BOSHI zarar oladi
             const gfl = room.gflower;
             const gfd = map.giantFlower;
@@ -1518,6 +1538,10 @@ export class GameEngine {
         room.gfThorns = [];
         room.gfRoots = [];
         room.gfCounter = 0;
+        const sqd = map.squid;
+        const sqHp = sqd ? sqd.hpPerPlayer * Math.max(1, Object.keys(room.players).length) : 0;
+        room.squid = sqd ? { state: 'sleep', hp: sqHp, maxHp: sqHp, timer: 0, tick: 0, x: sqd.baseX, eyeY: 700, hitFlash: 0, lastHitBy: null,
+            slam: null, geysers: [], fish: [], splashX: null, nextSlam: 0, nextGeyser: 0, nextFish: 0, counter: 0 } : null;
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
@@ -1852,6 +1876,158 @@ export class GameEngine {
             room.bots.push(bot);
             A.nextSpawnTick = A.tick + Math.round(ar.spawnIntervalMs / 30);
         }
+    }
+
+    // ===== KALMAR =====
+    private updateSquid(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const d = map.squid, sq = room.squid;
+        if (!d || !sq || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        sq.tick++;
+        if (sq.hitFlash > 0) sq.hitFlash--;
+        // Suvga tushgan qahramon cho'kadi
+        alive.forEach(p => { if (p.y > this.PIT_DEATH_Y) this.killPlayer(p); });
+        if (sq.state === 'sleep') {
+            if (!alive.some(p => p.x >= d.triggerX)) return;
+            sq.state = 'rise';
+            sq.timer = T(2200);
+            Object.values(room.players).forEach(p => {
+                if (p.x >= d.arenaX + 30 && p.x <= d.arenaX + d.arenaW - 30) return;
+                p.x = d.entryX; p.y = d.entryY;
+                this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+            });
+            this.io.to(roomId).emit('squidRise');
+            return;
+        }
+        if (sq.state === 'dying') {
+            sq.eyeY += 3;
+            if (--sq.timer === 0) {
+                const winner = (sq.lastHitBy && room.players[sq.lastHitBy]) ? sq.lastHitBy : (alive[0] || Object.values(room.players)[0])?.id;
+                if (winner) this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        // Harakat: ko'z sekin tepaga-pastga va chapga-o'ngga suzadi
+        const ph = sq.tick * 2 * Math.PI;
+        const targetEyeY = d.eyeBaseY + d.eyeAmpY * Math.sin(ph / T(7000));
+        sq.x = d.baseX + d.xAmp * Math.sin(ph / T(11000));
+        if (sq.state === 'rise') {
+            sq.eyeY = Math.max(targetEyeY, sq.eyeY - 6);   // suvdan ko'tarilib chiqadi
+            if (--sq.timer <= 0) {
+                sq.state = 'fight';
+                sq.nextSlam = sq.tick + T(1500);
+                sq.nextGeyser = sq.tick + T(3500);
+                sq.nextFish = sq.tick + T(5500);
+            }
+            return;
+        }
+        sq.eyeY = targetEyeY;
+        if (sq.splashX !== null && sq.tick % T(400) === 0) sq.splashX = null;
+        const nextId = (k: string) => 'sq' + k + '_' + (++sq.counter);
+        const platOf = (p: PlayerState): number => {
+            const feet = p.y + this.PLAYER_HALF_H;
+            let best = -1, bestY = 1e9;
+            d.arenaPlats.forEach(i => {
+                const pl = map.platforms[i];
+                if (p.x >= pl.x - 8 && p.x <= pl.x + pl.w + 8 && pl.y >= feet - 12 && pl.y < bestY) { best = i; bestY = pl.y; }
+            });
+            return best;
+        };
+
+        // 1) QO'L BILAN URISH: qahramon turgan (yoki tushadigan) platformaga tepadan
+        if (!sq.slam && sq.tick >= sq.nextSlam) {
+            const cands = alive.map(p => platOf(p)).filter(i => i >= 0);
+            if (cands.length) {
+                const i = cands[Math.floor(Math.random() * cands.length)];
+                const pl = map.platforms[i];
+                sq.slam = { plat: i, phase: 'raise', t: T(d.slamRaiseMs), x0: pl.x - 10, x1: pl.x + pl.w + 10, y: pl.y, hit: [] };
+            } else sq.nextSlam = sq.tick + T(500);
+        }
+        if (sq.slam) {
+            const sl = sq.slam;
+            if (--sl.t <= 0 && sl.phase === 'raise') {
+                sl.phase = 'slam'; sl.t = T(450);
+                this.io.to(roomId).emit('squidSlam', { x: Math.round((sl.x0 + sl.x1) / 2), y: sl.y });
+            } else if (sl.phase === 'slam') {
+                // Platforma ustida (va uning tepasida havoda) turganlarga tegadi
+                alive.forEach(p => {
+                    if (sl.hit.includes(p.id) || p.x < sl.x0 || p.x > sl.x1) return;
+                    const feet = p.y + this.PLAYER_HALF_H;
+                    if (feet > sl.y + 6 || feet < sl.y - 150) return;
+                    sl.hit.push(p.id);
+                    this.hurtPlayer(p, d.slamDamage);
+                    this.knockback(p, (p.x < (sl.x0 + sl.x1) / 2 ? -1 : 1) * 300, -200);
+                });
+                if (sl.t <= 0) { sq.slam = null; sq.nextSlam = sq.tick + T(d.slamEveryMs); }
+            }
+        }
+
+        // 2) GEYZERLAR: biri qahramon ostidan eng tepagacha, ikkinchisi boshqa joydan pastki platformalargacha
+        if (sq.tick >= sq.nextGeyser) {
+            const target = alive[Math.floor(Math.random() * alive.length)];
+            if (target) {
+                const x1 = Math.max(d.arenaX + 60, Math.min(d.arenaX + d.arenaW - 60, target.x));
+                let x2 = d.arenaX + 80 + Math.random() * (d.arenaW - 160);
+                if (Math.abs(x2 - x1) < 120) x2 = x1 + (x1 < d.arenaX + d.arenaW / 2 ? 260 : -260);
+                sq.geysers.push({ id: nextId('g'), x: Math.round(x1), topY: d.topY - 40, phase: 'warn', t: T(d.geyserWarnMs), hit: [] });
+                sq.geysers.push({ id: nextId('g'), x: Math.round(x2), topY: d.lowY - 20, phase: 'warn', t: T(d.geyserWarnMs), hit: [] });
+            }
+            sq.nextGeyser = sq.tick + T(d.geyserEveryMs);
+        }
+        for (let i = sq.geysers.length - 1; i >= 0; i--) {
+            const g = sq.geysers[i];
+            if (--g.t <= 0 && g.phase === 'warn') { g.phase = 'up'; g.t = T(d.geyserUpMs); continue; }
+            if (g.phase === 'up') {
+                alive.forEach(p => {
+                    if (g.hit.includes(p.id) || Math.abs(p.x - g.x) > 30 || p.y + this.PLAYER_HALF_H < g.topY) return;
+                    g.hit.push(p.id);
+                    this.hurtPlayer(p, d.geyserDamage);
+                    this.knockback(p, 0, -520);
+                });
+                if (g.t <= 0) sq.geysers.splice(i, 1);
+            }
+        }
+
+        // 3) SUVNI URADI: tikanli baliqlar sakrab chiqadi, qahramonga tegsa yoki platformaga/suvga tushsa portlaydi
+        if (sq.tick >= sq.nextFish && alive.length) {
+            const sx = sq.x + (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * 100);
+            sq.splashX = Math.round(sx);
+            for (let k = 0; k < d.fishCount; k++) {
+                const p = alive[k % alive.length];
+                const Tt = 1.1 + Math.random() * 0.3;
+                const vx = (p.x + (Math.random() - 0.5) * 80 - sx) / Tt;
+                const vy = (p.y - 566 - 0.5 * 800 * Tt * Tt) / Tt;
+                sq.fish.push({ id: nextId('f'), x: sx + (k - 1) * 20, y: 566, vx, vy });
+            }
+            this.io.to(roomId).emit('squidSplash', { x: Math.round(sx) });
+            sq.nextFish = sq.tick + T(d.fishEveryMs);
+        }
+        for (let i = sq.fish.length - 1; i >= 0; i--) {
+            const f = sq.fish[i];
+            const prevY = f.y;
+            f.vy += 800 * this.TICK_SECONDS;
+            f.x += f.vx * this.TICK_SECONDS;
+            f.y += f.vy * this.TICK_SECONDS;
+            const touch = alive.some(p => Math.abs(p.x - f.x) <= 26 && Math.abs(p.y - f.y) <= 30);
+            const onPlat = f.vy > 0 && map.platforms.some(pl => f.x >= pl.x && f.x <= pl.x + pl.w && prevY <= pl.y && f.y >= pl.y);
+            const inWater = f.vy > 0 && f.y >= 568;
+            if (!touch && !onPlat && !inWater) continue;
+            sq.fish.splice(i, 1);
+            if (inWater && !touch) { this.io.to(roomId).emit('squidFishBoom', { x: Math.round(f.x), y: 566, water: true }); continue; }
+            alive.forEach(p => { if (Math.hypot(p.x - f.x, p.y - f.y) <= d.fishRadius) this.hurtPlayer(p, d.fishDamage); });
+            this.io.to(roomId).emit('squidFishBoom', { x: Math.round(f.x), y: Math.round(f.y) });
+        }
+    }
+    private squidDefeated(room: RoomState, sq: NonNullable<RoomState['squid']>): void {
+        if (sq.state === 'dying') return;
+        sq.state = 'dying';
+        sq.timer = Math.round(2600 / 30);
+        sq.slam = null;
+        sq.geysers = [];
+        sq.fish = [];
+        this.io.to(room.id).emit('squidDown');
     }
 
     // ===== FERMA =====

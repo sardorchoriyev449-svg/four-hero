@@ -312,6 +312,29 @@ export interface FarmDef {
     tongueDamage: number;
 }
 
+// KALMAR (Season 2, map-4): daryo/ko'l ustidagi platformalar, tuman. Jang maydoniga yetilganda ikki
+// tomondan ulkan kalmar qo'llari chiqib yo'lni yopadi, kalmar suvdan chiqadi. Faqat QIZIL KO'ZI zarar oladi.
+// Hujumlari: qahramon turgan platformaga tepadan qo'li bilan uradi; pastdan geyzerlar (pastki va eng tepa
+// platformagacha) 1 s otiladi; suvni ursa - tikanli baliqlar sakrab chiqib portlaydi. Suvga tushgan halok bo'ladi
+export interface SquidDef {
+    arenaX: number;
+    arenaW: number;
+    triggerX: number;
+    entryX: number; entryY: number;  // jang boshlanganda tashqarida qolgan qahramon shu joyga o'tkaziladi
+    baseX: number;           // ko'z markazi (o'rtacha) va harakat amplitudalari
+    xAmp: number;
+    eyeBaseY: number;
+    eyeAmpY: number;
+    eyeR: number;
+    hpPerPlayer: number;
+    arenaPlats: number[];    // platforms indekslari (jang maydonidagilar)
+    lowY: number;            // pastki platformalar balandligi (geyzer shu yergacha)
+    topY: number;            // eng tepa platformalar (geyzer shu yergacha)
+    slamDamage: number; slamEveryMs: number; slamRaiseMs: number;
+    geyserDamage: number; geyserEveryMs: number; geyserWarnMs: number; geyserUpMs: number;
+    fishEveryMs: number; fishCount: number; fishDamage: number; fishRadius: number;
+}
+
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
 // Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
@@ -335,7 +358,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
@@ -360,6 +383,7 @@ export interface MapDef {
     giantFlower?: GiantFlowerDef; // Season 2, map-1
     lift?: LiftDef;             // Season 2, map-2
     farm?: FarmDef;             // Season 2, map-3
+    squid?: SquidDef;           // Season 2, map-4
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
@@ -866,6 +890,50 @@ export const MAPS: MapDef[] = [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // zombilar polizdan chiqadi
+    },
+    {
+        id: 13,
+        name: "Legendary Kraken",
+        description: "A misty river with stepping platforms. The Legendary Kraken sleeps in the deep water - hit its red eye!",
+        season: 2,
+        mode: 'squid',
+        killsToWin: 0,
+        xpReward: 50,          // Season 2 boss
+        accentColor: 0x26c6da,
+        groundColor: 0x2e3b2a,
+        mapWidth: 2600,
+        // Suv (daryo/ko'l) - yer yo'q, tushgan halok bo'ladi
+        pits: [{ x: 600, w: 1800 }],
+        platforms: [
+            // Daryo ustidagi yo'l (10 m yurilgach boshlanadi, ~20 m sakrab o'tiladi)
+            { x: 640, y: 520, w: 100, h: 12 },
+            { x: 820, y: 490, w: 85, h: 12 },
+            { x: 985, y: 460, w: 90, h: 12 },
+            { x: 1150, y: 500, w: 85, h: 12 },
+            { x: 1310, y: 470, w: 95, h: 12 },
+            { x: 1480, y: 480, w: 100, h: 12 },
+            // Jang maydoni: pastki, o'rta va eng tepa qatorlar
+            { x: 1640, y: 470, w: 120, h: 12 },   // 6
+            { x: 1880, y: 470, w: 110, h: 12 },   // 7
+            { x: 2240, y: 470, w: 120, h: 12 },   // 8
+            { x: 1720, y: 370, w: 110, h: 12 },   // 9
+            { x: 2130, y: 370, w: 110, h: 12 },   // 10
+            { x: 1800, y: 270, w: 100, h: 12 },   // 11
+            { x: 2040, y: 270, w: 100, h: 12 }    // 12
+        ],
+        squid: {
+            arenaX: 1600, arenaW: 800, triggerX: 1650, entryX: 1690, entryY: 446,
+            baseX: 2000, xAmp: 150, eyeBaseY: 340, eyeAmpY: 90, eyeR: 34,
+            hpPerPlayer: 1600,
+            arenaPlats: [6, 7, 8, 9, 10, 11, 12], lowY: 470, topY: 270,
+            slamDamage: 22, slamEveryMs: 4600, slamRaiseMs: 1000,
+            geyserDamage: 18, geyserEveryMs: 6200, geyserWarnMs: 900, geyserUpMs: 1000,
+            fishEveryMs: 7000, fishCount: 3, fishDamage: 15, fishRadius: 50
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // bu xaritada bot yo'q
     }
 ];
 
