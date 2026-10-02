@@ -1916,9 +1916,12 @@ export class GameEngine {
                 return;
             }
             if ((b.tongueCd || 0) > 0) { b.tongueCd!--; return; }
-            // Nishon: zombi TEPASIDA turgan (tom, soyabon, quduq) va yetadigan masofadagi qahramon
-            const target = alive.find(p => p.y + this.PLAYER_HALF_H < b.y + this.BOT_HALF_H - 40 &&
-                Math.hypot(p.x - mouthX, p.y - mouthY) <= F.tongueRange + 20);
+            // Nishon: yetadigan masofadagi qahramon - tepada (tom, soyabon, quduq) ham, pastda (yerda) ham.
+            // Juda yaqin turgani (qo'li yetadigan) - oddiy hujum bilan uriladi, til otilmaydi
+            const target = alive.find(p => {
+                const d = Math.hypot(p.x - mouthX, p.y - mouthY);
+                return d <= F.tongueRange + 20 && (Math.abs(p.x - b.x) > 60 || p.y + this.PLAYER_HALF_H < b.y + this.BOT_HALF_H - 40);
+            });
             if (!target) return;
             b.facingLeft = target.x < b.x;
             b.tongue = { phase: 'aim', t: T(650), tx: target.x, ty: target.y };
@@ -1942,16 +1945,21 @@ export class GameEngine {
             farm.lastDogTick = farm.tick;
             this.io.to(roomId).emit('farmDog');
         }
-        // E bosmay sabzidan 5 m o'tib ketsa: yerdan ildiz chiqib oyog'idan ushlaydi (2 s yura olmaydi)
+        // E bosmay sabzidan 5 m o'tib ketsa (YERDA yurib): yerdan ildizlar chiqib yerdagi qahramonlarni
+        // oyog'idan 2 s ushlab turadi va polizlar uyg'onadi - zombi-sabzavotlar chiqa boshlaydi.
+        // Tom/soyabon/quduq ustida turgan qahramonni ildiz ushlamaydi
         Object.keys(farm.rooted).forEach(id => { if (--farm.rooted[id] <= 0 || !room.players[id] || room.players[id].isDead) delete farm.rooted[id]; });
         Object.keys(farm.rootCd).forEach(id => { if (--farm.rootCd[id] <= 0) delete farm.rootCd[id]; });
-        if (farm.state === 'idle') {
+        const onGround = (p: PlayerState) => p.y + this.PLAYER_HALF_H >= 562;
+        if (farm.state === 'idle' && alive.some(p => onGround(p) && p.x >= F.carrotX + F.rootPastCarrot)) {
             alive.forEach(p => {
-                if (p.x < F.carrotX + F.rootPastCarrot || farm.rooted[p.id] || farm.rootCd[p.id]) return;
+                if (!onGround(p) || p.x < F.carrotX - 200) return;
                 farm.rooted[p.id] = T(F.rootMs);
-                farm.rootCd[p.id] = T(F.rootMs + 1500);
                 this.io.to(roomId).emit('farmRoot', { id: p.id, x: Math.round(p.x) });
             });
+            farm.state = 'fight';
+            farm.nextSpawnTick = farm.tick + T(600);
+            this.io.to(roomId).emit('carrotPulled', { woke: true });
         }
         // Zombi-sabzavotlar: tepada (tom/platformada) turgan qahramonga og'zidan o'tkir igna-til otadi
         this.updateZombieTongues(room, F);
