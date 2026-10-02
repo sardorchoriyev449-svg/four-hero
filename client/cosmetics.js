@@ -46,7 +46,10 @@ window.Cosmetics = (() => {
     };
 
     // ===== QAHRAMON TANASI: skin rangidagi tik to'rtburchak, o'ngda to'q sariq visor (14x22) =====
-    function bodyGrid(color) {
+    // color - tana rangi; 2^24 dan katta qismi - ikkinchi rang (visor va belbog'): skin kombinatsiyasi
+    function bodyGrid(packed) {
+        const color = packed % 0x1000000;
+        const accent = Math.floor(packed / 0x1000000);
         const W = 14, H = 22, g = gridNew(W, H);
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             let c = color;
@@ -55,11 +58,16 @@ window.Cosmetics = (() => {
             if (y >= H - 2) c = mix(c, 0x000000, 0.18);
             g[y][x] = c;
         }
-        const ORANGE = 0xd9822b, WHITE = 0xffffff, DARK = 0x141414;
+        const ORANGE = accent || 0xd9822b, WHITE = 0xffffff, DARK = 0x141414;
         for (let x = 6; x < W; x++) { g[4][x] = DARK; g[7][x] = DARK; }
         g[5][6] = DARK; g[6][6] = DARK;
         for (let x = 7; x < W; x++) { g[5][x] = ORANGE; g[6][x] = ORANGE; }
         [8, 9, 11, 12].forEach((x) => { g[5][x] = WHITE; });
+        // Kombinatsiyali skin: belbog' (ikkinchi rang) va o'rtasida to'qa
+        if (accent) {
+            for (let x = 0; x < W; x++) { g[14][x] = mix(accent, 0x000000, 0.15); g[15][x] = mix(accent, 0x000000, 0.35); }
+            g[14][6] = 0xffe082; g[14][7] = 0xffe082; g[15][6] = 0xffb300; g[15][7] = 0xffb300;
+        }
         return outline(g, 0x0d0d0d);
     }
 

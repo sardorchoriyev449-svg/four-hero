@@ -792,10 +792,21 @@ export class RoomManager {
         room.isOver = true;
         room.isStarted = false;
 
+        // Season 2 boss xaritalari (maps.ts: bossCoins): bossni yengishda QATNASHGAN HAR BIR o'yinchiga
+        // shuncha tanga. Oddiy xaritalarda - faqat g'olibga odatdagi g'alaba tangasi
+        const bossCoins = getMapById(room.selectedLevel).bossCoins;
+        const winCoins = bossCoins ?? RoomManager.WIN_REWARD_COINS;
         let updatedCoins: number | null = null;
         if (winner.userId !== null) {
-            const updated = await db.addCoins(winner.userId, RoomManager.WIN_REWARD_COINS);
+            const updated = await db.addCoins(winner.userId, winCoins);
             if (updated) updatedCoins = updated.coins;
+        }
+        if (bossCoins) {
+            for (const p of Object.values(room.players)) {
+                if (p.id === winnerId || p.userId === null) continue;
+                const updated = await db.addCoins(p.userId, bossCoins);
+                if (updated) this.io.to(p.id).emit('coinsUpdated', { amount: bossCoins, totalCoins: updated.coins });
+            }
         }
 
         // PROGRESS - HAR KIMNING O'Z HISOBIDA: xonadagi har o'yinchiga +10 XP; aynan o'zining
@@ -832,7 +843,7 @@ export class RoomManager {
         // XARITALAR ULANGAN: keyingi xarita bo'lsa, lobbiga qaytmasdan darhol
         // o'sha joydan davom etiladi. Keyin hamma yutqazsa - lobbida aynan shu
         // (keyingi) xarita tanlangan bo'lib qoladi, ya'ni o'sha joydan qayta boshlanadi
-        const coinsAwarded = winner.userId !== null ? RoomManager.WIN_REWARD_COINS : 0;
+        const coinsAwarded = winner.userId !== null ? winCoins : 0;
         if (room.selectedLevel + 1 < SEASON_MAP_COUNT) {
             const fromLevel = room.selectedLevel;
             room.selectedLevel++;
@@ -850,7 +861,7 @@ export class RoomManager {
             xpGained: xpGain,
             winnerId: winnerId,
             winnerNickname: winner.nickname,
-            coinsAwarded: winner.userId !== null ? RoomManager.WIN_REWARD_COINS : 0,
+            coinsAwarded: winner.userId !== null ? winCoins : 0,
             totalCoins: updatedCoins,
             levelCleared: levelCleared,
             unlockedLevel: room.unlockedLevel

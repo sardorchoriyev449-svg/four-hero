@@ -256,22 +256,22 @@ export async function buySkin(userId: string, characterType: string, skinId: str
     if (!doc) return { success: false, message: 'err_user_not_found' };
 
     const ownedField = category === 'weapon' ? 'ownedWeaponSkins' : 'ownedSkins';
-    const owned: string[] = (doc as any)[ownedField][characterType] || [];
+    const owned: string[] = ((doc as any)[ownedField] || {})[characterType] || [];
     if (owned.includes(skinId)) {
         return { success: false, message: 'err_skin_owned' };
     }
     if (doc.coins < price) {
         return { success: false, message: 'err_not_enough_coins' };
     }
-
-    owned.push(skinId);
-    (doc as any)[ownedField][characterType] = owned;
-    doc.coins -= price;
-    doc.markModified(ownedField);
-
-    await doc.save();
-
-    return { success: true, user: docToUser(doc) };
+    // Bitta atomar yozuv: hali olinmagan va tanga yetarli bo'lsagina (ikki marta tez bosilsa ham bir marta yechiladi)
+    const path = ownedField + '.' + characterType;
+    const updated = await UserModel.findOneAndUpdate(
+        { _id: userId, [path]: { $ne: skinId }, coins: { $gte: price } },
+        { $push: { [path]: skinId }, $inc: { coins: -price } },
+        { returnDocument: 'after' }
+    );
+    if (!updated) return { success: false, message: 'err_not_enough_coins' };
+    return { success: true, user: docToUser(updated) };
 }
 
 // SKIN KIYISH (faqat sotib olingan skinni kiyish mumkin)
@@ -281,12 +281,12 @@ export async function equipSkin(userId: string, characterType: string, skinId: s
 
     const ownedField = category === 'weapon' ? 'ownedWeaponSkins' : 'ownedSkins';
     const equippedField = category === 'weapon' ? 'equippedWeaponSkins' : 'equippedSkins';
-    const owned: string[] = (doc as any)[ownedField][characterType] || [];
+    const owned: string[] = ((doc as any)[ownedField] || {})[characterType] || [];
     if (!owned.includes(skinId)) {
         return { success: false, message: 'err_skin_not_owned' };
     }
 
-    (doc as any)[equippedField][characterType] = skinId;
+    (doc as any)[equippedField] = { ...((doc as any)[equippedField] || {}), [characterType]: skinId };
     doc.markModified(equippedField);
     await doc.save();
 

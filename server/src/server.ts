@@ -7,7 +7,7 @@ import { RoomState } from './types';
 import { RoomManager } from './managers/room.manager';
 import { GameEngine } from './managers/game.engine';
 import * as db from './db';
-import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice } from './skins';
+import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
 import { MAPS } from './maps';
 import { config } from 'dotenv';
@@ -184,6 +184,7 @@ app.post('/api/character/:userId/upgrade', async (req, res) => {
 // ekranini bosh menyudan ochganda "ro'yxatdan o'tmagansiz" degan noto'g'ri xato chiqardi)
 app.post('/api/skins/:userId/buy', async (req, res) => {
     const { characterType, skinId } = req.body || {};
+    if (!isKnownSkin(characterType, skinId)) { res.status(400).json({ success: false, message: 'err_not_found' }); return; }
     try {
         const price = getSkinPrice(characterType, skinId);
         const result = await db.buySkin(req.params.userId, characterType, skinId, price, 'body');
@@ -195,6 +196,7 @@ app.post('/api/skins/:userId/buy', async (req, res) => {
 
 app.post('/api/skins/:userId/equip', async (req, res) => {
     const { characterType, skinId } = req.body || {};
+    if (!isKnownSkin(characterType, skinId)) { res.status(400).json({ success: false, message: 'err_not_found' }); return; }
     try {
         const result = await db.equipSkin(req.params.userId, characterType, skinId, 'body');
         res.json(result);
@@ -211,6 +213,7 @@ app.get('/api/weapon-skins', (req, res) => {
 // QUROL SKINI SOTIB OLISH / KIYISH - tana skinidan ALOHIDA
 app.post('/api/weapon-skins/:userId/buy', async (req, res) => {
     const { characterType, skinId } = req.body || {};
+    if (!isKnownSkin(characterType, skinId, true)) { res.status(400).json({ success: false, message: 'err_not_found' }); return; }
     try {
         const price = getWeaponSkinPrice(characterType, skinId);
         const result = await db.buySkin(req.params.userId, characterType, skinId, price, 'weapon');
@@ -222,6 +225,7 @@ app.post('/api/weapon-skins/:userId/buy', async (req, res) => {
 
 app.post('/api/weapon-skins/:userId/equip', async (req, res) => {
     const { characterType, skinId } = req.body || {};
+    if (!isKnownSkin(characterType, skinId, true)) { res.status(400).json({ success: false, message: 'err_not_found' }); return; }
     try {
         const result = await db.equipSkin(req.params.userId, characterType, skinId, 'weapon');
         res.json(result);
@@ -627,7 +631,7 @@ io.on('connection', (socket) => {
 
     // 8b2. EMOTSIYA (o'yinda "1" tugmasi): xonadagi hammaga - kim ko'rsatdi va qaysi emotsiya
     socket.on('emote', (data: { roomId: string, id: number }) => {
-        if (!data || typeof data.roomId !== 'string' || data.id !== 1) return;
+        if (!data || typeof data.roomId !== 'string' || (data.id !== 1 && data.id !== 2)) return;
         const room = activeRooms[data.roomId];
         const p = room && room.players[socket.id];
         if (!p || !room.isStarted) return;

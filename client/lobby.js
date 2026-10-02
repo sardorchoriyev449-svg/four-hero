@@ -1534,9 +1534,11 @@ function renderShop() {
         const isOwned = owned.includes(skin.id);
         const isEquipped = equipped === skin.id;
         const colorHex = '#' + skin.color.toString(16).padStart(6, '0');
+        // Kombinatsiyali skin: namunada ikki rang (tana va visor/belbog')
+        const swatchBg = skin.accent ? `linear-gradient(135deg, ${colorHex} 0 58%, #${skin.accent.toString(16).padStart(6, '0')} 58% 100%)` : colorHex;
 
         const left = document.createElement('span');
-        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${tSkinName('skin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        left.innerHTML = `<span class="skin-swatch" style="background:${swatchBg}"></span>${tSkinName('skin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
         row.appendChild(left);
 
         const btn = document.createElement('button');
@@ -1720,9 +1722,11 @@ function renderWeaponShop() {
         const isOwned = owned.includes(skin.id);
         const isEquipped = equipped === skin.id;
         const colorHex = '#' + skin.color.toString(16).padStart(6, '0');
+        // Kombinatsiyali skin: namunada ikki rang (tana va visor/belbog')
+        const swatchBg = skin.accent ? `linear-gradient(135deg, ${colorHex} 0 58%, #${skin.accent.toString(16).padStart(6, '0')} 58% 100%)` : colorHex;
 
         const left = document.createElement('span');
-        left.innerHTML = `<span class="skin-swatch" style="background:${colorHex}"></span>${tSkinName('wskin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        left.innerHTML = `<span class="skin-swatch" style="background:${swatchBg}"></span>${tSkinName('wskin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
         row.appendChild(left);
 
         const btn = document.createElement('button');
@@ -1901,7 +1905,7 @@ function drawCharPreview() {
         const id = (equippedMap && equippedMap[type]) || 'default';
         const list = (catalog && catalog[type]) || [];
         const skin = list.find(s => s.id === id) || list[0];
-        return skin ? '#' + skin.color.toString(16).padStart(6, '0') : null;
+        return skin ? '#' + (skin.color + (skin.accent || 0) * 0x1000000).toString(16).padStart(6, '0') : null;
     };
     const body = pick(skinCatalog, currentUser.equippedSkins) || '#1e88e5';
     ctx.clearRect(0, 0, 64, 48);

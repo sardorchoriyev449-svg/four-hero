@@ -360,6 +360,7 @@ export interface MapDef {
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
     mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
+    bossCoins?: number;      // Boss xaritasi: bossni o'ldirgan (oxirgi zarbani bergan) o'yinchiga shuncha tanga (yo'q bo'lsa - odatdagi 100)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
     groundColor: number;
@@ -810,6 +811,7 @@ export const MAPS: MapDef[] = [
         mode: 'gflower',
         killsToWin: 0,
         xpReward: 70,          // Season 2 boss
+        bossCoins: 250,
         accentColor: 0xff4081,
         groundColor: 0x1b3a2a,
         mapWidth: 3000,
@@ -899,6 +901,7 @@ export const MAPS: MapDef[] = [
         mode: 'squid',
         killsToWin: 0,
         xpReward: 50,          // Season 2 boss
+        bossCoins: 250,
         accentColor: 0x26c6da,
         groundColor: 0x2e3b2a,
         mapWidth: 2600,

@@ -313,12 +313,26 @@ function launchGame(socket, roomId, mapData, continued) {
     function preload() {
         // Emotsiya ("1" tugmasi) - qahramon tepasida ko'rinadi
         this.load.image('emote_1', 'public/emotions/emotion-1.png');
+        // emote_2 - qo'l ishorasi (piksel rasm, create'da chiziladi)
     }
 
     // O'YINCHI QAHRAMON TANASI (chizma bo'yicha, piksel): skin rangidagi tik to'rtburchak
     // (chap qirrasi yorug', o'ng qirrasi soyada), o'ng tomonda - qora ramkali TO'Q SARIQ visor,
     // ichida ikkita oq tirqish. O'ngga qaragan; chapga qaraganda rasm ko'zgudek aylanadi. 32x48
     // (rasm cosmetics.js da - lobbidagi oldindan ko'rinish bilan bir xil bo'lishi uchun)
+    // QO'L ISHORASI (emotsiya 2): oq qo'l, qora chiziq, o'rta barmoq tik ko'tarilgan. 13x17
+    function handGestureGrid() {
+        const W = 13, H = 17, g = gridNew(W, H), WH = 0xfafafa, SH = 0xd7d7d7;
+        const rect = (x, y, w, h) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) g[yy][xx] = xx === x + w - 1 ? SH : WH; };
+        rect(5, 0, 3, 11);    // o'rta barmoq
+        rect(2, 6, 3, 5);     // ko'rsatkich (bukilgan)
+        rect(8, 6, 3, 5);     // nomsiz
+        rect(10, 7, 2, 4);    // jimjiloq
+        rect(0, 9, 3, 4);     // bosh barmoq
+        rect(1, 10, 12, 7);   // kaft
+        [3, 6, 9].forEach(x => { g[10][x] = 0x141414; });   // barmoq bo'g'imlari chizig'i
+        return gridOutline(g, 0x0a0a0a);
+    }
     function createPlayerTexture(scene, key, color) {
         if (scene.textures.exists(key)) return;
         gridToTexture(scene, key, Cosmetics.bodyGrid(color), 2);
@@ -4944,15 +4958,19 @@ function launchGame(socket, roomId, mapData, continued) {
             socket.emit('useSpecial', roomId);
         });
 
-        // EMOTSIYA: "1" (yoki raqamli klaviaturadagi 1) - xonadagi hammaga ko'rinadi
-        const sendEmote = () => {
+        // EMOTSIYA: "1" - rasmli (bosh ustida), "2" - qo'l ishorasi (tana oldida) - xonadagi hammaga ko'rinadi
+        if (!this.textures.exists('emote_2')) gridToTexture(this, 'emote_2', handGestureGrid(), 2);
+        const sendEmote = (id = 1) => {
             if (!currentCharacter || dialog || this.time.now - lastEmoteAt < 1500) return;
             lastEmoteAt = this.time.now;
-            socket.emit('emote', { roomId: roomId, id: 1 });
+            socket.emit('emote', { roomId: roomId, id });
         };
-        this.input.keyboard.on('keydown-ONE', sendEmote);
-        this.input.keyboard.on('keydown-NUMPAD_ONE', sendEmote);
-        touchActions.emote = [sendEmote];
+        this.input.keyboard.on('keydown-ONE', () => sendEmote(1));
+        this.input.keyboard.on('keydown-NUMPAD_ONE', () => sendEmote(1));
+        this.input.keyboard.on('keydown-TWO', () => sendEmote(2));
+        this.input.keyboard.on('keydown-NUMPAD_TWO', () => sendEmote(2));
+        touchActions.emote = [() => sendEmote(1)];
+        touchActions.emote2 = [() => sendEmote(2)];
         socket.off('emote');
         socket.on('emote', (d) => {
             if (!this.textures.exists('emote_' + d.id)) return;
@@ -4961,9 +4979,10 @@ function launchGame(socket, roomId, mapData, continued) {
             emotes = emotes.filter(e => e.playerId !== d.playerId);
             // Darhol egasining boshi ustida paydo bo'ladi (keyin update() u bilan birga yurgizadi)
             const owner = d.playerId === socket.id ? currentCharacter : otherPlayers[d.playerId];
-            const img = this.add.image(owner ? owner.x : 0, owner ? owner.y - 62 : 0, 'emote_' + d.id).setDepth(1005).setScale(0);
-            const size = 56 / Math.max(img.width, img.height);
-            const e = { img, playerId: d.playerId };
+            const onBody = d.id === 2;   // qo'l ishorasi - boshi ustida emas, tanasi oldida (qahramon ko'rsatyapti)
+            const img = this.add.image(owner ? owner.x : 0, owner ? owner.y - (onBody ? -2 : 62) : 0, 'emote_' + d.id).setDepth(onBody ? 3.6 : 1005).setScale(0);
+            const size = onBody ? 1 : 56 / Math.max(img.width, img.height);
+            const e = { img, playerId: d.playerId, onBody };
             emotes.push(e);
             this.tweens.add({ targets: img, scale: size, duration: 180, ease: 'Back.Out' });
             this.tweens.add({ targets: img, y: '-=0', alpha: 0, delay: 1900, duration: 300, onComplete: () => {
@@ -5922,7 +5941,11 @@ function launchGame(socket, roomId, mapData, continued) {
         emotes.forEach((e) => {
             const owner = e.playerId === socket.id ? currentCharacter : otherPlayers[e.playerId];
             if (!owner || !owner.active) { e.img.setVisible(false); return; }
-            e.img.setPosition(owner.x, owner.y - 62);
+            if (e.onBody) {
+                // Qahramon qaragan tomonga: tanasi oldida, u bilan birga buriladi
+                const left = owner === currentCharacter ? lastDirection === 'left' : owner.facingRight === false;
+                e.img.setFlipX(left).setPosition(owner.x + (left ? -14 : 14), owner.y + 2);
+            } else e.img.setPosition(owner.x, owner.y - 62);
         });
         // ILON QUVISHI: ilon silliq siljiydi, KAMERA u bilan bir xil suriladi
         // (ilon ekranning chap chetida ko'rinib turadi)
