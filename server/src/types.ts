@@ -385,11 +385,13 @@ export interface DoorsState {
     lastPlat: Record<string, number>;
     // Ichkari
     sub: 'elf' | 'lever' | 'drop' | 'shock' | 'fight' | 'buried' | null;
-    monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop' | 'dig' | 'hidden', facing: 1 | -1,
-        hits: number, maxHits: number, mode: 'surface' | 'burrow' | 'under' | 'emerge', modeT: number,
-        emergeAt: { x: number, y: number, kind: 'ground' | 'ceiling' | 'wall' } | null,
+    monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop' | 'hidden', facing: 1 | -1,
+        hits: number, maxHits: number, mode: 'surface' | 'retreat' | 'hidden' | 'warn' | 'emerge', modeT: number,
+        emergeAt: { x: number, y: number, kind: 'left' | 'right' | 'top' | 'under' } | null, targetId: string | null,
         climbTo: number | null, cd: number, attackT: number, hitFlash: number } | null;
-    digs: { x: number, y: number, kind: 'ground' | 'ceiling' | 'wall' }[];
-    stal: { id: string, x: number, state: 'hang' | 'fall' | 'gone', y: number, vy: number, regrow: number, by: string | null }[];
+    bombs: { id: string, x: number, alive: boolean, respawn: number }[];
+    hands: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: boolean }[];
+    nextHand: number;
+    counter: number;
     lastHitBy: string | null;
 }

@@ -2525,6 +2525,15 @@ function launchGame(socket, roomId, mapData, continued) {
         for (let y = 0; y < 3; y++) for (let x = kx; x < kx + 2 && x < W; x++) g[y + 1][x] = 0xd32f2f;
         return gridOutline(g, 0x0a0a0a);
     }
+    // Yerdan chiqadigan qo'l: oqish-kulrang, ingichka uzun barmoqlar tepaga, tirnoqlar qora. 11x22
+    function grabHandGrid() {
+        const W = 11, H = 22, g = gridNew(W, H), S1 = 0xd7ccc8, S2 = 0xa1887f;
+        for (let y = 9; y < H; y++) for (let x = 2; x < 9; x++) g[y][x] = x > 6 ? S2 : S1;   // kaft va bilak
+        [[1, 2], [3, 0], [5, 0], [7, 1]].forEach(([x, y0]) => { for (let y = y0; y < 10; y++) { g[y][x] = S1; g[y][x + 1] = S2; } g[y0][x] = 0x212121; });
+        for (let y = 11; y < 15; y++) g[y][0] = S1;   // bosh barmoq
+        [[4, 14], [5, 17], [3, 19]].forEach(([x, y]) => { g[y][x] = 0x6d4c41; });   // tuproq/qon dog'lari
+        return gridOutline(g, 0x0a0a0a);
+    }
     // Stalaktit (shiftdan osilgan tosh, uchi pastda). 14x70
     function stalactiteGrid() {
         const W = 14, H = 70, g = gridNew(W, H);
@@ -2568,6 +2577,7 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_lever_down', leverGrid(true), 3);
         mk('px_bomb', bombGrid(), 3);
         mk('px_stal', stalactiteGrid(), 3);
+        mk('px_grab_hand', grabHandGrid(), 3);
         mk('px_oq_scare', oqScareGrid(), 22);
         // Yorug'lik "cho'tkasi" (qorong'ilikda o'yinchi atrofida teshik ochish uchun): markazi to'liq, cheti shaffof
         [['light_brush', 340], ['light_brush_s', 110]].forEach(([key, size]) => {
@@ -2651,14 +2661,16 @@ function launchGame(socket, roomId, mapData, continued) {
             g.fillStyle(0x3d3548, 1); g.fillRect(pl.x, pl.y, pl.w, 3);
             g.fillStyle(0x1a1620, 1); g.fillTriangle(pl.x + 10, pl.y + 14, pl.x + pl.w / 2, pl.y + 34, pl.x + pl.w - 10, pl.y + 14);
         });
-        // Stalaktitlar (bombalari bilan) - holat serverdan
-        const stals = {};
-        d.stalX.forEach((x, i) => {
-            const img = scene.add.image(x, 40, 'px_stal').setOrigin(0.5, 0).setDepth(1.35);
-            const bomb = scene.add.image(x + 10, d.stalTipY - 6, 'px_bomb').setOrigin(0.5, 1).setDepth(1.36).setAngle(-12);
-            const spark = scene.add.circle(x + 15, d.stalTipY - 38, 3, 0xffeb3b).setDepth(4.75);
-            stals['stal_' + i] = { img, bomb, spark, x, state: 'hang' };
+        // Shiftdagi stalaktitlar - faqat bezak (qo'rqinchli silueta)
+        [X0 + 140, X0 + 470, X0 + 690, X0 + 1010, X0 + 1240, X0 + 1500].forEach((x, i) => scene.add.image(x, 40, 'px_stal').setOrigin(0.5, 0).setDepth(-0.4).setScale(1, 0.6 + (i % 3) * 0.2));
+        // Polda har 5 m da bomba (holat serverdan): o'q tegsa yoki maxluq bossa portlaydi
+        const bombs = {};
+        d.bombX.forEach((x, i) => {
+            const img = scene.add.image(x, 572, 'px_bomb').setOrigin(0.5, 1).setDepth(1.36);
+            const spark = scene.add.circle(x + 4, 572 - 33, 3, 0xffeb3b).setDepth(4.75);
+            bombs['cbomb_' + i] = { img, spark, x, alive: true };
         });
+        const hands = {};
         // Bog'langan elf malika (shiftdan arqonlar), richag
         const ropes = scene.add.graphics().setDepth(1.5);
         ropes.fillStyle(0xbcaaa4, 1); ropes.fillRect(d.elfX - 10, 40, 2, d.elfY - 60); ropes.fillRect(d.elfX + 9, 40, 2, d.elfY - 60);
@@ -2672,7 +2684,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const brush = scene.make.image({ key: 'light_brush', add: false });
         const brushS = scene.make.image({ key: 'light_brush_s', add: false });
         const fx = scene.add.graphics().setDepth(4.7);       // ko'zlar, kovlanayotgan joylar - qorong'ilik ustida
-        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, stals, dark, brush, brushS, fx,
+        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, bombs, hands, dark, brush, brushS, fx, underWarn: null, peeks: [], nextEdgePeek: 0,
             barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9 };
     }
     function drDoorsUp(scene, instant) {
@@ -2726,9 +2738,23 @@ function launchGame(socket, roomId, mapData, continued) {
         setTimeout(() => { el.style.transition = 'opacity 0.5s'; el.style.opacity = '0'; }, 3200);
         setTimeout(() => el.remove(), 3800);
     }
+    // Brauzer oynasi chetidan (o'yin maydonidan tashqarida) OQ YUZ kallasi mo'ralaydi va qaytib ketadi
+    function edgePeek() {
+        const left = Math.random() < 0.5;
+        const g = oqScareGrid(), P = 9, c = document.createElement('canvas');
+        c.width = g[0].length * P; c.height = g.length * P;
+        const ctx = c.getContext('2d');
+        g.forEach((row, y) => row.forEach((col, x) => { if (col) { ctx.fillStyle = '#' + col.toString(16).padStart(6, '0'); ctx.fillRect(x * P, y * P, P, P); } }));
+        c.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;image-rendering:pixelated;transition:transform 0.9s ease-in-out;' +
+            'top:' + (25 + Math.random() * 45) + 'vh;' + (left ? 'left:0;transform:translateX(-100%) rotate(18deg)' : 'right:0;transform:translateX(100%) rotate(-18deg)');
+        document.body.appendChild(c);
+        requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transform = (left ? 'translateX(-45%) rotate(18deg)' : 'translateX(45%) rotate(-18deg)'); }));
+        setTimeout(() => { c.style.transform = left ? 'translateX(-100%) rotate(18deg)' : 'translateX(100%) rotate(-18deg)'; }, 1500);
+        setTimeout(() => c.remove(), 2600);
+    }
     // SKRIMER: OQ YUZ niqobi butun ekranga otilib chiqadi, qichqiriq
     function oqJumpscare(scene) {
-        if (!drObj || scene.time.now - drObj.lastScare < 7000) return;
+        if (!drObj || scene.time.now - drObj.lastScare < 25000) return;
         drObj.lastScare = scene.time.now;
         const red = scene.add.rectangle(400, 300, 800, 600, 0x7f0000, 0.45).setScrollFactor(0).setDepth(3000);
         const face = scene.add.image(400, 320, 'px_oq_scare').setScrollFactor(0).setDepth(3001).setScale(0.5);
@@ -2759,19 +2785,39 @@ function launchGame(socket, roomId, mapData, continued) {
             rg.fillStyle(0x69f0ae, 0.35); rg.fillRect(sp.x, sp.y - 6, sp.w, 6);
         }
         if (S.state !== 'room' && S.state !== 'done') return;
-        // Stalaktitlar
-        (S.stal || []).forEach((st) => {
-            const o = drObj.stals[st.id];
-            if (!o) return;
-            if (st.state === 'hang' && o.state === 'gone') {   // yana o'sdi
-                o.img.setVisible(true).setY(40).setScale(1, 0.05);
-                scene.tweens.add({ targets: o.img, scaleY: 1, duration: 600, ease: 'Quad.Out' });
-                o.bomb.setVisible(true).setScale(0); scene.tweens.add({ targets: o.bomb, scale: 1, delay: 500, duration: 250, ease: 'Back.Out' });
+        // Poldagi bombalar
+        const aliveIds = new Set((S.bombs || []).map(b => b.id));
+        Object.entries(drObj.bombs).forEach(([id, o]) => {
+            const alive = aliveIds.has(id);
+            if (alive && !o.alive) { o.img.setVisible(true).setScale(0); scene.tweens.add({ targets: o.img, scale: 1, duration: 300, ease: 'Back.Out' }); }
+            if (!alive) o.img.setVisible(false);
+            o.spark.setVisible(alive && S.sub !== 'buried').setAlpha(0.5 + 0.5 * Math.sin(t0 / 60 + o.x));
+            o.alive = alive;
+        });
+        // Yerdan chiqayotgan qo'llar: avval yer yoriladi, keyin qo'l otilib chiqadi
+        const handIds = new Set((S.hands || []).map(h => h.id));
+        (S.hands || []).forEach((h) => {
+            let o = drObj.hands[h.id];
+            if (!o) {
+                const crack = scene.add.graphics().setDepth(1.37);
+                crack.fillStyle(0x0a0a0a, 1); crack.fillRect(h.x - 14, h.y - 2, 28, 3); crack.fillRect(h.x - 6, h.y - 5, 3, 4); crack.fillRect(h.x + 5, h.y - 4, 3, 3);
+                const img = scene.add.image(h.x, h.y + 2, 'px_grab_hand').setOrigin(0.5, 1).setDepth(3.45).setScale(1, 0).setFlipX(Math.random() < 0.5);
+                o = drObj.hands[h.id] = { crack, img, up: false };
+                gDust(scene, h.x, h.y - 4, 2, 0x3e2723);
             }
-            if (st.state === 'fall') { o.img.setVisible(true).setY(st.y - 210); o.bomb.setVisible(false); }
-            if (st.state === 'gone') { o.img.setVisible(false); o.bomb.setVisible(false); }
-            o.spark.setVisible(st.state === 'hang' && S.sub !== 'buried').setAlpha(0.5 + 0.5 * Math.sin(t0 / 60 + o.x));
-            o.state = st.state;
+            if (h.phase === 'up' && !o.up) {
+                o.up = true;
+                scene.tweens.add({ targets: o.img, scaleY: 1, duration: 90, ease: 'Back.Out' });
+                scene.tweens.add({ targets: o.img, angle: { from: -8, to: 8 }, duration: 70, yoyo: true, repeat: 3 });
+                sfxAt('stab', h.x, 0.5);
+            }
+        });
+        Object.keys(drObj.hands).forEach((id) => {
+            if (handIds.has(id)) return;
+            const o = drObj.hands[id];
+            o.crack.destroy();
+            scene.tweens.add({ targets: o.img, scaleY: 0, duration: 120, onComplete: () => o.img.destroy() });
+            delete drObj.hands[id];
         });
         // OQ YUZ
         const mo = S.monster, spr = drObj.monster;
@@ -2784,7 +2830,6 @@ function launchGame(socket, roomId, mapData, continued) {
             drObj.disp.y = mo.mode === 'emerge' && Math.abs(drObj.disp.y - mo.y) > 150 ? mo.y : Phaser.Math.Linear(drObj.disp.y, mo.y, 0.45);
             const tex = mo.pose === 'climb' ? 'px_oq_climb' : mo.pose === 'attack' ? 'px_oq_attack' : 'px_oq_crawl';
             spr.setTexture(tex).setFlipX(mo.facing < 0).setPosition(drObj.disp.x, drObj.disp.y).setFlipY(mo.pose === 'drop' && S.sub === 'fight');
-            if (mo.pose === 'dig') { spr.y += 40 + Math.random() * 6; spr.x += Math.random() * 6 - 3; }
             if (mo.pose === 'crawl') spr.y += Math.sin(t0 / 90) * 2;
             if (mo.hitFlash > 0 && Math.floor(t0 / 60) % 2) spr.setTint(0xff5252); else spr.clearTint();
             if (S.sub === 'fight') drawBossBar(scene, mo.maxHits - mo.hits, mo.maxHits, t('oqyuz_name'));
@@ -2795,21 +2840,15 @@ function launchGame(socket, roomId, mapData, continued) {
                 fx.fillStyle(0xff1744, 0.9); fx.fillRect(hx - 8 * dir - 3, hy, 5, 5); fx.fillRect(hx + 7 * dir - 2, hy - 1, 4, 4);
             }
         }
-        // Kovlanayotgan joylar: ikkita (biri aldov) - yerda tuproq do'mpayadi, shiftdan chang, devorda yoriq
-        (S.digs || []).forEach((dg) => {
-            const j = Math.sin(t0 / 40) * 3;
-            if (dg.kind === 'ground') {
-                fx.fillStyle(0x3e2723, 1); fx.fillEllipse(dg.x + j, 566, 70, 16);
-                fx.fillStyle(0x5d4037, 1); fx.fillEllipse(dg.x - j, 562, 44, 10);
-                if (Math.random() < 0.3) gDust(scene, dg.x, 562, 1, 0x4e342e);
-            } else if (dg.kind === 'ceiling') {
-                fx.lineStyle(2, 0x000000, 1); fx.lineBetween(dg.x - 30, 60, dg.x + j, 74); fx.lineBetween(dg.x + j, 74, dg.x + 26, 62);
-                if (Math.random() < 0.35) { const pp = scene.add.rectangle(dg.x + Phaser.Math.Between(-25, 25), 70, 3, 3, 0x9e9e9e).setDepth(4.7); scene.tweens.add({ targets: pp, y: 420, alpha: 0, duration: 700, onComplete: () => pp.destroy() }); }
-            } else {
-                fx.lineStyle(3, 0x000000, 1); fx.lineBetween(d.roomX0 + 40, 470, d.roomX0 + 52 + j, 520); fx.lineBetween(d.roomX0 + 52 + j, 520, d.roomX0 + 40, 566);
-                if (Math.random() < 0.3) gDust(scene, d.roomX0 + 50, 520, 1, 0x3a3a40);
-            }
-        });
+        // Tagidan chiqish oldidan: qahramon ostida yer yoriladi va titraydi
+        if (drObj.underWarn && t0 < drObj.underWarn.until) {
+            const u = drObj.underWarn, j = Math.sin(t0 / 30) * 3;
+            fx.lineStyle(3, 0x000000, 1);
+            fx.lineBetween(u.x - 34, u.y - 1, u.x - 10 + j, u.y - 7); fx.lineBetween(u.x - 10 + j, u.y - 7, u.x + 6, u.y - 1); fx.lineBetween(u.x + 6, u.y - 1, u.x + 30 - j, u.y - 6);
+            if (Math.random() < 0.4) gDust(scene, u.x + Phaser.Math.Between(-25, 25), u.y - 4, 1, 0x3e2723);
+        }
+        // Soyada mo'ralagan bosh: qorong'iroq joydan bir lahza qarab turadi
+        drObj.peeks = drObj.peeks.filter(pk => pk.until > t0 || (pk.img.destroy(), false));
         // Qorong'ilik: faqat qahramonlar (miltillab), bombalar atrofi yorug'
         const dark = drObj.dark;
         if (S.state === 'room' && !drObj.sunlit) {
@@ -2822,7 +2861,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 drObj.brush.setScale(f);
                 dark.erase(drObj.brush, o.x - cam.scrollX, o.y - cam.scrollY);
             });
-            Object.values(drObj.stals).forEach((o) => { if (o.state === 'hang') { drObj.brushS.setScale(0.9 + Math.sin(t0 / 60 + o.x) * 0.1); dark.erase(drObj.brushS, o.x + 12 - cam.scrollX, d.stalTipY - 30 - cam.scrollY); } });
+            Object.values(drObj.bombs).forEach((o) => { if (o.alive) { drObj.brushS.setScale(0.8 + Math.sin(t0 / 60 + o.x) * 0.1); dark.erase(drObj.brushS, o.x - cam.scrollX, 556 - cam.scrollY); } });
         }
         // Atmosfera: suv tomchilari, uzoqdan bo'kirish, qorong'ida miltillagan qizil ko'zlar
         if (S.state === 'room' && !drObj.sunlit && t0 > drObj.nextAmbient) {
@@ -2835,6 +2874,11 @@ function launchGame(socket, roomId, mapData, continued) {
                 const far = !me || Math.abs(ex - me.x) > 220;
                 if (far) drObj.eyes.push({ x: ex, y: ey, until: t0 + 1400 });
             }
+        }
+        // JUDA KAMDAN-KAM: o'yin oynasida emas - butun ekran (brauzer) chetidan kallasi chiqib, qaytib ketadi
+        if (S.state === 'room' && S.sub === 'fight' && !drObj.sunlit) {
+            if (!drObj.nextEdgePeek) drObj.nextEdgePeek = t0 + Phaser.Math.Between(30000, 55000);
+            else if (t0 > drObj.nextEdgePeek) { drObj.nextEdgePeek = t0 + Phaser.Math.Between(45000, 90000); edgePeek(); }
         }
         drObj.eyes = drObj.eyes.filter(e => e.until > t0);
         drObj.eyes.forEach((e) => { if (Math.floor(t0 / 300) % 4) { fx.fillStyle(0xd50000, 0.85); fx.fillRect(e.x, e.y, 4, 3); fx.fillRect(e.x + 12, e.y, 4, 3); } });
@@ -5493,26 +5537,36 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('elfCrushed', () => { elfCrushFx(this); sfx('squish'); sfx('roar'); });
         socket.off('monsterLanded');
         socket.on('monsterLanded', () => { sfx('bossStart'); this.cameras.main.shake(400, 0.012); oqJumpscare(this); this.time.delayedCall(700, () => arenaBanner(t('oqyuz_name'), '#fafafa', t('oqyuz_sub'))); });
-        // G'OR: stalaktit bombasi portladi (yer silkinadi), stalaktit maxluqqa tegdi / yerga qulab tushdi
-        socket.off('stalBomb');
-        socket.on('stalBomb', (d) => { explodeMine(this, d.x, d.y); this.cameras.main.shake(600, 0.014); sfx('rumble'); });
-        socket.off('stalHit');
-        socket.on('stalHit', (d) => {
-            this.cameras.main.shake(500, 0.018); sfx('explosion'); sfx('roar', 0.8);
-            gDust(this, d.x, 560, 16, 0x55555d);
-            for (let k = 0; k < 10; k++) { const r = this.add.rectangle(d.x + Phaser.Math.Between(-30, 30), 540, 8, 8, 0x3d3548).setDepth(3.6); this.tweens.add({ targets: r, x: r.x + Phaser.Math.Between(-90, 90), y: 566, angle: 200, duration: 500, onComplete: () => r.destroy() }); }
+        // G'OR: bomba portladi (yer silkinadi), maxluq yaralandi, yashirindi, chiqdi; qo'l ushladi
+        socket.off('caveBomb');
+        socket.on('caveBomb', (d) => { explodeMine(this, d.x, d.y); this.cameras.main.shake(700, 0.016); sfx('rumble'); });
+        socket.off('monsterHurt');
+        socket.on('monsterHurt', (d) => { sfx('roar', 0.9); sfx('scream', 0.35); gDust(this, d.x, 556, 10, 0x55555d); });
+        socket.off('monsterHide');
+        socket.on('monsterHide', () => {
+            if (!drObj || !currentCharacter) return;
+            // Bir lahza: qorong'iroq tomonda (qahramondan uzoqda) boshi mo'ralab turadi
+            const cam = this.cameras.main, me = currentCharacter;
+            const side = me.x - cam.scrollX > 400 ? -1 : 1;
+            const px = me.x + side * Phaser.Math.Between(260, 360), py = Phaser.Math.Between(140, 470);
+            const head = this.add.image(px, py, 'px_oq_scare').setScale(0.12).setAlpha(0).setDepth(4.72).setFlipX(side > 0);
+            this.tweens.add({ targets: head, alpha: 0.55, duration: 300, yoyo: true, hold: 900 });
+            drObj.peeks.push({ img: head, until: this.time.now + 1600 });
+            sfx('roar', 0.2);
         });
-        socket.off('stalCrash');
-        socket.on('stalCrash', (d) => { gDust(this, d.x, 562, 10, 0x55555d); sfxAt('thud', d.x); this.cameras.main.shake(250, 0.008); });
-        socket.off('monsterBurrow');
-        socket.on('monsterBurrow', (d) => { gDust(this, d.x, 562, 14, 0x3e2723); sfxAt('roots', d.x); });
-        socket.off('monsterDig');
-        socket.on('monsterDig', () => { sfx('rumble'); this.cameras.main.shake(1200, 0.004); });
+        socket.off('underWarn');
+        socket.on('underWarn', (d) => { if (drObj) drObj.underWarn = { x: d.x, y: d.y, until: this.time.now + 700 }; sfx('rumble'); this.cameras.main.shake(600, 0.006); });
+        socket.off('grabbed');
+        socket.on('grabbed', (d) => { rootUntil = this.time.now + d.ms; this.cameras.main.shake(200, 0.008); });
+        socket.off('handGrab');
+        socket.on('handGrab', (d) => sfxAt('chomp', d.x));
         socket.off('monsterEmerge');
         socket.on('monsterEmerge', (d) => {
-            gDust(this, d.x, d.kind === 'ceiling' ? 80 : 560, 16, 0x3e2723);
+            if (drObj) drObj.underWarn = null;
+            gDust(this, d.x, d.kind === 'top' ? 80 : 560, 16, 0x3e2723);
             sfxAt('roar', d.x); this.cameras.main.shake(400, 0.012);
-            if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 240) oqJumpscare(this);
+            // Skrimer faqat kerakli paytda: tagingdan yorib chiqib haqiqatan urganda (va kamdan-kam)
+            if (d.kind === 'under' && (d.hit || []).includes(socket.id)) oqJumpscare(this);
         });
         socket.off('monsterBuried');
         socket.on('monsterBuried', (d) => {

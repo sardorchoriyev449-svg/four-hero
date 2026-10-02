@@ -362,16 +362,22 @@ export interface DoorsDef {
     elfY: number;
     leverX: number;
     roomPlats: number[];
-    stalX: number[];          // shiftdagi stalaktitlar (har birida bomba yopishgan)
-    stalTipY: number;
-    stalRegrowMs: number;
-    stalPlayerDamage: number;
+    bombX: number[];          // polda har 5 m da bomba (maxluq bossa yoki o'q tegsa portlaydi)
+    bombRadius: number;
+    bombRespawnMs: number;
     bombPlayerDamage: number;
-    hitsToBury: number;       // shuncha stalaktit tegsa - maxluqni toshlar bosib qoladi
-    surfaceMs: number;        // yer ustida quvlash
-    burrowMs: number;         // yerga kirish
-    underMs: number;          // yer ostida (ikkita kovlanayotgan joy ko'rinadi)
+    hitsToBury: number;       // shuncha portlash tegsa - shift qulab, maxluqni toshlar bosib qoladi
+    surfaceMs: number;        // yer ustida quvlash, keyin o'zi qorong'iga chekinadi
+    retreatMs: number;        // orqaga sudralib qochish
+    hiddenMinMs: number;      // hech qayerdan chiqmaydi (yerdan qo'llar chiqadi)
+    hiddenMaxMs: number;
+    underWarnMs: number;      // o'yinchi tagidan chiqishdan oldin yer yoriladi
     emergeDamage: number;
+    handEveryMs: number;      // yerdan chiqadigan qo'llar
+    handWarnMs: number;
+    handUpMs: number;
+    handDamage: number;
+    grabMs: number;           // qo'l ushlasa - shuncha vaqt yura olmaydi
     monsterSpeed: number;
     monsterClimb: number;
     monsterDamage: number;
@@ -1010,9 +1016,9 @@ export const MAPS: MapDef[] = [
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: 3800, roomEntryX: 2260, elfX: 2700, elfY: 200, leverX: 2380,
             roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-            stalX: [2330, 2580, 2760, 2980, 3160, 3390, 3540, 3740], stalTipY: 250, stalRegrowMs: 6000,
-            stalPlayerDamage: 30, bombPlayerDamage: 15, hitsToBury: 10,
-            surfaceMs: 6500, burrowMs: 700, underMs: 1700, emergeDamage: 25,
+            bombX: [2350, 2600, 2850, 3100, 3350, 3600], bombRadius: 110, bombRespawnMs: 5000, bombPlayerDamage: 15, hitsToBury: 10,
+            surfaceMs: 7000, retreatMs: 800, hiddenMinMs: 1000, hiddenMaxMs: 2000, underWarnMs: 650, emergeDamage: 25,
+            handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 8, grabMs: 1100,
             monsterSpeed: 3.4, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },
         playerSpawns: [

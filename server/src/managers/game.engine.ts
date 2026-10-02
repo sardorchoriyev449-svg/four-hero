@@ -321,8 +321,9 @@ export class GameEngine {
                     monster: room.doors.monster ? { x: Math.round(room.doors.monster.x), y: Math.round(room.doors.monster.y), pose: room.doors.monster.pose,
                         facing: room.doors.monster.facing, hits: room.doors.monster.hits, maxHits: room.doors.monster.maxHits, mode: room.doors.monster.mode,
                         hitFlash: room.doors.monster.hitFlash } : null,
-                    digs: room.doors.digs,
-                    stal: room.doors.stal.map(st => ({ id: st.id, x: st.x, state: st.state, y: Math.round(st.y) }))
+                    emergeAt: room.doors.monster && room.doors.monster.mode === 'warn' ? room.doors.monster.emergeAt : null,
+                    bombs: room.doors.bombs.filter(b => b.alive).map(b => ({ id: b.id, x: b.x })),
+                    hands: room.doors.hands.map(h => ({ id: h.id, x: Math.round(h.x), y: h.y, phase: h.phase }))
                 } : null,
                 squid: room.squid ? { state: room.squid.state, hp: room.squid.hp, maxHp: room.squid.maxHp, x: Math.round(room.squid.x), eyeY: Math.round(room.squid.eyeY),
                     hitFlash: room.squid.hitFlash, slam: room.squid.slam ? { plat: room.squid.slam.plat, phase: room.squid.slam.phase, x0: room.squid.slam.x0, x1: room.squid.slam.x1, y: room.squid.slam.y } : null,
@@ -961,8 +962,8 @@ export class GameEngine {
             const dr = room.doors;
             const dd = map.doors;
             if (!bulletDestroyed && dr && dd && dr.state === 'room' && dr.sub !== 'elf') {
-                const st = dr.stal.find(q => q.state === 'hang' && this.checkOverlap(hitRect, { x: q.x - 18, y: dd.stalTipY - 30, w: 36, h: 40 }));
-                if (st) { bulletDestroyed = true; this.explodeStalBomb(room, dd, st, bullet.playerId); }
+                const bomb = dr.bombs.find(q => q.alive && this.checkOverlap(hitRect, { x: q.x - 16, y: 570 - 32, w: 32, h: 32 }));
+                if (bomb) { bulletDestroyed = true; this.explodeCaveBomb(room, dd, bomb, bullet.playerId); }
                 const mo = dr.monster;
                 if (!bulletDestroyed && mo && dr.sub === 'fight' && (mo.mode === 'surface' || mo.mode === 'emerge') &&
                     this.checkOverlap(hitRect, { x: mo.x - 60, y: mo.y - 95, w: 120, h: 95 })) bulletDestroyed = true;
@@ -1566,8 +1567,8 @@ export class GameEngine {
         room.squid = sqd ? { state: 'sleep', hp: sqHp, maxHp: sqHp, timer: 0, tick: 0, x: sqd.baseX, eyeY: 700, hitFlash: 0, lastHitBy: null,
             slam: null, geysers: [], fish: [], splashX: null, nextSlam: 0, nextGeyser: 0, nextFish: 0, counter: 0 } : null;
         room.doors = map.doors ? { state: 'walk', choice: null, timer: 0, tick: 0, segment: 0, wave: null, lastSafe: -1, nextWave: 0, lastPlat: {},
-            sub: null, monster: null, digs: [], lastHitBy: null,
-            stal: map.doors.stalX.map((x, i) => ({ id: 'stal_' + i, x, state: 'hang' as const, y: map.doors!.stalTipY, vy: 0, regrow: 0, by: null })) } : null;
+            sub: null, monster: null, lastHitBy: null, hands: [], nextHand: 0, counter: 0,
+            bombs: map.doors.bombX.map((x, i) => ({ id: 'cbomb_' + i, x, alive: true, respawn: 0 })) } : null;
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
@@ -1937,20 +1938,38 @@ export class GameEngine {
         if (dr.state === 'room' && dr.sub === 'lever' && Math.abs(p.x - d.leverX) <= 50) {
             dr.sub = 'drop';
             dr.monster = { x: d.elfX, y: -160, vy: 0, pose: 'drop', facing: -1, hits: 0, maxHits: d.hitsToBury, mode: 'surface', modeT: 0,
-                emergeAt: null, climbTo: null, cd: 0, attackT: 0, hitFlash: 0 };
+                emergeAt: null, targetId: null, climbTo: null, cd: 0, attackT: 0, hitFlash: 0 };
             this.io.to(room.id).emit('leverPulled');
         }
     }
-    // Stalaktitdagi bomba portladi: yer silkinadi, stalaktit qulab tushadi (ostidagini bosadi)
-    private explodeStalBomb(room: RoomState, d: NonNullable<MapDef['doors']>, st: NonNullable<RoomState['doors']>['stal'][number], by: string): void {
-        st.state = 'fall';
-        st.y = d.stalTipY;
-        st.vy = 0;
-        st.by = by;
-        this.io.to(room.id).emit('stalBomb', { x: st.x, y: d.stalTipY - 10 });
+    // Poldagi bomba portladi (o'q tegdi yoki maxluq bosdi): yer silkinadi; maxluq yaqinida bo'lsa - yaralanadi,
+    // orqaga sudralib qochadi va 1-2 s hech qayerdan chiqmaydi
+    private explodeCaveBomb(room: RoomState, d: NonNullable<MapDef['doors']>, bomb: NonNullable<RoomState['doors']>['bombs'][number], by: string | null): void {
+        const dr = room.doors!;
+        bomb.alive = false;
+        bomb.respawn = dr.tick + Math.round(d.bombRespawnMs / 30);
+        this.io.to(room.id).emit('caveBomb', { x: bomb.x, y: 556 });
         Object.values(room.players).forEach(p => {
-            if (!p.isDead && Math.hypot(p.x - st.x, p.y - (d.stalTipY - 10)) <= 70) this.hurtPlayer(p, d.bombPlayerDamage);
+            if (!p.isDead && Math.hypot(p.x - bomb.x, p.y - 556) <= d.bombRadius * 0.7) this.hurtPlayer(p, d.bombPlayerDamage);
         });
+        const mo = dr.monster;
+        if (!mo || dr.sub !== 'fight' || (mo.mode !== 'surface' && mo.mode !== 'emerge')) return;
+        if (Math.hypot(mo.x - bomb.x, (mo.y - 40) - 556) > d.bombRadius) return;
+        mo.hits++;
+        mo.hitFlash = 8;
+        if (by) dr.lastHitBy = by;
+        this.io.to(room.id).emit('monsterHurt', { x: Math.round(mo.x), hits: mo.hits });
+        if (mo.hits >= mo.maxHits) {
+            dr.sub = 'buried';
+            dr.timer = Math.round(3600 / 30);
+            dr.hands = [];
+            this.io.to(room.id).emit('monsterBuried', { x: Math.round(mo.x), y: Math.round(mo.y) });
+            return;
+        }
+        mo.mode = 'retreat';
+        mo.modeT = Math.round(d.retreatMs / 30);
+        mo.climbTo = null;
+        mo.facing = bomb.x > mo.x ? 1 : -1;   // portlash tomonga qaragan holda orqaga sudraladi
     }
     private updateDoors(room: RoomState, roomId: string): void {
         const map = getMapById(room.selectedLevel);
@@ -2067,44 +2086,14 @@ export class GameEngine {
         const mo = dr.monster;
         if (!mo) return;
         if (mo.hitFlash > 0) mo.hitFlash--;
+        dr.bombs.forEach(b => { if (!b.alive && dr.tick >= b.respawn) b.alive = true; });
         const plats = d.roomPlats.map(i => map.platforms[i]);
         const surfAt = (x: number, feet: number) => {
             let best = 570;
             plats.forEach(pl => { if (x >= pl.x && x <= pl.x + pl.w && pl.y >= feet - 12 && pl.y < best) best = pl.y; });
             return best;
         };
-        // Stalaktitlar: qulayotgani - pastga (ostidagini bosadi), qulagani - bir ozdan keyin yana o'sadi (yangi bomba bilan)
-        dr.stal.forEach(st => {
-            if (st.state === 'gone') { if (dr.tick >= st.regrow) { st.state = 'hang'; st.y = d.stalTipY; } return; }
-            if (st.state !== 'fall') return;
-            const prev = st.y;
-            st.vy = Math.min(1400, st.vy + 1600 * this.TICK_SECONDS);
-            st.y += st.vy * this.TICK_SECONDS;
-            alive.forEach(p => {
-                if (Math.abs(p.x - st.x) <= 26 && prev < p.y + this.PLAYER_HALF_H && st.y >= p.y - this.PLAYER_HALF_H) {
-                    this.hurtPlayer(p, d.stalPlayerDamage);
-                }
-            });
-            if (dr.sub === 'fight' && (mo.mode === 'surface' || mo.mode === 'emerge') && Math.abs(mo.x - st.x) <= 70 && prev < mo.y && st.y >= mo.y - 100) {
-                mo.hits++;
-                mo.hitFlash = 6;
-                mo.cd = Math.max(mo.cd, T(900));   // gangib qoladi
-                dr.lastHitBy = st.by;
-                st.state = 'gone'; st.regrow = dr.tick + T(d.stalRegrowMs);
-                this.io.to(roomId).emit('stalHit', { x: st.x, y: Math.round(mo.y), hits: mo.hits });
-                if (mo.hits >= mo.maxHits) {
-                    dr.sub = 'buried';
-                    dr.timer = T(3600);
-                    dr.digs = [];
-                    this.io.to(roomId).emit('monsterBuried', { x: Math.round(mo.x), y: Math.round(mo.y) });
-                }
-                return;
-            }
-            if (st.y >= 570) {
-                st.state = 'gone'; st.regrow = dr.tick + T(d.stalRegrowMs);
-                this.io.to(roomId).emit('stalCrash', { x: st.x });
-            }
-        });
+        const clampX = (x: number) => Math.max(d.roomX0 + 70, Math.min(d.roomX1 - 50, x));
         if (dr.sub === 'drop') {
             // Tepadan tushadi: avval malikani bosib (qon), keyin yerga
             const before = mo.y;
@@ -2125,7 +2114,6 @@ export class GameEngine {
             return;
         }
         if (dr.sub === 'buried') {
-            // Toshlar bosib qoldi - tepadan quyosh nuri tushadi, xarita o'tiladi
             if (--dr.timer <= 0) {
                 dr.state = 'done';
                 const winner = (dr.lastHitBy && room.players[dr.lastHitBy]) ? dr.lastHitBy : (alive[0] || Object.values(room.players)[0])?.id;
@@ -2136,51 +2124,61 @@ export class GameEngine {
         if (mo.cd > 0) mo.cd--;
         if (mo.attackT > 0) mo.attackT--;
         mo.modeT--;
-        // YER OSTI: kovlab kiradi -> ikkita joy kovlanayotgandek ko'rinadi (biri aldov) -> qahramon yonidan chiqadi
-        if (mo.mode === 'burrow') {
-            mo.pose = 'dig';
-            mo.y = Math.min(640, mo.y + 2);
+        // YERDAN QO'LLAR: maxluq ko'rinmay turgan paytda qahramonlar oyog'i ostidan tez-tez chiqib, ushlashga urinadi
+        if (mo.mode === 'hidden' && dr.tick >= dr.nextHand && alive.length) {
+            const p = alive[Math.floor(Math.random() * alive.length)];
+            const y = surfAt(p.x, p.y + this.PLAYER_HALF_H);
+            dr.hands.push({ id: 'hand_' + (++dr.counter), x: clampX(p.x + (Math.random() - 0.5) * 100), y, phase: 'warn', t: T(d.handWarnMs), hit: false });
+            dr.nextHand = dr.tick + T(d.handEveryMs);
+        }
+        for (let i = dr.hands.length - 1; i >= 0; i--) {
+            const h = dr.hands[i];
+            if (--h.t <= 0 && h.phase === 'warn') { h.phase = 'up'; h.t = T(d.handUpMs); continue; }
+            if (h.phase === 'up' && !h.hit) {
+                const p = alive.find(q => Math.abs(q.x - h.x) <= 24 && Math.abs(q.y + this.PLAYER_HALF_H - h.y) <= 12);
+                if (p) {
+                    h.hit = true;
+                    this.hurtPlayer(p, d.handDamage);
+                    this.io.to(p.id).emit('grabbed', { ms: d.grabMs });
+                    this.io.to(roomId).emit('handGrab', { x: Math.round(h.x), id: p.id });
+                }
+            }
+            if (h.phase === 'up' && h.t <= 0) dr.hands.splice(i, 1);
+        }
+        // ORQAGA QOCHISH (bomba tekkanda yoki o'zi): orqaga sudralib, qorong'iga yo'qoladi
+        if (mo.mode === 'retreat') {
+            mo.pose = 'crawl';
+            mo.x = clampX(mo.x - mo.facing * d.monsterSpeed * 1.6);
+            if (mo.y < 570) mo.y = Math.min(570, mo.y + 6);
             if (mo.modeT <= 0) {
-                const target = alive[Math.floor(Math.random() * alive.length)];
-                if (!target) return;
-                const feet = target.y + this.PLAYER_HALF_H;
-                let kind: 'ground' | 'ceiling' | 'wall';
-                if (feet < 400 && Math.random() < 0.65) kind = 'ceiling';
-                else if (target.x < d.roomX0 + 320 && Math.random() < 0.6) kind = 'wall';
-                else kind = Math.random() < 0.25 ? 'ceiling' : 'ground';
-                const jitter = () => (Math.random() - 0.5) * 80;
-                const clampX = (x: number) => Math.max(d.roomX0 + 80, Math.min(d.roomX1 - 60, x));
-                const real = kind === 'wall' ? { x: d.roomX0 + 30, y: 520, kind } : kind === 'ceiling' ? { x: clampX(target.x + jitter()), y: 50, kind } : { x: clampX(target.x + jitter()), y: 570, kind };
-                let fx = clampX(target.x + (Math.random() < 0.5 ? -1 : 1) * (260 + Math.random() * 260));
-                const fakeKind: 'ground' | 'ceiling' = Math.random() < 0.5 ? 'ground' : 'ceiling';
-                const fake = { x: fx, y: fakeKind === 'ceiling' ? 50 : 570, kind: fakeKind };
-                mo.emergeAt = real;
-                dr.digs = Math.random() < 0.5 ? [real, fake] : [fake, real];
-                mo.mode = 'under';
-                mo.modeT = T(d.underMs);
+                mo.mode = 'hidden';
                 mo.pose = 'hidden';
-                this.io.to(roomId).emit('monsterDig');
+                mo.modeT = T(d.hiddenMinMs + Math.random() * (d.hiddenMaxMs - d.hiddenMinMs));
+                dr.nextHand = dr.tick + T(200);
+                this.io.to(roomId).emit('monsterHide');
             }
             return;
         }
-        if (mo.mode === 'under') {
+        // YASHIRIN: 1-2 s hech qayerdan chiqmaydi, keyin o'ziga qulay joyni tanlaydi
+        if (mo.mode === 'hidden') {
             if (mo.modeT > 0) return;
-            const e = mo.emergeAt!;
-            dr.digs = [];
-            mo.mode = 'emerge';
-            mo.modeT = T(600);
-            mo.climbTo = null;
-            if (e.kind === 'ceiling') { mo.x = e.x; mo.y = 120; mo.vy = 0; mo.pose = 'drop'; }
-            else if (e.kind === 'wall') { mo.x = d.roomX0 + 70; mo.y = 570; mo.facing = 1; mo.pose = 'crawl'; }
-            else { mo.x = e.x; mo.y = 570; mo.pose = 'climb'; }
-            // Chiqqan joyi yonidagilarga zarba
-            alive.forEach(p => {
-                if (Math.hypot(p.x - e.x, (p.y + this.PLAYER_HALF_H) - (e.kind === 'ceiling' ? surfAt(e.x, 0) : 570)) <= 90 || Math.hypot(p.x - e.x, p.y - e.y) <= 90) {
-                    this.hurtPlayer(p, d.emergeDamage);
-                    this.knockback(p, (p.x < e.x ? -1 : 1) * 380, -280);
-                }
-            });
-            this.io.to(roomId).emit('monsterEmerge', { x: Math.round(e.x), y: Math.round(e.y), kind: e.kind });
+            const target = alive[Math.floor(Math.random() * alive.length)];
+            if (!target) return;
+            const feet = target.y + this.PLAYER_HALF_H;
+            const r = Math.random();
+            const kind: 'left' | 'right' | 'top' | 'under' = r < 0.28 ? 'left' : r < 0.56 ? 'right' : r < 0.78 ? 'top' : 'under';
+            const at = kind === 'left' ? { x: clampX(target.x - 360), y: 570, kind }
+                : kind === 'right' ? { x: clampX(target.x + 360), y: 570, kind }
+                : kind === 'top' ? { x: clampX(target.x), y: 60, kind }
+                : { x: clampX(target.x), y: surfAt(target.x, feet), kind };
+            mo.emergeAt = at;
+            mo.targetId = target.id;
+            if (kind === 'under') { mo.mode = 'warn'; mo.modeT = T(d.underWarnMs); this.io.to(roomId).emit('underWarn', { x: Math.round(at.x), y: at.y }); return; }
+            this.emergeMonster(room, roomId, d, mo, alive, surfAt);
+            return;
+        }
+        if (mo.mode === 'warn') {
+            if (mo.modeT <= 0) this.emergeMonster(room, roomId, d, mo, alive, surfAt);
             return;
         }
         if (mo.mode === 'emerge') {
@@ -2194,10 +2192,18 @@ export class GameEngine {
             if (mo.modeT <= 0) { mo.mode = 'surface'; mo.modeT = T(d.surfaceMs); mo.pose = 'crawl'; }
             return;
         }
-        // YER USTIDA: eng yaqin qahramon ortidan - yerda emaklaydi, platformaga tik o'rmalab chiqadi
-        if (mo.modeT <= 0 && mo.climbTo === null && mo.cd <= 0) { mo.mode = 'burrow'; mo.modeT = T(d.burrowMs); this.io.to(roomId).emit('monsterBurrow', { x: Math.round(mo.x) }); return; }
+        // YER USTIDA: quvlaydi; vaqt tugasa - o'zi qorong'iga chekinadi
+        if (mo.modeT <= 0 && mo.climbTo === null) {
+            mo.mode = 'retreat'; mo.modeT = T(d.retreatMs);
+            const near = alive.slice().sort((a, b) => Math.abs(a.x - mo.x) - Math.abs(b.x - mo.x))[0];
+            mo.facing = near && near.x > mo.x ? 1 : -1;
+            return;
+        }
+        // Bombani bosib olsa - portlaydi
+        const stepped = dr.bombs.find(b => b.alive && Math.abs(b.x - mo.x) <= 36 && mo.y >= 566);
+        if (stepped) { this.explodeCaveBomb(room, d, stepped, null); return; }
         const target = alive.slice().sort((a, b) => Math.hypot(a.x - mo.x, a.y - mo.y) - Math.hypot(b.x - mo.x, b.y - mo.y))[0];
-        if (!target || mo.cd > T(500)) return;   // stalaktit tekkanda biroz gangib turadi
+        if (!target) return;
         const tY = surfAt(target.x, target.y + this.PLAYER_HALF_H);
         if (mo.climbTo !== null) {
             mo.pose = 'climb';
@@ -2222,7 +2228,7 @@ export class GameEngine {
                 mo.pose = mo.attackT > 0 ? 'attack' : 'crawl';
             }
         }
-        mo.x = Math.max(d.roomX0 + 60, Math.min(d.roomX1 - 50, mo.x));
+        mo.x = clampX(mo.x);
         alive.forEach(p => {
             if (mo.cd > 0) return;
             if (Math.abs(p.x - mo.x) <= 70 && Math.abs((p.y + this.PLAYER_HALF_H) - mo.y) <= 60) {
@@ -2233,6 +2239,31 @@ export class GameEngine {
                 this.io.to(roomId).emit('monsterHit', { x: Math.round(mo.x) });
             }
         });
+    }
+    // Chiqish: chapdan / o'ngdan emaklab kiradi, tepadan tushadi yoki qahramon tagidan yorib chiqadi
+    private emergeMonster(room: RoomState, roomId: string, d: NonNullable<MapDef['doors']>, mo: NonNullable<NonNullable<RoomState['doors']>['monster']>,
+        alive: PlayerState[], surfAt: (x: number, feet: number) => number): void {
+        const T = (ms: number) => Math.round(ms / 30);
+        const e = mo.emergeAt!;
+        mo.mode = 'emerge';
+        mo.modeT = T(500);
+        mo.climbTo = null;
+        mo.cd = T(300);
+        if (e.kind === 'top') { mo.x = e.x; mo.y = 80; mo.vy = 0; mo.pose = 'drop'; }
+        else if (e.kind === 'under') { mo.x = e.x; mo.y = e.y; mo.pose = 'climb'; }
+        else { mo.x = e.x; mo.y = 570; mo.pose = 'crawl'; mo.facing = e.kind === 'left' ? 1 : -1; }
+        let hitIds: string[] = [];
+        if (e.kind === 'under' || e.kind === 'top') {
+            const landY = e.kind === 'under' ? e.y : surfAt(e.x, 0);
+            alive.forEach(p => {
+                if (Math.abs(p.x - e.x) <= 60 && Math.abs(p.y + this.PLAYER_HALF_H - landY) <= 40) {
+                    this.hurtPlayer(p, d.emergeDamage);
+                    this.knockback(p, (p.x < e.x ? -1 : 1) * 260, -420);
+                    hitIds.push(p.id);
+                }
+            });
+        }
+        this.io.to(roomId).emit('monsterEmerge', { x: Math.round(e.x), y: Math.round(e.y), kind: e.kind, hit: hitIds });
     }
 
     // ===== KALMAR =====
