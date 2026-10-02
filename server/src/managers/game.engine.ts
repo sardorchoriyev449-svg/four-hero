@@ -255,6 +255,9 @@ export class GameEngine {
             // 4j. GIGANT GUL (Season 2, map-1)
             this.updateGiantFlower(room, roomId);
 
+            // 4k. LIFT (Season 2, map-2)
+            this.updateLift(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -303,6 +306,7 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                lift: room.lift ? { state: room.lift.state, y: Math.round(room.lift.y), progress: this.liftProgress(room) } : null,
                 gfThorns: room.gfThorns || [],
                 gfRoots: (room.gfRoots || []).map(r => ({ id: r.id, x: r.x, y: r.y, phase: r.phase })),
                 arena: room.arena ? { kills: room.arena.kills, sinceBoss: room.arena.sinceBoss, boss: room.arena.boss, bossesBeaten: room.arena.bossesBeaten } : null,
@@ -361,6 +365,12 @@ export class GameEngine {
                 thin: p.h <= 14
             });
         });
+        // Lift: platforma ham sirt; ko'tarilayotganda pastda yer yo'q - tushib ketgan bot yo'qoladi
+        if (map.lift && room.lift && room.lift.state !== 'hidden' && room.lift.state !== 'emerge') {
+            const L = map.lift;
+            surfaces.push({ xStart: L.x, xEnd: L.x + L.w, standY: room.lift.y - this.BOT_HALF_H, underY: room.lift.y + 20 + this.BOT_HALF_H, thin: true });
+            if (room.lift.state === 'rising' || room.lift.state === 'arrived' || room.lift.state === 'done') surfaces[0].standY = 5000;
+        }
         // Arena: tosh platformalar gorilla platformalari (room.gPlats) - botlar ham ularga chiqadi.
         // Joriy balandligi olinadi; shiftga ko'tarilgan/qaytayotgan platforma hisobga olinmaydi
         if (map.arena && map.gorilla) {
@@ -1493,6 +1503,7 @@ export class GameEngine {
         room.gfThorns = [];
         room.gfRoots = [];
         room.gfCounter = 0;
+        room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
         if (map.arena) {
             room.gorilla = null;
             room.fatElf = null;
@@ -1823,6 +1834,87 @@ export class GameEngine {
             bot.id += '_' + A.tick;
             room.bots.push(bot);
             A.nextSpawnTick = A.tick + Math.round(ar.spawnIntervalMs / 30);
+        }
+    }
+
+    // ===== LIFT =====
+    private liftProgress(room: RoomState): number {
+        const L = getMapById(room.selectedLevel).lift;
+        if (!L || !room.lift) return 0;
+        if (room.lift.state === 'arrived' || room.lift.state === 'done') return 1;
+        if (room.lift.state !== 'rising') return 0;
+        return Math.min(1, room.lift.t / Math.round(L.riseMs / 30));
+    }
+    private onLift(L: NonNullable<MapDef['lift']>, liftY: number, p: PlayerState): boolean {
+        return Math.abs(p.x - (L.x + L.w / 2)) <= L.w / 2 + 6 && Math.abs(p.y + this.PLAYER_HALF_H - liftY) <= 14;
+    }
+    // E: platformadagi qahramon bosadi - hamma tirik qahramon ustida bo'lsa, ko'tarilish boshlanadi
+    public useLift(room: RoomState, playerId: string): void {
+        const L = getMapById(room.selectedLevel).lift;
+        const lift = room.lift;
+        const p = room.players[playerId];
+        if (!L || !lift || lift.state !== 'ready' || !p || p.isDead || room.isOver) return;
+        if (!this.onLift(L, lift.y, p)) return;
+        const alive = Object.values(room.players).filter(x => !x.isDead);
+        const on = alive.filter(x => this.onLift(L, lift.y, x)).length;
+        if (on < alive.length) {
+            this.io.to(room.id).emit('liftWait', { on, total: alive.length });
+            return;
+        }
+        lift.state = 'rising';
+        lift.t = 0;
+        lift.nextBotTick = 0;
+        room.bots = [];
+        this.io.to(room.id).emit('liftStart');
+    }
+    private updateLift(room: RoomState, roomId: string): void {
+        const L = getMapById(room.selectedLevel).lift;
+        const lift = room.lift;
+        if (!L || !lift || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        lift.t++;
+        if (lift.state === 'hidden') {
+            if (alive.some(p => p.x >= L.triggerX)) { lift.state = 'emerge'; lift.t = 0; this.io.to(roomId).emit('liftEmerge'); }
+            return;
+        }
+        if (lift.state === 'emerge') {
+            const k = Math.min(1, lift.t / T(1500));
+            lift.y = 600 - (600 - L.readyY) * k;
+            if (k >= 1) { lift.state = 'ready'; lift.t = 0; }
+            return;
+        }
+        if (lift.state === 'ready') return;
+        // Ko'tarilish: avval platforma yerdan uzilib, ekranda biroz tepaga chiqadi; pastda - chuqur jarlik
+        lift.y = L.readyY - (L.readyY - L.rideY) * Math.min(1, lift.t / T(L.liftOffMs));
+        alive.forEach(p => { if (p.y > this.PIT_DEATH_Y) this.killPlayer(p); });
+        for (let i = room.bots.length - 1; i >= 0; i--) if (room.bots[i].y > 700) room.bots.splice(i, 1);
+        if (lift.state === 'rising') {
+            // Qizil botlar: bittasi o'lsa (yoki jarlikka tushsa) - keyingisi tushadi, jami botsTotal ta
+            if (room.bots.length === 0 && lift.spawned < L.botsTotal) {
+                if (!lift.nextBotTick) lift.nextBotTick = lift.t + T(lift.spawned === 0 ? L.firstBotMs : L.nextBotMs);
+                else if (lift.t >= lift.nextBotTick) {
+                    const bx = L.x + 40 + Math.random() * (L.w - 80);
+                    const bot = GameEngine.createBots(room.id, [{ x: bx, y: 60 }], 'robot', L.botHp)[0];
+                    bot.id += '_l' + lift.spawned;
+                    bot.elite = true;   // qizil
+                    room.bots.push(bot);
+                    lift.spawned++;
+                    lift.nextBotTick = 0;
+                }
+            }
+            if (lift.t >= T(L.riseMs)) {
+                lift.state = 'arrived';
+                lift.t = 0;
+                this.io.to(roomId).emit('liftArrived');
+            }
+            return;
+        }
+        if (lift.state === 'arrived' && lift.t >= T(2200)) {
+            lift.state = 'done';
+            room.bots = [];
+            const winner = this.topKillerId(room);
+            this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
         }
     }
 

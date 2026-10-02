@@ -771,6 +771,7 @@ export class RoomManager {
             underworld: map.underworld || null,
             arena: map.arena || null,
             giantFlower: map.giantFlower || null,
+            lift: map.lift || null,
             season: map.season || 1,
             groundColor: map.groundColor,
             accentColor: map.accentColor

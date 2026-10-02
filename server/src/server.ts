@@ -514,6 +514,10 @@ io.on('connection', (socket) => {
         const room = activeRooms[roomId];
         if (room && room.isStarted) gameEngine.markIntroDone(room, socket.id);
     });
+    socket.on('useLift', (roomId: string) => {
+        const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
+        if (room && room.isStarted) gameEngine.useLift(room, socket.id);
+    });
     socket.on('talkTroll', (roomId: string) => {
         const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
         if (room && room.isStarted) gameEngine.talkTroll(room, socket.id);

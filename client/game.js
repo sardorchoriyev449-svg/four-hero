@@ -158,6 +158,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const isUnderworld = !!map.underworld; // UnderWorld (map-10): og'zibor gul, shahar, trol
     const isArena = !!map.arena;     // Arena (bonus): cheksiz botlar, har 5 o'ldirishda boss
     const isGFlower = !!map.giantFlower; // Season 2 map-1: Gigant gul
+    const isLift = !!map.lift;           // Season 2 map-2: tog'ga ko'tariluvchi platforma
     const isSnakeArena = isArena && !!map.arena.snake; // arenada Robot ilon boss bo'lib chiqishi mumkin
     const snakeDef = map.boss || (isSnakeArena ? map.arena.snake : null);
 
@@ -226,6 +227,9 @@ function launchGame(socket, roomId, mapData, continued) {
     let gfDying = false;
     let gfThornSprites = {};
     let gfRootSprites = {};
+    // LIFT: server holati va sahna obyektlari
+    let liftState = null;
+    let liftObj = null;        // { sprite, piston, hole, hint, groundOff, layer: {...} }
     let gPoundHit = false;     // yerni urish seriyasi: oxirgi kadr "urish" bo'lganmi
     let gCracks = [];          // urishlardan polda paydo bo'lgan yoriqlar
     let gRideId = null;        // shiftga otilayotgan platforma ustida qolgan bo'lsam - uning id si
@@ -2156,26 +2160,14 @@ function launchGame(socket, roomId, mapData, continued) {
         cave.fillStyle(0x4ea24a, 1);
         [[60, 120], [120, 260], [30, 380], [150, 450]].forEach(([x, y]) => cave.fillRect(x, y, 12, 6));
         cave.fillStyle(0x05040c, 1); pxEllipse(cave, uw.caveExitX / 2 + 20, 570, 95, 170);
-        // Shahar: to'rt qo'lli daraxt-uylar
-        [[1320, 0], [1780, 1], [2380, 0]].forEach(([x, v]) => scene.add.image(x, 572, 'px_treehouse_' + v).setOrigin(0.5, 1).setDepth(-0.5));
+        // Shahar: ulkan daraxt-uylar, qo'ziqorin-uylar, fonarlar, gaplashayotgan mavjudotlar, sayr qiluvchi trollar
+        buildUwCity(scene, uw.cityX, W - 20, { skip: [[uw.trollX - 110, uw.trollX + 110]] });
         // Yaltiroq qo'ziqorinchalar (gul atrofidan tashqari)
         for (let x = 260; x < W - 40; x += 70 + ((x * 13) % 60)) {
             if (Math.abs(x - uw.flowers[0].x) < 120) continue;
             const m = scene.add.image(x, 572, 'px_uwm_' + (x % 3)).setOrigin(0.5, 1).setDepth(1.2);
             scene.tweens.add({ targets: m, alpha: 0.6, duration: 900 + (x % 5) * 200, yoyo: true, repeat: -1 });
         }
-        // To'rtburchak semiz mavjudotlar - shaharda u yoqdan-bu yoqqa sayr qiladi
-        ['a', 'b', 'c', 'd', 'a'].forEach((k, i) => {
-            const x0 = uw.cityX + 120 + i * 230;
-            const c = scene.add.image(x0, 572, 'px_blk_' + k + '0').setOrigin(0.5, 1).setDepth(1.6);
-            const range = 60 + (i % 3) * 30;
-            scene.tweens.add({ targets: c, x: x0 + range, duration: 2600 + i * 400, yoyo: true, repeat: -1, ease: 'Sine.InOut',
-                onYoyo: () => c.setFlipX(true), onRepeat: () => c.setFlipX(false) });
-            scene.time.addEvent({ delay: 260, loop: true, callback: () => c.setTexture('px_blk_' + k + (c.texture.key.endsWith('0') ? '1' : '0')) });
-        });
-        // Trollar: ikkitasi shunchaki turibdi, biri bilan gaplashish mumkin
-        scene.add.image(1560, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6).setFlipX(true);
-        scene.add.image(2460, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6);
         const troll = scene.add.image(uw.trollX, 572, 'px_troll').setOrigin(0.5, 1).setDepth(1.7).setFlipX(true);
         scene.tweens.add({ targets: troll, scaleY: 1.02, duration: 900, yoyo: true, repeat: -1 });
         trollHint = scene.add.text(uw.trollX, 572 - 130, '[E]', {
@@ -2243,6 +2235,330 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         } else {
             fs.img.setTexture('px_flower_hidden');
+        }
+    }
+
+    // ===== UNDERWORLD SHAHRI (katta): ulkan daraxt-uylar, yerdagi qo'ziqorin-uylar, fonar ustunlari,
+    // chiroq girlyandalari, bir-biri bilan gaplashayotgan mavjudotlar, sayr qiladigan trollar =====
+    function mushroomHouseGrid(capPal, v) {
+        const W = 46, H = 48;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        // Oyoq (uy tanasi)
+        for (let y = 20; y < H; y++) {
+            const bulge = Math.round(Math.sin((y - 20) / 28 * Math.PI) * 2);
+            for (let x = 13 - bulge; x <= 33 + bulge; x++) set(x, y, shade(0.85 - (x - 13) / 50 + ((x * 3 + y) % 11 === 0 ? -0.1 : 0), x, y, [0xa1887f, 0xd7ccc8, 0xffe0b2, 0xfff3e0]));
+        }
+        // Eshik (tepasi yumaloq), tutqichi
+        for (let y = 34; y < H; y++) for (let x = 19; x <= 27; x++) {
+            if (y < 36 && (x === 19 || x === 27)) continue;
+            set(x, y, (x === 19 || x === 27 || y === 34) ? 0x3e2723 : (x % 3 === 0 ? 0x5d4037 : 0x6d4c41));
+        }
+        set(25, 41, 0xffca28);
+        // Derazalar: dumaloq va kichik - ichida chiroq yonib turibdi
+        for (let y = 24; y <= 30; y++) for (let x = 26; x <= 32; x++) {
+            const d = (x - 29) ** 2 + (y - 27) ** 2;
+            if (d <= 10) set(x, y, d >= 7 ? 0x4e342e : (x + y) % 4 === 0 ? 0xfff59d : 0xffd54f);
+        }
+        for (let y = 26; y <= 30; y++) for (let x = 15; x <= 18; x++) set(x, y, (x === 15 || y === 26) ? 0x4e342e : 0xffd54f);
+        // Qalpoq: katta gumbaz, ostida qatlamlar (plastinkalar), oq dog'lar
+        for (let y = 0; y <= 21; y++) for (let x = 0; x < W; x++) {
+            const d = ((x - 23) / 23) ** 2 + ((y - 20) / 19) ** 2;
+            if (d <= 1) set(x, y, shade(0.92 - y / 40 - Math.abs(x - 23) / 90, x, y, capPal));
+        }
+        for (let x = 4; x < 42; x++) { set(x, 20, 0xbcaaa4); if (x % 3 === 0) set(x, 21, 0x8d6e63); }
+        const dots = v ? [[10, 10, 2], [22, 5, 3], [33, 11, 2], [16, 15, 1], [28, 16, 1], [39, 16, 1]] : [[8, 13, 2], [18, 7, 2], [29, 6, 3], [37, 13, 2], [24, 14, 1]];
+        dots.forEach(([cx, cy, r]) => {
+            for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r + 0.5) set(x, y, 0xfafafa);
+        });
+        // Mo'rcha
+        for (let y = 1; y < 7; y++) for (let x = 31; x < 35; x++) set(x, y, y === 1 ? 0x6d4c41 : (x + y) % 2 ? 0x8d6e63 : 0x795548);
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function lampPostGrid() {
+        const W = 12, H = 46;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        for (let y = 42; y < H; y++) for (let x = 3; x <= 8; x++) set(x, y, y === 42 ? 0x546e7a : 0x37474f);
+        for (let y = 11; y < 42; y++) { set(5, y, 0x263238); set(6, y, y % 6 === 0 ? 0x607d8b : 0x455a64); }
+        [[4, 14], [7, 14], [4, 15], [7, 15]].forEach(([x, y]) => set(x, y, 0x455a64));
+        for (let y = 3; y <= 10; y++) for (let x = 2; x <= 9; x++) {
+            const frame = x === 2 || x === 9 || y === 3 || y === 10 || x === 5 || x === 6;
+            set(x, y, frame ? 0x263238 : y < 6 ? 0xfff59d : 0xffd54f);
+        }
+        for (let x = 1; x <= 10; x++) set(x, 2, 0x37474f);
+        for (let x = 3; x <= 8; x++) set(x, 1, 0x37474f);
+        set(5, 0, 0x37474f); set(6, 0, 0x37474f);
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // Gap pufagi: 0 - "...", 1 - yurakcha, 2 - "?", 3 - "!"
+    function bubbleGrid(kind) {
+        const W = 14, H = 11;
+        const g = gridNew(W, H);
+        for (let y = 0; y < 8; y++) for (let x = 0; x < W; x++) if (!((x === 0 || x === W - 1) && (y === 0 || y === 7))) g[y][x] = 0xfafafa;
+        g[8][4] = 0xfafafa; g[8][5] = 0xfafafa; g[9][4] = 0xfafafa;
+        const ink = 0x37474f;
+        if (kind === 0) [3, 6, 9].forEach(x => { g[4][x] = ink; g[4][x + 1] = ink; });
+        else if (kind === 1) [[5, 2], [8, 2], [4, 3], [5, 3], [6, 3], [7, 3], [8, 3], [9, 3], [5, 4], [6, 4], [7, 4], [8, 4], [6, 5], [7, 5]].forEach(([x, y]) => { g[y][x] = 0xe53935; });
+        else if (kind === 2) [[6, 1], [7, 1], [8, 2], [7, 3], [6, 4], [6, 6]].forEach(([x, y]) => { g[y][x] = ink; });
+        else [[6, 1], [6, 2], [6, 3], [6, 4], [6, 6], [7, 1], [7, 2], [7, 3], [7, 4], [7, 6]].forEach(([x, y]) => { g[y][x] = 0xff6f00; });
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function ensureUwCityTextures(scene) {
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        mk('px_treehouse_xl_0', treeHouseGrid(0), 5);
+        mk('px_treehouse_xl_1', treeHouseGrid(1), 5);
+        mk('px_mhouse_0', mushroomHouseGrid([0x8e0000, 0xb71c1c, 0xd32f2f, 0xef5350], 0), 4);
+        mk('px_mhouse_1', mushroomHouseGrid([0x4a148c, 0x6a1b9a, 0x8e24aa, 0xab47bc], 1), 4);
+        mk('px_mhouse_2', mushroomHouseGrid([0x004d40, 0x00796b, 0x26a69a, 0x80cbc4], 0), 4);
+        mk('px_lamp', lampPostGrid(), 3);
+        [0, 1, 2, 3].forEach(k => mk('px_bubble_' + k, bubbleGrid(k), 2));
+        mk('px_troll', trollGrid(0), 3);
+        mk('px_troll_b', trollGrid(1), 3);
+        [[0xff7043, 'a'], [0x26c6da, 'b'], [0xffca28, 'c'], [0xec407a, 'd']].forEach(([c, k]) => {
+            mk('px_blk_' + k + '0', blockCreatureGrid(c, false), 3);
+            mk('px_blk_' + k + '1', blockCreatureGrid(c, true), 3);
+        });
+    }
+    // x0..x1 oralig'iga shahar quradi; skip - bo'sh qoldiriladigan oraliqlar [[a, b], ...]
+    function buildUwCity(scene, x0, x1, opts = {}) {
+        ensureUwCityTextures(scene);
+        const skip = opts.skip || [];
+        const free = (x, r) => x - r >= x0 && x + r <= x1 && !skip.some(([a, b]) => x + r > a && x - r < b);
+        // Ulkan daraxt-uylar (orqa qatorda) va ular orasida yerdagi qo'ziqorin-uylar
+        let k = 0;
+        for (let x = x0 + 170; x < x1 - 60; x += 560) {
+            if (free(x, 130)) scene.add.image(x, 574, 'px_treehouse_xl_' + (k % 2)).setOrigin(0.5, 1).setDepth(-0.55);
+            const mx = x + 290;
+            if (free(mx, 90)) scene.add.image(mx, 574, 'px_mhouse_' + (k % 3)).setOrigin(0.5, 1).setDepth(-0.4);
+            k++;
+        }
+        // Fonar ustunlari va ular orasida rangli chiroqchalar girlyandasi
+        const lamps = [];
+        for (let x = x0 + 60; x < x1 - 20; x += 230) {
+            if (!free(x, 20)) continue;
+            scene.add.image(x, 574, 'px_lamp').setOrigin(0.5, 1).setDepth(1.5);
+            const glow = scene.add.circle(x, 574 - 138 + 20, 34, 0xffd54f, 0.22).setDepth(1.45).setBlendMode(Phaser.BlendModes.ADD);
+            scene.tweens.add({ targets: glow, alpha: 0.38, scale: 1.12, duration: 900 + (x % 7) * 120, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+            lamps.push(x);
+        }
+        const garland = scene.add.graphics().setDepth(1.44);
+        const COLS = [0xff5252, 0xffeb3b, 0x69f0ae, 0x40c4ff, 0xea80fc];
+        for (let i = 0; i + 1 < lamps.length; i++) {
+            const a = lamps[i], b = lamps[i + 1];
+            if (b - a > 260) continue;
+            const yTop = 574 - 132;
+            for (let t = 0; t <= 1; t += 0.01) {
+                const x = a + (b - a) * t, y = yTop + Math.sin(t * Math.PI) * 26;
+                garland.fillStyle(0x263238, 1); garland.fillRect(Math.round(x), Math.round(y), 2, 2);
+            }
+            for (let j = 1; j < 12; j++) {
+                const t = j / 12, x = a + (b - a) * t, y = yTop + Math.sin(t * Math.PI) * 26;
+                garland.fillStyle(COLS[(i + j) % COLS.length], 1); garland.fillRect(Math.round(x) - 2, Math.round(y) + 2, 5, 5);
+            }
+        }
+        scene.tweens.add({ targets: garland, alpha: 0.7, duration: 700, yoyo: true, repeat: -1 });
+        // Gaplashayotgan mavjudotlar: juft-juft, bir-biriga qarab; navbatma-navbat "gapiradi" (pufak chiqadi, sakraydi)
+        const kinds = ['a', 'b', 'c', 'd'];
+        let pi = 0;
+        for (let x = x0 + 420; x < x1 - 60; x += 610) {
+            if (!free(x, 50)) continue;
+            const left = scene.add.image(x - 24, 574, 'px_blk_' + kinds[pi % 4] + '0').setOrigin(0.5, 1).setDepth(1.6).setFlipX(true);
+            const right = scene.add.image(x + 24, 574, 'px_blk_' + kinds[(pi + 1) % 4] + '0').setOrigin(0.5, 1).setDepth(1.6);
+            const bubble = scene.add.image(x, 574 - 62, 'px_bubble_0').setOrigin(0.5, 1).setDepth(1.65).setVisible(false);
+            let turn = pi % 2;
+            scene.time.addEvent({ delay: 1200 + (pi % 3) * 250, loop: true, callback: () => {
+                const sp = turn ? right : left;
+                turn = 1 - turn;
+                bubble.setTexture('px_bubble_' + Phaser.Math.Between(0, 3)).setPosition(sp.x + (sp === left ? -8 : 8), 574 - 52).setVisible(true).setScale(0.6);
+                scene.tweens.add({ targets: bubble, scale: 1, duration: 160, ease: 'Back.Out' });
+                scene.tweens.add({ targets: sp, y: 568, duration: 120, yoyo: true, repeat: 1 });
+            } });
+            pi++;
+        }
+        // Sayr qiladigan trollar
+        let ti = 0;
+        for (let x = x0 + 700; x < x1 - 80; x += 900) {
+            if (!free(x, 120)) continue;
+            const troll = scene.add.image(x, 574, ti % 2 ? 'px_troll' : 'px_troll_b').setOrigin(0.5, 1).setDepth(1.62);
+            const range = 140 + (ti % 3) * 40;
+            scene.tweens.add({ targets: troll, x: x + range, duration: 4200 + ti * 500, yoyo: true, repeat: -1, ease: 'Sine.InOut', hold: 600, repeatDelay: 600,
+                onYoyo: () => troll.setFlipX(true), onRepeat: () => troll.setFlipX(false) });
+            scene.tweens.add({ targets: troll, y: 571, duration: 220, yoyo: true, repeat: -1 });
+            ti++;
+        }
+    }
+
+    // ===== LIFT (Season 2, map-2) =====
+    function liftGrid() {
+        const W = 76, H = 12;
+        const g = gridNew(W, H);
+        for (let x = 0; x < W; x++) {
+            const plank = Math.floor(x / 7) % 2;
+            for (let y = 0; y < 4; y++) g[y][x] = y === 0 ? (plank ? 0xa1887f : 0x8d6e63) : (x % 7 === 0 ? 0x4e342e : plank ? 0x8d6e63 : 0x795548);
+            g[4][x] = 0xb0bec5; g[5][x] = 0x78909c;
+            for (let y = 6; y < H; y++) g[y][x] = shade(0.7 - (y - 6) / 14, x, y, [0x1c262b, 0x263238, 0x37474f, 0x455a64]);
+        }
+        // Sehrli runalar (ko'k nur) va murvatlar
+        for (let x = 5; x < W - 4; x += 10) { g[8][x] = 0x18ffff; g[9][x + 1] = 0x18ffff; g[8][x + 2] = 0x84ffff; g[10][x + 1] = 0x00b8d4; }
+        for (let x = 2; x < W; x += 10) g[7][x] = 0xcfd8dc;
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function cliffTileInto(g, w, h) {
+        const PAL = [0x1e1a2e, 0x2a2440, 0x3a3354, 0x4a4268, 0x5b527c];
+        for (let y = 0; y < h; y += 6) for (let x = 0; x < w; x += 6) {
+            const v = 0.5 + 0.25 * Math.sin(x * 0.09 + y * 0.05) + 0.2 * Math.sin(y * 0.21 - x * 0.03) - ((x * 7 + y * 13) % 17 === 0 ? 0.3 : 0);
+            g.fillStyle(PAL[Math.max(0, Math.min(4, Math.floor(v * 5)))], 1);
+            g.fillRect(x, y, 6, 6);
+        }
+        g.fillStyle(0x69f0ae, 0.8);
+        [[12, 40], [40, 130], [20, 200]].forEach(([x, y]) => g.fillRect(x, y, 6, 6));
+    }
+    function buildLiftScene(scene) {
+        const W = mapWidth, L = map.lift;
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        [0x69f0ae, 0x80d8ff, 0xea80fc].forEach((c, i) => mk('px_uwm_' + i, uwMushroomGrid(c), 3));
+        mk('px_uw_grass', uwGrassGrid(), 2);
+        mk('px_lift', liftGrid(), 4);
+        drawPixelBackdrop(scene, { sky: [0x0b0920, 0x110e30, 0x181440, 0x201a52, 0x282063, 0x312673], clouds: false, mountains: false, width: W });
+        bakeTile(scene, 'bg_uw', 570, 0, (g, w) => uwBackInto(g, w));
+        scene.add.tileSprite(0, 0, W, 570, 'bg_uw').setOrigin(0, 0).setScrollFactor(0.5, 1).setDepth(-3);
+        scene.add.tileSprite(0, 570, W, 30, 'px_uw_grass').setOrigin(0, 0).setDepth(1);
+        buildUwCity(scene, 40, L.x - 60);
+        for (let x = 120; x < L.x - 40; x += 80 + ((x * 13) % 50)) {
+            const m = scene.add.image(x, 572, 'px_uwm_' + (x % 3)).setOrigin(0.5, 1).setDepth(1.2);
+            scene.tweens.add({ targets: m, alpha: 0.6, duration: 900 + (x % 5) * 200, yoyo: true, repeat: -1 });
+        }
+        // O'ngda - baland tog' (cho'qqisi ko'rinmaydi) va uning qoyasi bo'ylab platforma yo'li (relslar)
+        if (!scene.textures.exists('px_cliff_tile')) {
+            const cg = scene.add.graphics();
+            cliffTileInto(cg, 96, 240);
+            cg.generateTexture('px_cliff_tile', 96, 240);
+            cg.destroy();
+        }
+        const cliffX = L.x + L.w + 20;
+        scene.add.tileSprite(cliffX, 0, W - cliffX, 572, 'px_cliff_tile').setOrigin(0, 0).setDepth(-0.3);
+        const rails = scene.add.graphics().setDepth(-0.35);
+        [L.x + 14, L.x + L.w - 22].forEach((rx) => {
+            rails.fillStyle(0x0a0a0a, 1); rails.fillRect(rx - 2, 0, 12, 572);
+            rails.fillStyle(0x78909c, 1); rails.fillRect(rx, 0, 8, 572);
+            rails.fillStyle(0xb0bec5, 1); rails.fillRect(rx, 0, 2, 572);
+            for (let y = 10; y < 572; y += 30) { rails.fillStyle(0x37474f, 1); rails.fillRect(rx - 4, y, 16, 4); }
+        });
+        const wall = scene.add.rectangle(cliffX + (W - cliffX) / 2, 300, W - cliffX, 600, 0x000000, 0);
+        platforms.add(wall);
+        // Yerdagi chuqur (platforma shu yerdan chiqadi): avval yopiq (yer), chiqqach - qora quduq
+        const hole = scene.add.graphics().setDepth(1.05).setVisible(false);
+        hole.fillStyle(0x000000, 1); hole.fillRect(L.x, 568, L.w, 32);
+        hole.fillStyle(0x3e2723, 1); hole.fillRect(L.x - 6, 566, 6, 34); hole.fillRect(L.x + L.w, 566, 6, 34);
+        const piston = scene.add.graphics().setDepth(1.9);
+        const sprite = scene.physics.add.image(L.x + L.w / 2, 600 + 24, 'px_lift').setDepth(2.5);
+        sprite.body.setAllowGravity(false);
+        sprite.body.setImmovable(true);
+        sprite.body.checkCollision.down = false;
+        sprite.body.checkCollision.left = false;
+        sprite.body.checkCollision.right = false;
+        sprite.setVisible(false);
+        const hint = scene.add.text(L.x + L.w / 2, 0, '[E]', {
+            fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(5).setVisible(false);
+        liftObj = { sprite, piston, hole, hint, groundOff: false, layer: null, disp: 600 };
+    }
+    // Ko'tarilish boshlandi: yer yo'qoladi (pastda jarlik), kamera platformaga qulflanadi,
+    // ekran qatlami - tepaga harakatlanayotgan qoya va uzoqdagi shahar chiroqlari
+    function startLiftRide(scene) {
+        if (!liftObj || liftObj.groundOff) return;
+        liftObj.groundOff = true;
+        platforms.getChildren().forEach((c) => { if (c.y === 585 && c.body) c.body.enable = false; });
+        scene.physics.world.checkCollision.down = false;
+        scene.cameras.main.setBounds(mapWidth - 800, 0, 800, 600);
+        if (!scene.textures.exists('bg_ascent')) {
+            const g = scene.add.graphics();
+            for (let y = 0; y < 600; y += 6) {
+                const k = y / 600;
+                g.fillStyle([0x0b0920, 0x110e30, 0x181440, 0x201a52, 0x282063][Math.min(4, Math.floor(k * 5))], 1);
+                g.fillRect(0, y, 800, 6);
+            }
+            for (let i = 0; i < 140; i++) {
+                const x = (i * 97) % 800, y = (i * 61) % 600;
+                g.fillStyle([0xffd54f, 0x69f0ae, 0x80d8ff, 0xea80fc, 0xffffff][i % 5], i % 3 ? 0.5 : 0.9);
+                g.fillRect(x, y, i % 4 ? 2 : 4, i % 4 ? 2 : 4);
+            }
+            g.generateTexture('bg_ascent', 800, 600);
+            g.destroy();
+        }
+        const L = map.lift, camX = mapWidth - 800;
+        const sx0 = L.x - camX, sx1 = L.x + L.w - camX;
+        const bg = scene.add.tileSprite(0, 0, 800, 600, 'bg_ascent').setOrigin(0, 0).setScrollFactor(0).setDepth(2.0);
+        const cliffR = scene.add.tileSprite(sx1 + 20, 0, 800 - sx1 - 20, 600, 'px_cliff_tile').setOrigin(0, 0).setScrollFactor(0).setDepth(2.05);
+        const cliffL = scene.add.tileSprite(0, 0, Math.max(60, sx0 - 230), 600, 'px_cliff_tile').setOrigin(0, 0).setScrollFactor(0).setDepth(2.05).setAlpha(0.85);
+        const rails = scene.add.graphics().setScrollFactor(0).setDepth(2.1);
+        const all = [bg, cliffR, cliffL, rails];
+        all.forEach(o => o.setAlpha(0));
+        scene.tweens.add({ targets: all, alpha: 1, duration: 1500 });
+        liftObj.layer = { bg, cliffR, cliffL, rails, sx0, sx1, speed: 0, ledge: null };
+        scene.cameras.main.shake(500, 0.006);
+    }
+    // Tog' cho'qqisiga yetildi: o'ngdan cho'qqi qirrasi tushib keladi, qatlam to'xtaydi
+    function liftArrive(scene) {
+        if (!liftObj || !liftObj.layer || liftObj.layer.ledge) return;
+        const Ly = liftObj.layer;
+        const top = map.lift.rideY;
+        const ledge = scene.add.graphics().setScrollFactor(0).setDepth(2.2);
+        const lx = Ly.sx1 + 4;
+        ledge.fillStyle(0x0a0a0a, 1); ledge.fillRect(lx - 2, top - 2, 800 - lx + 2, 600);
+        ledge.fillStyle(0x3a3354, 1); ledge.fillRect(lx, top + 10, 800 - lx, 600);
+        ledge.fillStyle(0x00e676, 1); ledge.fillRect(lx, top, 800 - lx, 10);
+        ledge.fillStyle(0xb9f6ca, 1); for (let x = lx; x < 800; x += 9) ledge.fillRect(x, top - 4, 3, 4);
+        ledge.y = -700;
+        scene.tweens.add({ targets: ledge, y: 0, duration: 1800, ease: 'Cubic.Out' });
+        Ly.ledge = ledge;
+    }
+    function updateLift(scene) {
+        if (!liftObj || !liftState) return;
+        const L = map.lift, o = liftObj, st = liftState.state;
+        const shown = st !== 'hidden';
+        o.sprite.setVisible(shown);
+        o.hole.setVisible(shown && st !== 'emerge' ? true : st === 'emerge');
+        // Platformaning ko'rinadigan balandligi (silliq); fizik tanasi ham shu joyda
+        o.disp = Phaser.Math.Linear(o.disp, liftState.y, 0.3);
+        const cy = o.disp + 24;
+        o.sprite.setPosition(L.x + L.w / 2, cy);
+        o.sprite.body.reset(L.x + L.w / 2, cy);
+        // Ko'taruvchi ustunlar (yerdan platforma tagigacha)
+        o.piston.clear();
+        if (shown && !o.groundOff) {
+            [L.x + 40, L.x + L.w - 54].forEach((px) => {
+                o.piston.fillStyle(0x0a0a0a, 1); o.piston.fillRect(px - 2, o.disp + 46, 18, 600 - o.disp);
+                o.piston.fillStyle(0x90a4ae, 1); o.piston.fillRect(px, o.disp + 46, 14, 600 - o.disp);
+                o.piston.fillStyle(0xcfd8dc, 1); o.piston.fillRect(px + 2, o.disp + 46, 3, 600 - o.disp);
+            });
+        }
+        // E belgisi: platforma tayyor va men ustida bo'lsam
+        const me = currentCharacter;
+        const onIt = me && !me.isDead && Math.abs(me.x - (L.x + L.w / 2)) <= L.w / 2 + 6 && Math.abs(me.y + 24 - liftState.y) <= 16;
+        o.hint.setVisible(st === 'ready' && !!onIt && !dialog).setPosition(L.x + L.w / 2, liftState.y - 70 + Math.sin(scene.time.now / 200) * 4);
+        // Ko'tarilish illyuziyasi: qoya va chiroqlar pastga suriladi
+        const Ly = o.layer;
+        if (Ly) {
+            const target = st === 'rising' ? 4.5 : 0;
+            Ly.speed = Phaser.Math.Linear(Ly.speed, target, st === 'rising' ? 0.02 : 0.03);
+            Ly.bg.tilePositionY -= Ly.speed * 0.25;
+            Ly.cliffR.tilePositionY -= Ly.speed;
+            Ly.cliffL.tilePositionY -= Ly.speed * 0.6;
+            const r = Ly.rails;
+            r.clear();
+            [Ly.sx0 + 14, Ly.sx1 - 22].forEach((rx) => {
+                r.fillStyle(0x0a0a0a, 1); r.fillRect(rx - 2, 0, 12, 600);
+                r.fillStyle(0x78909c, 1); r.fillRect(rx, 0, 8, 600);
+                r.fillStyle(0xb0bec5, 1); r.fillRect(rx, 0, 2, 600);
+                const off = (scene.time.now * Ly.speed * 0.06) % 30;
+                for (let y = -30 + off; y < 600; y += 30) { r.fillStyle(0x37474f, 1); r.fillRect(rx - 4, Math.round(y), 16, 4); }
+            });
+            if (st === 'rising' && Math.random() < 0.25) {
+                const sp = scene.add.rectangle(Phaser.Math.Between(0, 800), -10, 3, 3, [0xb2ff59, 0x80d8ff, 0xea80fc][Phaser.Math.Between(0, 2)], 0.9).setScrollFactor(0).setDepth(2.15);
+                scene.tweens.add({ targets: sp, y: 640, duration: Phaser.Math.Between(700, 1400), onComplete: () => sp.destroy() });
+            }
         }
     }
 
@@ -2418,10 +2734,8 @@ function launchGame(socket, roomId, mapData, continued) {
         bakeTile(scene, 'bg_uw', 570, 0, (g, w) => uwBackInto(g, w));
         scene.add.tileSprite(0, 0, W, 570, 'bg_uw').setOrigin(0, 0).setScrollFactor(0.5, 1).setDepth(-3);
         scene.add.tileSprite(0, 570, W, 30, 'px_uw_grass').setOrigin(0, 0).setDepth(1);
-        // Shahar (boshida): daraxt-uylar, trollar
-        [[300, 1], [760, 0], [1180, 1]].forEach(([x, v]) => scene.add.image(x, 572, 'px_treehouse_' + v).setOrigin(0.5, 1).setDepth(-0.5));
-        scene.add.image(520, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6).setFlipX(true);
-        scene.add.image(980, 572, 'px_troll_b').setOrigin(0.5, 1).setDepth(1.6);
+        // Shahar (boshida) - UnderWorld'ning katta shahri
+        buildUwCity(scene, 40, 1380);
         // Shahardan keyin - yovvoyi yo'l: jang maydoniga yaqinlashgan sari tikonli butalar kattalashadi
         const bush = scene.add.graphics().setDepth(-0.3);
         for (let x = 1420; x < d.arenaX - 40; x += 90 + ((x * 7) % 50)) {
@@ -2441,13 +2755,6 @@ function launchGame(socket, roomId, mapData, continued) {
             const m = scene.add.image(x, 572, 'px_uwm_' + (x % 3)).setOrigin(0.5, 1).setDepth(1.2);
             scene.tweens.add({ targets: m, alpha: 0.6, duration: 900 + (x % 5) * 200, yoyo: true, repeat: -1 });
         }
-        ['b', 'd', 'a'].forEach((k, i) => {
-            const x0 = 180 + i * 420;
-            const c = scene.add.image(x0, 572, 'px_blk_' + k + '0').setOrigin(0.5, 1).setDepth(1.6);
-            scene.tweens.add({ targets: c, x: x0 + 90, duration: 2800 + i * 500, yoyo: true, repeat: -1, ease: 'Sine.InOut',
-                onYoyo: () => c.setFlipX(true), onRepeat: () => c.setFlipX(false) });
-            scene.time.addEvent({ delay: 260, loop: true, callback: () => c.setTexture('px_blk_' + k + (c.texture.key.endsWith('0') ? '1' : '0')) });
-        });
         scene.time.addEvent({ delay: 220, loop: true, callback: () => {
             const cam = scene.cameras.main;
             const sp = scene.add.rectangle(cam.scrollX + Phaser.Math.Between(0, 800), 580, 3, 3, [0xb2ff59, 0x80d8ff, 0xea80fc][Phaser.Math.Between(0, 2)], 0.9).setDepth(-0.4);
@@ -3682,6 +3989,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isFatElf) buildFatElfScene(this, isArena);
         if (isUnderworld) buildUnderworldScene(this);
         if (isGFlower) buildGiantFlowerScene(this);
+        if (isLift) buildLiftScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 3
@@ -3773,6 +4081,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (gPlatGroup) this.physics.add.collider(currentCharacter, gPlatGroup);
             if (flowerBlockGroup) this.physics.add.collider(currentCharacter, flowerBlockGroup);
             if (gfObj) this.physics.add.collider(currentCharacter, gfObj.wallGroup);
+            if (liftObj) this.physics.add.collider(currentCharacter, liftObj.sprite);
 
             // XARITA EKRANDAN KENGROQ BO'LSA: kamera o'yinchini kuzatib boradi
             // (ilon quvishida esa kamerani ilon suradi - update() ichida)
@@ -3788,6 +4097,12 @@ function launchGame(socket, roomId, mapData, continued) {
             if (pauseMenuOpen) return;
             // 1) Dialog ochiq bo'lsa - keyingi gap
             if (dialog) { advanceDialog(); return; }
+            // 1b) Lift: platforma ustida - hamma chiqqan bo'lsa ko'tariladi
+            if (isLift && liftState && liftState.state === 'ready' && currentCharacter && !currentCharacter.isDead &&
+                Math.abs(currentCharacter.x - (map.lift.x + map.lift.w / 2)) <= map.lift.w / 2 + 6) {
+                socket.emit('useLift', roomId);
+                return;
+            }
             // 2) Katta eshik oldida: kalit (12 ta olma) bo'lsa - ochadi, bo'lmasa "qulflangan"
             if (isApples && currentCharacter && !currentCharacter.isDead &&
                 currentCharacter.x >= map.apples.bigWall.x - 40) {
@@ -4072,6 +4387,30 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         };
         // GIGANT GUL: jang boshlandi (yo'llar tikon bilan yopildi) / tishladi / yengildi
+        // LIFT: yerdan chiqdi / hamma chiqmagan / ko'tarilish / cho'qqiga yetildi
+        socket.off('liftEmerge');
+        socket.on('liftEmerge', () => {
+            this.cameras.main.shake(900, 0.008);
+            if (map.lift) gDust(this, map.lift.x + map.lift.w / 2, 566, 14, 0x4e342e);
+        });
+        socket.off('liftWait');
+        socket.on('liftWait', (d) => {
+            if (!map.lift) return;
+            const txt = this.add.text(map.lift.x + map.lift.w / 2, (liftState ? liftState.y : 520) - 100, t('lift_wait').replace('{n}', d.on).replace('{t}', d.total), {
+                fontFamily: PIXEL_FONT, fontSize: '11px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 4, align: 'center'
+            }).setOrigin(0.5).setDepth(1004);
+            this.tweens.add({ targets: txt, y: txt.y - 20, alpha: 0, delay: 1200, duration: 600, onComplete: () => txt.destroy() });
+        });
+        socket.off('liftStart');
+        socket.on('liftStart', () => {
+            startLiftRide(this);
+            arenaBanner(t('lift_banner'), '#40c4ff', t('lift_banner_sub'));
+        });
+        socket.off('liftArrived');
+        socket.on('liftArrived', () => {
+            liftArrive(this);
+            arenaBanner(t('lift_top_banner'), '#69f0ae', null);
+        });
         socket.off('gflowerWake');
         socket.on('gflowerWake', () => {
             raiseGfWalls(this, false);
@@ -4179,6 +4518,13 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             }
             checkpointReached = data.checkpointReached || [];
+
+            // LIFT: holat; ko'tarilish boshlangan bo'lsa (kech qo'shilgan) - darhol
+            if (isLift) {
+                liftState = data.lift || null;
+                if (liftState && (liftState.state === 'rising' || liftState.state === 'arrived' || liftState.state === 'done')) startLiftRide(this);
+                if (liftState && (liftState.state === 'arrived' || liftState.state === 'done')) liftArrive(this);
+            }
 
             // GIGANT GUL: holat, tikanlar, tomirlar; jang boshlangan bo'lsa (kech qo'shilgan) - devorlar darhol
             if (isGFlower) {
@@ -4795,6 +5141,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isForest) return (forestTriggered && botsKilled < (currentCharacter ? currentCharacter.killsToWin : 1)) ? 'action' : 'calm';
         if (isArena) return 'action';
         if (isGFlower) return gfState && gfState.state !== 'sleep' ? 'action' : 'calm';
+        if (isLift) return liftState && liftState.state === 'rising' ? 'action' : 'calm';
         if (isUnderworld) {
             return Object.values(flowerSprites).some(f => f.state !== 'hidden' && f.state !== 'dead') ? 'action' : 'calm';
         }
@@ -4857,6 +5204,7 @@ function launchGame(socket, roomId, mapData, continued) {
             updateCrowd(this, this.game.loop.delta);
         }
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
+        if (isLift) updateLift(this);
         if (isGFlower) {
             drawGiantFlower(this);
             Object.values(gfThornSprites).forEach((sp) => { sp.x = Phaser.Math.Linear(sp.x, sp.tx, 0.6); sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6); });
@@ -5166,6 +5514,13 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (myApples >= need && !hudKey) {
                     hudKey = this.add.image(22, 134, 'px_key').setOrigin(0, 0.5).setScrollFactor(0).setDepth(1002);
                 }
+            } else if (isLift) {
+                const st = liftState ? liftState.state : 'hidden';
+                progressText = st === 'hidden' || st === 'emerge'
+                    ? t('hud_lift_go').replace('{m}', Math.max(0, Math.ceil((map.lift.x - currentCharacter.x) / 50)))
+                    : st === 'ready' ? t('hud_lift_board')
+                    : st === 'rising' ? t('hud_lift_rise').replace('{p}', Math.round((liftState.progress || 0) * 100))
+                    : t('hud_lift_top');
             } else if (isGFlower) {
                 const st = gfState ? gfState.state : 'sleep';
                 progressText = st === 'sleep' ? t('hud_gf_go') : st === 'wake' ? t('hud_gf_wake') : st === 'dying' ? '' : t('hud_gf_fight');

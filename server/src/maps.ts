@@ -270,6 +270,23 @@ export interface GiantFlowerDef {
     sproutEveryMs: number; sproutHp: number; sproutMax: number; sproutBiteDamage: number;
 }
 
+// LIFT (Season 2, map-2): yo'lda yerdan katta platforma chiqadi (6 kishilik). Hamma tirik qahramon
+// ustiga chiqib E bossa - tog' tepasiga ko'tariladi (ostida chuqur jarlik). Ko'tarilayotganda qizil
+// botlar birma-bir tushadi (jami botsTotal ta); tepaga yetilganda xarita o'tiladi
+export interface LiftDef {
+    x: number;            // platformaning chap cheti
+    w: number;
+    triggerX: number;     // shu yerga yetilganda platforma yerdan chiqadi
+    readyY: number;       // tayyor turganda platforma tepasi
+    rideY: number;        // ko'tarilayotganda (ekranda) platforma tepasi
+    liftOffMs: number;    // readyY -> rideY
+    riseMs: number;       // tepaga yetguncha
+    botsTotal: number;
+    botHp: number;
+    firstBotMs: number;
+    nextBotMs: number;
+}
+
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
 // Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
@@ -293,7 +310,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
@@ -316,6 +333,7 @@ export interface MapDef {
     underworld?: UnderworldDef; // Faqat UnderWorld (map-10)
     arena?: ArenaDef;           // Faqat Arena (bonus)
     giantFlower?: GiantFlowerDef; // Season 2, map-1
+    lift?: LiftDef;             // Season 2, map-2
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
@@ -769,6 +787,28 @@ export const MAPS: MapDef[] = [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // botlar (kichik gullar) yerdan chiqadi
+    },
+    {
+        id: 11,
+        name: "Mountain Lift",
+        description: "A huge platform rises out of the road. Get everyone on it and ride up the mountain - red bots will attack on the way!",
+        season: 2,
+        mode: 'lift',
+        killsToWin: 0,
+        xpReward: 20,
+        accentColor: 0x40c4ff,
+        groundColor: 0x1b3a2a,
+        mapWidth: 1300,
+        platforms: [],
+        lift: {
+            x: 860, w: 300, triggerX: 560,
+            readyY: 520, rideY: 380, liftOffMs: 2500, riseMs: 32000,
+            botsTotal: 3, botHp: 330, firstBotMs: 2500, nextBotMs: 2000
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 60 } // botlar platforma ustiga tushadi
     }
 ];
 

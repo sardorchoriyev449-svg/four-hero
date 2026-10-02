@@ -293,6 +293,7 @@ export interface RoomState {
     acidCounter?: number;
     flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
     gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
+    lift?: { state: 'hidden' | 'emerge' | 'ready' | 'rising' | 'arrived' | 'done', y: number, t: number, spawned: number, nextBotTick: number } | null;
     gfThorns?: { id: string, x: number, y: number, vx: number, vy: number }[];
     gfRoots?: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: string[] }[];
     gfCounter?: number;
