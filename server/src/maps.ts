@@ -1039,7 +1039,7 @@ export const MAPS: MapDef[] = [
             surfaceMs: 7000, retreatMs: 800, hiddenMinMs: 1000, hiddenMaxMs: 2000, underWarnMs: 650, emergeDamage: 25,
             emergeBiteMin: 30, emergeBiteMax: 40, roadWarnMs: 250,
             handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 15, grabMs: 1100,
-            monsterSpeed: 6.5, monsterClimb: 4, monsterDamage: 25, respectXp: 200
+            monsterSpeed: 5, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
