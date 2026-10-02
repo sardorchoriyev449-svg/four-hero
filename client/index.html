@@ -65,6 +65,22 @@
 
         /* Yashirish uchun klass */
         .hidden { display: none !important; }
+        /* REKLAMA: chap/o'ng chetda uzunchoq bannerlar - faqat keng ekranda va o'yin paytida emas */
+        .ad-rail { position: fixed; top: 50%; transform: translateY(-50%); width: 160px; height: 600px; z-index: 5; overflow: hidden; }
+        #ad-rail-left { left: 12px; }
+        #ad-rail-right { right: 12px; }
+        @media (max-width: 1180px), (max-height: 640px) { .ad-rail { display: none !important; } }
+        body:has(#game-wrapper:not(.hidden)) .ad-rail { display: none !important; }
+        #nav-ad-btn { border-color: #ffcc00; }
+        #nav-ad-btn i { color: #ffcc00; }
+        #nav-ad-btn .ad-amount { margin-left: auto; color: #ffcc00; font-weight: bold; }
+        #nav-ad-btn.loading { opacity: .6; pointer-events: none; }
+        #ad-modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        #ad-modal.hidden { display: none !important; }
+        #ad-modal .ad-box { background: #1b1b1b; border: 3px solid #ffcc00; padding: 22px; max-width: 340px; width: 100%; text-align: center; color: #eee; }
+        #ad-modal .ad-box i.fa-coins { color: #ffcc00; font-size: 36px; display: block; margin-bottom: 10px; }
+        #ad-modal .ad-row { display: flex; gap: 10px; margin-top: 16px; }
+        #ad-modal .ad-row button { flex: 1; }
 
         /* Orqaga qaytish tugmasi (har bir sahifada) */
         .back-btn {
@@ -993,6 +1009,7 @@
         <button id="nav-play-btn" class="hub-btn"><i class="fa-solid fa-play"></i><span data-i18n="nav_play">Play</span></button>
         <button id="nav-character-btn" class="hub-btn"><i class="fa-solid fa-shield-halved"></i><span data-i18n="nav_character">My Character</span></button>
         <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
+        <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad">Watch an ad</span><span class="ad-amount">+500</span></button>
         <button id="nav-donate-btn" class="hub-btn"><i class="fa-solid fa-heart"></i><span data-i18n="nav_donate">Support the Author</span></button>
         <div class="control-scheme-row" style="margin: 16px 0 0;">
             <button class="control-scheme-btn" id="control-pc-btn"><i class="fa-solid fa-desktop"></i> PC</button>
@@ -1201,6 +1218,20 @@
         <button id="gameover-ok-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_to_lobby">Back to Lobby</span></button>
     </div>
 
+    <!-- REKLAMA: uzunchoq bannerlar va "reklama ko'r -> tanga" oynasi (ID berilmaguncha ko'rinmaydi) -->
+    <div id="ad-rail-left" class="ad-rail hidden"></div>
+    <div id="ad-rail-right" class="ad-rail hidden"></div>
+    <div id="ad-modal" class="hidden">
+        <div class="ad-box">
+            <i class="fa-solid fa-coins"></i>
+            <p id="ad-modal-text"></p>
+            <div class="ad-row">
+                <button id="ad-cancel-btn" class="hub-btn" data-i18n="ad_cancel">Cancel</button>
+                <button id="ad-watch-btn" class="hub-btn" data-i18n="ad_watch">Watch</button>
+            </div>
+        </div>
+    </div>
+
     <div id="game-wrapper" class="hidden">
         <div id="game-container"></div>
         <div id="rotate-hint"><i class="fa-solid fa-mobile-screen-button"></i><span data-i18n="rotate_hint">Turn your phone sideways</span></div>
@@ -1234,5 +1265,6 @@
     <script src="i18n.js"></script>
     <script src="lobby.js"></script>
     <script src="game.js"></script>
+    <script src="ads.js"></script>
 </body>
 </html>

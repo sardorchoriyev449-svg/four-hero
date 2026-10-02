@@ -81,6 +81,60 @@ app.get('/api/skins', (req, res) => {
 });
 
 // XARITALAR RO'YXATINI OLISH (nom, tavsif, rang - lobbida ko'rsatish uchun)
+// ===== REKLAMA =====
+// Reklama tarmog'i ID lari .env (Render -> Environment) dan olinadi. ADS_CLIENT bo'lmasa - reklama
+// umuman ko'rinmaydi. ADS_CLIENT: "ca-pub-XXXXXXXXXXXXXXXX" (Google AdSense / H5 Games Ads),
+// ADS_SLOT_LEFT / ADS_SLOT_RIGHT - uzunchoq (160x600) bannerlar slot ID si,
+// ADS_REWARD=off - tanga uchun reklamani o'chirish, ADS_TEST=on - sinov rejimi (haqiqiy pul yo'q)
+const AD_REWARD_COINS = 500;
+const AD_COOLDOWN_MS = 3 * 60 * 1000;
+const AD_DAILY_CAP = 10;
+const AD_MIN_WATCH_MS = 5000;
+const adClient = () => (process.env.ADS_CLIENT || '').trim();
+app.get('/api/ads/config', (_req, res) => {
+    const client = adClient();
+    res.json({
+        enabled: /^ca-pub-\d+$/.test(client),
+        client,
+        slotLeft: (process.env.ADS_SLOT_LEFT || '').trim(),
+        slotRight: (process.env.ADS_SLOT_RIGHT || '').trim(),
+        reward: (process.env.ADS_REWARD || 'on').trim() !== 'off',
+        test: (process.env.ADS_TEST || '').trim() === 'on',
+        rewardCoins: AD_REWARD_COINS,
+        dailyCap: AD_DAILY_CAP
+    });
+});
+// AdSense talab qiladigan ads.txt - ADS_CLIENT dan avtomatik yasaladi
+app.get('/ads.txt', (_req, res) => {
+    const m = adClient().match(/^ca-(pub-\d+)$/);
+    if (!m) { res.status(404).end(); return; }
+    res.type('text/plain').send(`google.com, ${m[1]}, DIRECT, f08c47fec0942fa0\n`);
+});
+// Reklama boshlanishi: bir martalik chipta (ko'rmasdan darrov "mukofot" so'ralmasin)
+const adTickets = new Map<string, { nonce: string, at: number }>();
+app.post('/api/ads/:userId/start', (req, res) => {
+    if (!adClient()) { res.status(404).json({ success: false }); return; }
+    const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    adTickets.set(req.params.userId, { nonce, at: Date.now() });
+    res.json({ success: true, nonce });
+});
+app.post('/api/ads/:userId/reward', async (req, res) => {
+    try {
+        if (!adClient()) { res.status(404).json({ success: false }); return; }
+        const tk = adTickets.get(req.params.userId);
+        const age = tk ? Date.now() - tk.at : 0;
+        if (!tk || !req.body || req.body.nonce !== tk.nonce || age < AD_MIN_WATCH_MS || age > 10 * 60 * 1000) {
+            res.json({ success: false, message: 'err_ad_invalid' });
+            return;
+        }
+        adTickets.delete(req.params.userId);
+        const r = await db.claimAdReward(req.params.userId, AD_REWARD_COINS, AD_COOLDOWN_MS, AD_DAILY_CAP);
+        res.json(r.success ? { success: true, coins: r.user!.coins, left: r.left, reward: AD_REWARD_COINS } : r);
+    } catch (e) {
+        res.status(500).json({ success: false, message: 'err_server' });
+    }
+});
+
 app.get('/api/maps', (req, res) => {
     res.json({ success: true, maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor })) });
 });

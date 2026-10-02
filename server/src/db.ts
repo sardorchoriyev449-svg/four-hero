@@ -51,6 +51,10 @@ const userSchema = new mongoose.Schema({
     // ({ knight: { head: 'cowboy', sword: 'bat' }, ... })
     ownedCosmetics: { type: [String], default: () => [] },
     achievements: { type: [String], default: () => [] },   // bir martalik yutuqlar ("respect" va h.k.)
+    // REKLAMA MUKOFOTI: oxirgi ko'rilgan vaqt va shu kun (UTC) nechta ko'rilgani
+    adLastAt: { type: Number, default: 0 },
+    adDay: { type: String, default: '' },
+    adCount: { type: Number, default: 0 },
     equippedCosmetics: { type: Object, default: () => ({}) },
     // ADMIN (Telegram bot) bloklagan hisob: kira olmaydi, xonaga qo'shila olmaydi
     banned: { type: Boolean, required: true, default: false },
@@ -292,6 +296,31 @@ export async function equipSkin(userId: string, characterType: string, skinId: s
     await doc.save();
 
     return { success: true, user: docToUser(doc) };
+}
+
+// REKLAMA KO'RGANI UCHUN TANGA: oraliq (cooldownMs) va kunlik chegara (dailyCap) bitta atomar
+// yozuvda tekshiriladi - tez-tez bosib yoki parallel so'rov bilan ortiqcha tanga olib bo'lmaydi
+export async function claimAdReward(userId: string, amount: number, cooldownMs: number, dailyCap: number): Promise<{ success: boolean, message?: string, user?: UserRecord, left?: number }> {
+    const now = Date.now();
+    const today = new Date(now).toISOString().slice(0, 10);
+    const ready = { $or: [{ adLastAt: { $exists: false } }, { adLastAt: { $lte: now - cooldownMs } }] };
+    // Bugun allaqachon ko'rgan - chegaradan oshmagan bo'lsa
+    let doc = await UserModel.findOneAndUpdate(
+        { _id: userId, adDay: today, adCount: { $lt: dailyCap }, ...ready },
+        { $inc: { coins: amount, adCount: 1 }, $set: { adLastAt: now } },
+        { returnDocument: 'after' }
+    );
+    // Bugun birinchi marta
+    if (!doc) doc = await UserModel.findOneAndUpdate(
+        { _id: userId, adDay: { $ne: today }, ...ready },
+        { $inc: { coins: amount }, $set: { adLastAt: now, adDay: today, adCount: 1 } },
+        { returnDocument: 'after' }
+    );
+    if (doc) return { success: true, user: docToUser(doc), left: Math.max(0, dailyCap - (doc.adCount || 0)) };
+    const cur = await UserModel.findById(userId);
+    if (!cur) return { success: false, message: 'err_user_not_found' };
+    if (cur.adDay === today && (cur.adCount || 0) >= dailyCap) return { success: false, message: 'err_ad_daily_limit', left: 0 };
+    return { success: false, message: 'err_ad_cooldown' };
 }
 
 // YUTUQ: akkauntga faqat BIR MARTA beriladi (atomar) - berilgan bo'lsa true
