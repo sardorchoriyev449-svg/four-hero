@@ -758,11 +758,11 @@ export const MAPS: MapDef[] = [
             stemX: 1340, headY: 225, headR: 58,
             hpPerPlayer: 1600,
             topPlats: [0, 2],
-            whipDamage: 18, whipEveryMs: 3200, whipGrowMs: 900,
-            thornDamage: 8, thornEveryMs: 4500, thornSpeed: 360,
-            rootDamage: 20, rootEveryMs: 4200, rootWarnMs: 800, rootUpMs: 600,
-            biteDamage: 25, biteEveryMs: 2300, biteWindMs: 600, biteRange: 72, biteReach: 270,
-            sproutEveryMs: 3500, sproutHp: 40, sproutMax: 4, sproutBiteDamage: 12
+            whipDamage: 18, whipEveryMs: 5200, whipGrowMs: 1300,
+            thornDamage: 8, thornEveryMs: 7000, thornSpeed: 240,
+            rootDamage: 20, rootEveryMs: 6500, rootWarnMs: 1200, rootUpMs: 700,
+            biteDamage: 25, biteEveryMs: 3800, biteWindMs: 1000, biteRange: 72, biteReach: 270,
+            sproutEveryMs: 5500, sproutHp: 40, sproutMax: 4, sproutBiteDamage: 12
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

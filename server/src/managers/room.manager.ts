@@ -1,3 +1,4 @@
+import { aimAssist } from './aim';
 import { Server, Socket } from 'socket.io';
 import { RoomState, PlayerState } from '../types';
 import { getCharacterLogic } from '../characters';
@@ -486,7 +487,7 @@ export class RoomManager {
         BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
         player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
 
-        charLogic.handleAttack(player, room, player.lastAttackAngle);
+        charLogic.handleAttack(player, room, aimAssist(room, player, player.lastAttackAngle));
     }
 
     // SHIFT BOSIB TURILGANDA: barcha personajlar uchun umumiy - qobiliyat faollashadi

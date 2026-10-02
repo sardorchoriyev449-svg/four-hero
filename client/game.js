@@ -4723,8 +4723,14 @@ function launchGame(socket, roomId, mapData, continued) {
                 else ownerSprite = otherPlayers[bData.playerId];
 
                 const isMeleeType = (bData.bulletType === 'melee');
-                const posX = (isMeleeType && ownerSprite) ? ownerSprite.x + dir * 26 : bData.x;
-                const posY = (isMeleeType && ownerSprite) ? ownerSprite.y - 2 : bData.y;
+                // Qiya hujum (masalan, Gigant gul boshiga yo'naltirilgan): rasm ham shu burchakka buriladi
+                const ang = Math.atan2(bData.vy || 0, bData.vx || 0);
+                let tilt = facingLeft ? ang - Math.PI : ang;
+                while (tilt > Math.PI) tilt -= 2 * Math.PI;
+                while (tilt < -Math.PI) tilt += 2 * Math.PI;
+                if (Math.abs(tilt) < 0.05) tilt = 0;
+                const posX = (isMeleeType && ownerSprite) ? ownerSprite.x + (tilt ? Math.cos(ang) * 26 : dir * 26) : bData.x;
+                const posY = (isMeleeType && ownerSprite) ? ownerSprite.y - 2 + (tilt ? Math.sin(ang) * 26 : 0) : bData.y;
 
                 if (!bulletSprites[bData.id]) {
                     const shooter = serverPlayers[bData.playerId];
@@ -4746,6 +4752,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     let bSprite = this.add.sprite(posX, posY, currentTexture).setDepth(4);
                     // Chapga qarab hujum qilinganda qurol tasvirini gorizontal aylantirish
                     if (facingLeft) bSprite.setFlipX(true);
+                    if (tilt && bData.bulletType !== 'pellet') bSprite.setRotation(tilt);
 
                     // QUROL SKINI: egasi tanlagan qurol skinining rangini qo'llaymiz
                     // (alohida tekstura chizish o'rniga, tez va yengil "tint" usuli)

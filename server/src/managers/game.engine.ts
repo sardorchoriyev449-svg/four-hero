@@ -1,3 +1,4 @@
+import { aimAssist } from './aim';
 import { Server } from 'socket.io';
 import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
@@ -209,7 +210,7 @@ export class GameEngine {
                     if (player.attackCooldown <= 0 && charLogic.canAttack(player) && player.stamina >= BaseCharacter.staminaCost(player, charLogic.attackStaminaCost)) {
                         BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
                         player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
-                        charLogic.handleAttack(player, room, player.lastAttackAngle);
+                        charLogic.handleAttack(player, room, aimAssist(room, player, player.lastAttackAngle));
                     } else if (player.attackCooldown <= 0 && charLogic.canAttack(player)) {
                         this.signalNoStamina(player);
                     }
@@ -488,7 +489,7 @@ export class GameEngine {
     private moveToward(bot: BotState, x: number, surfaces: Surface[]): void {
         const dx = x - bot.x;
         if (Math.abs(dx) < 1) return;
-        const speed = bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 4.2)
+        const speed = bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 3.2)
             : bot.kind === 'dog' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : this.DOG_SPEED) : this.BOT_SPEED;
         const newX = bot.x + Math.sign(dx) * Math.min(speed, Math.abs(dx));
         if (!this.blockedAt(surfaces, newX, bot)) bot.x = newX;
@@ -915,7 +916,7 @@ export class GameEngine {
             const gfl = room.gflower;
             const gfd = map.giantFlower;
             if (!bulletDestroyed && gfl && gfd && (gfl.state === 'fight' || gfl.state === 'wake') &&
-                this.checkOverlap(hitRect, { x: gfl.hx - gfd.headR, y: gfl.hy - gfd.headR, w: gfd.headR * 2, h: gfd.headR * 2 })) {
+                this.checkOverlap(hitRect, { x: gfl.hx - 68, y: gfl.hy - 56, w: 136, h: 112 })) {
                 bulletDestroyed = true;
                 gfl.hp = Math.max(0, gfl.hp - damage);
                 gfl.hitFlash = 4;
@@ -1873,9 +1874,9 @@ export class GameEngine {
         if (g.state === 'wake') {
             if (--g.timer <= 0) {
                 g.state = 'fight';
-                g.nextWhip = g.tick + T(1200);
-                g.nextRoot = g.tick + T(2600);
-                g.nextThorn = g.tick + T(3500);
+                g.nextWhip = g.tick + T(2000);
+                g.nextRoot = g.tick + T(3500);
+                g.nextThorn = g.tick + T(5000);
                 g.nextBite = g.tick;
                 g.nextSprout = g.tick + T(1500);
             }
@@ -1895,7 +1896,7 @@ export class GameEngine {
             if (focus) g.side = focus.x < d.stemX ? -1 : 1;
             const rx = d.stemX + g.side * 75, ry = d.headY;
             const dx = rx - g.hx, dy = ry - g.hy, dist = Math.hypot(dx, dy);
-            const step = 4;
+            const step = 2.5;   // bosh sekin o'tadi (o'yinchi ko'zlab ulgursin)
             if (dist <= step) { g.hx = rx; g.hy = ry; } else { g.hx += dx / dist * step; g.hy += dy / dist * step; }
         }
 
@@ -1917,9 +1918,9 @@ export class GameEngine {
             if (b.phase === 'wind') {
                 // Orqaga tortilib, og'zini ochadi
                 g.hx += (d.stemX - g.hx) * 0.04; g.hy -= 0.8;
-                if (b.t <= 0) { b.phase = 'lunge'; b.t = T(210); b.fromX = g.hx; b.fromY = g.hy; }
+                if (b.t <= 0) { b.phase = 'lunge'; b.t = T(320); b.fromX = g.hx; b.fromY = g.hy; }
             } else if (b.phase === 'lunge') {
-                const k = 1 - b.t / T(210);
+                const k = 1 - b.t / T(320);
                 g.hx = b.fromX + (b.tx - b.fromX) * k; g.hy = b.fromY + (b.ty - b.fromY) * k;
                 if (b.t <= 0) {
                     g.hx = b.tx; g.hy = b.ty;
@@ -1929,7 +1930,7 @@ export class GameEngine {
                         this.knockback(p, (p.x < d.stemX ? -1 : 1) * 260, -320);
                     });
                     this.io.to(roomId).emit('gflowerBite', { x: Math.round(g.hx), y: Math.round(g.hy) });
-                    b.phase = 'back'; b.t = T(450);
+                    b.phase = 'back'; b.t = T(700);
                 }
             } else if (b.t <= 0) {
                 g.bite = null;
