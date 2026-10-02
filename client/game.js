@@ -159,6 +159,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const isArena = !!map.arena;     // Arena (bonus): cheksiz botlar, har 5 o'ldirishda boss
     const isGFlower = !!map.giantFlower; // Season 2 map-1: Gigant gul
     const isLift = !!map.lift;           // Season 2 map-2: tog'ga ko'tariluvchi platforma
+    const isFarm = !!map.farm;           // Season 2 map-3: zombi poliz
     const isSnakeArena = isArena && !!map.arena.snake; // arenada Robot ilon boss bo'lib chiqishi mumkin
     const snakeDef = map.boss || (isSnakeArena ? map.arena.snake : null);
 
@@ -230,6 +231,11 @@ function launchGame(socket, roomId, mapData, continued) {
     // LIFT: server holati va sahna obyektlari
     let liftState = null;
     let liftObj = null;        // { sprite, piston, hole, hint, groundOff, layer: {...} }
+    // FERMA
+    let farmState = null;
+    let farmObj = null;        // { top, hint, carrot }
+    let farmTalkShown = false;
+    let carrotOut = false;
     let gPoundHit = false;     // yerni urish seriyasi: oxirgi kadr "urish" bo'lganmi
     let gCracks = [];          // urishlardan polda paydo bo'lgan yoriqlar
     let gRideId = null;        // shiftga otilayotgan platforma ustida qolgan bo'lsam - uning id si
@@ -2389,6 +2395,232 @@ function launchGame(socket, roomId, mapData, continued) {
         }
     }
 
+    // ===== FERMA (Season 2, map-3) =====
+    function farmSoilGrid() {
+        const g = gridNew(16, 15);
+        for (let x = 0; x < 16; x++) {
+            g[0][x] = x % 5 === 1 ? 0x9ccc65 : x % 3 ? 0x7cb342 : 0x689f38;
+            g[1][x] = x % 4 === 2 ? 0x7cb342 : 0x33691e;
+            for (let y = 2; y < 15; y++) g[y][x] = shade(0.75 - y / 18, x, y, [0x24160c, 0x2d1b10, 0x3e2716, 0x4e3220]);
+        }
+        [[3, 6], [11, 9], [7, 12]].forEach(([x, y]) => { g[y][x] = 0x6d4c41; });
+        return g;
+    }
+    const WOOD = [0x4e342e, 0x6d4c41, 0x8d6e63, 0xa1887f];
+    function farmhouseGrid() {
+        const W = 80, H = 58;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        for (let y = 22; y < H; y++) for (let x = 6; x < 74; x++) set(x, y, (y - 22) % 5 === 4 ? WOOD[0] : shade(0.8 - (x - 6) / 160 + ((x * 7 + y) % 13 === 0 ? -0.15 : 0), x, y, WOOD));
+        const ROOF = [0x4a140e, 0x7f2a1c, 0xa63d2a, 0xc4573a];
+        for (let y = 2; y < 25; y++) {
+            const half = Math.round((y - 2) * 40 / 22);
+            for (let x = 40 - half; x <= 40 + half; x++) set(x, y, (y % 4 === 0) ? ROOF[0] : shade(0.85 - (y - 2) / 50, x, y, ROOF));
+        }
+        for (let y = 4; y < 15; y++) for (let x = 58; x < 65; x++) set(x, y, (y % 3 === 0 || (x + Math.floor(y / 3)) % 3 === 0) ? 0x5d1a12 : 0x8e3b2a);
+        for (let y = 38; y < H; y++) for (let x = 46; x < 56; x++) set(x, y, (x === 46 || x === 55 || y === 38) ? 0x2b1b12 : (x % 3 === 0 ? 0x3e2723 : 0x4e342e));
+        set(53, 47, 0xffca28);
+        [[12, 30], [28, 30]].forEach(([wx, wy]) => {
+            for (let y = wy; y < wy + 11; y++) for (let x = wx; x < wx + 11; x++) {
+                const frame = x === wx || x === wx + 10 || y === wy || y === wy + 10 || x === wx + 5 || y === wy + 5;
+                set(x, y, frame ? 0xeeeeee : (x + y) % 5 === 0 ? 0xfff59d : 0xffe082);
+            }
+            // Pardalar (zanaveska) - qizil, ikki chetida
+            for (let y = wy + 1; y < wy + 10; y++) { set(wx + 1, y, 0xc62828); set(wx + 2, y, y % 2 ? 0xc62828 : 0xe53935); set(wx + 9, y, 0xc62828); set(wx + 8, y, y % 2 ? 0xc62828 : 0xe53935); }
+        });
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function barnGrid() {
+        const W = 72, H = 66;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const RED = [0x5c1414, 0x7f1d1d, 0x9b2226, 0xb83232];
+        for (let y = 22; y < H; y++) for (let x = 4; x < 68; x++) set(x, y, x % 4 === 0 ? RED[0] : shade(0.85 - (y - 22) / 90 - (x - 4) / 200, x, y, RED));
+        // Gambrel tom
+        for (let y = 0; y < 23; y++) {
+            const half = y < 10 ? 16 + Math.round(y * 1.4) : 30 + Math.round((y - 10) * 0.45);
+            for (let x = 36 - half; x <= 36 + half; x++) set(x, y, y % 3 === 0 ? 0x263238 : shade(0.7 - y / 40, x, y, [0x1c262b, 0x263238, 0x37474f, 0x455a64]));
+        }
+        // Katta eshik va oq X ramka
+        for (let y = 36; y < H; y++) for (let x = 24; x < 48; x++) {
+            const fx = (x - 24) / 23, fy = (y - 36) / 29;
+            const onX = Math.abs(fx - fy) < 0.07 || Math.abs(fx - (1 - fy)) < 0.07;
+            const edge = x === 24 || x === 47 || y === 36 || y === H - 1 || x === 35 || x === 36;
+            set(x, y, edge || onX ? 0xf5f5f5 : (x % 3 === 0 ? RED[1] : RED[2]));
+        }
+        // Pichan bilan to'la tepa deraza
+        for (let y = 14; y < 24; y++) for (let x = 30; x < 42; x++) set(x, y, (x === 30 || x === 41 || y === 14) ? 0xf5f5f5 : (x + y) % 3 ? 0xfbc02d : 0xf9a825);
+        for (let x = 4; x < 68; x++) set(x, 22, 0xf5f5f5);
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function kennelGrid() {
+        const W = 24, H = 19;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        for (let y = 0; y < 7; y++) { const half = 6 + y * 1; for (let x = 12 - half; x < 12 + half; x++) set(x, y, y % 2 ? 0xb71c1c : 0xd32f2f); }
+        for (let y = 7; y < H; y++) for (let x = 3; x < 21; x++) set(x, y, (x - 3) % 4 === 3 ? WOOD[0] : shade(0.8 - (y - 7) / 30, x, y, WOOD));
+        for (let y = 10; y < H; y++) for (let x = 8; x < 16; x++) { const d = ((x - 11.5) / 4) ** 2 + ((y - 13) / 4) ** 2; if (y >= 13 || d <= 1) set(x, y, 0x120c08); }
+        for (let x = 9; x < 15; x++) set(x, 8, 0xffe082);   // ism taxtachasi
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function carrotGrid(full) {
+        const W = 12, H = full ? 24 : 8;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        [[3, 0], [5, 1], [6, 0], [8, 1], [9, 0]].forEach(([x, y]) => { for (let yy = y; yy < 7; yy++) set(x + Math.round((yy - y) * (6 - x) / 10), yy, yy % 2 ? 0x558b2f : 0x7cb342); });
+        for (let x = 4; x < 9; x++) set(x, 7, 0x33691e);
+        if (!full) return gridOutline(g, 0x0a0a0a);
+        for (let y = 8; y < H; y++) {
+            const half = Math.max(0.5, 5 - (y - 8) * 0.3);
+            for (let x = 0; x < W; x++) if (Math.abs(x - 6) <= half) set(x, y, (y % 4 === 0 && Math.abs(x - 6) < half - 0.5) ? 0xe65100 : x < 6 ? 0xff9800 : 0xf57c00);
+        }
+        // Yovuz yuz: qizil ko'zlar, tishli og'iz, og'zidan qon oqadi
+        set(4, 10, 0xb71c1c); set(8, 10, 0xb71c1c); set(3, 9, 0x3e2723); set(9, 9, 0x3e2723);
+        for (let x = 3; x <= 9; x++) set(x, 13, 0x3a0000);
+        [3, 5, 7, 9].forEach(x => set(x, 12, 0xfafafa));
+        [4, 6, 8].forEach(x => set(x, 14, 0xfafafa));
+        [[4, 15], [4, 16], [7, 15], [7, 16], [7, 17], [5, 15]].forEach(([x, y]) => set(x, y, 0xc62828));
+        return gridOutline(g, 0x0a0a0a);
+    }
+    // ZOMBI (o'ngga qaragan): yashil teri, qizil ko'zlar, yirtiq ko'ylak, qo'llari oldinga cho'zilgan
+    function zombieGrid(frame) {
+        const W = 16, H = 26;
+        const g = gridNew(W, H);
+        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const SKIN = [0x3b5229, 0x4e6b3a, 0x6b8e4e, 0x8bab6a];
+        for (let y = 0; y < 8; y++) for (let x = 4; x < 11; x++) set(x, y, shade(0.8 - (y) / 20 - (x - 4) / 30, x, y, SKIN));
+        [[4, 0], [5, 0], [7, 0], [9, 1], [4, 1]].forEach(([x, y]) => set(x, y, 0x263238));
+        set(7, 3, 0xff1744); set(9, 3, 0xff1744);
+        [[6, 6], [7, 5], [8, 6], [9, 5]].forEach(([x, y]) => set(x, y, 0x1b0000));
+        for (let y = 8; y < 17; y++) for (let x = 3; x < 11; x++) set(x, y, ((x * 3 + y * 5) % 11 === 0) ? SKIN[2] : shade(0.75 - y / 40, x, y, [0x263238, 0x37474f, 0x546e7a, 0x78909c]));
+        set(5, 16, 0); set(8, 16, 0);
+        const armY = frame === 2 ? 6 : 10;
+        for (let x = 10; x < 16; x++) { const y = frame === 2 ? 10 - Math.round((x - 10) * 0.7) : armY; set(x, y, SKIN[2]); set(x, y + 1, SKIN[1]); }
+        set(15, frame === 2 ? 6 : 9, SKIN[3]); set(15, frame === 2 ? 5 : 12, SKIN[3]);
+        const legs = frame === 1 ? [[5, 1], [8, -1]] : [[4, 0], [9, 0]];
+        legs.forEach(([lx, dx]) => { for (let y = 17; y < 25; y++) { const x = lx + Math.round((y - 17) * dx / 8); set(x, y, y % 3 ? 0x5d4037 : 0x4e342e); set(x + 1, y, 0x3e2723); } });
+        legs.forEach(([lx, dx]) => { set(lx + dx - 1, 25, 0x1b1b1b); set(lx + dx, 25, 0x1b1b1b); set(lx + dx + 1, 25, 0x1b1b1b); set(lx + dx + 2, 25, 0x1b1b1b); });
+        return gridOutline(g, 0x0a0a0a);
+    }
+    function ensureFarmTextures(scene) {
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        mk('px_farm_soil', farmSoilGrid(), 2);
+        buildForestTextures(scene);   // robot it rasmlari (itxonadan chiqadi)
+        mk('px_farmhouse', farmhouseGrid(), 4);
+        mk('px_barn', barnGrid(), 4);
+        mk('px_kennel', kennelGrid(), 4);
+        mk('px_carrot_top', carrotGrid(false), 3);
+        mk('px_carrot_evil', carrotGrid(true), 3);
+        [0, 1, 2].forEach(f => mk('px_zombie_' + f, zombieGrid(f), 3));
+    }
+    function buildFarmScene(scene) {
+        const W = mapWidth, F = map.farm;
+        ensureFarmTextures(scene);
+        // Qonli kechki osmon, katta oy, uzoqda qoramtir tepaliklar
+        drawPixelBackdrop(scene, { sky: [0x1a0f2e, 0x2e1640, 0x4a1d45, 0x6e2643, 0x96343f, 0xb9503f], clouds: false, mountains: false, width: W });
+        const far = scene.add.graphics().setScrollFactor(0.4, 1).setDepth(-3.5);
+        far.fillStyle(0xfff3e0, 1); far.fillCircle(620, 120, 46);
+        far.fillStyle(0xffe0b2, 1); far.fillCircle(604, 108, 9); far.fillCircle(640, 134, 6);
+        for (let x = 0; x < W; x += 8) {
+            const top = 420 - Math.round((Math.abs(Math.sin(x * 0.006)) * 70 + Math.abs(Math.sin(x * 0.017)) * 25) / 8) * 8;
+            far.fillStyle(0x2a1530, 1); far.fillRect(x, top, 8, 570 - top);
+            const top2 = 470 - Math.round((Math.abs(Math.sin(x * 0.011 + 1)) * 45) / 8) * 8;
+            far.fillStyle(0x1c0f22, 1); far.fillRect(x, top2, 8, 570 - top2);
+        }
+        scene.add.tileSprite(0, 570, W, 30, 'px_farm_soil').setOrigin(0, 0).setDepth(1);
+        // Yog'och to'siq (orqada)
+        const fence = scene.add.graphics().setDepth(-0.6);
+        for (let x = 600; x < 2560; x += 28) {
+            fence.fillStyle(0x0a0a0a, 1); fence.fillRect(x - 1, 512, 10, 60);
+            fence.fillStyle(0x8d6e63, 1); fence.fillRect(x, 514, 8, 58);
+            fence.fillStyle(0xa1887f, 1); fence.fillRect(x, 514, 2, 58);
+        }
+        fence.fillStyle(0x6d4c41, 1); fence.fillRect(600, 524, 1960, 6); fence.fillRect(600, 548, 1960, 6);
+        // Ferma uyi, omborxona (saray)
+        scene.add.image(400, 574, 'px_farmhouse').setOrigin(0.5, 1).setDepth(-0.5);
+        scene.add.image(2660, 574, 'px_barn').setOrigin(0.5, 1).setDepth(-0.5);
+        // Ferma soyaboni (zanaveska) - ustiga chiqsa bo'ladi
+        const aw = map.platforms[0], awg = scene.add.graphics().setDepth(1.35);
+        [aw.x + 6, aw.x + aw.w - 12].forEach(px => { awg.fillStyle(0x0a0a0a, 1); awg.fillRect(px - 1, aw.y + 14, 8, 572 - aw.y - 14); awg.fillStyle(0x8d6e63, 1); awg.fillRect(px, aw.y + 14, 6, 572 - aw.y - 14); });
+        awg.fillStyle(0x0a0a0a, 1); awg.fillRect(aw.x - 2, aw.y - 2, aw.w + 4, 20);
+        for (let x = aw.x; x < aw.x + aw.w; x += 14) {
+            awg.fillStyle((x - aw.x) / 14 % 2 ? 0xfafafa : 0xc62828, 1); awg.fillRect(x, aw.y, Math.min(14, aw.x + aw.w - x), 16);
+            awg.fillStyle((x - aw.x) / 14 % 2 ? 0xfafafa : 0xc62828, 1); awg.fillCircle(x + 7, aw.y + 16, 6);
+        }
+        // Quduq: tosh halqa, ustunlar, tom, chelak
+        const wr = map.platforms[1], wt = map.platforms[2], wg = scene.add.graphics().setDepth(1.35);
+        for (let y = wr.y; y < 572; y += 7) for (let x = wr.x; x < wr.x + wr.w; x += 12) {
+            const ox = (y / 7) % 2 ? 6 : 0;
+            wg.fillStyle(0x0a0a0a, 1); wg.fillRect(x + ox - 1, y - 1, 13, 8);
+            wg.fillStyle([0x757575, 0x8d8d8d, 0x9e9e9e][(x + y) % 3], 1); wg.fillRect(x + ox, y, Math.min(11, wr.x + wr.w - x - ox), 6);
+        }
+        [wt.x + 12, wt.x + wt.w - 18].forEach(px => { wg.fillStyle(0x0a0a0a, 1); wg.fillRect(px - 1, wt.y + 16, 8, wr.y - wt.y - 16); wg.fillStyle(0x795548, 1); wg.fillRect(px, wt.y + 16, 6, wr.y - wt.y - 16); });
+        wg.fillStyle(0x0a0a0a, 1); wg.fillTriangle(wt.x - 14, wt.y + 20, wt.x + wt.w / 2, wt.y - 16, wt.x + wt.w + 14, wt.y + 20);
+        wg.fillStyle(0x7f2a1c, 1); wg.fillTriangle(wt.x - 10, wt.y + 17, wt.x + wt.w / 2, wt.y - 12, wt.x + wt.w + 10, wt.y + 17);
+        wg.fillStyle(0x0a0a0a, 1); wg.fillRect(wt.x - 2, wt.y - 2, wt.w + 4, 8);
+        wg.fillStyle(0xa63d2a, 1); wg.fillRect(wt.x, wt.y, wt.w, 4);
+        const cx = wt.x + wt.w / 2;
+        wg.fillStyle(0x6d4c41, 1); wg.fillRect(cx - 1, wt.y + 20, 2, 40);
+        wg.fillStyle(0x0a0a0a, 1); wg.fillRect(cx - 9, wt.y + 58, 18, 14);
+        wg.fillStyle(0x8d6e63, 1); wg.fillRect(cx - 7, wt.y + 60, 14, 10);
+        // Itxona (tomiga chiqsa - robot it chiqadi)
+        const kr = map.platforms[F.kennelRoof];
+        scene.add.image(kr.x + kr.w / 2, 574, 'px_kennel').setOrigin(0.5, 1).setDepth(1.3);
+        const bowl = scene.add.graphics().setDepth(1.3);
+        bowl.fillStyle(0x0a0a0a, 1); bowl.fillRect(kr.x - 34, 562, 22, 10); bowl.fillStyle(0x1e88e5, 1); bowl.fillRect(kr.x - 32, 564, 18, 6);
+        // Polizlar: tuproq uyumlari ustida karam, qovoq, sabzi barglari
+        const bed = scene.add.graphics().setDepth(1.3);
+        for (let x = F.fieldX0; x < F.fieldX1; x += 150) {
+            if (F.noSpawn.some(([a, b]) => x + 120 > a && x < b)) continue;
+            bed.fillStyle(0x0a0a0a, 1); bed.fillRect(x - 2, 552, 124, 20);
+            bed.fillStyle(0x3e2716, 1); bed.fillRect(x, 554, 120, 18);
+            bed.fillStyle(0x5d3d26, 1); bed.fillRect(x, 554, 120, 4);
+            for (let k = 0; k < 5; k++) {
+                const px = x + 12 + k * 24, kind = (Math.floor(x / 150) + k) % 3;
+                if (Math.abs(px - F.carrotX) < 30) continue;
+                if (kind === 0) { bed.fillStyle(0x0a0a0a, 1); bed.fillCircle(px, 546, 10); bed.fillStyle(0x7cb342, 1); bed.fillCircle(px, 546, 8); bed.fillStyle(0xaed581, 1); bed.fillCircle(px - 2, 544, 4); }
+                else if (kind === 1) { bed.fillStyle(0x0a0a0a, 1); bed.fillEllipse(px, 546, 24, 18); bed.fillStyle(0xef6c00, 1); bed.fillEllipse(px, 546, 20, 14); bed.fillStyle(0xffa726, 1); bed.fillRect(px - 1, 540, 2, 12); bed.fillStyle(0x33691e, 1); bed.fillRect(px - 1, 535, 3, 5); }
+                else { bed.fillStyle(0x558b2f, 1); bed.fillTriangle(px - 6, 554, px - 2, 534, px + 1, 554); bed.fillTriangle(px, 554, px + 4, 532, px + 7, 554); bed.fillStyle(0xff9800, 1); bed.fillRect(px - 3, 552, 7, 3); }
+            }
+        }
+        // Sabzi (tuproqdan faqat barglari ko'rinadi)
+        const top = scene.add.image(F.carrotX, 556, 'px_carrot_top').setOrigin(0.5, 1).setDepth(1.4);
+        scene.tweens.add({ targets: top, angle: { from: -4, to: 4 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+        const hint = scene.add.text(F.carrotX, 500, '[E]', {
+            fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(5).setVisible(false);
+        scene.tweens.add({ targets: hint, y: 494, duration: 400, yoyo: true, repeat: -1 });
+        farmObj = { top, hint, carrot: null };
+    }
+    // Sabzi sug'urildi: og'zidan qon oqayotgan yovuz sabzi, polizlar silkinadi
+    function pullCarrotAnim(scene, instant) {
+        if (carrotOut || !farmObj) return;
+        carrotOut = true;
+        const F = map.farm;
+        farmObj.top.setVisible(false);
+        farmObj.hint.setVisible(false);
+        const hole = scene.add.graphics().setDepth(1.35);
+        hole.fillStyle(0x0a0505, 1); hole.fillEllipse(F.carrotX, 557, 26, 8);
+        const c = scene.add.image(F.carrotX, 560, 'px_carrot_evil').setOrigin(0.5, 0.5).setDepth(3.2);
+        farmObj.carrot = c;
+        const restX = F.carrotX + 34, restY = 560;
+        if (instant) { c.setPosition(restX, restY).setAngle(-80); }
+        else {
+            c.setY(540);
+            scene.tweens.add({ targets: c, y: 470, angle: 200, duration: 450, ease: 'Quad.Out', onComplete: () => {
+                scene.tweens.add({ targets: c, x: restX, y: restY, angle: 280, duration: 380, ease: 'Bounce.Out' });
+            } });
+            scene.cameras.main.shake(1200, 0.01);
+            for (let k = 0; k < 10; k++) scene.time.delayedCall(k * 140, () => gDust(scene, F.carrotX + Phaser.Math.Between(-500, 500), 556, 4, 0x4e3220));
+        }
+        // Og'zidan tomchilab qon oqadi
+        scene.time.addEvent({ delay: 260, loop: true, callback: () => {
+            if (!c.active) return;
+            const d = scene.add.rectangle(c.x - 6 + Phaser.Math.Between(-2, 2), c.y - 2, 3, 4, 0xc62828).setDepth(3.15);
+            scene.tweens.add({ targets: d, y: 568, alpha: 0.4, duration: 420, onComplete: () => d.destroy() });
+        } });
+    }
+
     // ===== LIFT (Season 2, map-2) =====
     function liftGrid() {
         const W = 76, H = 12;
@@ -3831,7 +4063,7 @@ function launchGame(socket, roomId, mapData, continued) {
             platforms.add(plat);
             // Bozorda: devor/taxtalar o'z piksel rasmi bilan chiziladi; taxtalar bir tomonlama
             // (pastdan sakrab o'tib, ustiga qo'nish mumkin)
-            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower) {
+            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower || isFarm) {
                 plat.setVisible(false);
                 if (p.h <= 14) makeOneWay(plat);
             }
@@ -3990,6 +4222,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isUnderworld) buildUnderworldScene(this);
         if (isGFlower) buildGiantFlowerScene(this);
         if (isLift) buildLiftScene(this);
+        if (isFarm) buildFarmScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 3
@@ -4097,6 +4330,12 @@ function launchGame(socket, roomId, mapData, continued) {
             if (pauseMenuOpen) return;
             // 1) Dialog ochiq bo'lsa - keyingi gap
             if (dialog) { advanceDialog(); return; }
+            // 1a) Ferma: sabzi yonida - sug'urib olish
+            if (isFarm && farmState && farmState.state === 'idle' && currentCharacter && !currentCharacter.isDead &&
+                Math.abs(currentCharacter.x - map.farm.carrotX) <= map.farm.talkRange) {
+                socket.emit('pullCarrot', roomId);
+                return;
+            }
             // 1b) Lift: platforma ustida - hamma chiqqan bo'lsa ko'tariladi
             if (isLift && liftState && liftState.state === 'ready' && currentCharacter && !currentCharacter.isDead &&
                 Math.abs(currentCharacter.x - (map.lift.x + map.lift.w / 2)) <= map.lift.w / 2 + 6) {
@@ -4388,6 +4627,19 @@ function launchGame(socket, roomId, mapData, continued) {
         };
         // GIGANT GUL: jang boshlandi (yo'llar tikon bilan yopildi) / tishladi / yengildi
         // LIFT: yerdan chiqdi / hamma chiqmagan / ko'tarilish / cho'qqiga yetildi
+        // FERMA: sabzi sug'urildi (zombilar chiqa boshlaydi) / itxonadan robot it chiqdi
+        socket.off('carrotPulled');
+        socket.on('carrotPulled', () => {
+            if (dialog) closeDialog();
+            pullCarrotAnim(this, false);
+            arenaBanner(t('farm_banner'), '#8bc34a', t('farm_banner_sub'));
+        });
+        socket.off('farmDog');
+        socket.on('farmDog', () => {
+            if (!map.farm) return;
+            this.cameras.main.shake(300, 0.006);
+            gDust(this, map.farm.kennelX - 40, 566, 6, 0x6d4c41);
+        });
         socket.off('liftEmerge');
         socket.on('liftEmerge', () => {
             this.cameras.main.shake(900, 0.008);
@@ -4518,6 +4770,20 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             }
             checkpointReached = data.checkpointReached || [];
+
+            // FERMA: holat; suhbat (hammaga); sabzi sug'urilgan bo'lsa (kech qo'shilgan) - darhol
+            if (isFarm) {
+                farmState = data.farm || null;
+                if (farmState && farmState.state === 'talk' && !farmTalkShown && currentCharacter) {
+                    farmTalkShown = true;
+                    if (farmObj) farmObj.hint.setVisible(false);
+                    startDialog(this, [{ who: 'player', text: t('farm_d1') }], () => socket.emit('dialogDone', roomId));
+                }
+                if (farmState && (farmState.state === 'fight' || farmState.state === 'done') && !carrotOut) {
+                    if (dialog) closeDialog();
+                    pullCarrotAnim(this, true);
+                }
+            }
 
             // LIFT: holat; ko'tarilish boshlangan bo'lsa (kech qo'shilgan) - darhol
             if (isLift) {
@@ -5007,7 +5273,14 @@ function launchGame(socket, roomId, mapData, continued) {
             serverBots.forEach((bot) => {
                 if (!enemyBots[bot.id]) {
                     let b;
-                    if (bot.skin === 'sprout') {
+                    if (bot.skin === 'zombie') {
+                        // ZOMBI: 48x78 rasm, oyog'i server hitboxi tagiga (y+20) to'g'ri keladi
+                        ensureFarmTextures(this);
+                        b = this.physics.add.sprite(bot.x, bot.y, 'px_zombie_0').setDepth(3).setOrigin(0.5, 58 / 78);
+                        b.isZombie = true;
+                        b.animT = 0;
+                        b.animFrame = 0;
+                    } else if (bot.skin === 'sprout') {
                         // KICHKINA GUL: 54x72 rasm, oyog'i (tomirlari) server hitboxi tagiga (y+20) to'g'ri keladi
                         ensureGfTextures(this);
                         b = this.physics.add.sprite(bot.x, bot.y, 'px_sprout_0').setDepth(3).setOrigin(0.5, 52 / 72);
@@ -5033,6 +5306,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (b.isDog) { b.body.setSize(60, 44, false); b.body.setOffset(10, 16); }
                     if (b.isRobot) { b.body.setSize(32, 40, false); b.body.setOffset(26, 10); }
                     if (b.isSprout) { b.body.setSize(36, 44, false); b.body.setOffset(9, 28); }
+                    if (b.isZombie) { b.body.setSize(30, 40, false); b.body.setOffset(9, 38); }
                     b.emerge = bot.emerge || 0;
                     b.targetX = bot.x; b.targetY = bot.y; b.hp = bot.hp; b.maxHp = bot.maxHp;
                     b.isBlocking = bot.isBlocking; b.isAttacking = bot.isAttacking; b.facingLeft = bot.facingLeft;
@@ -5142,6 +5416,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isArena) return 'action';
         if (isGFlower) return gfState && gfState.state !== 'sleep' ? 'action' : 'calm';
         if (isLift) return liftState && liftState.state === 'rising' ? 'action' : 'calm';
+        if (isFarm) return farmState && farmState.state === 'fight' ? 'action' : 'calm';
         if (isUnderworld) {
             return Object.values(flowerSprites).some(f => f.state !== 'hidden' && f.state !== 'dead') ? 'action' : 'calm';
         }
@@ -5456,7 +5731,22 @@ function launchGame(socket, roomId, mapData, continued) {
             if (b && b.active && b.targetX !== undefined) {
                 b.x = Phaser.Math.Linear(b.x, b.targetX, 0.22);
                 b.y = Phaser.Math.Linear(b.y, b.targetY, 0.4);
-                if (b.isSprout) {
+                if (b.isZombie) {
+                    // Polizdan asta-sekin chiqib keladi: faqat yer ustidagi qismi ko'rinadi
+                    if (b.emerge > 0) {
+                        const frac = Phaser.Math.Clamp(1 - b.emerge / 43, 0.05, 1);
+                        b.y = b.targetY + 78 * (1 - frac);
+                        b.setCrop(0, 0, 48, 78 * frac);
+                        b.cropped = true;
+                        if (Math.random() < 0.25) gDust(this, b.x, 566, 1, 0x4e3220);
+                    } else if (b.cropped) { b.setCrop(); b.cropped = false; }
+                    b.setFlipX(!!b.facingLeft);
+                    const moving = Math.abs(b.targetX - b.x) > 0.4;
+                    b.animT += this.game.loop.delta;
+                    if (b.animT > 260) { b.animT = 0; b.animFrame = 1 - b.animFrame; }
+                    b.setTexture(b.isAttacking ? 'px_zombie_2' : moving ? 'px_zombie_' + b.animFrame : 'px_zombie_0');
+                    if (b.healthBar) b.healthBar.clear();   // bitta zarbada o'ladi - jon chizig'i kerak emas
+                } else if (b.isSprout) {
                     // Yerdan sug'urilib chiqmoqda: faqat yer ustidagi qismi ko'rinadi
                     if (b.emerge > 0) {
                         const frac = Phaser.Math.Clamp(1 - b.emerge / 30, 0.05, 1);
@@ -5472,7 +5762,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     b.setTexture(b.isAttacking ? 'px_sprout_2' : moving ? 'px_sprout_' + b.animFrame : 'px_sprout_0');
                     if (b.emerge <= 0) drawHealthBar(this, b, b.hp, b.maxHp); else if (b.healthBar) b.healthBar.clear();
                 } else drawHealthBar(this, b, b.hp, b.maxHp);
-                if (b.isSprout) {
+                if (b.isSprout || b.isZombie) {
                     // (yuqorida chizildi)
                 } else if (b.isDog) {
                     b.setFlipX(!!b.facingLeft);
@@ -5514,6 +5804,12 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (myApples >= need && !hudKey) {
                     hudKey = this.add.image(22, 134, 'px_key').setOrigin(0, 0.5).setScrollFactor(0).setDepth(1002);
                 }
+            } else if (isFarm) {
+                const st = farmState ? farmState.state : 'idle';
+                const near = Math.abs(currentCharacter.x - map.farm.carrotX) <= map.farm.talkRange;
+                progressText = st === 'idle' ? (near ? t('hud_farm_carrot') : t('hud_farm_go').replace('{m}', Math.max(0, Math.ceil(Math.abs(map.farm.carrotX - currentCharacter.x) / 50))))
+                    : st === 'fight' ? t('hud_farm_fight').replace('{k}', farmState.kills).replace('{n}', farmState.target) : '';
+                if (farmObj) farmObj.hint.setVisible(st === 'idle' && near && !dialog && !currentCharacter.isDead);
             } else if (isLift) {
                 const st = liftState ? liftState.state : 'hidden';
                 progressText = st === 'hidden' || st === 'emerge'

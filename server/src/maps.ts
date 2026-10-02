@@ -287,6 +287,26 @@ export interface LiftDef {
     nextBotMs: number;
 }
 
+// FERMA (Season 2, map-3): zombi poliz. Qahramon polizlar ustidan yurib, sabzi oldida E bosadi -
+// sabzini sug'urib oladi (og'zidan qon oqadi) va polizlardan asta-sekin zombilar chiqadi: avval 3 ta,
+// har o'ldirilganiga yerdan yana bittasi - jami killsPerPlayer x o'yinchilar o'ldirilguncha.
+// Zombi bitta zarbada o'ladi va tomlarga chiqa olmaydi. Itxona tomiga chiqqanga robot it hujum qiladi
+export interface FarmDef {
+    carrotX: number;
+    talkRange: number;
+    fieldX0: number;          // polizlar (zombilar shu oraliqdan chiqadi)
+    fieldX1: number;
+    killsPerPlayer: number;
+    aliveZombies: number;     // bir vaqtda (boshida) shuncha zombi
+    zombieDamage: number;
+    zombieEmergeMs: number;
+    kennelX: number;          // itxona (tomi - platforms[kennelRoof])
+    kennelRoof: number;
+    dogHp: number;
+    dogCooldownMs: number;
+    noSpawn: [number, number][]; // quduq, itxona - zombi chiqmaydigan joylar
+}
+
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
 // Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
@@ -310,7 +330,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
     accentColor: number;     // xaritaning o'ziga xos rangi (HUD/lobbida ko'rsatish uchun)
@@ -334,6 +354,7 @@ export interface MapDef {
     arena?: ArenaDef;           // Faqat Arena (bonus)
     giantFlower?: GiantFlowerDef; // Season 2, map-1
     lift?: LiftDef;             // Season 2, map-2
+    farm?: FarmDef;             // Season 2, map-3
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
@@ -809,6 +830,36 @@ export const MAPS: MapDef[] = [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 60 } // botlar platforma ustiga tushadi
+    },
+    {
+        id: 12,
+        name: "Farm",
+        description: "A quiet farm with strange vegetable beds. Just one carrot... what could go wrong?",
+        season: 2,
+        mode: 'farm',
+        killsToWin: 0,
+        xpReward: 25,
+        accentColor: 0x8bc34a,
+        groundColor: 0x3e2a1c,
+        mapWidth: 2800,
+        // Bir tomonlama: fermaning soyaboni (zanaveska), quduq (tosh halqa va tomi), itxona tomi
+        platforms: [
+            { x: 330, y: 468, w: 170, h: 12 },    // 0 ferma soyaboni
+            { x: 2115, y: 530, w: 70, h: 12 },    // 1 quduq tosh halqasi
+            { x: 2095, y: 440, w: 110, h: 12 },   // 2 quduq tomi
+            { x: 2355, y: 496, w: 90, h: 12 }     // 3 itxona tomi
+        ],
+        farm: {
+            carrotX: 1600, talkRange: 80,
+            fieldX0: 650, fieldX1: 2520,
+            killsPerPlayer: 15, aliveZombies: 3, zombieDamage: 12, zombieEmergeMs: 1300,
+            kennelX: 2400, kennelRoof: 3, dogHp: 200, dogCooldownMs: 6000,
+            noSpawn: [[2060, 2240], [2330, 2470]]
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // zombilar polizdan chiqadi
     }
 ];
 

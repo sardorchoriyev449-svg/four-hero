@@ -52,7 +52,7 @@ export interface PlayerState {
 
 export interface BotState {
     elite?: boolean;               // Arena: "Robot otryadi" bossining kuchli roboti
-    skin?: 'sprout';               // Gigant gul xaritasi: kichkina gul (it AI'si bilan, o'z rasmi)
+    skin?: 'sprout' | 'zombie';    // 'sprout' - Gigant gul xaritasi (it AI'si); 'zombie' - ferma (sekin, faqat yerda, 1 zarbada o'ladi)
     emerge?: number;               // yerdan sug'urilib chiqish (tik) - shu vaqtda harakatlanmaydi
     id: string;
     x: number;
@@ -293,6 +293,7 @@ export interface RoomState {
     acidCounter?: number;
     flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
     gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
+    farm?: { state: 'idle' | 'talk' | 'fight' | 'done', timer: number, tick: number, kills: number, target: number, spawned: number, nextSpawnTick: number, lastDogTick: number } | null;
     lift?: { state: 'hidden' | 'emerge' | 'ready' | 'rising' | 'arrived' | 'done', y: number, t: number, spawned: number, nextBotTick: number } | null;
     gfThorns?: { id: string, x: number, y: number, vx: number, vy: number }[];
     gfRoots?: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: string[] }[];

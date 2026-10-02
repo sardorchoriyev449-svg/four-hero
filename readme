@@ -1,5 +1,4 @@
-underworld bita kata shaxar va daraxt uylar juda kata bo'lishi kerak mavjudotlar bir biribilan gaplashganday tutsin, 
-va trolar xam yurishsin qo'ziqorindan uylar yerda bo'ladi ular xam kata bo'lsin svet fonariklar bo'lsin stolblar bo'lsin kata joy bo'lsin xulas odam bu o'yini ko'rganda xis qilishi kerak aynan sexirliy fantasiya shaxarga keganini,
-season-2 map-2:
-15 metr yuradi va yo'lidan platforma chiqadi u nimaga kerak u tepaga toqa chiqish uchun kerak va u kata bo'lsin 6 kishi sigayatgan platforma, "E" bosa tepaga qarab birga o'yinchilarbilan chiqadi barcha o'yinchi bo'lsa chiqish mumkin bo'lsin va bostlikda chuqur yama bo'ladi,
-platformada tepaga chiqish uchunxam yo'l bor va tepaga chiquncha ularga yovuz qizil botlar xujum qilsin manzil toq chiquncha bita botni o'ldirsa yana bot tushsin jami uchta bot bo'ladi va platforma tepaga chiqgach map-2 o'tiladi
+```text
+    map-3: Ferma, // zombie poliz ekinlar, polizlar ustidan yuryatgan 30 metr payt sabzi ustud 'E' chiqadi va dialog chiqadi: player:'menimcha bita sabzini olsam xechkim sezmaydi', sabsini oladi uni esa ogzidan qon oqyabti va polizlar asta asta chiqib boshlaydi 3 ta zombie chiqadi xar bita kill ga yerdan 1 ta zombie chiqadi 15xPlayer o'yinchilariga qarab ta kill bo'lgunicha,
+    orqa tomonda ferma va Saray, Kalodis tepasiga tomiga chiqsa bo'ladi va kuchuk uychasi bo'ladi u yerda xam kuchuk uyini tomiga chiqsa bo'ladi va agar kuchuk tomiga chiqsa robot kuchuk chiqadi va atack qiladi va fermani zanaveskasibor va unga xam chiqsa bo'ladi zombi bita zarbada o'ladi itlarni joni oldingi itlarga qaraganda joni qatiqroq
+```

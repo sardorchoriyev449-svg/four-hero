@@ -258,6 +258,9 @@ export class GameEngine {
             // 4k. LIFT (Season 2, map-2)
             this.updateLift(room, roomId);
 
+            // 4l. FERMA (Season 2, map-3)
+            this.updateFarm(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -306,6 +309,7 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                farm: room.farm ? { state: room.farm.state, kills: room.farm.kills, target: room.farm.target } : null,
                 lift: room.lift ? { state: room.lift.state, y: Math.round(room.lift.y), progress: this.liftProgress(room) } : null,
                 gfThorns: room.gfThorns || [],
                 gfRoots: (room.gfRoots || []).map(r => ({ id: r.id, x: r.x, y: r.y, phase: r.phase })),
@@ -498,7 +502,7 @@ export class GameEngine {
     private moveToward(bot: BotState, x: number, surfaces: Surface[]): void {
         const dx = x - bot.x;
         if (Math.abs(dx) < 1) return;
-        const speed = bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 3.7)
+        const speed = bot.skin === 'zombie' ? 2.6 : bot.skin === 'sprout' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : 3.7)
             : bot.kind === 'dog' ? ((bot.slowTicks || 0) > 0 ? this.DOG_SLOW_SPEED : this.DOG_SPEED) : this.BOT_SPEED;
         const newX = bot.x + Math.sign(dx) * Math.min(speed, Math.abs(dx));
         if (!this.blockedAt(surfaces, newX, bot)) bot.x = newX;
@@ -535,9 +539,12 @@ export class GameEngine {
     }
 
     private updateBots(room: RoomState): void {
-        const surfaces = this.getMapSurfaces(room);
+        const allSurfaces = this.getMapSurfaces(room);
+        const groundOnly = [allSurfaces[0]];
 
         room.bots.forEach((bot) => {
+            // Zombi platformalarni "bilmaydi" - faqat yerda yuradi, tepadagini pastda kutadi
+            const surfaces = bot.skin === 'zombie' ? groundOnly : allSurfaces;
             // Qalqon holati taymerini kamaytirish (block tugasa avtomatik tushiriladi)
             if (bot.isBlocking) {
                 bot.blockTimer--;
@@ -736,7 +743,7 @@ export class GameEngine {
                     // bot ba'zan (har safar emas) o'zi ham sakrab, yo'lini to'sadi.
                     // Har bir sakrashga faqat bir marta "qaror qiladi"
                     const overhead = targetAirborne && pAsBotY < bot.y - 15 && Math.abs(p.x - bot.x) < 90;
-                    if (overhead && !bot.jumpReacted) {
+                    if (overhead && !bot.jumpReacted && bot.skin !== 'zombie') {
                         bot.jumpReacted = true;
                         if (Math.random() < this.BOT_INTERCEPT_CHANCE) {
                             this.jump(bot, bot.y - pAsBotY, p.x);
@@ -759,6 +766,7 @@ export class GameEngine {
                     const shielded = p.characterType === 'knight' && p.isHoldingAbility;
                     if (inReach && !shielded) {
                         p.hp -= bot.skin === 'sprout' ? (getMapById(room.selectedLevel).giantFlower?.sproutBiteDamage ?? 12)
+                            : bot.skin === 'zombie' ? (getMapById(room.selectedLevel).farm?.zombieDamage ?? 12)
                             : isDog ? this.DOG_ATTACK_DAMAGE : this.BOT_ATTACK_DAMAGE;
                         // O'YINCHI O'LDI: butun raund davomida arvoh holatiga o'tadi
                         if (p.hp <= 0 && !p.isDead) {
@@ -786,7 +794,7 @@ export class GameEngine {
             // yaqin atrofdagi bot "oldindan sezgandek" MA'LUM EHTIMOLLIK bilan
             // qalqon ko'taradi - har safar emas. Uzoqdagi bot javob bermaydi
             const inThreatRange = Math.abs(p.x - bot.x) < this.BOT_REACT_RANGE;
-            if (!isDog && !bot.isBlocking && inThreatRange) {
+            if (!isDog && !bot.isBlocking && inThreatRange && bot.skin !== 'zombie') {
                 const justAttacked = room.bullets.some(b => b.playerId === p.id && b.justSpawned);
                 if (justAttacked && Math.random() < this.BOT_REACTIVE_BLOCK_CHANCE) {
                     bot.isBlocking = true;
@@ -797,10 +805,10 @@ export class GameEngine {
 
         // BOTLAR BIR-BIRINING ICHIGA KIRIB KETMASLIGI UCHUN
         // (ular orasidagi to'qnashuvni tekshirib, kerak bo'lsa ajratib qo'yamiz)
-        if (!room.arena) this.resolveBotCollisions(room);
+        if (!room.arena && !room.farm) this.resolveBotCollisions(room);
 
         // Itarish natijasida bot xaritadan tashqariga chiqib ketmasin
-        const mapWidth = surfaces[0].xEnd;
+        const mapWidth = allSurfaces[0].xEnd;
         room.bots.forEach(bot => {
             bot.x = Math.max(this.BOT_HALF_W, Math.min(mapWidth - this.BOT_HALF_W, bot.x));
         });
@@ -1048,6 +1056,7 @@ export class GameEngine {
 
     // Bot o'ldi: ro'yxatdan o'chiriladi, jamoa hisobi va o'ldirganning statistikasi
     private killBot(room: RoomState, index: number, killerId: string | null): void {
+        const dead = room.bots[index];
         room.bots.splice(index, 1);
         // Jamoaviy hisob: xarita botlarning HAMMASI o'lganda o'tiladi
         // (checkBotRespawn'da tekshiriladi), shaxsiy kill - statistika uchun
@@ -1059,6 +1068,10 @@ export class GameEngine {
         if (killer && !room.isOver) {
             this.roomManager.awardReward(room.id, killer.id, ar ? ar.botCoins : 0, ar ? ar.botXp : GameEngine.KILL_XP)
                 .catch(err => console.error('awardReward xatosi:', err));
+        }
+        if (dead.skin === 'zombie' && room.farm && room.farm.state === 'fight') {
+            room.farm.kills++;
+            if (room.farm.spawned < room.farm.target) room.farm.nextSpawnTick = room.farm.tick;   // yerdan yana bittasi
         }
         if (ar && room.arena && !room.isOver) {
             room.arena.kills++;
@@ -1503,6 +1516,8 @@ export class GameEngine {
         room.gfThorns = [];
         room.gfRoots = [];
         room.gfCounter = 0;
+        room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
+            spawned: 0, nextSpawnTick: 0, lastDogTick: -100000 } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
         if (map.arena) {
             room.gorilla = null;
@@ -1834,6 +1849,81 @@ export class GameEngine {
             bot.id += '_' + A.tick;
             room.bots.push(bot);
             A.nextSpawnTick = A.tick + Math.round(ar.spawnIntervalMs / 30);
+        }
+    }
+
+    // ===== FERMA =====
+    // E: sabzi yonida - suhbat (hammaga), o'qib bo'lingach sabzi sug'uriladi va zombilar chiqa boshlaydi
+    public pullCarrot(room: RoomState, playerId: string): void {
+        const F = getMapById(room.selectedLevel).farm;
+        const p = room.players[playerId];
+        if (!F || !room.farm || room.farm.state !== 'idle' || !p || p.isDead || room.isOver) return;
+        if (Math.abs(p.x - F.carrotX) > F.talkRange) return;
+        room.farm.state = 'talk';
+        room.farm.timer = Math.round(15000 / 30);
+        Object.values(room.players).forEach(x => { x.introDone = false; });
+    }
+    private spawnZombie(room: RoomState, F: NonNullable<MapDef['farm']>): void {
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        const near = alive[Math.floor(Math.random() * alive.length)];
+        let x = F.carrotX;
+        for (let tries = 0; tries < 20; tries++) {
+            const base = near ? near.x : F.carrotX;
+            x = base + (Math.random() < 0.5 ? -1 : 1) * (160 + Math.random() * 280);
+            if (x < F.fieldX0 || x > F.fieldX1) continue;
+            if (F.noSpawn.some(([a, b]) => x >= a && x <= b)) continue;
+            if (alive.every(p => Math.abs(p.x - x) > 120)) break;
+        }
+        x = Math.max(F.fieldX0, Math.min(F.fieldX1, x));
+        const bot = GameEngine.createBots(room.id, [{ x, y: this.GROUND_Y }], 'robot', 1)[0];
+        bot.id += '_z' + room.farm!.spawned;
+        bot.skin = 'zombie';
+        bot.emerge = Math.round(F.zombieEmergeMs / 30);
+        room.bots.push(bot);
+        room.farm!.spawned++;
+    }
+    private updateFarm(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const F = map.farm, farm = room.farm;
+        if (!F || !farm || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        farm.tick++;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        // Itxona tomiga chiqqanga robot it hujum qiladi (oldingi itlardan qattiqroq)
+        const roof = map.platforms[F.kennelRoof];
+        const onRoof = alive.some(p => p.x >= roof.x - 6 && p.x <= roof.x + roof.w + 6 && Math.abs(p.y + this.PLAYER_HALF_H - roof.y) <= 10);
+        if (onRoof && !room.bots.some(b => b.kind === 'dog') && farm.tick - farm.lastDogTick >= T(F.dogCooldownMs) && farm.state !== 'done') {
+            const dog = GameEngine.createBots(room.id, [{ x: F.kennelX - 50, y: this.GROUND_Y }], 'dog', F.dogHp)[0];
+            dog.id += '_dog' + farm.tick;
+            room.bots.push(dog);
+            farm.lastDogTick = farm.tick;
+            this.io.to(roomId).emit('farmDog');
+        }
+        if (farm.state === 'talk') {
+            if (--farm.timer <= 0 || alive.every(p => p.introDone)) {
+                farm.state = 'fight';
+                farm.nextSpawnTick = farm.tick + T(1200);
+                this.io.to(roomId).emit('carrotPulled');
+            }
+            return;
+        }
+        if (farm.state === 'fight') {
+            // Boshida 3 ta zombi asta-sekin (birin-ketin) chiqadi; keyin har o'ldirilganiga - bittadan
+            const zombies = room.bots.filter(b => b.skin === 'zombie').length;
+            if (farm.spawned < farm.target && zombies < F.aliveZombies && farm.tick >= farm.nextSpawnTick) {
+                this.spawnZombie(room, F);
+                farm.nextSpawnTick = farm.tick + T(900);
+            }
+            if (farm.kills >= farm.target) {
+                farm.state = 'done';
+                farm.timer = T(1500);
+                room.bots = room.bots.filter(b => b.skin !== 'zombie');
+            }
+            return;
+        }
+        if (farm.state === 'done' && farm.timer > 0 && --farm.timer <= 0) {
+            room.bots = [];
+            this.roomManager.declareWinner(roomId, this.topKillerId(room)).catch(err => console.error('declareWinner xatosi:', err));
         }
     }
 
