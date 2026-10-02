@@ -264,6 +264,9 @@ export class GameEngine {
             // 4m. KALMAR (Season 2, map-4)
             this.updateSquid(room, roomId);
 
+            // 4n. SARIQ ESHIK (Season 2, map-5)
+            this.updateDoors(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -312,6 +315,13 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                doors: room.doors ? {
+                    state: room.doors.state, choice: room.doors.choice, segment: room.doors.segment, sub: room.doors.sub,
+                    wave: room.doors.wave ? { safe: room.doors.wave.safe, phase: room.doors.wave.phase } : null,
+                    monster: room.doors.monster ? { x: Math.round(room.doors.monster.x), y: Math.round(room.doors.monster.y), pose: room.doors.monster.pose,
+                        facing: room.doors.monster.facing, hp: room.doors.monster.hp, maxHp: room.doors.monster.maxHp, hitFlash: room.doors.monster.hitFlash } : null,
+                    bombs: room.doors.bombs.filter(b => b.alive).map(b => ({ id: b.id, x: b.x, y: b.y }))
+                } : null,
                 squid: room.squid ? { state: room.squid.state, hp: room.squid.hp, maxHp: room.squid.maxHp, x: Math.round(room.squid.x), eyeY: Math.round(room.squid.eyeY),
                     hitFlash: room.squid.hitFlash, slam: room.squid.slam ? { plat: room.squid.slam.plat, phase: room.squid.slam.phase, x0: room.squid.slam.x0, x1: room.squid.slam.x1, y: room.squid.slam.y } : null,
                     geysers: room.squid.geysers.map(g => ({ id: g.id, x: g.x, topY: g.topY, phase: g.phase })),
@@ -945,6 +955,17 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
+            // SARIQ ESHIK ichkarisi: bombaga tegsa - portlaydi; OQ YUZga oddiy o'q/zarba ta'sir qilmaydi
+            const dr = room.doors;
+            const dd = map.doors;
+            if (!bulletDestroyed && dr && dd && dr.state === 'room') {
+                const bomb = dr.bombs.find(b => b.alive && this.checkOverlap(hitRect, { x: b.x - 15, y: b.y - 30, w: 30, h: 30 }));
+                if (bomb) { bulletDestroyed = true; this.explodeDoorBomb(room, dd, bomb); }
+                const mo = dr.monster;
+                if (!bulletDestroyed && mo && (dr.sub === 'fight' || dr.sub === 'exit') &&
+                    this.checkOverlap(hitRect, { x: mo.x - 60, y: mo.y - 95, w: 120, h: 95 })) bulletDestroyed = true;
+            }
+
             // KALMAR: faqat QIZIL KO'ZI zarar oladi
             const sq = room.squid;
             const sqd = map.squid;
@@ -1542,6 +1563,8 @@ export class GameEngine {
         const sqHp = sqd ? sqd.hpPerPlayer * Math.max(1, Object.keys(room.players).length) : 0;
         room.squid = sqd ? { state: 'sleep', hp: sqHp, maxHp: sqHp, timer: 0, tick: 0, x: sqd.baseX, eyeY: 700, hitFlash: 0, lastHitBy: null,
             slam: null, geysers: [], fish: [], splashX: null, nextSlam: 0, nextGeyser: 0, nextFish: 0, counter: 0 } : null;
+        room.doors = map.doors ? { state: 'walk', choice: null, timer: 0, tick: 0, segment: 0, wave: null, lastSafe: -1, nextWave: 0, lastPlat: {},
+            sub: null, monster: null, bombs: map.doors.bombs.map((b, i) => ({ id: 'bomb_' + i, x: b.x, y: b.y, alive: true, respawn: 0 })) } : null;
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
@@ -1876,6 +1899,259 @@ export class GameEngine {
             room.bots.push(bot);
             A.nextSpawnTick = A.tick + Math.round(ar.spawnIntervalMs / 30);
         }
+    }
+
+    // ===== SARIQ ESHIK =====
+    public doorChoice(room: RoomState, playerId: string, choice: 'enter' | 'no'): void {
+        const dr = room.doors, d = getMapById(room.selectedLevel).doors;
+        if (!dr || !d || dr.state !== 'choose' || room.isOver) return;
+        dr.choice = choice;
+        dr.state = 'free';
+        this.io.to(room.id).emit('doorsChosen', { choice, by: room.players[playerId]?.nickname || '' });
+        // "Respect": kirishni tanlaganda - har kimga (akkauntga bir marta) +200 XP
+        if (choice === 'enter') Object.values(room.players).forEach(p => {
+            this.roomManager.grantAchievement(room.id, p.id, 'respect', d.respectXp).catch(err => console.error('grantAchievement xatosi:', err));
+        });
+    }
+    // E: sariq eshik oldida - ichkariga (hamma birga); ichkarida richag oldida - tortadi
+    public doorsInteract(room: RoomState, playerId: string): void {
+        const dr = room.doors, d = getMapById(room.selectedLevel).doors;
+        const p = room.players[playerId];
+        if (!dr || !d || !p || p.isDead || room.isOver) return;
+        if (dr.state === 'free' && Math.abs(p.x - d.yellowX) <= 50 && p.y + this.PLAYER_HALF_H >= 560) {
+            dr.state = 'room';
+            dr.sub = 'elf';
+            dr.timer = Math.round(40000 / 30);
+            let slot = 0;
+            Object.values(room.players).forEach(pl => {
+                pl.introDone = false;
+                pl.x = d.roomEntryX + (slot++) * 32; pl.y = 546;
+                this.io.to(pl.id).emit('teleport', { x: pl.x, y: pl.y });
+            });
+            this.io.to(room.id).emit('doorsEnter');
+            return;
+        }
+        if (dr.state === 'room' && dr.sub === 'lever' && Math.abs(p.x - d.leverX) <= 50) {
+            dr.sub = 'drop';
+            const players = Math.max(1, Object.keys(room.players).length);
+            const hp = d.monsterHpBase + d.monsterHpPerExtra * (players - 1);
+            dr.monster = { x: d.elfX, y: -160, vy: 0, pose: 'drop', facing: -1, hp, maxHp: hp, climbTo: null, cd: 0, attackT: 0, hitFlash: 0 };
+            this.io.to(room.id).emit('leverPulled');
+        }
+    }
+    private explodeDoorBomb(room: RoomState, d: NonNullable<MapDef['doors']>, bomb: { id: string, x: number, y: number, alive: boolean, respawn: number }): void {
+        const dr = room.doors!;
+        bomb.alive = false;
+        bomb.respawn = dr.tick + Math.round(d.bombRespawnMs / 30);
+        this.io.to(room.id).emit('doorBomb', { x: bomb.x, y: bomb.y - 14 });
+        const mo = dr.monster;
+        if (mo && (dr.sub === 'fight' || dr.sub === 'exit') && Math.hypot(mo.x - bomb.x, (mo.y - 45) - (bomb.y - 14)) <= d.bombRadius) {
+            mo.hp = Math.max(1, mo.hp - d.bombDamage);   // o'lmaydi - joni ozgina qolganda chiqish ochiladi
+            mo.hitFlash = 5;
+            if (dr.sub === 'fight' && mo.hp <= mo.maxHp * d.exitAtPct) { dr.sub = 'exit'; this.io.to(room.id).emit('doorsExit'); }
+        }
+        Object.values(room.players).forEach(p => {
+            if (!p.isDead && Math.hypot(p.x - bomb.x, p.y - (bomb.y - 14)) <= d.bombRadius * 0.7) this.hurtPlayer(p, d.bombPlayerDamage);
+        });
+    }
+    private updateDoors(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const d = map.doors, dr = room.doors;
+        if (!d || !dr || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        dr.tick++;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        const allRead = () => alive.every(p => p.introDone);
+        if (dr.state === 'walk') {
+            if (!alive.some(p => p.x >= d.triggerX)) return;
+            dr.state = 'talk';
+            dr.timer = T(40000);
+            Object.values(room.players).forEach(p => { p.introDone = false; });
+            this.io.to(roomId).emit('doorsAppear');
+            return;
+        }
+        if (dr.state === 'talk') {
+            if (--dr.timer <= 0 || allRead()) { dr.state = 'choose'; dr.timer = T(30000); this.io.to(roomId).emit('doorsChoose'); }
+            return;
+        }
+        if (dr.state === 'choose') {
+            if (--dr.timer <= 0) this.doorChoice(room, Object.keys(room.players)[0], 'no');
+            return;
+        }
+        if (dr.state === 'free') {
+            // "Yo'q" tanlanganda - troll aytgan yo'l: birinchi platformaga chiqqanda tepaga chiqish boshlanadi
+            const p0 = map.platforms[d.climbPlats[0]];
+            if (dr.choice === 'no' && alive.some(p => p.x >= p0.x - 6 && p.x <= p0.x + p0.w + 6 && Math.abs(p.y + this.PLAYER_HALF_H - p0.y) <= 10)) {
+                dr.state = 'climb';
+                dr.segment = 0;
+                dr.nextWave = dr.tick + T(800);
+                this.io.to(roomId).emit('climbStart');
+            }
+            return;
+        }
+        if (dr.state === 'climb') { this.updateClimb(room, roomId, map, d, dr, alive); return; }
+        if (dr.state === 'room') this.updateRoom(room, roomId, map, d, dr, alive);
+    }
+    private platOfPlayer(map: MapDef, idxs: number[], p: PlayerState): number {
+        const feet = p.y + this.PLAYER_HALF_H;
+        for (const i of idxs) {
+            const pl = map.platforms[i];
+            if (p.x >= pl.x - 6 && p.x <= pl.x + pl.w + 6 && Math.abs(feet - pl.y) <= 10) return i;
+        }
+        return -1;
+    }
+    private updateClimb(room: RoomState, roomId: string, map: MapDef, d: NonNullable<MapDef['doors']>, dr: NonNullable<RoomState['doors']>, alive: PlayerState[]): void {
+        const T = (ms: number) => Math.round(ms / 30);
+        const top = d.climbPlats[d.climbPlats.length - 1];
+        // Eng tepa platformaga yetildi - 25 m o'tildi
+        const atTop = alive.find(p => this.platOfPlayer(map, [top], p) === top);
+        if (atTop) {
+            dr.segment++;
+            dr.wave = null;
+            dr.lastPlat = {};
+            if (dr.segment >= d.segments) {
+                dr.state = 'done';
+                this.roomManager.declareWinner(roomId, atTop.id).catch(err => console.error('declareWinner xatosi:', err));
+                return;
+            }
+            let slot = 0;
+            Object.values(room.players).forEach(p => {
+                p.x = d.climbStartX + (slot++) * 30; p.y = 546;
+                this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+            });
+            dr.nextWave = dr.tick + T(1200);
+            this.io.to(roomId).emit('climbSegment', { segment: dr.segment });
+            return;
+        }
+        // Yangi platformaga chiqqanda (yoki har 2 s da) - yer silkinadi, 4 tadan 3 tasiga tosh tushadi
+        let landed = false;
+        alive.forEach(p => {
+            const i = this.platOfPlayer(map, d.climbPlats, p);
+            if (i >= 0 && dr.lastPlat[p.id] !== i) landed = true;
+            if (i >= 0) dr.lastPlat[p.id] = i;
+        });
+        if (!dr.wave && (dr.tick >= dr.nextWave || (landed && dr.tick >= dr.nextWave - T(1500)))) {
+            let safe = Math.floor(Math.random() * d.climbPlats.length);
+            if (safe === dr.lastSafe) safe = (safe + 1 + Math.floor(Math.random() * (d.climbPlats.length - 1))) % d.climbPlats.length;
+            dr.lastSafe = safe;
+            dr.wave = { safe, phase: 'warn', t: T(d.rockWarnMs) };
+            this.io.to(roomId).emit('climbQuake');
+        }
+        if (dr.wave) {
+            const w = dr.wave;
+            if (--w.t > 0) return;
+            if (w.phase === 'warn') {
+                w.phase = 'fall';
+                w.t = T(350);
+                d.climbPlats.forEach((pi, k) => {
+                    if (k === w.safe) return;
+                    const pl = map.platforms[pi];
+                    alive.forEach(p => {
+                        const feet = p.y + this.PLAYER_HALF_H;
+                        if (p.x < pl.x - 8 || p.x > pl.x + pl.w + 8 || feet > pl.y + 10 || feet < pl.y - 150) return;
+                        this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.rockDamagePct));
+                        this.knockback(p, 0, 200);
+                    });
+                });
+                this.io.to(roomId).emit('climbRocks', { safe: w.safe });
+            } else {
+                dr.wave = null;
+                dr.nextWave = dr.tick + T(d.rockEveryMs);
+            }
+        }
+    }
+    private updateRoom(room: RoomState, roomId: string, map: MapDef, d: NonNullable<MapDef['doors']>, dr: NonNullable<RoomState['doors']>, alive: PlayerState[]): void {
+        const T = (ms: number) => Math.round(ms / 30);
+        dr.bombs.forEach(b => { if (!b.alive && dr.tick >= b.respawn) b.alive = true; });
+        if (dr.sub === 'elf') {
+            if (--dr.timer <= 0 || alive.every(p => p.introDone)) dr.sub = 'lever';
+            return;
+        }
+        const mo = dr.monster;
+        if (!mo) return;
+        if (mo.hitFlash > 0) mo.hitFlash--;
+        if (dr.sub === 'drop') {
+            // Tepadan tushadi: avval malikani bosib (qon), keyin yerga
+            const before = mo.y;
+            mo.vy = Math.min(900, mo.vy + 900 * this.TICK_SECONDS);
+            mo.y += mo.vy * this.TICK_SECONDS;
+            if (before < d.elfY + 60 && mo.y >= d.elfY + 60) this.io.to(roomId).emit('elfCrushed', { x: d.elfX, y: d.elfY });
+            if (mo.y >= 570) {
+                mo.y = 570; mo.vy = 0; mo.pose = 'crawl';
+                dr.sub = 'shock';
+                dr.timer = T(6000);
+                Object.values(room.players).forEach(p => { p.introDone = false; });
+                this.io.to(roomId).emit('monsterLanded');
+            }
+            return;
+        }
+        if (dr.sub === 'shock') {
+            if (--dr.timer <= 0 || alive.every(p => p.introDone)) { dr.sub = 'fight'; mo.cd = T(800); }
+            return;
+        }
+        // CHIQISH: yorug'likka yetgan qahramon bilan xarita o'tiladi
+        if (dr.sub === 'exit') {
+            const out = alive.find(p => p.x >= d.exitX && p.y + this.PLAYER_HALF_H >= 560);
+            if (out) {
+                dr.state = 'done';
+                this.roomManager.declareWinner(roomId, out.id).catch(err => console.error('declareWinner xatosi:', err));
+                return;
+            }
+        }
+        // OQ YUZ: eng yaqin qahramon ortidan - yerda emaklaydi, platformaga devor kabi tik o'rmalab chiqadi
+        const target = alive.slice().sort((a, b) => Math.hypot(a.x - mo.x, a.y - mo.y) - Math.hypot(b.x - mo.x, b.y - mo.y))[0];
+        if (mo.cd > 0) mo.cd--;
+        if (mo.attackT > 0) mo.attackT--;
+        if (!target) return;
+        const plats = d.roomPlats.map(i => map.platforms[i]);
+        const surfAt = (x: number, feet: number) => {
+            let best = 570;
+            plats.forEach(pl => { if (x >= pl.x && x <= pl.x + pl.w && pl.y >= feet - 12 && pl.y < best) best = pl.y; });
+            return best;
+        };
+        const tY = surfAt(target.x, target.y + this.PLAYER_HALF_H);
+        if (mo.climbTo !== null) {
+            mo.pose = 'climb';
+            mo.y = Math.max(mo.climbTo, mo.y - d.monsterClimb);
+            if (mo.y <= mo.climbTo) { mo.y = mo.climbTo; mo.climbTo = null; mo.pose = 'crawl'; }
+        } else {
+            const here = surfAt(mo.x, mo.y);
+            if (mo.y < here - 1) {
+                // Platformadan tushib ketdi - pastga yiqiladi
+                mo.vy = Math.min(800, mo.vy + 900 * this.TICK_SECONDS);
+                mo.y = Math.min(here, mo.y + mo.vy * this.TICK_SECONDS);
+                if (mo.y >= here) mo.vy = 0;
+            } else if (tY < mo.y - 4) {
+                // Nishon tepada: uning platformasi tagiga borib, tik o'rmalab chiqadi
+                const pl = plats.find(q => q.y === tY && target.x >= q.x - 10 && target.x <= q.x + q.w + 10) || plats.find(q => q.y === tY)!;
+                const gx = Math.max(pl.x + 14, Math.min(pl.x + pl.w - 14, mo.x));
+                if (Math.abs(gx - mo.x) <= d.monsterSpeed) { mo.x = gx; mo.climbTo = pl.y; }
+                else { mo.facing = gx > mo.x ? 1 : -1; mo.x += mo.facing * d.monsterSpeed; }
+                mo.pose = mo.climbTo !== null ? 'climb' : 'crawl';
+            } else {
+                // Bir sirtda yoki nishon pastda: unga qarab emaklaydi (platforma chetidan tushib ketadi)
+                const dx = target.x - mo.x;
+                mo.facing = dx >= 0 ? 1 : -1;
+                if (Math.abs(dx) > 40) {
+                    mo.x += mo.facing * d.monsterSpeed;
+                    const after = surfAt(mo.x, mo.y);
+                    if (after > mo.y + 1 && tY <= mo.y - 4) mo.x -= mo.facing * d.monsterSpeed; // nishon tepada - chetdan tushmaydi
+                }
+                mo.pose = mo.attackT > 0 ? 'attack' : 'crawl';
+            }
+        }
+        mo.x = Math.max(d.roomX0 + 60, Math.min(d.roomX1 - 50, mo.x));
+        // Tegib ketsa - zarar va itarish
+        alive.forEach(p => {
+            if (mo.cd > 0) return;
+            if (Math.abs(p.x - mo.x) <= 70 && Math.abs((p.y + this.PLAYER_HALF_H) - mo.y) <= 60) {
+                this.hurtPlayer(p, d.monsterDamage);
+                this.knockback(p, (p.x < mo.x ? -1 : 1) * 380, -260);
+                mo.cd = T(1200);
+                mo.attackT = T(350);
+                this.io.to(roomId).emit('monsterHit', { x: Math.round(mo.x) });
+            }
+        });
     }
 
     // ===== KALMAR =====

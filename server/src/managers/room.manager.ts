@@ -774,6 +774,7 @@ export class RoomManager {
             lift: map.lift || null,
             farm: map.farm || null,
             squid: map.squid || null,
+            doors: map.doors || null,
             season: map.season || 1,
             groundColor: map.groundColor,
             accentColor: map.accentColor
@@ -897,6 +898,22 @@ export class RoomManager {
     }
 
     // O'LDIRISH / BOSS MUKOFOTI: o'yinchiga tanga va XP (hisobi bo'lsa - bazaga ham)
+    // Bir martalik yutuq: akkauntda (mehmon - shu o'yin davomida) birinchi marta bo'lsa - XP va yutuq oynasi
+    public async grantAchievement(roomId: string, playerId: string, key: string, xp: number): Promise<void> {
+        const player = this.activeRooms[roomId]?.players[playerId];
+        if (!player) return;
+        let fresh: boolean;
+        if (player.userId !== null) fresh = await db.grantAchievement(player.userId, key);
+        else {
+            const got = (player as any).achievements || ((player as any).achievements = []);
+            fresh = !got.includes(key);
+            if (fresh) got.push(key);
+        }
+        if (!fresh) return;
+        this.io.to(playerId).emit('achievement', { key, xp });
+        await this.awardReward(roomId, playerId, 0, xp);
+    }
+
     public async awardReward(roomId: string, playerId: string, coins: number, xp: number): Promise<void> {
         const player = this.activeRooms[roomId]?.players[playerId];
         if (!player) return;

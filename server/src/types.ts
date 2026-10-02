@@ -296,6 +296,7 @@ export interface RoomState {
     flowers?: FlowerState[];        // UnderWorld: og'zibor gullar
     gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
     squid?: SquidState | null;
+    doors?: DoorsState | null;
     farm?: { state: 'idle' | 'talk' | 'fight' | 'done', timer: number, tick: number, kills: number, target: number, spawned: number, nextSpawnTick: number, lastDogTick: number,
         rooted: Record<string, number>, rootCd: Record<string, number> } | null;
     lift?: { state: 'hidden' | 'emerge' | 'ready' | 'rising' | 'arrived' | 'done', y: number, t: number, spawned: number, nextBotTick: number } | null;
@@ -369,4 +370,22 @@ export interface SquidState {
     nextGeyser: number;
     nextFish: number;
     counter: number;
+}
+
+export interface DoorsState {
+    state: 'walk' | 'talk' | 'choose' | 'free' | 'climb' | 'room' | 'done';
+    choice: 'enter' | 'no' | null;
+    timer: number;
+    tick: number;
+    // Tepaga chiqish
+    segment: number;
+    wave: { safe: number, phase: 'warn' | 'fall', t: number } | null;
+    lastSafe: number;
+    nextWave: number;
+    lastPlat: Record<string, number>;
+    // Ichkari
+    sub: 'elf' | 'lever' | 'drop' | 'shock' | 'fight' | 'exit' | null;
+    monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop', facing: 1 | -1, hp: number, maxHp: number,
+        climbTo: number | null, cd: number, attackT: number, hitFlash: number } | null;
+    bombs: { id: string, x: number, y: number, alive: boolean, respawn: number }[];
 }

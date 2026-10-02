@@ -335,6 +335,48 @@ export interface SquidDef {
     fishEveryMs: number; fishCount: number; fishDamage: number; fishRadius: number;
 }
 
+// SARIQ ESHIK (Season 2, map-5): yo'lda sariq va qora eshik chiqadi, sariq eshik ortidan yordam so'ragan
+// ovoz. Tanlov: KIRISH ("Respect" yutug'i, +200 XP - akkauntga bir marta) yoki "YO'Q" (keyin ham kirish mumkin).
+// Ichkarida: bog'langan elf malika, richag -> tepadan "OQ YUZ" tushadi; uni faqat bombalar portlashi yaralaydi,
+// joni ozgina qolganda yorug' chiqish ochiladi - chiqqan qahramon bilan xarita o'tiladi.
+// Kirmasa: 100 m tepaga (4 platforma, har 25 m da yangi qism); yer silkinganda 4 tadan 3 tasiga tosh tushadi
+export interface DoorsDef {
+    triggerX: number;
+    yellowX: number;
+    blackX: number;
+    // Tepaga chiqish
+    climbX0: number;
+    climbX1: number;
+    climbPlats: number[];    // platforms indekslari (pastdan tepaga)
+    climbStartX: number;
+    segments: number;
+    segMeters: number;
+    rockEveryMs: number;
+    rockWarnMs: number;
+    rockDamagePct: number;
+    // Ichkari (xona)
+    roomX0: number;
+    roomX1: number;
+    roomEntryX: number;
+    elfX: number;
+    elfY: number;
+    leverX: number;
+    exitX: number;
+    roomPlats: number[];
+    bombs: { x: number, y: number }[];
+    bombRadius: number;
+    bombDamage: number;
+    bombPlayerDamage: number;
+    bombRespawnMs: number;
+    monsterHpBase: number;
+    monsterHpPerExtra: number;
+    exitAtPct: number;
+    monsterSpeed: number;
+    monsterClimb: number;
+    monsterDamage: number;
+    respectXp: number;
+}
+
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
 // Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
@@ -358,7 +400,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     bossCoins?: number;      // Boss xaritasi: bossni o'ldirgan (oxirgi zarbani bergan) o'yinchiga shuncha tanga (yo'q bo'lsa - odatdagi 100)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
@@ -385,6 +427,7 @@ export interface MapDef {
     lift?: LiftDef;             // Season 2, map-2
     farm?: FarmDef;             // Season 2, map-3
     squid?: SquidDef;           // Season 2, map-4
+    doors?: DoorsDef;           // Season 2, map-5
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
@@ -932,6 +975,44 @@ export const MAPS: MapDef[] = [
             slamDamage: 32, slamEveryMs: 4600, slamRaiseMs: 1000,
             geyserDamage: 28, geyserEveryMs: 6200, geyserWarnMs: 900, geyserUpMs: 1000,
             fishEveryMs: 7000, fishCount: 3, fishDamage: 24, fishRadius: 50
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // bu xaritada bot yo'q
+    },
+    {
+        id: 14,
+        name: "Yellow Door",
+        description: "A yellow and a black door rise out of the road. Someone is screaming for help behind the yellow one...",
+        season: 2,
+        mode: 'doors',
+        killsToWin: 0,
+        xpReward: 25,
+        accentColor: 0xffd600,
+        groundColor: 0x2b2733,
+        mapWidth: 3000,
+        platforms: [
+            // Tepaga chiqish (0-3, pastdan tepaga)
+            { x: 1180, y: 470, w: 140, h: 12 },
+            { x: 1400, y: 370, w: 140, h: 12 },
+            { x: 1180, y: 270, w: 140, h: 12 },
+            { x: 1400, y: 170, w: 140, h: 12 },
+            // Ichkari xona (4-6)
+            { x: 2290, y: 450, w: 150, h: 12 },
+            { x: 2720, y: 450, w: 150, h: 12 },
+            { x: 2500, y: 330, w: 160, h: 12 }
+        ],
+        doors: {
+            triggerX: 560, yellowX: 700, blackX: 840,
+            climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
+            rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
+            roomX0: 2200, roomX1: 3000, roomEntryX: 2270, elfX: 2580, elfY: 150, leverX: 2880, exitX: 2950,
+            roomPlats: [4, 5, 6],
+            bombs: [{ x: 2400, y: 570 }, { x: 2600, y: 570 }, { x: 2790, y: 570 }, { x: 2365, y: 450 }, { x: 2795, y: 450 }, { x: 2580, y: 330 }],
+            bombRadius: 120, bombDamage: 12, bombPlayerDamage: 15, bombRespawnMs: 3500,
+            monsterHpBase: 100, monsterHpPerExtra: 50, exitAtPct: 0.15,
+            monsterSpeed: 3.4, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

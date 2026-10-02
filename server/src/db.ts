@@ -50,6 +50,7 @@ const userSchema = new mongoose.Schema({
     // DETALLAR: sotib olinganlar ("head:cowboy", "knight.sword:bat") va har personajda kiyilganlari
     // ({ knight: { head: 'cowboy', sword: 'bat' }, ... })
     ownedCosmetics: { type: [String], default: () => [] },
+    achievements: { type: [String], default: () => [] },   // bir martalik yutuqlar ("respect" va h.k.)
     equippedCosmetics: { type: Object, default: () => ({}) },
     // ADMIN (Telegram bot) bloklagan hisob: kira olmaydi, xonaga qo'shila olmaydi
     banned: { type: Boolean, required: true, default: false },
@@ -291,6 +292,12 @@ export async function equipSkin(userId: string, characterType: string, skinId: s
     await doc.save();
 
     return { success: true, user: docToUser(doc) };
+}
+
+// YUTUQ: akkauntga faqat BIR MARTA beriladi (atomar) - berilgan bo'lsa true
+export async function grantAchievement(userId: string, key: string): Promise<boolean> {
+    const r = await UserModel.updateOne({ _id: userId, achievements: { $ne: key } }, { $push: { achievements: key } });
+    return r.modifiedCount === 1;
 }
 
 // DETAL SOTIB OLISH: tanga yetarli va hali olinmagan bo'lsa - bitta atomar yozuv bilan

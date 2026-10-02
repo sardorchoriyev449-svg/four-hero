@@ -518,6 +518,14 @@ io.on('connection', (socket) => {
         const room = activeRooms[roomId];
         if (room && room.isStarted) gameEngine.markIntroDone(room, socket.id);
     });
+    socket.on('doorChoice', (data: { roomId: string, choice: string }) => {
+        const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
+        if (room && room.isStarted && (data.choice === 'enter' || data.choice === 'no')) gameEngine.doorChoice(room, socket.id, data.choice);
+    });
+    socket.on('doorsInteract', (roomId: string) => {
+        const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
+        if (room && room.isStarted) gameEngine.doorsInteract(room, socket.id);
+    });
     socket.on('pullCarrot', (roomId: string) => {
         const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
         if (room && room.isStarted) gameEngine.pullCarrot(room, socket.id);
