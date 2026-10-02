@@ -377,6 +377,7 @@ export interface DoorsDef {
     emergeBiteMin: number;    // yo'ldan / tagidan / tepadan chiqib tishlasa
     emergeBiteMax: number;
     roadWarnMs: number;       // yo'ldan to'satdan chiqishdan oldingi juda qisqa yoriq
+    leashDist: number;        // eng oldingi qahramon shundan uzoqlashsa - maxluq yo'qolib, uning oldida yo'ldan chiqadi
     handEveryMs: number;      // yerdan chiqadigan qo'llar
     handWarnMs: number;
     handUpMs: number;
@@ -1002,7 +1003,7 @@ export const MAPS: MapDef[] = [
         xpReward: 25,
         accentColor: 0xffd600,
         groundColor: 0x2b2733,
-        mapWidth: 7000,
+        mapWidth: 10200,
         platforms: [
             // Tepaga chiqish (0-3, pastdan tepaga)
             { x: 1180, y: 470, w: 140, h: 12 },
@@ -1027,17 +1028,29 @@ export const MAPS: MapDef[] = [
             { x: 6160, y: 480, w: 100, h: 12 },
             { x: 6480, y: 480, w: 100, h: 12 },
             { x: 6700, y: 380, w: 120, h: 12 },
-            { x: 6960, y: 480, w: 100, h: 12 }
+            { x: 6960, y: 480, w: 100, h: 12 },
+            { x: 7280, y: 480, w: 100, h: 12 },
+            { x: 7500, y: 380, w: 120, h: 12 },
+            { x: 7760, y: 480, w: 100, h: 12 },
+            { x: 8080, y: 480, w: 100, h: 12 },
+            { x: 8300, y: 380, w: 120, h: 12 },
+            { x: 8560, y: 480, w: 100, h: 12 },
+            { x: 8880, y: 480, w: 100, h: 12 },
+            { x: 9100, y: 380, w: 120, h: 12 },
+            { x: 9360, y: 480, w: 100, h: 12 },
+            { x: 9680, y: 480, w: 100, h: 12 },
+            { x: 9900, y: 380, w: 120, h: 12 },
+            { x: 10160, y: 480, w: 100, h: 12 }
         ],
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
-            roomX0: 2200, roomX1: 7000, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: 6860,
-            roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-            bombX: [2700, 3200, 3700, 4200, 4700, 5200, 5700, 6200, 6700], bombRadius: 120, bombRespawnMs: 6000, bombPlayerDamage: 15, hitsToBury: 10,
+            roomX0: 2200, roomX1: 10200, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: 10060,
+            roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33],
+            bombX: [2700, 3200, 3700, 4200, 4700, 5200, 5700, 6200, 6700, 7200, 7700, 8200, 8700, 9200, 9700], bombRadius: 120, bombRespawnMs: 6000, bombPlayerDamage: 15, hitsToBury: 10,
             surfaceMs: 7000, retreatMs: 800, hiddenMinMs: 1000, hiddenMaxMs: 2000, underWarnMs: 650, emergeDamage: 25,
-            emergeBiteMin: 30, emergeBiteMax: 40, roadWarnMs: 250,
+            emergeBiteMin: 30, emergeBiteMax: 40, roadWarnMs: 250, leashDist: 250,
             handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 15, grabMs: 1100,
             monsterSpeed: 5, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },

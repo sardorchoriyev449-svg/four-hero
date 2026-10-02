@@ -2172,11 +2172,13 @@ export class GameEngine {
         // YASHIRIN: 1-2 s hech qayerdan chiqmaydi, keyin o'ziga qulay joyni tanlaydi
         if (mo.mode === 'hidden') {
             if (mo.modeT > 0) return;
-            const target = alive[Math.floor(Math.random() * alive.length)];
+            // Nishon: chiqish eshigiga eng yaqin (eng oldinda yugurayotgan) qahramon
+            const target = alive.slice().sort((a, b) => b.x - a.x)[0];
             if (!target) return;
             const feet = target.y + this.PLAYER_HALF_H;
             const r = Math.random();
-            const kind: 'left' | 'right' | 'top' | 'under' | 'road' = r < 0.42 ? 'road' : r < 0.58 ? 'under' : r < 0.72 ? 'left' : r < 0.86 ? 'right' : 'top';
+            const kind: 'left' | 'right' | 'top' | 'under' | 'road' = mo.emergeAt && mo.emergeAt.kind === 'road' && mo.targetId === 'leash' ? 'road'
+                : r < 0.42 ? 'road' : r < 0.58 ? 'under' : r < 0.72 ? 'left' : r < 0.86 ? 'right' : 'top';
             // Yo'l: qahramon yugurayotgan tomonda, sal oldinda (u yetib kelganda) - to'satdan
             const vx = this.playerMotion.get(target.id)?.vx || 0;
             const runDir = Math.abs(vx) > 30 ? Math.sign(vx) : (Math.random() < 0.5 ? -1 : 1);
@@ -2210,6 +2212,16 @@ export class GameEngine {
                 return;
             }
             if (mo.modeT <= 0) { mo.mode = 'surface'; mo.modeT = T(d.surfaceMs); mo.pose = 'crawl'; }
+            return;
+        }
+        // 5 M QOIDASI: eng oldingi qahramon 5 m dan uzoqlashsa - maxluq yo'qoladi va uning oldida yo'ldan chiqadi
+        const lead = alive.slice().sort((a, b) => b.x - a.x)[0];
+        if (lead && mo.climbTo === null && mo.modeT < T(d.surfaceMs) - T(800) && Math.hypot(lead.x - mo.x, (lead.y + this.PLAYER_HALF_H) - mo.y) > d.leashDist) {
+            mo.mode = 'hidden';
+            mo.pose = 'hidden';
+            mo.modeT = T(250);
+            mo.emergeAt = { x: lead.x, y: 570, kind: 'road' };
+            mo.targetId = 'leash';
             return;
         }
         // YER USTIDA: quvlaydi; vaqt tugasa - o'zi qorong'iga chekinadi
