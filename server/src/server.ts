@@ -91,6 +91,8 @@ const AD_COOLDOWN_MS = 3 * 60 * 1000;
 const AD_DAILY_CAP = 10;
 const AD_MIN_WATCH_MS = 5000;
 const adClient = () => (process.env.ADS_CLIENT || '').trim();
+// AdSense hisobi (ochiq ma'lumot) - ads.txt .env sozlanmagan bo'lsa ham shu bilan chiqadi
+const AD_PUBLISHER = 'ca-pub-3350609734222055';
 app.get('/api/ads/config', (_req, res) => {
     const client = adClient();
     res.json({
@@ -106,7 +108,7 @@ app.get('/api/ads/config', (_req, res) => {
 });
 // AdSense talab qiladigan ads.txt - ADS_CLIENT dan avtomatik yasaladi
 app.get('/ads.txt', (_req, res) => {
-    const m = adClient().match(/^ca-(pub-\d+)$/);
+    const m = (adClient() || AD_PUBLISHER).match(/^ca-(pub-\d+)$/);
     if (!m) { res.status(404).end(); return; }
     res.type('text/plain').send(`google.com, ${m[1]}, DIRECT, f08c47fec0942fa0\n`);
 });

@@ -14,15 +14,18 @@ const Ads = (() => {
     function loadScript() {
         if (scriptLoaded) return;
         scriptLoaded = true;
-        const s = document.createElement('script');
-        s.async = true;
-        s.crossOrigin = 'anonymous';
-        s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(cfg.client);
-        s.setAttribute('data-ad-frequency-hint', '30s');
-        if (cfg.test) s.setAttribute('data-adbreak-test', 'on');
-        document.head.appendChild(s);
         window.adsbygoogle = window.adsbygoogle || [];
         window.adBreak = window.adConfig = (o) => window.adsbygoogle.push(o);
+        // index.html da AdSense skripti allaqachon bor bo'lsa - ikkinchi marta yuklanmaydi
+        if (!document.querySelector('script[src*="adsbygoogle.js"]')) {
+            const s = document.createElement('script');
+            s.async = true;
+            s.crossOrigin = 'anonymous';
+            s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(cfg.client);
+            s.setAttribute('data-ad-frequency-hint', '30s');
+            if (cfg.test) s.setAttribute('data-adbreak-test', 'on');
+            document.head.appendChild(s);
+        }
         window.adConfig({ preloadAdBreaks: 'on', sound: 'on' });
     }
 
