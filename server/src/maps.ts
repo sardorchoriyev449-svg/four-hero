@@ -362,11 +362,12 @@ export interface DoorsDef {
     elfY: number;
     leverX: number;
     roomPlats: number[];
-    bombX: number[];          // polda har 5 m da bomba (maxluq bossa yoki o'q tegsa portlaydi)
+    bombX: number[];          // polda har 10 m da bomba - faqat o'yinchi otganda portlaydi
     bombRadius: number;
     bombRespawnMs: number;
     bombPlayerDamage: number;
-    hitsToBury: number;       // shuncha portlash tegsa - shift qulab, maxluqni toshlar bosib qoladi
+    hitsToBury: number;       // (statistika) bombalar tekkan soni
+    exitX: number;            // g'or oxiridagi yorug'lik: shu yerga yetilsa - orqada g'or qulab, maxluqni bosadi
     surfaceMs: number;        // yer ustida quvlash, keyin o'zi qorong'iga chekinadi
     retreatMs: number;        // orqaga sudralib qochish
     hiddenMinMs: number;      // hech qayerdan chiqmaydi (yerdan qo'llar chiqadi)
@@ -998,28 +999,43 @@ export const MAPS: MapDef[] = [
         xpReward: 25,
         accentColor: 0xffd600,
         groundColor: 0x2b2733,
-        mapWidth: 3800,
+        mapWidth: 7000,
         platforms: [
             // Tepaga chiqish (0-3, pastdan tepaga)
             { x: 1180, y: 470, w: 140, h: 12 },
             { x: 1400, y: 370, w: 140, h: 12 },
             { x: 1180, y: 270, w: 140, h: 12 },
             { x: 1400, y: 170, w: 140, h: 12 },
-            // G'or ichidagi tosh tokchalar (4-14): past, o'rta, baland (bombalarni otish uchun)
-            { x: 2480, y: 480, w: 100, h: 12 }, { x: 2880, y: 480, w: 100, h: 12 }, { x: 3280, y: 480, w: 100, h: 12 },
-            { x: 2280, y: 380, w: 120, h: 12 }, { x: 2620, y: 380, w: 120, h: 12 }, { x: 3020, y: 380, w: 120, h: 12 }, { x: 3420, y: 380, w: 120, h: 12 },
-            { x: 2420, y: 270, w: 100, h: 12 }, { x: 2820, y: 270, w: 100, h: 12 }, { x: 3220, y: 270, w: 100, h: 12 }, { x: 3600, y: 270, w: 100, h: 12 }
+            // Uzun g'or bo'ylab tosh tokchalar
+            { x: 2480, y: 480, w: 100, h: 12 },
+            { x: 2700, y: 380, w: 120, h: 12 },
+            { x: 2960, y: 480, w: 100, h: 12 },
+            { x: 3280, y: 480, w: 100, h: 12 },
+            { x: 3500, y: 380, w: 120, h: 12 },
+            { x: 3760, y: 480, w: 100, h: 12 },
+            { x: 4080, y: 480, w: 100, h: 12 },
+            { x: 4300, y: 380, w: 120, h: 12 },
+            { x: 4560, y: 480, w: 100, h: 12 },
+            { x: 4880, y: 480, w: 100, h: 12 },
+            { x: 5100, y: 380, w: 120, h: 12 },
+            { x: 5360, y: 480, w: 100, h: 12 },
+            { x: 5680, y: 480, w: 100, h: 12 },
+            { x: 5900, y: 380, w: 120, h: 12 },
+            { x: 6160, y: 480, w: 100, h: 12 },
+            { x: 6480, y: 480, w: 100, h: 12 },
+            { x: 6700, y: 380, w: 120, h: 12 },
+            { x: 6960, y: 480, w: 100, h: 12 }
         ],
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
-            roomX0: 2200, roomX1: 3800, roomEntryX: 2260, elfX: 2700, elfY: 200, leverX: 2380,
-            roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-            bombX: [2350, 2600, 2850, 3100, 3350, 3600], bombRadius: 110, bombRespawnMs: 5000, bombPlayerDamage: 15, hitsToBury: 10,
+            roomX0: 2200, roomX1: 7000, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: 6860,
+            roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+            bombX: [2700, 3200, 3700, 4200, 4700, 5200, 5700, 6200, 6700], bombRadius: 120, bombRespawnMs: 6000, bombPlayerDamage: 15, hitsToBury: 10,
             surfaceMs: 7000, retreatMs: 800, hiddenMinMs: 1000, hiddenMaxMs: 2000, underWarnMs: 650, emergeDamage: 25,
             handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 8, grabMs: 1100,
-            monsterSpeed: 3.4, monsterClimb: 4, monsterDamage: 25, respectXp: 200
+            monsterSpeed: 4.2, monsterClimb: 4, monsterDamage: 25, respectXp: 200
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

@@ -1959,13 +1959,6 @@ export class GameEngine {
         mo.hitFlash = 8;
         if (by) dr.lastHitBy = by;
         this.io.to(room.id).emit('monsterHurt', { x: Math.round(mo.x), hits: mo.hits });
-        if (mo.hits >= mo.maxHits) {
-            dr.sub = 'buried';
-            dr.timer = Math.round(3600 / 30);
-            dr.hands = [];
-            this.io.to(room.id).emit('monsterBuried', { x: Math.round(mo.x), y: Math.round(mo.y) });
-            return;
-        }
         mo.mode = 'retreat';
         mo.modeT = Math.round(d.retreatMs / 30);
         mo.climbTo = null;
@@ -2121,6 +2114,19 @@ export class GameEngine {
             }
             return;
         }
+        // QOCHISH: g'or oxiridagi yorug'likka yetgan qahramon - orqada g'or qulab, maxluqni toshlar bosib qoladi
+        const out = alive.find(p => p.x >= d.exitX);
+        if (out) {
+            dr.lastHitBy = out.id;
+            dr.sub = 'buried';
+            dr.timer = T(3600);
+            dr.hands = [];
+            // Maxluq qochayotganlar ortida bo'ladi - qulagan toshlar uni o'sha yerda bosadi
+            mo.mode = 'surface'; mo.climbTo = null; mo.y = 570; mo.pose = 'crawl';
+            mo.x = Math.max(d.roomX0 + 80, Math.min(out.x - 260, mo.x < out.x - 120 ? mo.x : out.x - 260));
+            this.io.to(roomId).emit('monsterBuried', { x: Math.round(mo.x), y: 570, sunX: d.exitX });
+            return;
+        }
         if (mo.cd > 0) mo.cd--;
         if (mo.attackT > 0) mo.attackT--;
         mo.modeT--;
@@ -2199,9 +2205,6 @@ export class GameEngine {
             mo.facing = near && near.x > mo.x ? 1 : -1;
             return;
         }
-        // Bombani bosib olsa - portlaydi
-        const stepped = dr.bombs.find(b => b.alive && Math.abs(b.x - mo.x) <= 36 && mo.y >= 566);
-        if (stepped) { this.explodeCaveBomb(room, d, stepped, null); return; }
         const target = alive.slice().sort((a, b) => Math.hypot(a.x - mo.x, a.y - mo.y) - Math.hypot(b.x - mo.x, b.y - mo.y))[0];
         if (!target) return;
         const tY = surfAt(target.x, target.y + this.PLAYER_HALF_H);

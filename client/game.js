@@ -2464,37 +2464,40 @@ function launchGame(socket, roomId, mapData, continued) {
 
     // ===== SARIQ ESHIK (Season 2, map-5) =====
     // OQ YUZ - emaklagan holati (o'ngga qaragan): oq bosh-niqob, ingichka qora tana, to'rtta uzun bukilgan oyoq. 64x34
+    // Ikkala holat uchun bir xil bosh (oq niqob): katta va kichik ko'z, og'iz
+    function oqHead(g, hx, hy, attack) {
+        const set = (x, y, c) => { if (g[y] && x >= 0 && x < g[0].length) g[y][x] = c; };
+        const rect = (x, y, w, h, c) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) set(xx, yy, c); };
+        rect(hx, hy, 11, 11, 0xfafafa);
+        rect(hx + 1, hy + 2, 4, 4, 0x111111); set(hx + 2, hy + 3, attack ? 0xff1744 : 0xfafafa);
+        rect(hx + 6, hy + 2, 3, 3, 0x111111); set(hx + 7, hy + 3, attack ? 0xff1744 : 0xfafafa);
+        if (attack) rect(hx + 3, hy + 6, 5, 4, 0x3a0000); else rect(hx + 4, hy + 6, 3, 4, 0x111111);
+    }
+    // Emaklagan holat (o'ngga qaragan): gorizontal tana, oldida ikki oyoq pastga, orqada ikki qo'l
+    // tepaga-chapga bukilib pastga tushadi. 58x32 (barcha "suyaklar" 2px qalin)
     function oqYuzCrawlGrid(attack) {
-        const W = 64, H = 34, g = gridNew(W, H), B = 0x111111, J = 0xfafafa;
+        const W = 58, H = 32, g = gridNew(W, H), B = 0x111111, J = 0xfafafa;
         const rect = (x, y, w, h, c) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (yy >= 0 && yy < H && xx >= 0 && xx < W) g[yy][xx] = c; };
-        rect(6, 15, 48, 3, B);                   // tana
-        rect(50, 12, 3, 5, B);                   // bo'yin
-        // Old oyoqlar (o'ngda): o'ngga, keyin pastga
-        rect(50, 16, 12, 3, B); rect(59, 16, 3, attack ? 10 : 18, B);
-        rect(46, 18, 9, 3, B); rect(52, 18, 3, 16, B);
-        // Orqa oyoqlar (chapda): tepaga, chapga, keyin pastga
-        rect(2, 7, 12, 3, B); rect(2, 7, 3, 24, B); rect(11, 7, 3, 9, B);
-        rect(6, 11, 10, 3, B); rect(6, 11, 3, 23, B); rect(13, 11, 3, 5, B);
-        [[3, 8], [12, 8], [7, 12], [14, 12], [60, 17], [53, 19]].forEach(([x, y]) => rect(x, y, 1, 1, J));   // bo'g'imlar
-        // Bosh (oq niqob): katta va kichik ko'z, og'iz
-        rect(44, 0, 13, 13, J);
-        rect(46, 3, 4, 4, B); rect(47, 4, 1, 1, attack ? 0xff1744 : J);
-        rect(52, 3, 3, 3, B); rect(53, 4, 1, 1, attack ? 0xff1744 : J);
-        if (attack) rect(48, 8, 5, 4, 0x3a0000); else rect(49, 8, 3, 4, B);
+        rect(10, 14, 36, 2, B);                                          // tana
+        rect(44, 9, 2, 6, B);                                            // bo'yin
+        rect(44, 14, 9, 2, B); rect(51, 14, 2, attack ? 12 : 18, B);     // old oyoq 1
+        rect(38, 16, 9, 2, B); rect(45, 16, 2, 16, B);                   // old oyoq 2
+        rect(12, 8, 2, 7, B); rect(2, 8, 12, 2, B); rect(2, 8, 2, 24, B); // orqa qo'l 1
+        rect(17, 11, 2, 4, B); rect(7, 11, 12, 2, B); rect(7, 11, 2, 21, B); // orqa qo'l 2
+        [[3, 9], [12, 9], [8, 12], [17, 12], [52, 15], [46, 17]].forEach(([x, y]) => rect(x, y, 1, 1, J));   // bo'g'imlar
+        oqHead(g, 40, 0, attack);
         return gridOutline(g, 0x000000);
     }
-    // OQ YUZ - tepaga o'rmalayotgan holati: bosh tepada, qo'llar yuqoriga, oyoqlar pastga bukilgan. 36x60
+    // O'rmalagan holat (old tomondan): bosh tepada, qo'llar yuqoriga, oyoqlar pastga bukilgan. 34x50
     function oqYuzClimbGrid() {
-        const W = 36, H = 60, g = gridNew(W, H), B = 0x111111, J = 0xfafafa;
+        const W = 34, H = 50, g = gridNew(W, H), B = 0x111111, J = 0xfafafa;
         const rect = (x, y, w, h, c) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (yy >= 0 && yy < H && xx >= 0 && xx < W) g[yy][xx] = c; };
-        rect(17, 14, 3, 36, B);                  // umurtqa
-        rect(4, 19, 29, 3, B); rect(2, 0, 3, 22, B); rect(31, 0, 3, 22, B);     // qo'llar tepaga
-        rect(9, 47, 19, 3, B); rect(9, 39, 3, 10, B); rect(25, 39, 3, 10, B);   // son
-        rect(0, 39, 12, 3, B); rect(25, 39, 11, 3, B); rect(0, 39, 3, 21, B); rect(33, 39, 3, 21, B);   // oyoqlar pastga
-        [[3, 20], [32, 20], [10, 48], [26, 48], [10, 40], [26, 40]].forEach(([x, y]) => rect(x, y, 1, 1, J));
-        rect(14, 0, 9, 14, J);                   // bosh (tepaga qaragan)
-        rect(16, 1, 5, 6, B);
-        rect(15, 9, 2, 3, B); rect(20, 9, 2, 3, B);
+        rect(16, 10, 2, 30, B);                                          // umurtqa
+        rect(4, 14, 26, 2, B); rect(4, 0, 2, 16, B); rect(28, 0, 2, 16, B);   // qo'llar tepaga
+        rect(8, 38, 18, 2, B); rect(8, 38, 2, 6, B); rect(24, 38, 2, 6, B);  // son
+        rect(0, 42, 10, 2, B); rect(24, 42, 10, 2, B); rect(0, 42, 2, 8, B); rect(32, 42, 2, 8, B);   // oyoqlar pastga
+        [[5, 15], [28, 15], [9, 39], [24, 39], [9, 43], [24, 43]].forEach(([x, y]) => rect(x, y, 1, 1, J));
+        oqHead(g, 12, 0, false);
         return gridOutline(g, 0x000000);
     }
     function doorGrid(yellow) {
@@ -2570,7 +2573,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
         mk('px_oq_crawl', oqYuzCrawlGrid(false), 3);
         mk('px_oq_attack', oqYuzCrawlGrid(true), 3);
-        mk('px_oq_climb', oqYuzClimbGrid(), 2);
+        mk('px_oq_climb', oqYuzClimbGrid(), 3);
         mk('px_door_yellow', doorGrid(true), 3);
         mk('px_door_black', doorGrid(false), 3);
         mk('px_lever_up', leverGrid(false), 3);
@@ -2662,7 +2665,15 @@ function launchGame(socket, roomId, mapData, continued) {
             g.fillStyle(0x1a1620, 1); g.fillTriangle(pl.x + 10, pl.y + 14, pl.x + pl.w / 2, pl.y + 34, pl.x + pl.w - 10, pl.y + 14);
         });
         // Shiftdagi stalaktitlar - faqat bezak (qo'rqinchli silueta)
-        [X0 + 140, X0 + 470, X0 + 690, X0 + 1010, X0 + 1240, X0 + 1500].forEach((x, i) => scene.add.image(x, 40, 'px_stal').setOrigin(0.5, 0).setDepth(-0.4).setScale(1, 0.6 + (i % 3) * 0.2));
+        for (let x = X0 + 140, i = 0; x < X1 - 200; x += 260 + (i * 37) % 120, i++) scene.add.image(x, 40, 'px_stal').setOrigin(0.5, 0).setDepth(-0.4).setScale(1, 0.5 + (i % 3) * 0.25);
+        // G'or oxirida - tashqariga chiqadigan yorug' teshik (qochish maqsadi)
+        const ex0 = d.exitX - 20;
+        const exitG = scene.add.graphics().setDepth(-0.35);
+        exitG.fillStyle(0xfff8e1, 1); exitG.fillRect(ex0 + 30, 380, X1 - ex0 - 30, 192);
+        for (let y = 380; y < 572; y += 12) { exitG.fillStyle(0x0b0810, 1); exitG.fillRect(ex0 + 30, y, 10 + ((y * 7) % 18), 12); }
+        exitG.fillStyle(0xffffff, 1); exitG.fillRect(ex0 + 70, 400, X1 - ex0 - 70, 172);
+        const exitGlow = scene.add.circle(ex0 + 90, 480, 160, 0xfff59d, 0.25).setDepth(4.65).setBlendMode(Phaser.BlendModes.ADD);
+        scene.tweens.add({ targets: exitGlow, scale: 1.1, alpha: 0.35, duration: 1400, yoyo: true, repeat: -1 });
         // Polda har 5 m da bomba (holat serverdan): o'q tegsa yoki maxluq bossa portlaydi
         const bombs = {};
         d.bombX.forEach((x, i) => {
@@ -2828,16 +2839,18 @@ function launchGame(socket, roomId, mapData, continued) {
             spr.setVisible(!hidden && !drObj.buried);
             drObj.disp.x = mo.mode === 'emerge' && Math.abs(drObj.disp.x - mo.x) > 150 ? mo.x : Phaser.Math.Linear(drObj.disp.x, mo.x, 0.35);
             drObj.disp.y = mo.mode === 'emerge' && Math.abs(drObj.disp.y - mo.y) > 150 ? mo.y : Phaser.Math.Linear(drObj.disp.y, mo.y, 0.45);
-            const tex = mo.pose === 'climb' ? 'px_oq_climb' : mo.pose === 'attack' ? 'px_oq_attack' : 'px_oq_crawl';
-            spr.setTexture(tex).setFlipX(mo.facing < 0).setPosition(drObj.disp.x, drObj.disp.y).setFlipY(mo.pose === 'drop' && S.sub === 'fight');
+            const vert = mo.pose === 'climb' || mo.pose === 'drop';
+            const tex = vert ? 'px_oq_climb' : mo.pose === 'attack' ? 'px_oq_attack' : 'px_oq_crawl';
+            spr.setTexture(tex).setFlipX(mo.facing < 0).setPosition(drObj.disp.x, drObj.disp.y).setFlipY(mo.pose === 'drop');
             if (mo.pose === 'crawl') spr.y += Math.sin(t0 / 90) * 2;
             if (mo.hitFlash > 0 && Math.floor(t0 / 60) % 2) spr.setTint(0xff5252); else spr.clearTint();
-            if (S.sub === 'fight') drawBossBar(scene, mo.maxHits - mo.hits, mo.maxHits, t('oqyuz_name'));
             // Qorong'ida ham ko'rinadigan qizil ko'zlar
             if (!hidden && !drObj.buried && S.sub === 'fight') {
                 const dir = mo.facing < 0 ? -1 : 1;
-                const hx = mo.pose === 'climb' ? spr.x : spr.x + dir * 54, hy = mo.pose === 'climb' ? spr.y - 104 : spr.y - 86;
-                fx.fillStyle(0xff1744, 0.9); fx.fillRect(hx - 8 * dir - 3, hy, 5, 5); fx.fillRect(hx + 7 * dir - 2, hy - 1, 4, 4);
+                // Ko'zlar: emaklashda - o'ngdagi bosh (rasm 58x32, P=3), o'rmalashda - tepadagi bosh (34x50), tushishda - pastdagi
+                const ex = mo.pose === 'climb' || mo.pose === 'drop' ? spr.x : spr.x + dir * 51;
+                const ey = mo.pose === 'climb' ? spr.y - 141 : mo.pose === 'drop' ? spr.y - 9 : spr.y - 87;
+                fx.fillStyle(0xff1744, 0.9); fx.fillRect(ex - 8 * dir - 3, ey, 5, 5); fx.fillRect(ex + 5 * dir - 2, ey - 1, 4, 4);
             }
         }
         // Tagidan chiqish oldidan: qahramon ostida yer yoriladi va titraydi
@@ -2855,6 +2868,7 @@ function launchGame(socket, roomId, mapData, continued) {
             dark.setVisible(true);
             dark.clear();
             dark.fill(0x000000, 0.94);
+            if (d.exitX - cam.scrollX < 1000) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, 480 - cam.scrollY); }
             [currentCharacter, ...Object.values(otherPlayers)].forEach((o) => {
                 if (!o || !o.active) return;
                 const f = 0.92 + Math.sin(t0 / 70 + o.x * 0.01) * 0.04 + (Math.random() < 0.03 ? -0.15 : 0);
@@ -5585,10 +5599,11 @@ function launchGame(socket, roomId, mapData, continued) {
                 drObj.sunlit = true;
                 this.tweens.add({ targets: drObj.dark, alpha: 0, duration: 1600 });
                 const beam = this.add.graphics().setDepth(4.8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
-                beam.fillStyle(0xfff8e1, 0.5); beam.fillTriangle(d.x - 40, 0, d.x + 40, 0, d.x + 170, 572); beam.fillTriangle(d.x - 40, 0, d.x - 170, 572, d.x + 170, 572);
-                beam.fillStyle(0xffffff, 0.35); beam.fillTriangle(d.x - 20, 0, d.x + 20, 0, d.x, 572);
+                const sx = d.sunX || d.x;
+                beam.fillStyle(0xfff8e1, 0.5); beam.fillTriangle(sx - 40, 0, sx + 40, 0, sx + 170, 572); beam.fillTriangle(sx - 40, 0, sx - 170, 572, sx + 170, 572);
+                beam.fillStyle(0xffffff, 0.35); beam.fillTriangle(sx - 20, 0, sx + 20, 0, sx, 572);
                 this.tweens.add({ targets: beam, alpha: 1, duration: 1500 });
-                for (let k = 0; k < 30; k++) { const m = this.add.rectangle(d.x + Phaser.Math.Between(-120, 120), Phaser.Math.Between(60, 540), 2, 2, 0xfffde7, 0.9).setDepth(4.85); this.tweens.add({ targets: m, y: m.y - 40, alpha: 0, duration: 2500, delay: k * 60 }); }
+                for (let k = 0; k < 30; k++) { const m = this.add.rectangle((d.sunX || d.x) + Phaser.Math.Between(-120, 120), Phaser.Math.Between(60, 540), 2, 2, 0xfffde7, 0.9).setDepth(4.85); this.tweens.add({ targets: m, y: m.y - 40, alpha: 0, duration: 2500, delay: k * 60 }); }
                 arenaBanner(t('dr_sun_banner'), '#fff59d', null);
             });
         });
@@ -6952,7 +6967,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     const lvl = d.climbPlats.findIndex(i => Math.abs(feet - map.platforms[i].y) <= 10 && Math.abs(currentCharacter.x - (map.platforms[i].x + map.platforms[i].w / 2)) <= map.platforms[i].w / 2 + 8);
                     progressText = t('hud_dr_climb').replace('{m}', S.segment * d.segMeters + (lvl + 1) * 5).replace('{n}', d.segments * d.segMeters);
                 } else if (S.state === 'room') progressText = S.sub === 'lever' ? t('hud_dr_lever')
-                    : S.sub === 'fight' && S.monster ? t('hud_dr_fight').replace('{k}', S.monster.hits).replace('{n}', S.monster.maxHits)
+                    : S.sub === 'fight' ? t('hud_dr_fight').replace('{m}', Math.max(0, Math.ceil((d.exitX - currentCharacter.x) / 50)))
                     : S.sub === 'buried' ? t('hud_dr_buried') : '';
                 else progressText = '';
             } else if (isSquid) {
