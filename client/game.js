@@ -2562,6 +2562,7 @@ function launchGame(socket, roomId, mapData, continued) {
         scene.cameras.main.setBounds(d.arenaX, 0, d.arenaW, 600);
         if (!instant) scene.cameras.main.shake(900, 0.01);
     }
+    const ex0 = (o) => o.disp.x;
     function drawSquid(scene) {
         if (!sqObj) return;
         const t = scene.time.now, d = map.squid, o = sqObj;
@@ -2574,10 +2575,10 @@ function launchGame(socket, roomId, mapData, continued) {
         if (o.fog1) { o.fog1.tilePositionX += 0.15; o.fog2.tilePositionX -= 0.3; }
         if (!sqState) return;
         const S = sqState;
-        if (!sqDying) {
-            o.disp.x = Phaser.Math.Linear(o.disp.x, S.x, 0.3);
-            o.disp.y = Phaser.Math.Linear(o.disp.y, S.state === 'sleep' ? 800 : S.eyeY, 0.2);
-        } else o.disp.y += 2.5;
+        // Yengilganda ham server balandligiga ergashadi - suv ostiga to'liq cho'kadi
+        o.disp.x = Phaser.Math.Linear(o.disp.x, S.x, 0.3);
+        o.disp.y = Phaser.Math.Linear(o.disp.y, S.state === 'sleep' ? 800 : S.eyeY, sqDying ? 0.12 : 0.2);
+        if (sqDying && o.disp.y < 900 && Math.random() < 0.3) waterSplash(scene, ex0(o) + Phaser.Math.Between(-100, 100), 3);
         const ex = o.disp.x, ey = o.disp.y;
         o.body.setPosition(ex, ey);
         o.eye.setPosition(ex, ey);
@@ -2585,7 +2586,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (S.hitFlash > 0 && Math.floor(t / 60) % 2) o.eye.setTint(0xffffff); else o.eye.clearTint();
         // Kalmar qo'llari (tanadan suvga) - chayqaladi
         o.tent.clear();
-        if (ey < 760) for (let k = 0; k < 6; k++) {
+        if (ey < 540) for (let k = 0; k < 6; k++) {
             const bx = ex - 75 + k * 30, pts = [];
             for (let i = 0; i <= 12; i++) {
                 const y = ey + 50 + i * ((600 - ey - 50) / 12);
@@ -2632,7 +2633,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     o.geyser.fillStyle(0xb2ebf2, 0.9); o.geyser.fillCircle(g.x - 20 + k * 8, by, 3);
                 }
             } else {
-                const top = g.topY + Math.sin(t / 50) * 6;
+                const top = Math.max(0, g.topY + Math.sin(t / 50) * 6);
                 o.geyser.fillStyle(0x0a0a0a, 0.6); o.geyser.fillRect(g.x - 28, top, 56, 600 - top);
                 o.geyser.fillStyle(0x4fc3f7, 0.9); o.geyser.fillRect(g.x - 25, top, 50, 600 - top);
                 o.geyser.fillStyle(0xb3e5fc, 1); o.geyser.fillRect(g.x - 14, top, 28, 600 - top);

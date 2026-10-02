@@ -1902,7 +1902,8 @@ export class GameEngine {
             return;
         }
         if (sq.state === 'dying') {
-            sq.eyeY += 3;
+            // Kraken butunlay suv ostiga cho'kib ketadi (tanasi ko'zdan ~240px tepada) - shundan keyin xarita o'tiladi
+            if (sq.eyeY < 850) { sq.eyeY += 5; return; }
             if (--sq.timer === 0) {
                 const winner = (sq.lastHitBy && room.players[sq.lastHitBy]) ? sq.lastHitBy : (alive[0] || Object.values(room.players)[0])?.id;
                 if (winner) this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
@@ -1964,15 +1965,15 @@ export class GameEngine {
             }
         }
 
-        // 2) GEYZERLAR: biri qahramon ostidan eng tepagacha, ikkinchisi boshqa joydan pastki platformalargacha
+        // 2) GEYZERLAR: ikkitasi (biri qahramon ostidan) - suv oqimi ekranning eng tepasigacha otiladi
         if (sq.tick >= sq.nextGeyser) {
             const target = alive[Math.floor(Math.random() * alive.length)];
             if (target) {
                 const x1 = Math.max(d.arenaX + 60, Math.min(d.arenaX + d.arenaW - 60, target.x));
                 let x2 = d.arenaX + 80 + Math.random() * (d.arenaW - 160);
                 if (Math.abs(x2 - x1) < 120) x2 = x1 + (x1 < d.arenaX + d.arenaW / 2 ? 260 : -260);
-                sq.geysers.push({ id: nextId('g'), x: Math.round(x1), topY: d.topY - 40, phase: 'warn', t: T(d.geyserWarnMs), hit: [] });
-                sq.geysers.push({ id: nextId('g'), x: Math.round(x2), topY: d.lowY - 20, phase: 'warn', t: T(d.geyserWarnMs), hit: [] });
+                sq.geysers.push({ id: nextId('g'), x: Math.round(x1), topY: 0, phase: 'warn', t: T(d.geyserWarnMs), hit: [] });
+                sq.geysers.push({ id: nextId('g'), x: Math.round(x2), topY: 0, phase: 'warn', t: T(d.geyserWarnMs), hit: [] });
             }
             sq.nextGeyser = sq.tick + T(d.geyserEveryMs);
         }
@@ -2023,7 +2024,7 @@ export class GameEngine {
     private squidDefeated(room: RoomState, sq: NonNullable<RoomState['squid']>): void {
         if (sq.state === 'dying') return;
         sq.state = 'dying';
-        sq.timer = Math.round(2600 / 30);
+        sq.timer = Math.round(800 / 30);   // cho'kib bo'lgach - biroz kutib, xarita o'tiladi
         sq.slam = null;
         sq.geysers = [];
         sq.fish = [];
