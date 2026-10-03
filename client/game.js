@@ -2964,7 +2964,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const brush = scene.make.image({ key: 'light_brush', add: false });
         const brushS = scene.make.image({ key: 'light_brush_s', add: false });
         const fx = scene.add.graphics().setDepth(4.7);       // ko'zlar, kovlanayotgan joylar - qorong'ilik ustida
-        drObj = { caveBg, fallingRocks: [], yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, bridgeG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
+        drObj = { caveBg, startDoor, fallingRocks: [], yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, bridgeG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
             barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9, floorOpen: false, diving: false, meSwallowed: false };
     }
     // Richagdan keyin: ustunlar orasidagi tosh ko'priklar qulab, bo'shliqlar ochiladi
@@ -3085,6 +3085,8 @@ function launchGame(socket, roomId, mapData, continued) {
         // Tepaga chiqish: tosh tushishi ogohlantirishi
         const rg = drObj.rockGfx;
         rg.clear();
+        // Tog' etagidagi eshik - faqat birinchi qavatda (keyingilarida - qoya o'rtasidamiz)
+        drObj.startDoor.setVisible(S.state !== 'climb' || !S.segment);
         if (S.state === 'climb' && S.wave) {
             d.climbPlats.forEach((pi, k) => {
                 if (k === S.wave.safe || k === d.climbPlats.length - 1) return;
@@ -5999,8 +6001,9 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('climbSegment', (d) => {
             if (drObj) { drObj.fallingRocks.forEach((r) => { this.tweens.killTweensOf(r); r.destroy(); }); drObj.fallingRocks = []; }
             sfx('xp');
-            this.cameras.main.flash(300, 255, 255, 255);
-            if (drObj) this.tweens.add({ targets: drObj.cliff, tilePositionY: drObj.cliff.tilePositionY - 240, duration: 600 });
+            // Yana bir qavat yuqoriga: qoya bir butun ekran pastga suriladi (tepaga chiqib borayotgandek)
+            this.cameras.main.flash(200, 255, 255, 255);
+            if (drObj) this.tweens.add({ targets: drObj.cliff, tilePositionY: drObj.cliff.tilePositionY - 572, duration: 700, ease: 'Sine.Out' });
             arenaBanner(t('dr_climb_banner').replace('{m}', d.segment * map.doors.segMeters), '#69f0ae', null);
         });
         // KALMAR: chiqdi / urdi / suvni urdi / baliq portladi / yengildi

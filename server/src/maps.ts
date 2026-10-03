@@ -1051,7 +1051,7 @@ export const MAPS: MapDef[] = [
         pits: CAVE_RUN.floorHoles,
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
-            climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], climbStartX: 1340, segments: 4, segMeters: 25,
+            climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], climbStartX: 1340, segments: 10, segMeters: 10,
             rockEveryMs: 2000, rockWarnMs: 2000, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
             runMeters: CAVE_RUN.runMeters, floorY: CAVE_RUN.floorY, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
