@@ -370,7 +370,8 @@ export interface DoorsDef {
     holeHandEveryMs: number;
     holeHandWarnMs: number;
     holeHandUpMs: number;
-    holeHandReach: number;
+    holeHandReach: number;    // egilgan qo'l ustun chetidan shuncha ichkariga yetadi
+    holeHandGrabAtMs: number; // qo'l chiqib egilib bo'lgan payt - shundagina ushlaydi
     holeHandCdMs: number;
     holeDamage: number;       // qo'l ushlasa
     grabMs: number;           // qo'l ushlasa - shuncha vaqt yura olmaydi
@@ -387,31 +388,32 @@ export interface DoorsDef {
     respectXp: number;
 }
 
-// MAP-5 G'ORI: 400 m qochish yo'li - pastda yer, ustida tosh ustunlar (ular orasidagi bo'shliqlar richag
-// tortilgach ochiladi, bo'shliqdan qo'llar chiqadi) va devordagi tunnel teshiklari. Tasodifiy, lekin har safar
+// MAP-5 G'ORI: 400 m qochish yo'li - chuqur jarlik ustidagi tosh ustunlar (ular orasidagi bo'shliqlar richag
+// tortilgach ochiladi, tushgan halok bo'ladi; bo'shliqdan qo'llar chiqadi) va devordagi tunnel teshiklari. Tasodifiy, lekin har safar
 // bir xil (urug'li generator)
 const CAVE_RUN = (() => {
     let seed = 5150;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-    const roomX0 = 2200, runFrom = 2260, runMeters = 400, exitX = runFrom + runMeters * 50, roomX1 = exitX + 200, floorY = 480;
+    const roomX0 = 2200, runFrom = 2260, runMeters = 400, exitX = runFrom + runMeters * 50, roomX1 = exitX + 200, floorY = 420;
     const blocks: { x: number, y: number, w: number, h: number }[] = [];
     const floorHoles: { x: number, w: number }[] = [];
     let x = 2760;
-    blocks.push({ x: roomX0, y: floorY, w: x - roomX0, h: 90 });      // eshik, richag va malika turgan joy - yaxlit
+    const H = 600 - floorY;   // ustunlar jarlik tubigacha (pastda yer yo'q - tushgan halok bo'ladi)
+    blocks.push({ x: roomX0, y: floorY, w: x - roomX0, h: H });       // eshik, richag va malika turgan joy - yaxlit
     while (x < exitX - 300) {
         const gw = 110 + Math.round(rnd() * 60);
         floorHoles.push({ x, w: gw });
         x += gw;
         const pw = 90 + Math.round(rnd() * 50);
         if (x + pw >= exitX - 300) break;
-        blocks.push({ x, y: floorY, w: pw, h: 90 });
+        blocks.push({ x, y: floorY, w: pw, h: H });
         x += pw;
     }
-    blocks.push({ x, y: floorY, w: roomX1 - x, h: 90 });              // oxirgi yaxlit tosh - yorug'likka chiqish
+    blocks.push({ x, y: floorY, w: roomX1 - x, h: H });               // oxirgi yaxlit tosh - yorug'likka chiqish
     const wallHoles: { x: number, y: number, r: number }[] = [];
     for (let wx = 3350; wx < exitX - 600; wx += 520 + Math.round(rnd() * 340)) {
         const r = 44 + Math.round(rnd() * 22);
-        wallHoles.push({ x: wx, y: 260 + Math.round(rnd() * (180 - r)), r });
+        wallHoles.push({ x: wx, y: 200 + Math.round(rnd() * (170 - r)), r });
     }
     return { runMeters, exitX, roomX1, floorY, blocks, floorHoles, wallHoles };
 })();
@@ -1040,13 +1042,14 @@ export const MAPS: MapDef[] = [
             // G'or yo'li: tosh ustunlar (4-...)
             ...CAVE_RUN.blocks
         ],
+        pits: CAVE_RUN.floorHoles,
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
             runMeters: CAVE_RUN.runMeters, floorY: CAVE_RUN.floorY, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
-            holeHandEveryMs: 450, holeHandWarnMs: 420, holeHandUpMs: 500, holeHandReach: 70, holeHandCdMs: 2600, holeDamage: 30, grabMs: 900,
+            holeHandEveryMs: 450, holeHandWarnMs: 450, holeHandUpMs: 750, holeHandReach: 52, holeHandGrabAtMs: 240, holeHandCdMs: 2600, holeDamage: 30, grabMs: 900,
             headWarnMs: 800, headLungeMs: 300, headBackMs: 450, headCdMs: 5000, headGlobalMs: 1300, headTrigger: 280, headReach: 115,
             swallowMs: 1500, swallowDamagePct: 0.5,
             respectXp: 200

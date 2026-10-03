@@ -2886,18 +2886,25 @@ function launchGame(socket, roomId, mapData, continued) {
             const img = scene.add.image(w.x, w.y, 'px_oq_scare').setDepth(4.72).setVisible(false);
             return { img, base: (w.r * 1.5) / 286 };
         });
-        // G'OR YO'LI: pastda qorong'i yer, ustida tosh ustunlar (rasmdagidek)
+        // G'OR YO'LI: chuqur jarlik ustidagi tosh ustunlar (rasmdagidek). Bo'shliqlar - tubsiz qorong'ilik
         const fy = d.floorY;
-        scene.add.rectangle(X0, 570, X1 - X0, 30, 0x0f0b16).setOrigin(0, 0).setDepth(1.02);
+        const abyss = scene.add.graphics().setDepth(1.3);
+        d.floorHoles.forEach((h) => {
+            abyss.fillStyle(0x0a0710, 1); abyss.fillRect(h.x, fy + 10, h.w, 600 - fy);
+            abyss.fillStyle(0x050308, 1); abyss.fillRect(h.x, fy + 60, h.w, 600 - fy);
+            abyss.fillStyle(0x000000, 1); abyss.fillRect(h.x, fy + 110, h.w, 600 - fy);
+        });
         const pillarG = scene.add.graphics().setDepth(1.4);
         map.platforms.forEach((pl, k) => {
             if (k < 4) return;
-            pillarG.fillStyle(0x050308, 1); pillarG.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 572 - pl.y + 2);
-            pillarG.fillStyle(0x2a2433, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 570 - pl.y);
+            pillarG.fillStyle(0x050308, 1); pillarG.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 602 - pl.y);
+            pillarG.fillStyle(0x2a2433, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 600 - pl.y);
             pillarG.fillStyle(0x3d3548, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 5);
             pillarG.fillStyle(0x1a1620, 1);
-            for (let yy = pl.y + 16; yy < 566; yy += 18) for (let xx = pl.x + ((yy / 18) % 2 ? 6 : 18); xx < pl.x + pl.w - 10; xx += 26) pillarG.fillRect(xx, yy, 12, 3);
-            pillarG.fillStyle(0x0b0810, 1); pillarG.fillRect(pl.x, 560, pl.w, 10);
+            for (let yy = pl.y + 16; yy < 600; yy += 18) for (let xx = pl.x + ((yy / 18) % 2 ? 6 : 18); xx < pl.x + pl.w - 10; xx += 26) pillarG.fillRect(xx, yy, 12, 3);
+            // Pastga tomon qorayib, jarlikka cho'kadi
+            pillarG.fillStyle(0x000000, 0.35); pillarG.fillRect(pl.x, pl.y + 90, pl.w, 600 - pl.y);
+            pillarG.fillStyle(0x000000, 0.45); pillarG.fillRect(pl.x, pl.y + 140, pl.w, 600 - pl.y);
         });
         // Ustunlar orasi richag tortilguncha tosh ko'prik bilan yopiq (keyin qulaydi)
         const bridgeG = scene.add.graphics().setDepth(1.39);
@@ -2915,10 +2922,11 @@ function launchGame(socket, roomId, mapData, continued) {
         // G'or oxirida - tashqariga chiqadigan yorug' teshik (qochish maqsadi)
         const ex0 = d.exitX - 20;
         const exitG = scene.add.graphics().setDepth(-0.35);
-        exitG.fillStyle(0xfff8e1, 1); exitG.fillRect(ex0 + 30, 290, X1 - ex0 - 30, 192);
-        for (let y = 290; y < 482; y += 12) { exitG.fillStyle(0x0b0810, 1); exitG.fillRect(ex0 + 30, y, 10 + ((y * 7) % 18), 12); }
-        exitG.fillStyle(0xffffff, 1); exitG.fillRect(ex0 + 70, 310, X1 - ex0 - 70, 172);
-        const exitGlow = scene.add.circle(ex0 + 90, 390, 160, 0xfff59d, 0.25).setDepth(4.65).setBlendMode(Phaser.BlendModes.ADD);
+        const ey0 = d.floorY - 190;
+        exitG.fillStyle(0xfff8e1, 1); exitG.fillRect(ex0 + 30, ey0, X1 - ex0 - 30, 192);
+        for (let y = ey0; y < d.floorY + 2; y += 12) { exitG.fillStyle(0x0b0810, 1); exitG.fillRect(ex0 + 30, y, 10 + ((y * 7) % 18), 12); }
+        exitG.fillStyle(0xffffff, 1); exitG.fillRect(ex0 + 70, ey0 + 20, X1 - ex0 - 70, 172);
+        const exitGlow = scene.add.circle(ex0 + 90, d.floorY - 90, 160, 0xfff59d, 0.25).setDepth(4.65).setBlendMode(Phaser.BlendModes.ADD);
         scene.tweens.add({ targets: exitGlow, scale: 1.1, alpha: 0.35, duration: 1400, yoyo: true, repeat: -1 });
         const hands = {};
         // Bog'langan elf malika (shiftdan arqonlar), richag
@@ -2952,9 +2960,9 @@ function launchGame(socket, roomId, mapData, continued) {
             if (h.x > cam.scrollX + 1400 || h.x + h.w < cam.scrollX - 200) return;
             for (let k = 0; k < 8; k++) {
                 const r = scene.add.rectangle(h.x + Math.random() * h.w, map.doors.floorY + 4, 10, 8, [0x2a2433, 0x3d3548, 0x1a1620][k % 3]).setDepth(1.38);
-                scene.tweens.add({ targets: r, y: 566, angle: 200, duration: Phaser.Math.Between(300, 600), ease: 'Quad.In', onComplete: () => r.destroy() });
+                scene.tweens.add({ targets: r, y: 640, angle: 200, alpha: 0, duration: Phaser.Math.Between(500, 900), ease: 'Quad.In', onComplete: () => r.destroy() });
             }
-            gDust(scene, h.x + h.w / 2, 562, 6, 0x3e2723);
+            gDust(scene, h.x + h.w / 2, map.doors.floorY + 6, 6, 0x3e2723);
         });
     }
     // Devordagi teshikdan bosh otilib chiqadi (victim - tortiladigan qahramon yoki null) va qaytib kiradi
@@ -3070,29 +3078,35 @@ function launchGame(socket, roomId, mapData, continued) {
         if (S.state !== 'room' && S.state !== 'done') return;
         // Yo'l teshiklari: kech qo'shilgan o'yinchida ham ochiq bo'lsin
         if (S.floorOpen && !drObj.floorOpen) drOpenFloor(scene, true);
-        // Bo'shliqlardan qo'llar: avval qizil ogohlantirish, keyin qo'l oldidagi ustun tepasiga otilib cho'ziladi va qaytib kiradi
+        // Bo'shliqlardan qo'llar: avval qizil ogohlantirish, keyin jarlikdan bilak otilib chiqadi va kaft oldidagi
+        // ustun ustiga egilib ushlaydi; so'ng yana jarlikka kirib ketadi
         const handIds = new Set((S.hands || []).map(h => h.id));
+        const armTop = d.floorY - 26;
         (S.hands || []).forEach((h) => {
             let o = drObj.hands[h.id];
             if (!o) {
-                const img = scene.add.image(h.x, 572, 'px_grab_hand').setOrigin(0.5, 1).setDepth(3.45).setScale(1, 0)
-                    .setFlipX(h.side > 0).setAngle(h.side < 0 ? -14 : 14);
-                o = drObj.hands[h.id] = { img, up: false };
+                const arm = scene.add.rectangle(h.x, 600, 12, 600 - armTop, 0xa1887f).setOrigin(0.5, 1).setDepth(3.44).setStrokeStyle(2, 0x3e2723).setScale(1, 0);
+                const hand = scene.add.image(h.x, 600, 'px_grab_hand').setOrigin(0.5, 0.95).setDepth(3.45).setFlipX(h.side > 0).setVisible(false);
+                o = drObj.hands[h.id] = { arm, hand, up: false };
                 sfxAt('rumble', h.x, 0.4);
             }
             if (h.phase === 'up' && !o.up) {
                 o.up = true;
-                scene.tweens.add({ targets: o.img, scaleY: (572 - d.floorY + 24) / 66, duration: 110, ease: 'Back.Out' });
-                scene.tweens.add({ targets: o.img, angle: h.side < 0 ? -26 : 26, duration: 90, yoyo: true, repeat: 2 });
-                gDust(scene, h.x, 564, 4, 0x3e2723);
+                o.hand.setVisible(true).setPosition(h.x, 600).setAngle(0);
+                scene.tweens.add({ targets: o.arm, scaleY: 1, duration: 120, ease: 'Quad.Out' });
+                scene.tweens.add({ targets: o.hand, y: armTop, duration: 120, ease: 'Quad.Out' });
+                // Egilib ushlaydi: kaft ustun ustiga tushadi
+                scene.tweens.add({ targets: o.hand, angle: h.side < 0 ? -112 : 112, delay: 120, duration: 110, ease: 'Back.Out' });
                 sfxAt('stab', h.x, 0.6);
             }
         });
         Object.keys(drObj.hands).forEach((id) => {
             if (handIds.has(id)) return;
             const o = drObj.hands[id];
-            scene.tweens.killTweensOf(o.img);
-            scene.tweens.add({ targets: o.img, scaleY: 0, duration: 160, ease: 'Quad.In', onComplete: () => o.img.destroy() });
+            scene.tweens.killTweensOf([o.arm, o.hand]);
+            scene.tweens.add({ targets: o.hand, angle: 0, duration: 90 });
+            scene.tweens.add({ targets: o.hand, y: 640, delay: 90, duration: 160, ease: 'Quad.In', onComplete: () => o.hand.destroy() });
+            scene.tweens.add({ targets: o.arm, scaleY: 0, delay: 90, duration: 160, ease: 'Quad.In', onComplete: () => o.arm.destroy() });
             delete drObj.hands[id];
         });
         // OQ YUZ: faqat tushishda va malikani olib ketayotganda ko'rinadi (keyin - tunnellarda)
@@ -3109,12 +3123,16 @@ function launchGame(socket, roomId, mapData, continued) {
             // Malikani sudrab ketyapti
             if (S.sub === 'take') drObj.elf.setPosition(spr.x - 70, d.floorY - 18).setAngle(90);
         } else if (!drObj.diving) spr.setVisible(false);
-        // Qo'l chiqishidan oldin: bo'shliq tubida qizil ogohlantirish (qorong'ilik ustida ko'rinadi)
+        // Qo'l chiqishidan oldin: jarlikda qizil nur va ustun chetida qo'l yetadigan joy qizil yonadi
         (S.hands || []).forEach((h) => {
             if (h.phase !== 'warn') return;
             const a = 0.45 + 0.4 * Math.sin(t0 / 45);
-            fx.fillStyle(0xff1744, a * 0.5); fx.fillEllipse(h.x, 567, 46, 10);
-            fx.fillStyle(0xff1744, a); fx.fillRect(h.x - 14, 565, 28, 3); fx.fillRect(h.x - 4, 561, 3, 5); fx.fillRect(h.x + 6, 562, 3, 4);
+            const g = d.floorHoles.find(q => h.x >= q.x && h.x <= q.x + q.w);
+            fx.fillStyle(0xff1744, a * 0.35); fx.fillEllipse(h.x, d.floorY + 60, 30, 90);
+            if (g) {
+                const edge = h.side < 0 ? g.x : g.x + g.w;
+                fx.fillStyle(0xff1744, a); fx.fillRect(h.side < 0 ? edge - 52 : edge, d.floorY - 2, 52, 4);
+            }
         });
         // Devordagi teshikda qizil ko'zlar - bosh chiqishidan oldin (qorong'ilik ustida ko'rinadi)
         (S.heads || []).forEach((h) => {
@@ -3128,7 +3146,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const swIds = new Set((S.swallowed || []).map(w => w.id));
         Object.keys(otherPlayers).forEach((id) => { if (swIds.has(id)) { otherPlayers[id].setAlpha(0); if (otherPlayers[id].healthBar) otherPlayers[id].healthBar.clear(); } });
         if (me && me.body) {
-            const inT = swIds.has(socket.id);
+            const inT = swIds.has(socket.id) && t0 - (drObj.spitAt || -1e9) > 600;
             if (inT && !drObj.meSwallowed) { drObj.meSwallowed = true; me.setAlpha(0); me.body.enable = false; }
             else if (!inT && drObj.meSwallowed) { drObj.meSwallowed = false; me.setAlpha(1); me.body.enable = true; }
         }
@@ -3140,7 +3158,7 @@ function launchGame(socket, roomId, mapData, continued) {
             dark.setVisible(true);
             dark.clear();
             dark.fill(0x000000, 0.94);
-            if (d.exitX - cam.scrollX < 1400) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, 390 - cam.scrollY); }
+            if (d.exitX - cam.scrollX < 1400) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, d.floorY - 90 - cam.scrollY); }
             [currentCharacter, ...Object.values(otherPlayers)].forEach((o) => {
                 if (!o || !o.active) return;
                 const f = 0.92 + Math.sin(t0 / 70 + o.x * 0.01) * 0.04 + (Math.random() < 0.03 ? -0.15 : 0);
@@ -5175,7 +5193,7 @@ function launchGame(socket, roomId, mapData, continued) {
             segStart = Math.max(segStart, pit.x + pit.w);
         });
         const pitGfx = this.add.graphics().setDepth(1);
-        pits.forEach((pit) => {
+        if (!isDoors) pits.forEach((pit) => {
             pitGfx.fillStyle(0x000000, 1);
             pitGfx.fillRect(pit.x, 570, pit.w, 30);
             pitGfx.fillStyle(0xff3d00, 0.35);
@@ -5885,13 +5903,15 @@ function launchGame(socket, roomId, mapData, continued) {
             if (d.id === socket.id && currentCharacter) {
                 if (currentCharacter.body) currentCharacter.body.enable = true;
                 currentCharacter.setAlpha(1);
-                if (drObj) drObj.meSwallowed = false;
+                if (drObj) { drObj.meSwallowed = false; drObj.spitAt = this.time.now; }
                 this.cameras.main.shake(400, 0.014);
                 this.cameras.main.flash(200, 120, 0, 0);
             }
         });
         socket.off('grabbed');
         socket.on('grabbed', (d) => { rootUntil = this.time.now + d.ms; this.cameras.main.shake(200, 0.008); });
+        socket.off('pitFall');
+        socket.on('pitFall', (d) => { sfxAt('scream', d.x, 0.8); if (d.id === socket.id) this.cameras.main.flash(300, 0, 0, 0); });
         socket.off('handGrab');
         socket.on('handGrab', (d) => { sfxAt('chomp', d.x); if (d.id === socket.id) this.cameras.main.flash(160, 120, 0, 0); });
         socket.off('monsterBuried');
