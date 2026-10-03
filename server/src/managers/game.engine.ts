@@ -2013,7 +2013,7 @@ export class GameEngine {
             if (safe === dr.lastSafe) safe = (safe + 1 + Math.floor(Math.random() * (n - 1))) % n;
             dr.lastSafe = safe;
             dr.wave = { safe, phase: 'warn', t: T(d.rockWarnMs) };
-            this.io.to(roomId).emit('climbQuake');
+            this.io.to(roomId).emit('climbQuake', { safe, ms: d.rockWarnMs });
         }
         if (dr.wave) {
             const w = dr.wave;

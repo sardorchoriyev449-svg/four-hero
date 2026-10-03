@@ -2812,16 +2812,36 @@ function launchGame(socket, roomId, mapData, continued) {
             const cg = scene.add.graphics(); cliffTileInto(cg, 96, 240); cg.generateTexture('px_cliff_tile', 96, 240); cg.destroy();
         }
     }
+    // QOTISHGA QARSHI: harakatlanmaydigan chizmani (minglab to'rtburchak) bir marta rasmga aylantiradi -
+    // aks holda Phaser ularni HAR KADRDA qayta chizadi (uzun g'orda 100 000+ buyruq - telefonda qotardi).
+    // 2048 px lik bo'laklarga bo'linadi (telefonlar katta rasmni ko'tarmaydi)
+    // (RenderTexture emas - oddiy tekstura: ko'p RenderTexture GPU da har kadr qimmatga tushadi)
+    let bakeN = 0;
+    function bakeGraphics(scene, g, x, y, w, h, depth) {
+        const parts = [];
+        for (let cx = 0; cx < w; cx += 2048) {
+            const cw = Math.min(2048, w - cx), key = 'baked_' + (++bakeN);
+            if (scene.textures.exists(key)) scene.textures.remove(key);
+            g.setScrollFactor(0).setPosition(-(x + cx), -y);   // scrollFactor 0: generateTexture siljishni bekor qilmasin
+            g.generateTexture(key, cw, h);
+            parts.push(scene.add.image(x + cx, y, key).setOrigin(0, 0).setDepth(depth));
+        }
+        g.destroy();
+        return parts;
+    }
     function buildDoorsScene(scene) {
         const W = mapWidth, d = map.doors;
         ensureDoorsTextures(scene);
-        drawPixelBackdrop(scene, { sky: [0x120d1f, 0x1c1430, 0x281c40, 0x352452, 0x432c60, 0x52346c], clouds: false, mountains: false, width: W });
+        bakeN = 0;
+        // Tashqi manzara faqat g'orgacha (g'or ichini o'z devori to'liq yopadi)
+        const outW = d.roomX0 + 900;
+        drawPixelBackdrop(scene, { sky: [0x120d1f, 0x1c1430, 0x281c40, 0x352452, 0x432c60, 0x52346c], clouds: false, mountains: false, width: outW });
         const far = scene.add.graphics().setScrollFactor(0.4, 1).setDepth(-3.5);
-        for (let x = 0; x < W; x += 8) {
+        for (let x = 0; x < outW; x += 8) {
             const top = 380 - Math.round((Math.abs(Math.sin(x * 0.007)) * 120 + Math.abs(Math.sin(x * 0.019)) * 40) / 8) * 8;
             far.fillStyle(0x221833, 1); far.fillRect(x, top, 8, 570 - top);
         }
-        scene.add.tileSprite(0, 570, W, 30, 'px_farm_soil').setOrigin(0, 0).setDepth(1);
+        scene.add.tileSprite(0, 570, d.roomX0, 30, 'px_farm_soil').setOrigin(0, 0).setDepth(1);
         // TOG': yo'l oxirida ulkan qoya - eshiklar uning o'ziga o'yilgan, tepaga chiqish yo'li ham shu tog'da
         const mountX = d.yellowX - 90;
         scene.add.tileSprite(mountX, 0, d.climbX1 - mountX, 572, 'px_cliff_tile').setOrigin(0, 0).setDepth(-0.6);
@@ -2856,51 +2876,46 @@ function launchGame(socket, roomId, mapData, continued) {
         wallG.fillStyle(0x0d0a12, 1); wallG.fillRect(d.climbX1, 0, d.roomX0 - d.climbX1, 572);
         // ===== ICHKARI: ulkan qorong'i G'OR =====
         const X0 = d.roomX0, X1 = d.roomX1;
-        scene.add.tileSprite(X0, 0, X1 - X0, 572, 'px_cliff_tile').setOrigin(0, 0).setDepth(-0.5).setTint(0x2a2433);
-        const cave = scene.add.graphics().setDepth(-0.45);
+        const caveBg = scene.add.tileSprite(0, 0, 800, 572, 'px_cliff_tile').setOrigin(0, 0).setScrollFactor(0).setDepth(-0.5).setTint(0x2a2433).setVisible(false);
+        scene.add.rectangle(X0, 0, 40, 600, 0x0b0810).setOrigin(0, 0).setDepth(-0.44);
+        const cave = scene.add.graphics();
         // Tishli shift
         for (let x = X0; x < X1; x += 10) {
             const h = 40 + Math.round(Math.abs(Math.sin(x * 0.031)) * 26 + ((x * 7) % 13));
             cave.fillStyle(0x0b0810, 1); cave.fillRect(x, 0, 10, h);
             cave.fillStyle(0x1a1620, 1); cave.fillRect(x, h - 4, 10, 4);
         }
-        // Chap devor, poldagi stalagmitlar, suyaklar, ko'lmaklar, o'rgimchak to'ri
-        cave.fillStyle(0x0b0810, 1); cave.fillRect(X0, 0, 40, 572);
-        for (let x = X0 + 60; x < X1 - 20; x += 90 + ((x * 13) % 70)) {
-            const h = 18 + (x * 7) % 30;
-            cave.fillStyle(0x0a0a0a, 1); cave.fillTriangle(x - 12, 572, x, 572 - h - 2, x + 12, 572);
-            cave.fillStyle(0x2a2433, 1); cave.fillTriangle(x - 10, 572, x, 572 - h, x + 10, 572);
-        }
-        [[X0 + 150, 0], [X0 + 830, 1], [X0 + 1310, 0]].forEach(([x, k]) => {
-            cave.fillStyle(0xbdbdbd, 1); cave.fillRect(x, 560, 22, 4); cave.fillRect(x - 3, 558, 5, 8); cave.fillRect(x + 20, 558, 5, 8);
-            if (k === 0) { cave.fillStyle(0xe0e0e0, 1); cave.fillRect(x + 32, 550, 14, 12); cave.fillStyle(0x0a0a0a, 1); cave.fillRect(x + 35, 554, 3, 3); cave.fillRect(x + 40, 554, 3, 3); }
-        });
-        [[X0 + 420, 70], [X0 + 1050, 90]].forEach(([x, w]) => { cave.fillStyle(0x0d1a20, 1); cave.fillEllipse(x, 571, w, 6); cave.fillStyle(0x4dd0e1, 0.25); cave.fillRect(x - w / 4, 570, w / 2, 1); });
+        // O'rgimchak to'ri (pastdagi bezaklar endi ustunlar ortida - chizilmaydi)
         cave.lineStyle(1, 0x9e9e9e, 0.35);
         [[X0 + 40, 60], [X1 - 60, 60]].forEach(([cx, cy]) => { for (let k = 0; k < 5; k++) cave.lineBetween(cx, cy, cx + Math.cos(k * 0.5) * 60 * (cx > X0 + 100 ? -1 : 1), cy + Math.sin(k * 0.5) * 60); });
+        bakeGraphics(scene, cave, X0, 0, X1 - X0, 130, -0.45);
         // DEVORDAGI TUNNEL TESHIKLARI: OQ YUZ shulardan boshini chiqaradi
-        const holesG = scene.add.graphics().setDepth(-0.38);
         // Qorong'ida ham teshiklarning cheti xira ko'rinadi (qayerdan chiqishi mumkinligini bilish uchun)
-        const holesRim = scene.add.graphics().setDepth(4.62);
-        d.wallHoles.forEach((w) => { holesRim.lineStyle(3, 0x6a5a80, 0.22); holesRim.strokeEllipse(w.x, w.y, w.r * 2 + 4, w.r * 2 - 2); });
+        d.wallHoles.forEach((w) => {
+            const rim = scene.add.graphics();
+            rim.lineStyle(3, 0x6a5a80, 0.22); rim.strokeEllipse(w.x, w.y, w.r * 2 + 4, w.r * 2 - 2);
+            bakeGraphics(scene, rim, w.x - w.r - 6, w.y - w.r - 4, w.r * 2 + 12, w.r * 2 + 8, 4.62);
+        });
         const heads = d.wallHoles.map((w) => {
+            const holesG = scene.add.graphics();
             holesG.fillStyle(0x2a2433, 1); holesG.fillEllipse(w.x, w.y, w.r * 2 + 18, w.r * 2 + 12);
             holesG.fillStyle(0x3d3548, 1); holesG.fillEllipse(w.x - 4, w.y - 5, w.r * 2 + 8, w.r * 2 + 2);
             holesG.fillStyle(0x020104, 1); holesG.fillEllipse(w.x, w.y, w.r * 2, w.r * 2 - 6);
             holesG.fillStyle(0x0c0812, 1); holesG.fillEllipse(w.x + 3, w.y + 4, w.r * 1.3, w.r * 1.1);
             for (let k = 0; k < 7; k++) { const a = k * 0.9; holesG.fillStyle(0x1a1620, 1); holesG.fillRect(w.x + Math.cos(a) * (w.r + 6) - 3, w.y + Math.sin(a) * (w.r + 3) - 3, 6, 6); }
+            bakeGraphics(scene, holesG, w.x - w.r - 14, w.y - w.r - 12, w.r * 2 + 28, w.r * 2 + 24, -0.38);
             const img = scene.add.image(w.x, w.y, 'px_oq_scare').setDepth(4.72).setVisible(false);
             return { img, base: (w.r * 1.5) / 286 };
         });
         // G'OR YO'LI: chuqur jarlik ustidagi tosh ustunlar (rasmdagidek). Bo'shliqlar - tubsiz qorong'ilik
         const fy = d.floorY;
-        const abyss = scene.add.graphics().setDepth(1.3);
+        const abyss = scene.add.graphics();
         d.floorHoles.forEach((h) => {
             abyss.fillStyle(0x0a0710, 1); abyss.fillRect(h.x, fy + 10, h.w, 600 - fy);
             abyss.fillStyle(0x050308, 1); abyss.fillRect(h.x, fy + 60, h.w, 600 - fy);
             abyss.fillStyle(0x000000, 1); abyss.fillRect(h.x, fy + 110, h.w, 600 - fy);
         });
-        const pillarG = scene.add.graphics().setDepth(1.4);
+        const pillarG = abyss;
         map.platforms.forEach((pl, k) => {
             if (d.climbPlats.includes(k)) return;
             pillarG.fillStyle(0x050308, 1); pillarG.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 602 - pl.y);
@@ -2912,8 +2927,9 @@ function launchGame(socket, roomId, mapData, continued) {
             pillarG.fillStyle(0x000000, 0.35); pillarG.fillRect(pl.x, pl.y + 90, pl.w, 600 - pl.y);
             pillarG.fillStyle(0x000000, 0.45); pillarG.fillRect(pl.x, pl.y + 140, pl.w, 600 - pl.y);
         });
+        bakeGraphics(scene, pillarG, X0, fy - 4, X1 - X0, 604 - fy, 1.4);
         // Ustunlar orasi richag tortilguncha tosh ko'prik bilan yopiq (keyin qulaydi)
-        const bridgeG = scene.add.graphics().setDepth(1.39);
+        const bridgeG = scene.add.graphics().setDepth(1.41);
         const covers = d.floorHoles.map((h) => {
             bridgeG.fillStyle(0x050308, 1); bridgeG.fillRect(h.x, fy - 2, h.w, 16);
             bridgeG.fillStyle(0x2a2433, 1); bridgeG.fillRect(h.x, fy, h.w, 12);
@@ -2948,7 +2964,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const brush = scene.make.image({ key: 'light_brush', add: false });
         const brushS = scene.make.image({ key: 'light_brush_s', add: false });
         const fx = scene.add.graphics().setDepth(4.7);       // ko'zlar, kovlanayotgan joylar - qorong'ilik ustida
-        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, bridgeG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
+        drObj = { caveBg, fallingRocks: [], yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, bridgeG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
             barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9, floorOpen: false, diving: false, meSwallowed: false };
     }
     // Richagdan keyin: ustunlar orasidagi tosh ko'priklar qulab, bo'shliqlar ochiladi
@@ -3074,13 +3090,19 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (k === S.wave.safe || k === d.climbPlats.length - 1) return;
                 const pl = map.platforms[pi];
                 if (S.wave.phase === 'warn') {
-                    if (Math.floor(t0 / 110) % 2) { rg.fillStyle(0x000000, 0.45); rg.fillEllipse(pl.x + pl.w / 2, pl.y - 2, pl.w, 14); }
-                    if (Math.random() < 0.4) { const pp = scene.add.rectangle(pl.x + Math.random() * pl.w, 0, 4, 4, 0x9e9e9e).setDepth(3.3); scene.tweens.add({ targets: pp, y: pl.y, duration: 500, onComplete: () => pp.destroy() }); }
+                    // Shu yerga tosh tushadi - qizil
+                    const a = 0.75 + 0.25 * Math.sin(t0 / 90);
+                    rg.fillStyle(0xff1744, a); rg.fillRect(pl.x - 2, pl.y - 4, pl.w + 4, 22);
+                    rg.lineStyle(3, 0xff0000, 1); rg.strokeRect(pl.x - 4, pl.y - 6, pl.w + 8, 26);
+                    rg.fillStyle(0xff1744, 0.18); rg.fillRect(pl.x, pl.y - 100, pl.w, 94);
                 }
             });
             const sp = map.platforms[d.climbPlats[S.wave.safe]];
             rg.fillStyle(0x69f0ae, 0.35); rg.fillRect(sp.x, sp.y - 6, sp.w, 6);
         }
+        const inCave = S.state === 'room' || (S.state === 'done' && cam.scrollX >= d.roomX0 - 10);
+        drObj.caveBg.setVisible(inCave);
+        if (inCave) drObj.caveBg.tilePositionX = cam.scrollX - d.roomX0;
         if (S.state !== 'room' && S.state !== 'done') return;
         // Yo'l teshiklari: kech qo'shilgan o'yinchida ham ochiq bo'lsin
         if (S.floorOpen && !drObj.floorOpen) drOpenFloor(scene, true);
@@ -5949,19 +5971,33 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('climbStart');
         socket.on('climbStart', () => sfx('banner'));
         socket.off('climbQuake');
-        socket.on('climbQuake', () => { this.cameras.main.shake(600, 0.008); sfx('rumble'); });
+        socket.on('climbQuake', (d) => {
+            this.cameras.main.shake(600, 0.008); sfx('rumble');
+            if (!drObj || !d) return;
+            // Toshlar ogohlantirish davomida (2 s) tepadan sekin tushib keladi
+            const plats = map.doors.climbPlats;
+            plats.forEach((pi, k) => {
+                if (k === d.safe || k === plats.length - 1) return;
+                const pl = map.platforms[pi];
+                const r = this.add.circle(pl.x + pl.w / 2, -50, Math.min(40, pl.w / 3), 0x757575).setStrokeStyle(4, 0x0a0a0a).setDepth(3.45);
+                this.tweens.add({ targets: r, y: pl.y - 30, angle: 180, duration: d.ms || 2000, ease: 'Quad.In' });
+                drObj.fallingRocks.push(r);
+            });
+        });
         socket.off('climbRocks');
         socket.on('climbRocks', (d) => {
             sfx('explosion', 0.7);
+            this.cameras.main.shake(250, 0.01);
             map.doors.climbPlats.forEach((pi, k) => {
                 if (k === d.safe || k === map.doors.climbPlats.length - 1) return;
                 const pl = map.platforms[pi];
-                const r = this.add.circle(pl.x + pl.w / 2, -40, 36, 0x757575).setStrokeStyle(4, 0x0a0a0a).setDepth(3.45);
-                this.tweens.add({ targets: r, y: pl.y - 30, duration: 220, ease: 'Quad.In', onComplete: () => { gDust(this, r.x, pl.y - 4, 8, 0x9e9e9e); r.destroy(); } });
+                gDust(this, pl.x + pl.w / 2, pl.y - 4, 8, 0x9e9e9e);
             });
+            if (drObj) { drObj.fallingRocks.forEach((r) => { this.tweens.killTweensOf(r); r.destroy(); }); drObj.fallingRocks = []; }
         });
         socket.off('climbSegment');
         socket.on('climbSegment', (d) => {
+            if (drObj) { drObj.fallingRocks.forEach((r) => { this.tweens.killTweensOf(r); r.destroy(); }); drObj.fallingRocks = []; }
             sfx('xp');
             this.cameras.main.flash(300, 255, 255, 255);
             if (drObj) this.tweens.add({ targets: drObj.cliff, tilePositionY: drObj.cliff.tilePositionY - 240, duration: 600 });
