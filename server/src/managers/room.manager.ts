@@ -7,6 +7,7 @@ import { lookString } from '../cosmetics';
 import { MAPS, getMapById, SEASON_MAP_COUNT } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
+import { isLocalTest } from '../testmode';
 import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
@@ -167,7 +168,8 @@ export class RoomManager {
             damageLevel: accountUpgrades[characterType]?.damage || 0,
             staminaLevel: accountUpgrades[characterType]?.stamina || 0,
             accountUpgrades: accountUpgrades,
-            unlockedLevel: unlockedLevel,
+            // Localhost test rejimi - hamma xaritalar ochiq (hisobli ham, mehmon ham)
+            unlockedLevel: isLocalTest(socket.handshake?.address) ? SEASON_MAP_COUNT - 1 : unlockedLevel,
             xp: xp,
             charXp: charXp,
             level: 0,
@@ -615,6 +617,25 @@ export class RoomManager {
         this.io.sockets.sockets.get(where.socketId)?.leave(where.roomId);
         this.leavePlayerById(where.socketId);
         return true;
+    }
+    // Admin darajani o'zgartirgan bo'lsa - o'yinchi onlayn bo'lsa, imkoniyatlari darhol yangilanadi
+    public notifyLevel(userId: string, charXp: { [c: string]: number }): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (!p) return;
+            p.charXp = { ...charXp };
+            RoomManager.refreshPerks(p);
+            this.updateLobby(room.id);
+        });
+    }
+    // Admin xaritalarni ochib bergan bo'lsa - o'yinchi onlayn bo'lsa, lobbisi darhol yangilanadi
+    public notifyUnlocked(userId: string, level: number): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (!p) return;
+            p.unlockedLevel = level;
+            if (room.hostId === p.id) { this.applyHostProgress(room, false); this.broadcastLevelInfo(room.id); }
+        });
     }
     // Admin tanga bergan bo'lsa - o'yinchi onlayn bo'lsa, balansi darhol yangilanadi
     public notifyCoins(userId: string, amount: number, totalCoins: number): void {

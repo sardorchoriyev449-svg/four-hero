@@ -582,6 +582,26 @@ export async function setBanned(userId: string, banned: boolean, reason: string 
 }
 
 // Tanga qo'shish/ayirish (manfiy bo'lsa ham balans 0 dan pastga tushmaydi)
+// ADMIN: qahramon darajasini belgilash. 15-darajada hamma imkoniyatlar ochiladi - undan yuqorisi hech narsa bermaydi
+export const MAX_LEVEL = 15;
+export const HERO_TYPES = CHARACTER_TYPES;
+// Aynan shu darajaning boshlanishi uchun kerakli jami XP (xpLevel ga teskari): 10 * (2^daraja - 1)
+export function xpForLevel(level: number): number {
+    return XP_PER_MAP * (2 ** level - 1);
+}
+export async function setHeroLevel(userId: string, heroes: string[], level: number): Promise<UserRecord | null> {
+    const set: any = {};
+    heroes.forEach(c => { set['charXp.' + c] = xpForLevel(level); });
+    const doc = await UserModel.findByIdAndUpdate(userId, { $set: set }, { returnDocument: 'after' });
+    return doc ? docToUser(doc) : null;
+}
+
+// ADMIN: ochilgan xaritalarni aniq belgilash (0 - faqat birinchisi)
+export async function setUnlockedLevel(userId: string, level: number): Promise<UserRecord | null> {
+    const doc = await UserModel.findByIdAndUpdate(userId, { $set: { unlockedLevel: level } }, { returnDocument: 'after' });
+    return doc ? docToUser(doc) : null;
+}
+
 export async function adjustCoins(userId: string, amount: number): Promise<UserRecord | null> {
     const doc: any = await UserModel.findById(userId);
     if (!doc) return null;

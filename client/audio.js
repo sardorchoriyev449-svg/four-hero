@@ -169,11 +169,19 @@
         block:     (t, v, o) => { tone(1800, t, 0.12, 'triangle', 0.07 * v, o); tone(2400, t + 0.02, 0.1, 'triangle', 0.05 * v, o); },
         // Skrimer: keskin shovqin va pastga tushuvchi chiyillash
         scream:    (t, v, o) => { noise(t, 0.6, 0.9 * v, 'bandpass', 2600, 900, o); sweep(1400, 220, t, 0.55, 'sawtooth', 0.22 * v, o); sweep(1900, 300, t + 0.03, 0.5, 'square', 0.12 * v, o); },
+        // OQ YUZ ushlaganda: uzun, qattiq, qichqiriqli baqiriq (bir necha qatlam)
+        deathScream: (t, v, o) => {
+            noise(t, 1.5, 1.0 * v, 'bandpass', 3400, 700, o);
+            sweep(1900, 150, t, 1.4, 'sawtooth', 0.32 * v, o);
+            sweep(2500, 260, t + 0.04, 1.3, 'square', 0.16 * v, o);
+            sweep(950, 80, t + 0.08, 1.4, 'sawtooth', 0.24 * v, o);
+            noise(t + 0.9, 0.7, 0.6 * v, 'lowpass', 900, 120, o);
+        },
         // G'orda suv tomchisi
         drip:      (t, v, o) => { sweep(1500, 2600, t, 0.06, 'sine', 0.12 * v, o); tone(900, t + 0.07, 0.25, 'sine', 0.04 * v, o); }
     };
     const lastSfxAt = {};
-    const SFX_GAP = { shotgun: 80, hit: 50, bossHit: 90, hurt: 150, coin: 60, xp: 80, click: 40, squish: 40, botDie: 60 };
+    const SFX_GAP = { deathScream: 1500, shotgun: 80, hit: 50, bossHit: 90, hurt: 150, coin: 60, xp: 80, click: 40, squish: 40, botDie: 60 };
 
     let calmOn = false;
     function scheduleCalm() {

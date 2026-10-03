@@ -13,6 +13,7 @@ import { MAPS } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
+import { isLocalTest } from './testmode';
 config({quiet:true})
 
 // Bitta kutilmagan xato (masalan, noto'g'ri formatdagi socket xabari) butun serverni - hamma
@@ -81,6 +82,9 @@ app.get('/api/skins', (req, res) => {
 });
 
 // XARITALAR RO'YXATINI OLISH (nom, tavsif, rang - lobbida ko'rsatish uchun)
+// Test rejimi (localhost): klient "TEST MODE" belgisini ko'rsatadi
+app.get('/api/test-mode', (req, res) => { res.json({ test: isLocalTest(req.socket.remoteAddress) }); });
+
 // ===== REKLAMA =====
 // Reklama tarmog'i ID lari .env (Render -> Environment) dan olinadi. ADS_CLIENT bo'lmasa - reklama
 // umuman ko'rinmaydi. ADS_CLIENT: "ca-pub-XXXXXXXXXXXXXXXX" (Google AdSense / H5 Games Ads),

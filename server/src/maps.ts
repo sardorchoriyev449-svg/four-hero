@@ -347,10 +347,12 @@ export interface DoorsDef {
     // Tepaga chiqish
     climbX0: number;
     climbX1: number;
-    climbPlats: number[];    // platforms indekslari (pastdan tepaga; oxirgisi - eng tepadagi maqsad)
+    climbPlats: number[];    // platforms indekslari (qavat-qavat, pastdan tepaga; oxirgisi - eng tepadagi maqsad)
+    stageStep: number;       // bir qavat balandligi (px)
+    stageRows: number[][];   // qavat ichidagi 4 talik qatorlar: qahramon turgan qatorga 3 ta tosh, bittasi xavfsiz
     climbStartX: number;
-    segments: number;
-    segMeters: number;
+    segments: number;        // qavatlar soni
+    segMeters: number;       // bir qavat - shuncha metr
     rockEveryMs: number;
     rockWarnMs: number;
     rockDamagePct: number;
@@ -385,8 +387,30 @@ export interface DoorsDef {
     headReach: number;        // otilib chiqqanda ushlaydigan masofa (teshik radiusiga qo'shiladi)
     swallowMs: number;        // tunnel ichida
     swallowDamagePct: number; // boshqa teshikdan tupurib chiqarganda - maks. jonning ulushi
+    grabImmuneMs: number;     // tunneldan chiqqandan keyin shuncha vaqt hech qaysi bosh ushlamaydi
+    huntMeters: number;       // malikani qoldirib (richagni tortmasdan) shuncha metr ketsa - OQ YUZ yugurib kelib ushlaydi: o'yin tugaydi
+    huntSpeed: number;        // o'shanda yugurish tezligi (px/s)
+    // G'OR QO'ZIQORINCHALARI: aqlli kichik maxluqlar - bo'shliqdan sakrab o'tadi, o'qdan sakrab qochadi, xalaqit beradi
+    shroomHp: number;
+    shroomDamage: number;
+    shroomSpeed: number;      // px/s
+    shroomEveryMs: number;
+    shroomMax: number;        // bir vaqtda nechta (1 - bittadan: o'lgach yangisi chiqadi)
+    shroomRespawnMs: number;  // o'lgandan keyin yangisi shuncha vaqtdan so'ng chiqadi
     respectXp: number;
+    doorLocked: boolean;      // VAQTINCHA: sariq eshik yopiq - tanlov yo'q, faqat tog'ga chiqiladi (eshik ortidan ovozlar). false - g'or qaytadi
 }
+
+// MAP-5 TEPAGA CHIQISH: rasmdagi qavat (pastda 4, o'rtada 1, tepada 4, eng tepada 1 platforma) bir joyda
+// ustma-ust 10 marta - har qavatning eng tepasidan keyingi qavatning pastki qatoriga bir sakrash
+const CLIMB_STAGE = [
+    { x: 1043, y: 460, w: 143, h: 12 }, { x: 1270, y: 460, w: 100, h: 12 }, { x: 1434, y: 460, w: 92, h: 12 }, { x: 1579, y: 460, w: 119, h: 12 },
+    { x: 1335, y: 355, w: 118, h: 12 },
+    { x: 1047, y: 245, w: 122, h: 12 }, { x: 1220, y: 245, w: 110, h: 12 }, { x: 1411, y: 245, w: 118, h: 12 }, { x: 1593, y: 245, w: 120, h: 12 },
+    { x: 1294, y: 135, w: 174, h: 12 }
+];
+const CLIMB_STAGES = 10, CLIMB_STEP = 435;
+const CLIMB_TOWER = Array.from({ length: CLIMB_STAGES }, (_, k) => CLIMB_STAGE.map(pl => ({ ...pl, y: pl.y - k * CLIMB_STEP }))).flat();
 
 // MAP-5 G'ORI: 400 m qochish yo'li - chuqur jarlik ustidagi tosh ustunlar (ular orasidagi bo'shliqlar richag
 // tortilgach ochiladi, tushgan halok bo'ladi; bo'shliqdan qo'llar chiqadi) va devordagi tunnel teshiklari. Tasodifiy, lekin har safar
@@ -394,7 +418,7 @@ export interface DoorsDef {
 const CAVE_RUN = (() => {
     let seed = 5150;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-    const roomX0 = 2200, runFrom = 2260, runMeters = 400, exitX = runFrom + runMeters * 50, roomX1 = exitX + 200, floorY = 420;
+    const roomX0 = 2200, runFrom = 2260, runMeters = 300, exitX = runFrom + runMeters * 50, roomX1 = exitX + 200, floorY = 420;
     const blocks: { x: number, y: number, w: number, h: number }[] = [];
     const floorHoles: { x: number, w: number }[] = [];
     let x = 2760;
@@ -413,7 +437,8 @@ const CAVE_RUN = (() => {
     const wallHoles: { x: number, y: number, r: number }[] = [];
     for (let wx = 3350; wx < exitX - 600; wx += 520 + Math.round(rnd() * 340)) {
         const r = 44 + Math.round(rnd() * 22);
-        wallHoles.push({ x: wx, y: 200 + Math.round(rnd() * (170 - r)), r });
+        // Teshik pastki cheti yo'ldan 50 px yuqorida; eng balandidan ham bosh yo'ldagi qahramonga yetadi
+        wallHoles.push({ x: wx, y: 230 + Math.round(rnd() * (140 - r)), r });
     }
     return { runMeters, exitX, roomX1, floorY, blocks, floorHoles, wallHoles };
 })();
@@ -1034,30 +1059,23 @@ export const MAPS: MapDef[] = [
         groundColor: 0x2b2733,
         mapWidth: CAVE_RUN.roomX1,
         platforms: [
-            // Tepaga chiqish (0-9, rasmdagidek): pastda 4 ta, o'rtada 1 ta, tepada 4 ta, eng tepada - maqsad
-            { x: 1043, y: 460, w: 143, h: 12 },
-            { x: 1270, y: 460, w: 100, h: 12 },
-            { x: 1434, y: 460, w: 92, h: 12 },
-            { x: 1579, y: 460, w: 119, h: 12 },
-            { x: 1335, y: 355, w: 118, h: 12 },
-            { x: 1047, y: 245, w: 122, h: 12 },
-            { x: 1220, y: 245, w: 110, h: 12 },
-            { x: 1411, y: 245, w: 118, h: 12 },
-            { x: 1593, y: 245, w: 120, h: 12 },
-            { x: 1294, y: 135, w: 174, h: 12 },
-            // G'or yo'li: tosh ustunlar (10-...)
+            // Tepaga chiqish (0-99): rasmdagi 10 platformali qavat bir joyda ustma-ust 10 marta - tepa-tepaga chiqiladi
+            ...CLIMB_TOWER,
+            // G'or yo'li: tosh ustunlar (100-...)
             ...CAVE_RUN.blocks
         ],
         pits: CAVE_RUN.floorHoles,
         doors: {
+            doorLocked: true,
             triggerX: 560, yellowX: 700, blackX: 840,
-            climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], climbStartX: 1340, segments: 10, segMeters: 10,
-            rockEveryMs: 2000, rockWarnMs: 2000, rockDamagePct: 0.6,
+            climbX0: 1000, climbX1: 1820, climbPlats: CLIMB_TOWER.map((_, i) => i), climbStartX: 1340, segments: CLIMB_STAGES, segMeters: 10, stageStep: CLIMB_STEP, stageRows: [[0, 1, 2, 3], [5, 6, 7, 8]],
+            rockEveryMs: 700, rockWarnMs: 2000, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
             runMeters: CAVE_RUN.runMeters, floorY: CAVE_RUN.floorY, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
-            holeHandEveryMs: 450, holeHandWarnMs: 450, holeHandUpMs: 750, holeHandReach: 52, holeHandGrabAtMs: 240, holeHandCdMs: 2600, holeDamage: 30, grabMs: 900,
-            headWarnMs: 800, headLungeMs: 300, headBackMs: 450, headCdMs: 5000, headGlobalMs: 1300, headTrigger: 280, headReach: 115,
-            swallowMs: 1500, swallowDamagePct: 0.5,
+            holeHandEveryMs: 700, holeHandWarnMs: 650, holeHandUpMs: 850, holeHandReach: 52, holeHandGrabAtMs: 300, holeHandCdMs: 3600, holeDamage: 30, grabMs: 900,
+            headWarnMs: 1100, headLungeMs: 350, headBackMs: 550, headCdMs: 6500, headGlobalMs: 2200, headTrigger: 280, headReach: 115,
+            swallowMs: 1500, swallowDamagePct: 0.5, grabImmuneMs: 6000, huntMeters: 200, huntSpeed: 620,
+            shroomHp: 60, shroomDamage: 20, shroomSpeed: 115, shroomEveryMs: 5000, shroomMax: 1, shroomRespawnMs: 3000,
             respectXp: 200
         },
         playerSpawns: [

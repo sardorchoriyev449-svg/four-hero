@@ -5,10 +5,11 @@
 //   - har safar /login bilan kirish kerak; parolli xabar darhol o'chiriladi
 //   - /logout - chiqish; 15 daqiqa hech narsa qilinmasa - avtomatik chiqadi
 //   - 5 marta noto'g'ri parol - 10 daqiqa bloklanadi
-// Buyruqlar: /stats, /find <login>, /ban <login> [sabab], /unban <login>, /coins <login> <son>
+// Buyruqlar: /stats, /find <login>, /ban <login> [sabab], /unban <login>, /coins <login> <son>, /maps <login> <son|all>
 import crypto from 'crypto';
 import * as db from './db';
 import { RoomManager } from './managers/room.manager';
+import { MAPS, SEASON_MAP_COUNT } from './maps';
 
 const SESSION_MS = 15 * 60 * 1000;
 const MAX_FAILS = 5;
@@ -24,7 +25,10 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export function startAdminBot(roomManager: RoomManager): void {
-    const token = (process.env.TG_BOT_KAY || process.env.TG_BOT_KEY || '').trim();
+    // Kompyuterda (lokal test) - alohida TEST bot (TG_BOT_TEST): Render'dagi asosiy bot bilan to'qnashmaydi
+    const local = !process.env.RENDER;
+    const testToken = (process.env.TG_BOT_TEST || '').trim();
+    const token = (local && testToken) ? testToken : (process.env.TG_BOT_KAY || process.env.TG_BOT_KEY || '').trim();
     const adminId = (process.env.admin_id || '').trim();
     const adminLogin = (process.env.admin_login || '').trim();
     const adminPassword = (process.env.admin_password || '').trim();
@@ -32,6 +36,13 @@ export function startAdminBot(roomManager: RoomManager): void {
         console.log('Admin bot o\'chiq: .env da TG_BOT_KAY, admin_id, admin_login, admin_password to\'liq emas');
         return;
     }
+    // Kompyuterda asosiy token bilan ishga tushirilmaydi: Render'dagi bot bilan bitta tokenni talashib,
+    // buyruqlar goh u, goh bu serverga ketardi. Lokal sinov uchun - .env ga TG_BOT_TEST (alohida test bot)
+    if (local && !testToken && (process.env.ADMIN_BOT_LOCAL || '').trim() !== 'on') {
+        console.log('Admin bot lokal serverda o\'chiq. Sinash uchun .env ga TG_BOT_TEST=<test bot tokeni> yozing');
+        return;
+    }
+    if (local && testToken) console.log('Admin bot: TEST bot bilan ishlayapti (TG_BOT_TEST)');
     const API = 'https://api.telegram.org/bot' + token + '/';
     let sessionUntil = 0;
     let fails = 0, lockedUntil = 0;
@@ -51,7 +62,9 @@ export function startAdminBot(roomManager: RoomManager): void {
         '/find &lt;login&gt; - foydalanuvchini topish',
         '/ban &lt;login&gt; [sabab] - bloklash (onlayn bo\'lsa - chiqarib yuboriladi)',
         '/unban &lt;login&gt; - blokdan chiqarish',
-        '/coins &lt;login&gt; &lt;son&gt; - tanga berish (manfiy - ayirish)'
+        '/coins &lt;login&gt; &lt;son&gt; - tanga berish (manfiy - ayirish)',
+        `/maps &lt;login&gt; &lt;son|all&gt; - xaritalarni ochish (son: nechta xarita ochiq bo'lsin, 1-${SEASON_MAP_COUNT}; all - hammasi)`,
+        `/level &lt;login&gt; &lt;knight|archer|mage|samurai|all&gt; &lt;0-${db.MAX_LEVEL}&gt; - qahramon darajasi (eng yuqori - ${db.MAX_LEVEL}: hamma imkoniyatlar ochiq)`
     ].join('\n');
 
     function userCard(u: db.UserRecord): string {
@@ -61,7 +74,7 @@ export function startAdminBot(roomManager: RoomManager): void {
             `<b>${esc(u.nickname)}</b> (${esc(u.fullName)})`,
             `ID: <code>${u.id}</code>`,
             `Tanga: <b>${u.coins}</b>`,
-            `Ochilgan xarita: ${u.unlockedLevel + 1}`,
+            `Ochilgan xarita: ${Math.min(u.unlockedLevel + 1, SEASON_MAP_COUNT)} / ${SEASON_MAP_COUNT}`,
             `Darajalar: knight ${lv('knight')}, archer ${lv('archer')}, mage ${lv('mage')}, samurai ${lv('samurai')}`,
             `Holat: ${u.banned ? '⛔ BLOKLANGAN' + (u.banReason ? ' (' + esc(u.banReason) + ')' : '') : '✅ faol'}`,
             `Onlayn: ${online ? '🟢 xonada "' + esc(online.roomName) + '"' : '⚪ yo\'q'}`,
@@ -147,6 +160,32 @@ export function startAdminBot(roomManager: RoomManager): void {
             const upd = await db.adjustCoins(u.id, amount);
             if (upd) roomManager.notifyCoins(u.id, upd.coins - u.coins, upd.coins);
             await send(chatId, `💰 ${amount > 0 ? '+' : ''}${amount} tanga. Yangi balans: <b>${upd ? upd.coins : '?'}</b>`);
+        } else if (cmd === '/maps') {
+            const arg = (args[1] || '').toLowerCase();
+            const n = arg === 'all' ? SEASON_MAP_COUNT : Number(arg);
+            if (!args[0] || !Number.isInteger(n) || n < 1 || n > SEASON_MAP_COUNT) {
+                await send(chatId, `Masalan: /maps sardor all  yoki  /maps sardor 7  (1-${SEASON_MAP_COUNT}: nechta xarita ochiq bo'lsin)`);
+                return;
+            }
+            const u = await findOne(chatId, args[0]);
+            if (!u) return;
+            const upd = await db.setUnlockedLevel(u.id, n - 1);
+            roomManager.notifyUnlocked(u.id, n - 1);
+            await send(chatId, `🗺 ${esc(u.nickname)}: ${n} ta xarita ochiq (oxirgisi: <b>${esc(MAPS[n - 1].name)}</b>)` + (upd ? '\n\n' + userCard(upd) : ''));
+        } else if (cmd === '/level') {
+            const hero = (args[1] || '').toLowerCase();
+            const level = Number(args[2]);
+            const heroes = hero === 'all' ? db.HERO_TYPES : db.HERO_TYPES.includes(hero) ? [hero] : [];
+            if (!args[0] || !heroes.length || !Number.isInteger(level) || level < 0 || level > db.MAX_LEVEL) {
+                await send(chatId, `Masalan: /level sardor knight 10  yoki  /level sardor all ${db.MAX_LEVEL}\n` +
+                    `Qahramon: knight, archer, mage, samurai yoki all. Daraja: 0-${db.MAX_LEVEL} (${db.MAX_LEVEL} - eng yuqori, hamma imkoniyatlar ochiq; undan yuqorisi hech narsa bermaydi)`);
+                return;
+            }
+            const u = await findOne(chatId, args[0]);
+            if (!u) return;
+            const upd = await db.setHeroLevel(u.id, heroes, level);
+            if (upd) roomManager.notifyLevel(u.id, upd.charXp);
+            await send(chatId, `⭐ ${esc(u.nickname)}: ${hero === 'all' ? 'hamma qahramonlar' : hero} - <b>${level}</b>-daraja` + (upd ? '\n\n' + userCard(upd) : ''));
         } else {
             await send(chatId, 'Noma\'lum buyruq.\n\n' + HELP);
         }
@@ -179,7 +218,9 @@ export function startAdminBot(roomManager: RoomManager): void {
         { command: 'find', description: 'Foydalanuvchini topish' },
         { command: 'ban', description: 'Bloklash' },
         { command: 'unban', description: 'Blokdan chiqarish' },
-        { command: 'coins', description: 'Tanga berish' }
+        { command: 'coins', description: 'Tanga berish' },
+        { command: 'maps', description: 'Xaritalarni ochish: /maps login all' },
+        { command: 'level', description: 'Daraja: /level login all 15 (eng yuqori 15)' }
     ] }).catch(() => {});
     console.log('Admin Telegram bot ishga tushdi');
     poll();

@@ -379,12 +379,13 @@ export interface DoorsState {
     tick: number;
     // Tepaga chiqish
     segment: number;
-    wave: { safe: number, phase: 'warn' | 'fall', t: number } | null;
-    lastSafe: number;
+    wave: { safes: (number[] | null)[], phase: 'warn' | 'fall', t: number, n: number,
+        rocks: { x: number, y: number, y0: number, ty: number, r: number, hit: string[] }[] } | null;   // safes[qavat]: [pastki qatordagi, yuqori qatordagi xavfsiz] (-1 - bu qatorga tosh yo'q; null - qavatga yo'q)
+    lastSafe: number[];
     nextWave: number;
     lastPlat: Record<string, number>;
     // Ichkari: elf -> richag -> maxluq tushadi (drop) -> malikani olib teshikka kiradi (take) -> qochish (fight)
-    sub: 'elf' | 'lever' | 'drop' | 'take' | 'shock' | 'fight' | 'buried' | null;
+    sub: 'elf' | 'lever' | 'drop' | 'take' | 'shock' | 'fight' | 'buried' | 'hunt' | 'caught' | null;
     monster: { x: number, y: number, vy: number, pose: 'drop' | 'crawl' | 'hidden', facing: 1 | -1 } | null;
     floorOpen: boolean;
     // Yo'ldagi teshiklardan qo'llar (side: qo'l qaysi tomondagi platformaga cho'ziladi)
@@ -395,6 +396,10 @@ export interface DoorsState {
     heads: { phase: 'idle' | 'warn' | 'lunge' | 'back', t: number, cd: number }[];
     nextHead: number;
     swallowed: { id: string, hole: number, t: number }[];
+    grabImmune: Record<string, number>;   // qahramon -> shu tikkacha bosh ushlamaydi
+    shrooms: { id: string, x: number, y: number, vx: number, vy: number, hp: number, air: boolean, facing: 1 | -1,
+        atkCd: number, jumpCd: number, flash: number }[];
+    nextShroom: number;
     counter: number;
     lastHitBy: string | null;
 }

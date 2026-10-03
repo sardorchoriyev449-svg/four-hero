@@ -1923,3 +1923,14 @@ function drawHero(ctx, type, body, look, ox, oy) {
 
 // Hamma yuklanish vazifalari ro'yxatga qo'shildi (saqlangan bo'limni tiklash ham - u ham setTimeout 0 da) - endi kutamiz
 setTimeout(() => Boot.start(), 0);
+
+// TEST REJIMI (o'yin kompyuterda localhost'da ishga tushirilgan): barcha xaritalar ochiq - burchakda belgi
+fetch('/api/test-mode').then(r => r.json()).then((d) => {
+    if (!d || !d.test) return;
+    const b = document.createElement('div');
+    b.textContent = 'TEST MODE';
+    b.title = 'Localhost: all maps unlocked';
+    b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:5000;padding:6px 8px;background:#d50000;color:#fff;border:3px solid #000;' +
+        'font:9px "Press Start 2P",monospace;pointer-events:none;opacity:.85';
+    document.body.appendChild(b);
+}).catch(() => {});

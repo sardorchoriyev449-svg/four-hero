@@ -317,13 +317,15 @@ export class GameEngine {
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
                 doors: room.doors ? {
                     state: room.doors.state, choice: room.doors.choice, segment: room.doors.segment, sub: room.doors.sub,
-                    wave: room.doors.wave ? { safe: room.doors.wave.safe, phase: room.doors.wave.phase } : null,
+                    wave: room.doors.wave ? { safes: room.doors.wave.safes, phase: room.doors.wave.phase,
+                        rocks: room.doors.wave.phase === 'warn' ? room.doors.wave.rocks.map(r => ({ x: r.x, y: Math.round(r.y), r: r.r })) : [] } : null,
                     monster: room.doors.monster && room.doors.monster.pose !== 'hidden' ? { x: Math.round(room.doors.monster.x), y: Math.round(room.doors.monster.y),
                         pose: room.doors.monster.pose, facing: room.doors.monster.facing } : null,
                     floorOpen: room.doors.floorOpen,
                     hands: room.doors.hands.map(h => ({ id: h.id, x: Math.round(h.x), y: h.y, side: h.side, phase: h.phase })),
                     heads: room.doors.heads.map((h, i) => h.phase === 'idle' ? null : { i, phase: h.phase }).filter(Boolean),
-                    swallowed: room.doors.swallowed.map(w => ({ id: w.id, i: w.hole }))
+                    swallowed: room.doors.swallowed.map(w => ({ id: w.id, i: w.hole })),
+                    shrooms: room.doors.shrooms.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y), hp: m.hp, f: m.facing, air: m.air, fl: m.flash }))
                 } : null,
                 squid: room.squid ? { state: room.squid.state, hp: room.squid.hp, maxHp: room.squid.maxHp, x: Math.round(room.squid.x), eyeY: Math.round(room.squid.eyeY),
                     hitFlash: room.squid.hitFlash, slam: room.squid.slam ? { plat: room.squid.slam.plat, phase: room.squid.slam.phase, x0: room.squid.slam.x0, x1: room.squid.slam.x1, y: room.squid.slam.y } : null,
@@ -958,7 +960,22 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
-            // G'OR (map-5): OQ YUZga o'q/zarba umuman ta'sir qilmaydi - faqat qochish
+            // G'OR (map-5): OQ YUZga o'q/zarba umuman ta'sir qilmaydi - faqat qochish. Qo'ziqorinchalar esa o'ladi
+            const drs = room.doors;
+            if (!bulletDestroyed && drs && drs.state === 'room' && drs.sub === 'fight' && drs.shrooms.length) {
+                const si = drs.shrooms.findIndex(m => this.checkOverlap(hitRect, { x: m.x - 22, y: m.y - 58, w: 44, h: 58 }));
+                if (si >= 0) {
+                    bulletDestroyed = true;
+                    const m = drs.shrooms[si];
+                    m.hp -= damage;
+                    m.flash = 5;
+                    if (m.hp <= 0) {
+                        drs.shrooms.splice(si, 1);
+                        drs.nextShroom = drs.tick + Math.round(map.doors!.shroomRespawnMs / 30);   // o'lgach - biroz o'tib yangisi
+                        this.io.to(room.id).emit('shroomDie', { id: m.id, x: Math.round(m.x), y: Math.round(m.y) });
+                    }
+                }
+            }
 
             // KALMAR: faqat QIZIL KO'ZI zarar oladi
             const sq = room.squid;
@@ -1557,9 +1574,10 @@ export class GameEngine {
         const sqHp = sqd ? sqd.hpPerPlayer * Math.max(1, Object.keys(room.players).length) : 0;
         room.squid = sqd ? { state: 'sleep', hp: sqHp, maxHp: sqHp, timer: 0, tick: 0, x: sqd.baseX, eyeY: 700, hitFlash: 0, lastHitBy: null,
             slam: null, geysers: [], fish: [], splashX: null, nextSlam: 0, nextGeyser: 0, nextFish: 0, counter: 0 } : null;
-        room.doors = map.doors ? { state: 'walk', choice: null, timer: 0, tick: 0, segment: 0, wave: null, lastSafe: -1, nextWave: 0, lastPlat: {},
+        room.doors = map.doors ? { state: 'walk', choice: null, timer: 0, tick: 0, segment: 0, wave: null, lastSafe: [], nextWave: 0, lastPlat: {},
             sub: null, monster: null, lastHitBy: null, floorOpen: false, hands: [], holeCd: map.doors.floorHoles.map(() => 0), nextHand: 0,
-            heads: map.doors.wallHoles.map(() => ({ phase: 'idle' as const, t: 0, cd: 0 })), nextHead: 0, swallowed: [], counter: 0 } : null;
+            heads: map.doors.wallHoles.map(() => ({ phase: 'idle' as const, t: 0, cd: 0 })), nextHead: 0, swallowed: [], grabImmune: {},
+            shrooms: [], nextShroom: 0, counter: 0 } : null;
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
@@ -1899,7 +1917,7 @@ export class GameEngine {
     // ===== SARIQ ESHIK =====
     public doorChoice(room: RoomState, playerId: string, choice: 'enter' | 'no'): void {
         const dr = room.doors, d = getMapById(room.selectedLevel).doors;
-        if (!dr || !d || dr.state !== 'choose' || room.isOver) return;
+        if (!dr || !d || dr.state !== 'choose' || room.isOver || d.doorLocked) return;
         dr.choice = choice;
         dr.state = 'free';
         this.io.to(room.id).emit('doorsChosen', { choice, by: room.players[playerId]?.nickname || '' });
@@ -1949,7 +1967,11 @@ export class GameEngine {
             return;
         }
         if (dr.state === 'talk') {
-            if (--dr.timer <= 0 || allRead()) { dr.state = 'choose'; dr.timer = T(30000); this.io.to(roomId).emit('doorsChoose'); }
+            if (--dr.timer <= 0 || allRead()) {
+                // Eshik yopiq bo'lsa - tanlov yo'q: darhol tog'ga chiqish yo'li
+                if (d.doorLocked) { dr.state = 'free'; dr.choice = 'no'; this.io.to(roomId).emit('doorsLocked'); }
+                else { dr.state = 'choose'; dr.timer = T(30000); this.io.to(roomId).emit('doorsChoose'); }
+            }
             return;
         }
         if (dr.state === 'choose') {
@@ -1979,28 +2001,36 @@ export class GameEngine {
     }
     private updateClimb(room: RoomState, roomId: string, map: MapDef, d: NonNullable<MapDef['doors']>, dr: NonNullable<RoomState['doors']>, alive: PlayerState[]): void {
         const T = (ms: number) => Math.round(ms / 30);
-        const top = d.climbPlats[d.climbPlats.length - 1];
-        // Eng tepa platformaga yetildi - 25 m o'tildi
-        const atTop = alive.find(p => this.platOfPlayer(map, [top], p) === top);
+        const per = d.climbPlats.length / d.segments;
+        const goal = d.climbPlats[d.climbPlats.length - 1];
+        // Eng tepadagi platformaga yetildi - butun tog' (10 qavat) o'tildi
+        const atTop = alive.find(p => this.platOfPlayer(map, [goal], p) === goal);
         if (atTop) {
-            dr.segment++;
+            dr.state = 'done';
             dr.wave = null;
-            dr.lastPlat = {};
-            if (dr.segment >= d.segments) {
-                dr.state = 'done';
-                this.roomManager.declareWinner(roomId, atTop.id).catch(err => console.error('declareWinner xatosi:', err));
-                return;
-            }
-            let slot = 0;
-            Object.values(room.players).forEach(p => {
-                p.x = d.climbStartX + (slot++) * 30; p.y = 546;
-                this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
-            });
-            dr.nextWave = dr.tick + T(1200);
-            this.io.to(roomId).emit('climbSegment', { segment: dr.segment });
+            this.roomManager.declareWinner(roomId, atTop.id).catch(err => console.error('declareWinner xatosi:', err));
             return;
         }
-        // Yangi platformaga chiqqanda (yoki har 2 s da) - yer silkinadi, 4 tadan 3 tasiga tosh tushadi
+        // Qahramon qaysi qavatda (oyog'i balandligi bo'yicha)
+        const stageOf = (p: PlayerState) => Math.max(0, Math.min(d.segments - 1, Math.floor((490 - (p.y + this.PLAYER_HALF_H)) / d.stageStep)));
+        // Qaysi qatorda: o'rtadagi platformadan pastda - 0 (pastki), o'rtadagi platformada va undan yuqorida - 1 (yuqori).
+        // Qavatning eng tepadagi platformasida turgan - hech qaysi (-1): u keyingi qavatga o'tish joyi
+        // O'rtadagi yakka platforma: qatorlarga kirmagan va eng tepadagisi bo'lmagan yagona platforma
+        const midJ = Array.from({ length: per - 1 }, (_, j) => j).find(j => !d.stageRows.some(r => r.includes(j)))!;
+        // Qavat va qator: o'rtadagi platformadan pastda - 0 (pastki), o'rtadagida va undan yuqorida - 1 (yuqori).
+        // Qavatning eng tepadagi platformasida turgan - keyingi qavatning pastki qatoriga o'tadi (oxirgisi - maqsad)
+        const placeOf = (p: PlayerState): { k: number, r: number } | null => {
+            const k = stageOf(p), feet = p.y + this.PLAYER_HALF_H;
+            // Tog' etagidagi yer - toshlar unga yetmaydi (bu yerda kutish mumkin)
+            if (k === 0 && feet > map.platforms[d.climbPlats[0]].y + 40) return null;
+            const top = d.climbPlats[k * per + per - 1];
+            if (this.platOfPlayer(map, [top], p) === top) return k + 1 < d.segments ? { k: k + 1, r: 0 } : null;
+            return { k, r: feet > map.platforms[d.climbPlats[k * per + midJ]].y + 10 ? 0 : 1 };
+        };
+        dr.segment = alive.reduce((m, p) => Math.max(m, stageOf(p)), 0);
+        // Toshlar to'xtovsiz yog'adi: qahramon turgan 4 talik qatorga 3 ta katta tosh (bitta platforma xavfsiz - unga
+        // tosh tushmaydi), o'rtadagi va eng tepadagi platformaga ham. Pastda bo'lsa - pastki qatorga, o'rtadan yuqoriga
+        // chiqqach - yuqori qatorga. Zarar FAQAT toshga tekkanda va HAR QANDAY holatda: qayerda turgan bo'lsa ham
         let landed = false;
         alive.forEach(p => {
             const i = this.platOfPlayer(map, d.climbPlats, p);
@@ -2008,32 +2038,65 @@ export class GameEngine {
             if (i >= 0) dr.lastPlat[p.id] = i;
         });
         if (!dr.wave && (dr.tick >= dr.nextWave || (landed && dr.tick >= dr.nextWave - T(1500)))) {
-            const n = d.climbPlats.length - 1;   // eng tepadagi (maqsad) tosh ostida emas
-            let safe = Math.floor(Math.random() * n);
-            if (safe === dr.lastSafe) safe = (safe + 1 + Math.floor(Math.random() * (n - 1))) % n;
-            dr.lastSafe = safe;
-            dr.wave = { safe, phase: 'warn', t: T(d.rockWarnMs) };
-            this.io.to(roomId).emit('climbQuake', { safe, ms: d.rockWarnMs });
+            const safes: (number[] | null)[] = new Array(d.segments).fill(null);
+            alive.forEach(p => {
+                const pl = placeOf(p);
+                if (!pl) return;
+                const { k, r } = pl;
+                if (!safes[k]) safes[k] = d.stageRows.map(() => -1);
+                if (safes[k]![r] >= 0) return;
+                const row = d.stageRows[r];
+                let j = Math.floor(Math.random() * row.length);
+                // Ketma-ket bir xil joy xavfsiz bo'lmasin
+                if (row[j] === dr.lastSafe[k * 2 + r]) j = (j + 1 + Math.floor(Math.random() * (row.length - 1))) % row.length;
+                safes[k]![r] = row[j];
+                dr.lastSafe[k * 2 + r] = row[j];
+            });
+            const rocks: { x: number, y: number, y0: number, ty: number, r: number, hit: string[] }[] = [];
+            safes.forEach((sf, k) => {
+                if (!sf) return;
+                // Qahramon turgan qatorning xavfsizidan boshqa 3 tasi + har doim o'rtadagi va eng tepadagi yakka
+                // platformalar: yuqoriga yo'l faqat ular orqali - toshlar orasidan o'tib bo'lmaydi
+                const js = new Set<number>([midJ, per - 1]);
+                d.stageRows.forEach((row, ri) => { if (sf[ri] >= 0) row.forEach(j => { if (j !== sf[ri]) js.add(j); }); });
+                js.forEach(j => {
+                    const pl = map.platforms[d.climbPlats[k * per + j]];
+                    const r = Math.max(30, Math.round(pl.w / 2) - 4), x = pl.x + pl.w / 2;   // platformadan sal tor - qo'shni platformadagiga tegmasin
+                    rocks.push({ x, y: pl.y - 560, y0: pl.y - 560, ty: pl.y - r, r, hit: [] });
+                });
+            });
+            dr.wave = { safes, phase: 'warn', t: T(d.rockWarnMs), n: 0, rocks };
+            this.io.to(roomId).emit('climbQuake', { safes, ms: d.rockWarnMs });
         }
         if (dr.wave) {
             const w = dr.wave;
-            if (--w.t > 0) return;
             if (w.phase === 'warn') {
-                w.phase = 'fall';
-                w.t = T(350);
-                d.climbPlats.forEach((pi, k) => {
-                    if (k === w.safe || k === d.climbPlats.length - 1) return;
-                    const pl = map.platforms[pi];
+                // Toshlar tezlashib tushadi va ogohlantirish oxirida (2 s) aynan platformaga qo'nadi
+                w.n++;
+                const total = T(d.rockWarnMs), f = Math.min(1, w.n / total);
+                w.rocks.forEach(rk => {
+                    rk.y = rk.y0 + (rk.ty - rk.y0) * f * f;
                     alive.forEach(p => {
-                        const feet = p.y + this.PLAYER_HALF_H;
-                        // Shu platformada turgan (yoki undan sal sakragan) qahramon; yuqoridagi platformadagilarga tegmaydi
-                        if (p.x < pl.x - 8 || p.x > pl.x + pl.w + 8 || feet > pl.y + 10 || feet < pl.y - 70) return;
+                        if (rk.hit.includes(p.id)) return;
+                        // Tosh (doira) qahramon (to'rtburchak) ga tegdimi. +3 px zaxira: qahramon joyi serverga tarmoq
+                        // kechikishi bilan keladi - ekranda tekkandek ko'ringan tosh haqiqatan ham jon olsin
+                        const cx = Math.max(p.x - this.PLAYER_HALF_W, Math.min(rk.x, p.x + this.PLAYER_HALF_W));
+                        const cy = Math.max(p.y - this.PLAYER_HALF_H, Math.min(rk.y, p.y + this.PLAYER_HALF_H));
+                        if (Math.hypot(rk.x - cx, rk.y - cy) > rk.r + 3) return;
+                        rk.hit.push(p.id);
                         this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.rockDamagePct));
-                        this.knockback(p, 0, 200);
+                        this.knockback(p, (p.x < rk.x ? -1 : 1) * 160, 200);
+                        this.io.to(roomId).emit('rockHit', { id: p.id, x: Math.round(p.x), y: Math.round(p.y) });
                     });
                 });
-                this.io.to(roomId).emit('climbRocks', { safe: w.safe });
-            } else {
+                if (w.n >= total) {
+                    w.phase = 'fall';
+                    w.t = T(350);
+                    this.io.to(roomId).emit('climbRocks', { safes: w.safes });
+                }
+                return;
+            }
+            if (--w.t <= 0) {
                 dr.wave = null;
                 dr.nextWave = dr.tick + T(d.rockEveryMs);
             }
@@ -2047,11 +2110,42 @@ export class GameEngine {
     }
     private updateRoom(room: RoomState, roomId: string, map: MapDef, d: NonNullable<MapDef['doors']>, dr: NonNullable<RoomState['doors']>, alive: PlayerState[]): void {
         const T = (ms: number) => Math.round(ms / 30);
+        // Malikani qoldirib (richagni tortmasdan) 200 m ketsa - OQ YUZ oldindagi qorong'idan yugurib keladi
+        if ((dr.sub === 'elf' || dr.sub === 'lever') && alive.some(p => p.x >= d.leverX + d.huntMeters * 50)) {
+            const runner = alive.reduce((a, b) => (b.x > a.x ? b : a));
+            dr.sub = 'hunt';
+            dr.monster = { x: Math.min(d.roomX1 - 40, runner.x + 700), y: d.floorY, vy: 0, pose: 'crawl', facing: -1 };
+            this.io.to(roomId).emit('oqHunt', { x: Math.round(dr.monster.x) });
+            return;
+        }
         if (dr.sub === 'elf') {
             if (--dr.timer <= 0 || alive.every(p => p.introDone)) dr.sub = 'lever';
             return;
         }
         const mo = dr.monster;
+        if (dr.sub === 'hunt' && mo) {
+            const target = alive.slice().sort((a, b) => Math.abs(a.x - mo.x) - Math.abs(b.x - mo.x))[0];
+            if (!target) return;
+            const dir: 1 | -1 = target.x >= mo.x ? 1 : -1;
+            mo.facing = dir;
+            mo.x += dir * d.huntSpeed * this.TICK_SECONDS;
+            if (Math.abs(target.x - mo.x) <= 46) {
+                // Ushladi: skrimer, baqiriq - va o'yin tugaydi
+                dr.sub = 'caught';
+                dr.timer = T(2300);
+                mo.x = target.x - dir * 30;
+                Object.values(room.players).forEach(p => this.io.to(p.id).emit('grabbed', { ms: 3000 }));
+                this.io.to(roomId).emit('oqCaught', { id: target.id, x: Math.round(target.x) });
+            }
+            return;
+        }
+        if (dr.sub === 'caught') {
+            if (--dr.timer <= 0) {
+                dr.state = 'done';
+                this.roomManager.declareGameOverLoss(roomId).catch(err => console.error('declareGameOverLoss xatosi:', err));
+            }
+            return;
+        }
         if (dr.sub === 'drop' && mo) {
             // Tepadan tushadi: malikani bosib (qon), keyin yo'lga - g'or silkinib, ustunlar orasi ochiladi
             const before = mo.y;
@@ -2121,6 +2215,7 @@ export class GameEngine {
             });
             dr.swallowed = [];
             dr.hands = [];
+            dr.shrooms = [];
             dr.heads.forEach(h => { h.phase = 'idle'; });
             dr.lastHitBy = out.id;
             dr.sub = 'buried';
@@ -2191,6 +2286,9 @@ export class GameEngine {
             this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
             this.io.to(roomId).emit('spitOut', { id: p.id, i: ei, x: Math.round(p.x), y: Math.round(p.y) });
             this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.swallowDamagePct));
+            // Tupurib chiqarilgan qahramonni darhol yana ushlamasin: bir muddat hech qaysi bosh hujum qilmaydi
+            dr.grabImmune[p.id] = dr.tick + T(d.grabImmuneMs);
+            dr.heads[ei].cd = Math.max(dr.heads[ei].cd, dr.tick + T(d.headCdMs));
         }
 
         // 3) DEVORDAGI TESHIKLAR: ko'zlar yonadi -> bosh otilib chiqadi -> yaqindagini tunnelga tortadi
@@ -2202,8 +2300,11 @@ export class GameEngine {
                 h.t = T(d.headLungeMs);
                 const w = d.wallHoles[k];
                 const busy = new Set(dr.swallowed.map(q => q.id));
-                const victim = free.filter(p => !busy.has(p.id) && Math.hypot(p.x - w.x, p.y - w.y) <= w.r + d.headReach)
-                    .sort((a, b) => Math.hypot(a.x - w.x, a.y - w.y) - Math.hypot(b.x - w.x, b.y - w.y))[0];
+                // Masofa - qahramon tanasining eng yaqin nuqtasigacha (baland teshikdan ham boshiga yetadi)
+                const reachOf = (p: PlayerState) => Math.hypot(w.x - Math.max(p.x - this.PLAYER_HALF_W, Math.min(w.x, p.x + this.PLAYER_HALF_W)),
+                    w.y - Math.max(p.y - this.PLAYER_HALF_H, Math.min(w.y, p.y + this.PLAYER_HALF_H)));
+                const victim = free.filter(p => !busy.has(p.id) && !((dr.grabImmune[p.id] || 0) > dr.tick) && reachOf(p) <= w.r + d.headReach)
+                    .sort((a, b) => reachOf(a) - reachOf(b))[0];
                 this.io.to(roomId).emit('headLunge', { i: k, hit: victim ? victim.id : null });
                 if (victim) {
                     dr.swallowed.push({ id: victim.id, hole: k, t: T(d.swallowMs) });
@@ -2220,7 +2321,7 @@ export class GameEngine {
             d.wallHoles.forEach((w, k) => {
                 const h = dr.heads[k];
                 if (h.phase !== 'idle' || dr.tick < h.cd) return;
-                if (free.some(p => Math.abs(p.x - w.x) <= d.headTrigger && p.y > w.y - 60)) cands.push(k);
+                if (free.some(p => !((dr.grabImmune[p.id] || 0) > dr.tick) && Math.abs(p.x - w.x) <= d.headTrigger && p.y > w.y - 60)) cands.push(k);
             });
             if (cands.length) {
                 const k = cands[Math.floor(Math.random() * cands.length)];
@@ -2230,6 +2331,78 @@ export class GameEngine {
                 h.cd = dr.tick + T(d.headCdMs);
                 dr.nextHead = dr.tick + T(d.headGlobalMs);
                 this.io.to(roomId).emit('headWarn', { i: k });
+            }
+        }
+
+        // 4) QO'ZIQORINCHALAR
+        this.updateShrooms(room, roomId, map, d, dr, free);
+    }
+
+    // G'OR QO'ZIQORINCHASI (bir vaqtda bittasi; o'lgach - yangisi): oldinda (ba'zan orqada) qorong'idan chiqadi, eng yaqin qahramonga yuguradi,
+    // bo'shliqqa yetganda sakrab o'tadi, o'q kelayotganini ko'rsa - sakrab qochadi, yaqinlashganda ustiga
+    // otiladi; tegsa -20 va itarib yuboradi (jarlikka ham). Jarlikka tushsa - o'ladi
+    private updateShrooms(room: RoomState, roomId: string, map: MapDef, d: NonNullable<MapDef['doors']>,
+        dr: NonNullable<RoomState['doors']>, free: PlayerState[]): void {
+        const T = (ms: number) => Math.round(ms / 30), dt = this.TICK_SECONDS, G = 1000;
+        const blocks = map.platforms.slice(d.climbPlats.length);
+        const onPillar = (x: number) => blocks.some(b => x >= b.x - 2 && x <= b.x + b.w + 2);
+        // Paydo bo'lish
+        const maxN = d.shroomMax;
+        if (free.length && dr.tick >= dr.nextShroom && dr.shrooms.length < maxN) {
+            dr.nextShroom = dr.tick + T(d.shroomEveryMs);
+            const lead = free.reduce((a, b) => (b.x > a.x ? b : a));
+            const side = Math.random() < 0.7 ? 1 : -1;
+            const want = Math.max(d.elfX + 400, Math.min(d.exitX - 250, lead.x + side * (420 + Math.random() * 160)));
+            const b = blocks.filter(q => q.w >= 60 && q.x > d.elfX + 300 && q.x + q.w < d.exitX - 150)
+                .sort((p1, p2) => Math.abs(p1.x + p1.w / 2 - want) - Math.abs(p2.x + p2.w / 2 - want))[0];
+            if (b) dr.shrooms.push({ id: 'shroom_' + (++dr.counter), x: b.x + b.w / 2, y: d.floorY, vx: 0, vy: 0, hp: d.shroomHp, air: false,
+                facing: -1, atkCd: 0, jumpCd: T(400), flash: 0 });
+        }
+        for (let i = dr.shrooms.length - 1; i >= 0; i--) {
+            const m = dr.shrooms[i];
+            if (m.flash > 0) m.flash--;
+            if (m.atkCd > 0) m.atkCd--;
+            if (m.jumpCd > 0) m.jumpCd--;
+            const target = free.slice().sort((a, b) => Math.abs(a.x - m.x) - Math.abs(b.x - m.x))[0];
+            if (!m.air && target) {
+                const dx = target.x - m.x, dir: 1 | -1 = dx >= 0 ? 1 : -1;
+                m.facing = dir;
+                // O'q kelyapti - sakrab qochadi
+                const threat = room.bullets.some(b => Math.abs(b.y - (m.y - 29)) < 50 && Math.abs(b.x - m.x) < 160 && b.vx !== 0 && Math.sign(m.x - b.x) === Math.sign(b.vx));
+                if (threat && m.jumpCd <= 0) { m.vy = -400; m.vx = dir * 90; m.air = true; m.jumpCd = T(900); }
+                // Yaqin - ustiga otiladi
+                else if (Math.abs(dx) < 80 && Math.abs(target.y + this.PLAYER_HALF_H - m.y) < 70 && m.atkCd <= 0 && m.jumpCd <= 0) {
+                    m.vy = -300; m.vx = dir * 250; m.air = true; m.jumpCd = T(1200);
+                } else if (Math.abs(dx) > 26) {
+                    // Oldinda bo'shliq - sakrab o'tadi (yetarli tezlik bilan), aks holda yuradi
+                    if (!onPillar(m.x + dir * 26)) { if (m.jumpCd <= 0) { m.vy = -420; m.vx = dir * 265; m.air = true; m.jumpCd = T(500); } }
+                    else m.x += dir * d.shroomSpeed * dt;
+                }
+            }
+            if (!m.air && !onPillar(m.x)) m.air = true;   // itarib yuborildi / ustun cheti
+            if (m.air) {
+                m.vy += G * dt;
+                m.x += m.vx * dt;
+                const ny = m.y + m.vy * dt;
+                if (m.vy > 0 && m.y <= d.floorY + 1 && ny >= d.floorY && onPillar(m.x)) { m.y = d.floorY; m.vy = 0; m.vx = 0; m.air = false; }
+                else m.y = ny;
+                if (m.y > 700) {
+                    dr.shrooms.splice(i, 1);
+                    dr.nextShroom = dr.tick + T(d.shroomRespawnMs);
+                    this.io.to(roomId).emit('shroomDie', { id: m.id, x: Math.round(m.x), y: 600, fall: true });
+                    continue;
+                }
+            }
+            m.x = Math.max(d.roomX0 + 60, Math.min(d.exitX - 40, m.x));
+            // Tegsa: -20 va itarib yuboradi
+            if (m.atkCd <= 0) {
+                const hit = free.find(p => Math.abs(p.x - m.x) < this.PLAYER_HALF_W + 20 && Math.abs(p.y - (m.y - 29)) < this.PLAYER_HALF_H + 29);
+                if (hit) {
+                    this.hurtPlayer(hit, d.shroomDamage);
+                    this.knockback(hit, (hit.x >= m.x ? 1 : -1) * 260, -220);
+                    m.atkCd = T(1100);
+                    this.io.to(roomId).emit('shroomBite', { id: hit.id, x: Math.round(m.x), y: Math.round(m.y) });
+                }
             }
         }
     }

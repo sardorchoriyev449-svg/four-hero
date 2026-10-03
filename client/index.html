@@ -416,7 +416,8 @@
 
         /* ===== XARITA O'TILDI: O'YIN OYNASI ichida - ko'k fon, o'rtada chekpoint nuriga
            o'xshash oq nur, "COMPLETED SUCCESSFULLY!", pastki o'ngda yutuq belgisi ===== */
-        #game-container { position: relative; }
+        /* overflow: hidden - o'yin rasmi qutidan chiqib ketmasin (aks holda "Game Over" kabi oynalar chetini yopmay qolardi) */
+        #game-container { position: relative; overflow: hidden; }
         #level-complete {
             position: absolute; inset: 0; z-index: 50; overflow: hidden; line-height: normal;
             display: flex; align-items: center; justify-content: center;
