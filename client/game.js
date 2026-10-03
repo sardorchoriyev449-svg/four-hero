@@ -2886,14 +2886,27 @@ function launchGame(socket, roomId, mapData, continued) {
             const img = scene.add.image(w.x, w.y, 'px_oq_scare').setDepth(4.72).setVisible(false);
             return { img, base: (w.r * 1.5) / 286 };
         });
-        // YO'L TESHIKLARI: richag tortilguncha usti yopiq (ko'rinmas qopqoq), keyin qulab ochiladi
-        const floorG = scene.add.graphics().setDepth(1.1).setVisible(false);
+        // G'OR YO'LI: pastda qorong'i yer, ustida tosh ustunlar (rasmdagidek)
+        const fy = d.floorY;
+        scene.add.rectangle(X0, 570, X1 - X0, 30, 0x0f0b16).setOrigin(0, 0).setDepth(1.02);
+        const pillarG = scene.add.graphics().setDepth(1.4);
+        map.platforms.forEach((pl, k) => {
+            if (k < 4) return;
+            pillarG.fillStyle(0x050308, 1); pillarG.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 572 - pl.y + 2);
+            pillarG.fillStyle(0x2a2433, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 570 - pl.y);
+            pillarG.fillStyle(0x3d3548, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 5);
+            pillarG.fillStyle(0x1a1620, 1);
+            for (let yy = pl.y + 16; yy < 566; yy += 18) for (let xx = pl.x + ((yy / 18) % 2 ? 6 : 18); xx < pl.x + pl.w - 10; xx += 26) pillarG.fillRect(xx, yy, 12, 3);
+            pillarG.fillStyle(0x0b0810, 1); pillarG.fillRect(pl.x, 560, pl.w, 10);
+        });
+        // Ustunlar orasi richag tortilguncha tosh ko'prik bilan yopiq (keyin qulaydi)
+        const bridgeG = scene.add.graphics().setDepth(1.39);
         const covers = d.floorHoles.map((h) => {
-            floorG.fillStyle(0x000000, 1); floorG.fillRect(h.x, 568, h.w, 40);
-            floorG.fillStyle(0x2a1010, 1); floorG.fillRect(h.x + 8, 592, h.w - 16, 8);
-            for (let x = h.x; x < h.x + h.w; x += 10) { floorG.fillStyle(0x1a1620, 1); floorG.fillRect(x, 568 + ((x * 7) % 5), 8, 4); }
-            floorG.fillStyle(0x3d3548, 1); floorG.fillRect(h.x - 4, 568, 6, 20); floorG.fillRect(h.x + h.w - 2, 568, 6, 20);
-            const c = scene.add.rectangle(h.x + h.w / 2, 585, h.w, 30, 0x000000, 0);
+            bridgeG.fillStyle(0x050308, 1); bridgeG.fillRect(h.x, fy - 2, h.w, 16);
+            bridgeG.fillStyle(0x2a2433, 1); bridgeG.fillRect(h.x, fy, h.w, 12);
+            bridgeG.fillStyle(0x3d3548, 1); bridgeG.fillRect(h.x, fy, h.w, 3);
+            bridgeG.fillStyle(0x0b0810, 1); for (let xx = h.x + 14; xx < h.x + h.w - 8; xx += 30) bridgeG.fillRect(xx, fy + 4, 2, 8);
+            const c = scene.add.rectangle(h.x + h.w / 2, fy + 6, h.w, 12, 0x000000, 0);
             platforms.add(c);
             return c;
         });
@@ -2902,10 +2915,10 @@ function launchGame(socket, roomId, mapData, continued) {
         // G'or oxirida - tashqariga chiqadigan yorug' teshik (qochish maqsadi)
         const ex0 = d.exitX - 20;
         const exitG = scene.add.graphics().setDepth(-0.35);
-        exitG.fillStyle(0xfff8e1, 1); exitG.fillRect(ex0 + 30, 380, X1 - ex0 - 30, 192);
-        for (let y = 380; y < 572; y += 12) { exitG.fillStyle(0x0b0810, 1); exitG.fillRect(ex0 + 30, y, 10 + ((y * 7) % 18), 12); }
-        exitG.fillStyle(0xffffff, 1); exitG.fillRect(ex0 + 70, 400, X1 - ex0 - 70, 172);
-        const exitGlow = scene.add.circle(ex0 + 90, 480, 160, 0xfff59d, 0.25).setDepth(4.65).setBlendMode(Phaser.BlendModes.ADD);
+        exitG.fillStyle(0xfff8e1, 1); exitG.fillRect(ex0 + 30, 290, X1 - ex0 - 30, 192);
+        for (let y = 290; y < 482; y += 12) { exitG.fillStyle(0x0b0810, 1); exitG.fillRect(ex0 + 30, y, 10 + ((y * 7) % 18), 12); }
+        exitG.fillStyle(0xffffff, 1); exitG.fillRect(ex0 + 70, 310, X1 - ex0 - 70, 172);
+        const exitGlow = scene.add.circle(ex0 + 90, 390, 160, 0xfff59d, 0.25).setDepth(4.65).setBlendMode(Phaser.BlendModes.ADD);
         scene.tweens.add({ targets: exitGlow, scale: 1.1, alpha: 0.35, duration: 1400, yoyo: true, repeat: -1 });
         const hands = {};
         // Bog'langan elf malika (shiftdan arqonlar), richag
@@ -2913,24 +2926,24 @@ function launchGame(socket, roomId, mapData, continued) {
         ropes.fillStyle(0xbcaaa4, 1); ropes.fillRect(d.elfX - 10, 40, 2, d.elfY - 60); ropes.fillRect(d.elfX + 9, 40, 2, d.elfY - 60);
         const elf = scene.add.image(d.elfX, d.elfY, 'px_princess').setDepth(1.6);
         scene.tweens.add({ targets: elf, angle: { from: -4, to: 4 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-        const lever = scene.add.image(d.leverX, 572, 'px_lever_up').setOrigin(0.5, 1).setDepth(1.5);
-        const hintLever = scene.add.text(d.leverX, 500, '[E]', { fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(5).setVisible(false);
+        const lever = scene.add.image(d.leverX, d.floorY + 2, 'px_lever_up').setOrigin(0.5, 1).setDepth(1.5);
+        const hintLever = scene.add.text(d.leverX, d.floorY - 70, '[E]', { fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(5).setVisible(false);
         const monster = scene.add.image(d.elfX, -200, 'px_oq_crawl').setOrigin(0.5, 1).setDepth(3.5).setVisible(false);
         // Qorong'ilik: g'or ichida faqat qahramonlar atrofi yorug' (ekran ustidagi qatlam)
         const dark = scene.add.renderTexture(0, 0, 800, 600).setOrigin(0, 0).setScrollFactor(0).setDepth(4.6).setVisible(false);
         const brush = scene.make.image({ key: 'light_brush', add: false });
         const brushS = scene.make.image({ key: 'light_brush_s', add: false });
         const fx = scene.add.graphics().setDepth(4.7);       // ko'zlar, kovlanayotgan joylar - qorong'ilik ustida
-        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, floorG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
+        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, bridgeG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
             barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9, floorOpen: false, diving: false, meSwallowed: false };
     }
-    // Richagdan keyin: yo'l qulab, teshiklar ochiladi
+    // Richagdan keyin: ustunlar orasidagi tosh ko'priklar qulab, bo'shliqlar ochiladi
     function drOpenFloor(scene, instant) {
         if (!drObj || drObj.floorOpen) return;
         drObj.floorOpen = true;
         drObj.covers.forEach((c) => platforms.remove(c, true, true));
         drObj.covers = [];
-        drObj.floorG.setVisible(true);
+        drObj.bridgeG.setVisible(false);
         if (instant) return;
         scene.cameras.main.shake(1200, 0.014);
         sfx('rumble'); sfx('explosion', 0.6);
@@ -2938,10 +2951,10 @@ function launchGame(socket, roomId, mapData, continued) {
         map.doors.floorHoles.forEach((h) => {
             if (h.x > cam.scrollX + 1400 || h.x + h.w < cam.scrollX - 200) return;
             for (let k = 0; k < 8; k++) {
-                const r = scene.add.rectangle(h.x + Math.random() * h.w, 572, 8, 8, [0x2a2433, 0x3d3548, 0x1a1620][k % 3]).setDepth(1.2);
-                scene.tweens.add({ targets: r, y: 640, angle: 200, duration: Phaser.Math.Between(400, 800), ease: 'Quad.In', onComplete: () => r.destroy() });
+                const r = scene.add.rectangle(h.x + Math.random() * h.w, map.doors.floorY + 4, 10, 8, [0x2a2433, 0x3d3548, 0x1a1620][k % 3]).setDepth(1.38);
+                scene.tweens.add({ targets: r, y: 566, angle: 200, duration: Phaser.Math.Between(300, 600), ease: 'Quad.In', onComplete: () => r.destroy() });
             }
-            gDust(scene, h.x + h.w / 2, 566, 6, 0x3e2723);
+            gDust(scene, h.x + h.w / 2, 562, 6, 0x3e2723);
         });
     }
     // Devordagi teshikdan bosh otilib chiqadi (victim - tortiladigan qahramon yoki null) va qaytib kiradi
@@ -3057,22 +3070,21 @@ function launchGame(socket, roomId, mapData, continued) {
         if (S.state !== 'room' && S.state !== 'done') return;
         // Yo'l teshiklari: kech qo'shilgan o'yinchida ham ochiq bo'lsin
         if (S.floorOpen && !drObj.floorOpen) drOpenFloor(scene, true);
-        // Yo'l teshiklaridan qo'llar: avval barmoqlar ko'rinadi, keyin platforma tomonga otilib cho'ziladi
+        // Bo'shliqlardan qo'llar: avval qizil ogohlantirish, keyin qo'l oldidagi ustun tepasiga otilib cho'ziladi va qaytib kiradi
         const handIds = new Set((S.hands || []).map(h => h.id));
         (S.hands || []).forEach((h) => {
             let o = drObj.hands[h.id];
             if (!o) {
-                const img = scene.add.image(h.x, h.y + 6, 'px_grab_hand').setOrigin(0.5, 1).setDepth(3.45).setScale(1, 0.35)
-                    .setFlipX(h.side > 0).setAngle(h.side < 0 ? -28 : 28);
+                const img = scene.add.image(h.x, 572, 'px_grab_hand').setOrigin(0.5, 1).setDepth(3.45).setScale(1, 0)
+                    .setFlipX(h.side > 0).setAngle(h.side < 0 ? -14 : 14);
                 o = drObj.hands[h.id] = { img, up: false };
-                scene.tweens.add({ targets: img, angle: img.angle + (h.side < 0 ? -6 : 6), duration: 80, yoyo: true, repeat: -1 });
-                gDust(scene, h.x, h.y - 2, 2, 0x3e2723);
-                sfxAt('drip', h.x, 0.5);
+                sfxAt('rumble', h.x, 0.4);
             }
             if (h.phase === 'up' && !o.up) {
                 o.up = true;
-                scene.tweens.killTweensOf(o.img);
-                scene.tweens.add({ targets: o.img, scaleY: 1.25, angle: h.side < 0 ? -62 : 62, duration: 100, ease: 'Back.Out' });
+                scene.tweens.add({ targets: o.img, scaleY: (572 - d.floorY + 24) / 66, duration: 110, ease: 'Back.Out' });
+                scene.tweens.add({ targets: o.img, angle: h.side < 0 ? -26 : 26, duration: 90, yoyo: true, repeat: 2 });
+                gDust(scene, h.x, 564, 4, 0x3e2723);
                 sfxAt('stab', h.x, 0.6);
             }
         });
@@ -3080,7 +3092,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (handIds.has(id)) return;
             const o = drObj.hands[id];
             scene.tweens.killTweensOf(o.img);
-            scene.tweens.add({ targets: o.img, scaleY: 0, duration: 140, onComplete: () => o.img.destroy() });
+            scene.tweens.add({ targets: o.img, scaleY: 0, duration: 160, ease: 'Quad.In', onComplete: () => o.img.destroy() });
             delete drObj.hands[id];
         });
         // OQ YUZ: faqat tushishda va malikani olib ketayotganda ko'rinadi (keyin - tunnellarda)
@@ -3095,8 +3107,15 @@ function launchGame(socket, roomId, mapData, continued) {
             spr.setTexture(drop ? 'px_oq_climb' : 'px_oq_crawl').setFlipX(mo.facing < 0).setFlipY(drop).setPosition(drObj.disp.x, drObj.disp.y);
             if (!drop) spr.y += Math.sin(t0 / 70) * 2;
             // Malikani sudrab ketyapti
-            if (S.sub === 'take') drObj.elf.setPosition(spr.x - 70, 552).setAngle(90);
+            if (S.sub === 'take') drObj.elf.setPosition(spr.x - 70, d.floorY - 18).setAngle(90);
         } else if (!drObj.diving) spr.setVisible(false);
+        // Qo'l chiqishidan oldin: bo'shliq tubida qizil ogohlantirish (qorong'ilik ustida ko'rinadi)
+        (S.hands || []).forEach((h) => {
+            if (h.phase !== 'warn') return;
+            const a = 0.45 + 0.4 * Math.sin(t0 / 45);
+            fx.fillStyle(0xff1744, a * 0.5); fx.fillEllipse(h.x, 567, 46, 10);
+            fx.fillStyle(0xff1744, a); fx.fillRect(h.x - 14, 565, 28, 3); fx.fillRect(h.x - 4, 561, 3, 5); fx.fillRect(h.x + 6, 562, 3, 4);
+        });
         // Devordagi teshikda qizil ko'zlar - bosh chiqishidan oldin (qorong'ilik ustida ko'rinadi)
         (S.heads || []).forEach((h) => {
             if (h.phase !== 'warn') return;
@@ -3121,7 +3140,7 @@ function launchGame(socket, roomId, mapData, continued) {
             dark.setVisible(true);
             dark.clear();
             dark.fill(0x000000, 0.94);
-            if (d.exitX - cam.scrollX < 1400) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, 480 - cam.scrollY); }
+            if (d.exitX - cam.scrollX < 1400) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, 390 - cam.scrollY); }
             [currentCharacter, ...Object.values(otherPlayers)].forEach((o) => {
                 if (!o || !o.active) return;
                 const f = 0.92 + Math.sin(t0 / 70 + o.x * 0.01) * 0.04 + (Math.random() < 0.03 ? -0.15 : 0);
@@ -3157,13 +3176,13 @@ function launchGame(socket, roomId, mapData, continued) {
         drObj.ropes.clear();
         scene.tweens.killTweensOf(drObj.elf);
         drObj.elf.setTint(0x7b1f2a);
-        scene.tweens.add({ targets: drObj.elf, y: 560, angle: 90, duration: 500, ease: 'Quad.In' });
+        scene.tweens.add({ targets: drObj.elf, y: d.floorY - 10, angle: 90, duration: 500, ease: 'Quad.In' });
         for (let k = 0; k < 30; k++) {
             const b = scene.add.rectangle(d.elfX + Phaser.Math.Between(-10, 10), d.elfY + Phaser.Math.Between(-10, 10), Phaser.Math.Between(3, 7), Phaser.Math.Between(3, 7), [0xb71c1c, 0x8e0000, 0xd50000][k % 3]).setDepth(4);
-            scene.tweens.add({ targets: b, x: b.x + Phaser.Math.Between(-140, 140), y: Phaser.Math.Between(480, 568), duration: Phaser.Math.Between(500, 900), ease: 'Quad.In', onComplete: () => b.setAlpha(0.8) });
+            scene.tweens.add({ targets: b, x: b.x + Phaser.Math.Between(-140, 140), y: Phaser.Math.Between(d.floorY - 80, d.floorY - 2), duration: Phaser.Math.Between(500, 900), ease: 'Quad.In', onComplete: () => b.setAlpha(0.8) });
         }
         const pool = scene.add.graphics().setDepth(1.05);
-        pool.fillStyle(0x7f0000, 0.9); pool.fillEllipse(d.elfX, 570, 160, 10);
+        pool.fillStyle(0x7f0000, 0.9); pool.fillEllipse(d.elfX, d.floorY, 160, 10);
         scene.cameras.main.shake(500, 0.014);
     }
 
@@ -5146,9 +5165,8 @@ function launchGame(socket, roomId, mapData, continued) {
         // YER: jarliklar (pits) orasidagi bo'laklardan quriladi - jarlikka tushgan
         // qahramonni server halok qiladi
         const pits = (map.pits || []).slice().sort((a, b) => a.x - b.x);
-        const groundGaps = [...pits, ...((map.doors && map.doors.floorHoles) || [])].sort((a, b) => a.x - b.x);
         let segStart = 0;
-        [...groundGaps, { x: mapWidth, w: 0 }].forEach((pit) => {
+        [...pits, { x: mapWidth, w: 0 }].forEach((pit) => {
             const segEnd = Math.min(pit.x, mapWidth);
             if (segEnd > segStart) {
                 const seg = this.add.rectangle((segStart + segEnd) / 2, 585, segEnd - segStart, 30, map.groundColor || 0x333333);
@@ -5884,7 +5902,7 @@ function launchGame(socket, roomId, mapData, continued) {
             // Shiftdan toshlar qulab, maxluqni bosib qoladi
             const pile = this.add.graphics().setDepth(3.6);
             for (let k = 0; k < 14; k++) {
-                const rx = d.x + Phaser.Math.Between(-90, 90), ry = 560 - Phaser.Math.Between(0, 60), rr = Phaser.Math.Between(14, 30);
+                const rx = d.x + Phaser.Math.Between(-90, 90), ry = map.doors.floorY - 10 - Phaser.Math.Between(0, 60), rr = Phaser.Math.Between(14, 30);
                 const rock = this.add.circle(rx, -40, rr, [0x3d3548, 0x544a63, 0x2a2433][k % 3]).setStrokeStyle(3, 0x050308).setDepth(3.65);
                 this.tweens.add({ targets: rock, y: ry, delay: k * 70, duration: 380, ease: 'Bounce.Out' });
             }
@@ -5894,8 +5912,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 this.tweens.add({ targets: drObj.dark, alpha: 0, duration: 1600 });
                 const beam = this.add.graphics().setDepth(4.8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
                 const sx = d.sunX || d.x;
-                beam.fillStyle(0xfff8e1, 0.5); beam.fillTriangle(sx - 40, 0, sx + 40, 0, sx + 170, 572); beam.fillTriangle(sx - 40, 0, sx - 170, 572, sx + 170, 572);
-                beam.fillStyle(0xffffff, 0.35); beam.fillTriangle(sx - 20, 0, sx + 20, 0, sx, 572);
+                const by = map.doors.floorY;
+                beam.fillStyle(0xfff8e1, 0.5); beam.fillTriangle(sx - 40, 0, sx + 40, 0, sx + 170, by); beam.fillTriangle(sx - 40, 0, sx - 170, by, sx + 170, by);
+                beam.fillStyle(0xffffff, 0.35); beam.fillTriangle(sx - 20, 0, sx + 20, 0, sx, by);
                 this.tweens.add({ targets: beam, alpha: 1, duration: 1500 });
                 for (let k = 0; k < 30; k++) { const m = this.add.rectangle((d.sunX || d.x) + Phaser.Math.Between(-120, 120), Phaser.Math.Between(60, 540), 2, 2, 0xfffde7, 0.9).setDepth(4.85); this.tweens.add({ targets: m, y: m.y - 40, alpha: 0, duration: 2500, delay: k * 60 }); }
                 arenaBanner(t('dr_sun_banner'), '#fff59d', null);
@@ -6150,10 +6169,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     if ((S.sub === 'shock' || S.sub === 'fight' || S.sub === 'buried') && drObj && drObj.elf.visible && !drObj.diving) { drObj.elf.setVisible(false); drObj.ropes.clear(); }
                     if (S.sub === 'shock' && !drShown.shock && currentCharacter) {
                         drShown.shock = true;
-                        startDialog(this, [
-                            { who: 'player', text: t('dr_shock'), fx: 'shake' },
-                            { who: 'player', text: t('dr_run') }
-                        ], () => socket.emit('dialogDone', roomId));
+                        startDialog(this, [{ who: 'player', text: t('dr_shock'), fx: 'shake' }], () => socket.emit('dialogDone', roomId));
                     }
                     if (S.sub === 'fight' && dialog && drShown.shock && !drShown.fightStart) { drShown.fightStart = true; closeDialog(); }
                     if (S.state === 'room' && !drShown.roomCam) { drShown.roomCam = true; this.cameras.main.setBounds(map.doors.roomX0, 0, map.doors.roomX1 - map.doors.roomX0, 600); }

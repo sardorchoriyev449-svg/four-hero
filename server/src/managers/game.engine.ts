@@ -1920,7 +1920,7 @@ export class GameEngine {
             let slot = 0;
             Object.values(room.players).forEach(pl => {
                 pl.introDone = false;
-                pl.x = d.roomEntryX + (slot++) * 32; pl.y = 546;
+                pl.x = d.roomEntryX + (slot++) * 32; pl.y = d.floorY - this.PLAYER_HALF_H;
                 this.io.to(pl.id).emit('teleport', { x: pl.x, y: pl.y });
             });
             this.io.to(room.id).emit('doorsEnter');
@@ -2038,7 +2038,7 @@ export class GameEngine {
             }
         }
     }
-    // Tupurib chiqarish / qo'yib yuborish joyi: yo'ldagi teshik ustida bo'lmasin
+    // Tupurib chiqarish / qo'yib yuborish joyi: bo'shliq ustida emas - ustun ustida
     private caveSafeX(d: NonNullable<MapDef['doors']>, x: number): number {
         const h = d.floorHoles.find(q => x >= q.x - 24 && x <= q.x + q.w + 24);
         if (h) x = h.x - 40;
@@ -2052,13 +2052,13 @@ export class GameEngine {
         }
         const mo = dr.monster;
         if (dr.sub === 'drop' && mo) {
-            // Tepadan tushadi: malikani bosib (qon), keyin yerga - g'or silkinib, yo'lda teshiklar ochiladi
+            // Tepadan tushadi: malikani bosib (qon), keyin yo'lga - g'or silkinib, ustunlar orasi ochiladi
             const before = mo.y;
             mo.vy = Math.min(900, mo.vy + 900 * this.TICK_SECONDS);
             mo.y += mo.vy * this.TICK_SECONDS;
             if (before < d.elfY + 60 && mo.y >= d.elfY + 60) this.io.to(roomId).emit('elfCrushed', { x: d.elfX, y: d.elfY });
-            if (mo.y >= 570) {
-                mo.y = 570; mo.vy = 0; mo.pose = 'crawl'; mo.facing = 1;
+            if (mo.y >= d.floorY) {
+                mo.y = d.floorY; mo.vy = 0; mo.pose = 'crawl'; mo.facing = 1;
                 dr.sub = 'take';
                 dr.floorOpen = true;
                 this.io.to(roomId).emit('monsterLanded');
@@ -2067,7 +2067,7 @@ export class GameEngine {
             return;
         }
         if (dr.sub === 'take' && mo) {
-            // Malikani sudrab eng yaqin teshikka olib kirib ketadi
+            // Malikani sudrab birinchi bo'shliqqa olib kirib ketadi
             const hole = d.floorHoles.find(h => h.x + h.w / 2 > mo.x) || d.floorHoles[0];
             const hx = hole.x + hole.w / 2;
             mo.x = Math.min(hx, mo.x + 7);
@@ -2100,14 +2100,15 @@ export class GameEngine {
         dr.swallowed = dr.swallowed.filter(w => room.players[w.id] && !room.players[w.id].isDead);
         const inTunnel = new Set(dr.swallowed.map(w => w.id));
         const free = alive.filter(p => !inTunnel.has(p.id));
-        const onGround = (p: PlayerState) => Math.abs(p.y + this.PLAYER_HALF_H - 570) <= 12;
+        const onTop = (p: PlayerState) => Math.abs(p.y + this.PLAYER_HALF_H - d.floorY) <= 12;
+        const gapOf = (p: PlayerState) => Math.abs(p.y + this.PLAYER_HALF_H - 570) <= 12 ? d.floorHoles.findIndex(g => p.x >= g.x - 4 && p.x <= g.x + g.w + 4) : -1;
 
         // QOCHISH: yorug'likka yetgan qahramon - orqada g'or qulaydi
         const out = free.find(p => p.x >= d.exitX);
         if (out) {
             dr.swallowed.forEach(w => {
                 const p = room.players[w.id], h = d.wallHoles[w.hole];
-                p.x = this.caveSafeX(d, h.x); p.y = 540;
+                p.x = this.caveSafeX(d, h.x); p.y = d.floorY - 30;
                 this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
                 this.io.to(roomId).emit('spitOut', { id: p.id, i: w.hole });
             });
@@ -2121,31 +2122,26 @@ export class GameEngine {
             return;
         }
 
-        // 1) YO'LDAGI TESHIKKA TUSHIB KETDI: qo'l ushlab, chetga otib chiqaradi (-30)
-        free.forEach(p => {
-            if (p.y <= 562) return;
-            const h = d.floorHoles.find(q => p.x >= q.x - 6 && p.x <= q.x + q.w + 6);
-            if (!h) return;
-            this.hurtPlayer(p, d.holeDamage);
-            p.x = h.x - 34; p.y = 540;
-            this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
-            this.io.to(p.id).emit('grabbed', { ms: d.grabMs });
-            this.io.to(roomId).emit('handGrab', { x: Math.round(h.x + 10), id: p.id, fall: true });
-        });
-
-        // 2) YO'LDAGI TESHIKLARDAN QO'LLAR: teshik yonidagi platformada turgan qahramonni ushlashga urinadi
+        // 1) BO'SHLIQLARDAN QO'LLAR: avval qizil ogohlantirish, keyin qo'l chiqib oldidagi ustundagi
+        // (yoki bo'shliqqa tushgan) qahramonni ushlashga urinadi va yana ichkariga kirib ketadi
         if (dr.tick >= dr.nextHand) {
             dr.nextHand = dr.tick + T(d.holeHandEveryMs);
             free.forEach(p => {
-                if (!onGround(p)) return;
-                let best = -1, bestD = 1e9, side: -1 | 1 = -1;
-                d.floorHoles.forEach((h, k) => {
-                    const dist = p.x < h.x ? h.x - p.x : p.x > h.x + h.w ? p.x - (h.x + h.w) : 0;
-                    if (dist < bestD) { bestD = dist; best = k; side = p.x < h.x + h.w / 2 ? -1 : 1; }
-                });
-                if (best < 0 || bestD > d.holeHandReach + 50 || dr.tick < dr.holeCd[best] || dr.hands.some(hd => hd.hole === best)) return;
-                const h = d.floorHoles[best];
-                dr.hands.push({ id: 'hand_' + (++dr.counter), x: side < 0 ? h.x + 10 : h.x + h.w - 10, y: 570, side, hole: best,
+                let best = gapOf(p), side: -1 | 1 = -1;
+                if (best >= 0) {
+                    const g = d.floorHoles[best];
+                    side = p.x < g.x + g.w / 2 ? -1 : 1;
+                } else if (onTop(p)) {
+                    let bestD = 1e9;
+                    d.floorHoles.forEach((g, k) => {
+                        const dist = p.x < g.x ? g.x - p.x : p.x > g.x + g.w ? p.x - (g.x + g.w) : 0;
+                        if (dist < bestD) { bestD = dist; best = k; side = p.x < g.x + g.w / 2 ? -1 : 1; }
+                    });
+                    if (bestD > d.holeHandReach + 50) best = -1;
+                }
+                if (best < 0 || dr.tick < dr.holeCd[best] || dr.hands.some(hd => hd.hole === best)) return;
+                const g = d.floorHoles[best];
+                dr.hands.push({ id: 'hand_' + (++dr.counter), x: side < 0 ? g.x + 12 : g.x + g.w - 12, y: 570, side, hole: best,
                     phase: 'warn', t: T(d.holeHandWarnMs), hit: false });
                 dr.holeCd[best] = dr.tick + T(d.holeHandCdMs);
             });
@@ -2156,10 +2152,11 @@ export class GameEngine {
                 if (--h.t > 0) continue;
                 h.phase = 'up';
                 h.t = T(d.holeHandUpMs);
-                // Otilib chiqqan lahzada: teshik chetidan platformaga cho'ziladi (sakrab turgan - qutuladi)
-                const reachX0 = h.side < 0 ? h.x - 10 - d.holeHandReach : h.x - 6;
-                const reachX1 = h.side < 0 ? h.x + 6 : h.x + 10 + d.holeHandReach;
-                const p = free.find(q => onGround(q) && q.x >= reachX0 && q.x <= reachX1);
+                // Otilib chiqqan lahzada: bo'shliq chetidagi ustun tepasiga cho'ziladi (sakrab turgan - qutuladi)
+                const g = d.floorHoles[h.hole];
+                const x0 = h.side < 0 ? g.x - d.holeHandReach : g.x + g.w - 4;
+                const x1 = h.side < 0 ? g.x + 4 : g.x + g.w + d.holeHandReach;
+                const p = free.find(q => (onTop(q) && q.x >= x0 && q.x <= x1) || (gapOf(q) === h.hole && Math.abs(q.x - h.x) <= 60));
                 if (p) {
                     h.hit = true;
                     this.hurtPlayer(p, d.holeDamage);
@@ -2171,7 +2168,7 @@ export class GameEngine {
             if (--h.t <= 0) dr.hands.splice(k, 1);
         }
 
-        // 3) TUNNEL: tortilgan qahramon ichkarida; keyin boshqa (qo'shni) teshikdan tupurib chiqariladi - jonining yarmi
+        // 2) TUNNEL: tortilgan qahramon ichkarida; keyin boshqa (qo'shni) teshikdan tupurib chiqariladi - jonining yarmi
         for (let k = dr.swallowed.length - 1; k >= 0; k--) {
             const w = dr.swallowed[k], p = room.players[w.id], h = d.wallHoles[w.hole];
             p.x = h.x; p.y = h.y;
@@ -2179,14 +2176,14 @@ export class GameEngine {
             const options = [w.hole - 1, w.hole + 1].filter(q => q >= 0 && q < d.wallHoles.length);
             const ei = options.length ? options[Math.floor(Math.random() * options.length)] : w.hole;
             const eh = d.wallHoles[ei];
-            p.x = this.caveSafeX(d, eh.x); p.y = Math.min(540, eh.y + 10);
+            p.x = this.caveSafeX(d, eh.x); p.y = Math.min(d.floorY - 30, eh.y + 10);
             dr.swallowed.splice(k, 1);
             this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
             this.io.to(roomId).emit('spitOut', { id: p.id, i: ei, x: Math.round(p.x), y: Math.round(p.y) });
             this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.swallowDamagePct));
         }
 
-        // 4) DEVORDAGI TESHIKLAR: ko'zlar yonadi -> bosh otilib chiqadi -> yaqindagini tunnelga tortadi
+        // 3) DEVORDAGI TESHIKLAR: ko'zlar yonadi -> bosh otilib chiqadi -> yaqindagini tunnelga tortadi
         dr.heads.forEach((h, k) => {
             if (h.phase === 'idle') return;
             if (--h.t > 0) return;

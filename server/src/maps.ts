@@ -363,15 +363,16 @@ export interface DoorsDef {
     leverX: number;
     exitX: number;            // g'or oxiridagi yorug'lik: shu yerga yetilsa - orqada g'or qulaydi, xarita o'tiladi
     runMeters: number;
-    floorHoles: { x: number, w: number }[];        // yo'ldagi teshiklar - richag tortilgach ochiladi
+    floorY: number;           // g'or yo'li (tosh ustunlar tepasi)
+    floorHoles: { x: number, w: number }[];        // ustunlar orasidagi bo'shliqlar - richag tortilgach ochiladi
     wallHoles: { x: number, y: number, r: number }[]; // devordagi tunnel teshiklari - maxluq boshi chiqadi
-    // Yo'ldagi teshikdan chiqadigan qo'l: teshik yonidagi (platformadagi) qahramonni ushlaydi
+    // Bo'shliqdan chiqadigan qo'l: oldidagi ustunda turgan (yoki bo'shliqqa tushgan) qahramonni ushlaydi
     holeHandEveryMs: number;
     holeHandWarnMs: number;
     holeHandUpMs: number;
     holeHandReach: number;
     holeHandCdMs: number;
-    holeDamage: number;       // qo'l ushlasa yoki teshikka tushib ketsa
+    holeDamage: number;       // qo'l ushlasa
     grabMs: number;           // qo'l ushlasa - shuncha vaqt yura olmaydi
     // Devordagi teshikdan bosh: avval ko'zlar yonadi, keyin otilib chiqib tunnelga tortadi
     headWarnMs: number;
@@ -386,24 +387,33 @@ export interface DoorsDef {
     respectXp: number;
 }
 
-// MAP-5 G'ORI: 400 m qochish yo'li - yo'ldagi teshiklar (richagdan keyin ochiladi) va devordagi tunnel
-// teshiklari. Tasodifiy, lekin har safar bir xil (urug'li generator)
+// MAP-5 G'ORI: 400 m qochish yo'li - pastda yer, ustida tosh ustunlar (ular orasidagi bo'shliqlar richag
+// tortilgach ochiladi, bo'shliqdan qo'llar chiqadi) va devordagi tunnel teshiklari. Tasodifiy, lekin har safar
+// bir xil (urug'li generator)
 const CAVE_RUN = (() => {
     let seed = 5150;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-    const runFrom = 2260, runMeters = 400, exitX = runFrom + runMeters * 50;
+    const roomX0 = 2200, runFrom = 2260, runMeters = 400, exitX = runFrom + runMeters * 50, roomX1 = exitX + 200, floorY = 480;
+    const blocks: { x: number, y: number, w: number, h: number }[] = [];
     const floorHoles: { x: number, w: number }[] = [];
-    for (let x = 3150; x < exitX - 500;) {
-        const w = 90 + Math.round(rnd() * 60);
-        floorHoles.push({ x, w });
-        x += w + 230 + Math.round(rnd() * 280);
+    let x = 2760;
+    blocks.push({ x: roomX0, y: floorY, w: x - roomX0, h: 90 });      // eshik, richag va malika turgan joy - yaxlit
+    while (x < exitX - 300) {
+        const gw = 110 + Math.round(rnd() * 60);
+        floorHoles.push({ x, w: gw });
+        x += gw;
+        const pw = 90 + Math.round(rnd() * 50);
+        if (x + pw >= exitX - 300) break;
+        blocks.push({ x, y: floorY, w: pw, h: 90 });
+        x += pw;
     }
+    blocks.push({ x, y: floorY, w: roomX1 - x, h: 90 });              // oxirgi yaxlit tosh - yorug'likka chiqish
     const wallHoles: { x: number, y: number, r: number }[] = [];
-    for (let x = 3350; x < exitX - 600; x += 520 + Math.round(rnd() * 340)) {
+    for (let wx = 3350; wx < exitX - 600; wx += 520 + Math.round(rnd() * 340)) {
         const r = 44 + Math.round(rnd() * 22);
-        wallHoles.push({ x, y: 330 + Math.round(rnd() * (170 - r)), r });
+        wallHoles.push({ x: wx, y: 260 + Math.round(rnd() * (180 - r)), r });
     }
-    return { runMeters, exitX, roomX1: exitX + 200, floorHoles, wallHoles };
+    return { runMeters, exitX, roomX1, floorY, blocks, floorHoles, wallHoles };
 })();
 
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
@@ -1026,14 +1036,16 @@ export const MAPS: MapDef[] = [
             { x: 1180, y: 470, w: 140, h: 12 },
             { x: 1400, y: 370, w: 140, h: 12 },
             { x: 1180, y: 270, w: 140, h: 12 },
-            { x: 1400, y: 170, w: 140, h: 12 }
+            { x: 1400, y: 170, w: 140, h: 12 },
+            // G'or yo'li: tosh ustunlar (4-...)
+            ...CAVE_RUN.blocks
         ],
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
-            runMeters: CAVE_RUN.runMeters, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
+            runMeters: CAVE_RUN.runMeters, floorY: CAVE_RUN.floorY, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
             holeHandEveryMs: 450, holeHandWarnMs: 420, holeHandUpMs: 500, holeHandReach: 70, holeHandCdMs: 2600, holeDamage: 30, grabMs: 900,
             headWarnMs: 800, headLungeMs: 300, headBackMs: 450, headCdMs: 5000, headGlobalMs: 1300, headTrigger: 280, headReach: 115,
             swallowMs: 1500, swallowDamagePct: 0.5,
