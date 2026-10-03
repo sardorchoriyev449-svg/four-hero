@@ -1913,7 +1913,7 @@ export class GameEngine {
         const dr = room.doors, d = getMapById(room.selectedLevel).doors;
         const p = room.players[playerId];
         if (!dr || !d || !p || p.isDead || room.isOver) return;
-        if (dr.state === 'free' && Math.abs(p.x - d.yellowX) <= 50 && p.y + this.PLAYER_HALF_H >= 560) {
+        if (dr.state === 'free' && dr.choice === 'enter' && Math.abs(p.x - d.yellowX) <= 50 && p.y + this.PLAYER_HALF_H >= 560) {
             dr.state = 'room';
             dr.sub = 'elf';
             dr.timer = Math.round(40000 / 30);
@@ -1957,9 +1957,8 @@ export class GameEngine {
             return;
         }
         if (dr.state === 'free') {
-            // "Yo'q" tanlanganda - troll aytgan yo'l: birinchi platformaga chiqqanda tepaga chiqish boshlanadi
-            const p0 = map.platforms[d.climbPlats[0]];
-            if (dr.choice === 'no' && alive.some(p => p.x >= p0.x - 6 && p.x <= p0.x + p0.w + 6 && Math.abs(p.y + this.PLAYER_HALF_H - p0.y) <= 10)) {
+            // "Yo'q" tanlanganda - faqat tepaga chiqish: tog' etagiga yetganda boshlanadi
+            if (dr.choice === 'no' && alive.some(p => p.x >= d.climbX0 + 20)) {
                 dr.state = 'climb';
                 dr.segment = 0;
                 dr.nextWave = dr.tick + T(800);
@@ -2009,8 +2008,9 @@ export class GameEngine {
             if (i >= 0) dr.lastPlat[p.id] = i;
         });
         if (!dr.wave && (dr.tick >= dr.nextWave || (landed && dr.tick >= dr.nextWave - T(1500)))) {
-            let safe = Math.floor(Math.random() * d.climbPlats.length);
-            if (safe === dr.lastSafe) safe = (safe + 1 + Math.floor(Math.random() * (d.climbPlats.length - 1))) % d.climbPlats.length;
+            const n = d.climbPlats.length - 1;   // eng tepadagi (maqsad) tosh ostida emas
+            let safe = Math.floor(Math.random() * n);
+            if (safe === dr.lastSafe) safe = (safe + 1 + Math.floor(Math.random() * (n - 1))) % n;
             dr.lastSafe = safe;
             dr.wave = { safe, phase: 'warn', t: T(d.rockWarnMs) };
             this.io.to(roomId).emit('climbQuake');
@@ -2022,11 +2022,12 @@ export class GameEngine {
                 w.phase = 'fall';
                 w.t = T(350);
                 d.climbPlats.forEach((pi, k) => {
-                    if (k === w.safe) return;
+                    if (k === w.safe || k === d.climbPlats.length - 1) return;
                     const pl = map.platforms[pi];
                     alive.forEach(p => {
                         const feet = p.y + this.PLAYER_HALF_H;
-                        if (p.x < pl.x - 8 || p.x > pl.x + pl.w + 8 || feet > pl.y + 10 || feet < pl.y - 150) return;
+                        // Shu platformada turgan (yoki undan sal sakragan) qahramon; yuqoridagi platformadagilarga tegmaydi
+                        if (p.x < pl.x - 8 || p.x > pl.x + pl.w + 8 || feet > pl.y + 10 || feet < pl.y - 70) return;
                         this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.rockDamagePct));
                         this.knockback(p, 0, 200);
                     });

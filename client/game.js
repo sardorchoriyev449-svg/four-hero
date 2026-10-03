@@ -2844,6 +2844,12 @@ function launchGame(socket, roomId, mapData, continued) {
             g.fillStyle(0x8f8f96, 1); g.fillRect(pl.x, pl.y, pl.w, 4);
             g.fillStyle(0x55555d, 1); for (let x = pl.x + 6; x < pl.x + pl.w; x += 22) g.fillRect(x, pl.y + 8, 10, 4);
         });
+        const startDoor = scene.add.graphics().setDepth(1.35);
+        const sdx = d.climbStartX + 40;
+        startDoor.fillStyle(0x050308, 1); startDoor.fillRect(sdx - 22, 518, 44, 54);
+        startDoor.fillStyle(0x4e342e, 1); startDoor.fillRect(sdx - 19, 521, 38, 51);
+        startDoor.fillStyle(0x3e2723, 1); startDoor.fillRect(sdx - 1, 521, 2, 51);
+        startDoor.fillStyle(0xffca28, 1); startDoor.fillRect(sdx + 8, 544, 9, 5);
         const rockGfx = scene.add.graphics().setDepth(3.4);
         [[d.climbX1 + 20, 40], [d.roomX0 - 20, 40]].forEach(([x, w]) => platforms.add(scene.add.rectangle(x, 300, w, 600, 0x000000, 0)));
         const wallG = scene.add.graphics().setDepth(-0.3);
@@ -2896,7 +2902,7 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         const pillarG = scene.add.graphics().setDepth(1.4);
         map.platforms.forEach((pl, k) => {
-            if (k < 4) return;
+            if (d.climbPlats.includes(k)) return;
             pillarG.fillStyle(0x050308, 1); pillarG.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 602 - pl.y);
             pillarG.fillStyle(0x2a2433, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 600 - pl.y);
             pillarG.fillStyle(0x3d3548, 1); pillarG.fillRect(pl.x, pl.y, pl.w, 5);
@@ -3058,14 +3064,14 @@ function launchGame(socket, roomId, mapData, continued) {
     function updateDoors(scene) {
         if (!drObj || !drState) return;
         const d = map.doors, S = drState, t0 = scene.time.now, me = currentCharacter, cam = scene.cameras.main;
-        drObj.hintDoor.setVisible(S.state === 'free' && !!me && !me.isDead && Math.abs(me.x - d.yellowX) <= 50 && !dialog);
+        drObj.hintDoor.setVisible(S.state === 'free' && S.choice === 'enter' && !!me && !me.isDead && Math.abs(me.x - d.yellowX) <= 50 && !dialog);
         drObj.hintLever.setVisible(S.state === 'room' && S.sub === 'lever' && !!me && !me.isDead && Math.abs(me.x - d.leverX) <= 50 && !dialog);
         // Tepaga chiqish: tosh tushishi ogohlantirishi
         const rg = drObj.rockGfx;
         rg.clear();
         if (S.state === 'climb' && S.wave) {
             d.climbPlats.forEach((pi, k) => {
-                if (k === S.wave.safe) return;
+                if (k === S.wave.safe || k === d.climbPlats.length - 1) return;
                 const pl = map.platforms[pi];
                 if (S.wave.phase === 'warn') {
                     if (Math.floor(t0 / 110) % 2) { rg.fillStyle(0x000000, 0.45); rg.fillEllipse(pl.x + pl.w / 2, pl.y - 2, pl.w, 14); }
@@ -5481,7 +5487,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (dialog) { if (dry) return true; advanceDialog(); return; }
             // 0) Sariq eshik: eshik oldida - kirish; ichkarida richag oldida - tortish
             if (isDoors && drState && currentCharacter && !currentCharacter.isDead &&
-                ((drState.state === 'free' && Math.abs(currentCharacter.x - map.doors.yellowX) <= 50) ||
+                ((drState.state === 'free' && drState.choice === 'enter' && Math.abs(currentCharacter.x - map.doors.yellowX) <= 50) ||
                  (drState.state === 'room' && drState.sub === 'lever' && Math.abs(currentCharacter.x - map.doors.leverX) <= 50))) {
                 if (dry) return true;
                 socket.emit('doorsInteract', roomId);
@@ -5948,7 +5954,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('climbRocks', (d) => {
             sfx('explosion', 0.7);
             map.doors.climbPlats.forEach((pi, k) => {
-                if (k === d.safe) return;
+                if (k === d.safe || k === map.doors.climbPlats.length - 1) return;
                 const pl = map.platforms[pi];
                 const r = this.add.circle(pl.x + pl.w / 2, -40, 36, 0x757575).setStrokeStyle(4, 0x0a0a0a).setDepth(3.45);
                 this.tweens.add({ targets: r, y: pl.y - 30, duration: 220, ease: 'Quad.In', onComplete: () => { gDust(this, r.x, pl.y - 4, 8, 0x9e9e9e); r.destroy(); } });
@@ -7299,9 +7305,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (S.state === 'walk') progressText = t('hud_dr_go').replace('{m}', Math.max(0, Math.ceil((d.triggerX - currentCharacter.x) / 50)));
                 else if (S.state === 'free') progressText = S.choice === 'enter' ? t('hud_dr_enter') : t('hud_dr_free_no');
                 else if (S.state === 'climb') {
-                    const feet = currentCharacter.y + 24;
-                    const lvl = d.climbPlats.findIndex(i => Math.abs(feet - map.platforms[i].y) <= 10 && Math.abs(currentCharacter.x - (map.platforms[i].x + map.platforms[i].w / 2)) <= map.platforms[i].w / 2 + 8);
-                    progressText = t('hud_dr_climb').replace('{m}', S.segment * d.segMeters + (lvl + 1) * 5).replace('{n}', d.segments * d.segMeters);
+                    const feet = currentCharacter.y + 24, topY = map.platforms[d.climbPlats[d.climbPlats.length - 1]].y;
+                    const part = Math.max(0, Math.min(1, (570 - feet) / (570 - topY)));
+                    progressText = t('hud_dr_climb').replace('{m}', S.segment * d.segMeters + Math.round(part * d.segMeters)).replace('{n}', d.segments * d.segMeters);
                 } else if (S.state === 'room') progressText = S.sub === 'lever' ? t('hud_dr_lever')
                     : S.sub === 'fight' ? t('hud_dr_fight').replace('{m}', Math.max(0, Math.ceil((d.exitX - currentCharacter.x) / 50)))
                     : S.sub === 'buried' ? t('hud_dr_buried') : '';
@@ -7387,7 +7393,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
         if (!currentCharacter || !currentCharacter.body) return;
         // Boshqa o'yinchilar hali yuklanmoqda - raund boshlanguncha joyida turadi
-        if (!roundGo || pauseMenuOpen) { currentCharacter.setVelocityX(0); return; }
+        if (!roundGo || pauseMenuOpen || (isDoors && drState && drState.state === 'choose')) { currentCharacter.setVelocityX(0); return; }
 
         // O'LIK ("ARVOH") HOLATDA: yura oladi (chapga/o'ngga/sakrash), lekin
         // hujum va qobiliyat ishlamaydi (server bu holatda ularni allaqachon rad etadi)

@@ -347,7 +347,7 @@ export interface DoorsDef {
     // Tepaga chiqish
     climbX0: number;
     climbX1: number;
-    climbPlats: number[];    // platforms indekslari (pastdan tepaga)
+    climbPlats: number[];    // platforms indekslari (pastdan tepaga; oxirgisi - eng tepadagi maqsad)
     climbStartX: number;
     segments: number;
     segMeters: number;
@@ -1034,19 +1034,25 @@ export const MAPS: MapDef[] = [
         groundColor: 0x2b2733,
         mapWidth: CAVE_RUN.roomX1,
         platforms: [
-            // Tepaga chiqish (0-3, pastdan tepaga)
-            { x: 1180, y: 470, w: 140, h: 12 },
-            { x: 1400, y: 370, w: 140, h: 12 },
-            { x: 1180, y: 270, w: 140, h: 12 },
-            { x: 1400, y: 170, w: 140, h: 12 },
-            // G'or yo'li: tosh ustunlar (4-...)
+            // Tepaga chiqish (0-9, rasmdagidek): pastda 4 ta, o'rtada 1 ta, tepada 4 ta, eng tepada - maqsad
+            { x: 1043, y: 460, w: 143, h: 12 },
+            { x: 1270, y: 460, w: 100, h: 12 },
+            { x: 1434, y: 460, w: 92, h: 12 },
+            { x: 1579, y: 460, w: 119, h: 12 },
+            { x: 1335, y: 355, w: 118, h: 12 },
+            { x: 1047, y: 245, w: 122, h: 12 },
+            { x: 1220, y: 245, w: 110, h: 12 },
+            { x: 1411, y: 245, w: 118, h: 12 },
+            { x: 1593, y: 245, w: 120, h: 12 },
+            { x: 1294, y: 135, w: 174, h: 12 },
+            // G'or yo'li: tosh ustunlar (10-...)
             ...CAVE_RUN.blocks
         ],
         pits: CAVE_RUN.floorHoles,
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
-            climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
-            rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
+            climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], climbStartX: 1340, segments: 4, segMeters: 25,
+            rockEveryMs: 2000, rockWarnMs: 1000, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
             runMeters: CAVE_RUN.runMeters, floorY: CAVE_RUN.floorY, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
             holeHandEveryMs: 450, holeHandWarnMs: 450, holeHandUpMs: 750, holeHandReach: 52, holeHandGrabAtMs: 240, holeHandCdMs: 2600, holeDamage: 30, grabMs: 900,
