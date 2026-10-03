@@ -354,40 +354,57 @@ export interface DoorsDef {
     rockEveryMs: number;
     rockWarnMs: number;
     rockDamagePct: number;
-    // Ichkari - ulkan qorong'i g'or
+    // Ichkari - ulkan qorong'i g'or: richag tortilgach maxluq malikani olib ketadi, 400 m qochish
     roomX0: number;
     roomX1: number;
     roomEntryX: number;
     elfX: number;
     elfY: number;
     leverX: number;
-    roomPlats: number[];
-    bombX: number[];          // polda har 10 m da bomba - faqat o'yinchi otganda portlaydi
-    bombRadius: number;
-    bombRespawnMs: number;
-    bombPlayerDamage: number;
-    hitsToBury: number;       // (statistika) bombalar tekkan soni
-    exitX: number;            // g'or oxiridagi yorug'lik: shu yerga yetilsa - orqada g'or qulab, maxluqni bosadi
-    surfaceMs: number;        // yer ustida quvlash, keyin o'zi qorong'iga chekinadi
-    retreatMs: number;        // orqaga sudralib qochish
-    hiddenMinMs: number;      // hech qayerdan chiqmaydi (yerdan qo'llar chiqadi)
-    hiddenMaxMs: number;
-    underWarnMs: number;      // o'yinchi tagidan chiqishdan oldin yer yoriladi
-    emergeDamage: number;     // (eski) - endi tishlash: emergeBiteMin..emergeBiteMax
-    emergeBiteMin: number;    // yo'ldan / tagidan / tepadan chiqib tishlasa
-    emergeBiteMax: number;
-    roadWarnMs: number;       // yo'ldan to'satdan chiqishdan oldingi juda qisqa yoriq
-    leashDist: number;        // eng oldingi qahramon shundan uzoqlashsa - maxluq yo'qolib, uning oldida yo'ldan chiqadi
-    handEveryMs: number;      // yerdan chiqadigan qo'llar
-    handWarnMs: number;
-    handUpMs: number;
-    handDamage: number;
+    exitX: number;            // g'or oxiridagi yorug'lik: shu yerga yetilsa - orqada g'or qulaydi, xarita o'tiladi
+    runMeters: number;
+    floorHoles: { x: number, w: number }[];        // yo'ldagi teshiklar - richag tortilgach ochiladi
+    wallHoles: { x: number, y: number, r: number }[]; // devordagi tunnel teshiklari - maxluq boshi chiqadi
+    // Yo'ldagi teshikdan chiqadigan qo'l: teshik yonidagi (platformadagi) qahramonni ushlaydi
+    holeHandEveryMs: number;
+    holeHandWarnMs: number;
+    holeHandUpMs: number;
+    holeHandReach: number;
+    holeHandCdMs: number;
+    holeDamage: number;       // qo'l ushlasa yoki teshikka tushib ketsa
     grabMs: number;           // qo'l ushlasa - shuncha vaqt yura olmaydi
-    monsterSpeed: number;
-    monsterClimb: number;
-    monsterDamage: number;
+    // Devordagi teshikdan bosh: avval ko'zlar yonadi, keyin otilib chiqib tunnelga tortadi
+    headWarnMs: number;
+    headLungeMs: number;
+    headBackMs: number;
+    headCdMs: number;         // bitta teshik qayta hujumi
+    headGlobalMs: number;     // ikki hujum orasidagi eng kam vaqt
+    headTrigger: number;      // qahramon teshikka shuncha yaqinlashsa - ko'zlar yonadi
+    headReach: number;        // otilib chiqqanda ushlaydigan masofa (teshik radiusiga qo'shiladi)
+    swallowMs: number;        // tunnel ichida
+    swallowDamagePct: number; // boshqa teshikdan tupurib chiqarganda - maks. jonning ulushi
     respectXp: number;
 }
+
+// MAP-5 G'ORI: 400 m qochish yo'li - yo'ldagi teshiklar (richagdan keyin ochiladi) va devordagi tunnel
+// teshiklari. Tasodifiy, lekin har safar bir xil (urug'li generator)
+const CAVE_RUN = (() => {
+    let seed = 5150;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    const runFrom = 2260, runMeters = 400, exitX = runFrom + runMeters * 50;
+    const floorHoles: { x: number, w: number }[] = [];
+    for (let x = 3150; x < exitX - 500;) {
+        const w = 90 + Math.round(rnd() * 60);
+        floorHoles.push({ x, w });
+        x += w + 230 + Math.round(rnd() * 280);
+    }
+    const wallHoles: { x: number, y: number, r: number }[] = [];
+    for (let x = 3350; x < exitX - 600; x += 520 + Math.round(rnd() * 340)) {
+        const r = 44 + Math.round(rnd() * 22);
+        wallHoles.push({ x, y: 330 + Math.round(rnd() * (170 - r)), r });
+    }
+    return { runMeters, exitX, roomX1: exitX + 200, floorHoles, wallHoles };
+})();
 
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
@@ -1003,56 +1020,24 @@ export const MAPS: MapDef[] = [
         xpReward: 25,
         accentColor: 0xffd600,
         groundColor: 0x2b2733,
-        mapWidth: 10200,
+        mapWidth: CAVE_RUN.roomX1,
         platforms: [
             // Tepaga chiqish (0-3, pastdan tepaga)
             { x: 1180, y: 470, w: 140, h: 12 },
             { x: 1400, y: 370, w: 140, h: 12 },
             { x: 1180, y: 270, w: 140, h: 12 },
-            { x: 1400, y: 170, w: 140, h: 12 },
-            // Uzun g'or bo'ylab tosh tokchalar
-            { x: 2480, y: 480, w: 100, h: 12 },
-            { x: 2700, y: 380, w: 120, h: 12 },
-            { x: 2960, y: 480, w: 100, h: 12 },
-            { x: 3280, y: 480, w: 100, h: 12 },
-            { x: 3500, y: 380, w: 120, h: 12 },
-            { x: 3760, y: 480, w: 100, h: 12 },
-            { x: 4080, y: 480, w: 100, h: 12 },
-            { x: 4300, y: 380, w: 120, h: 12 },
-            { x: 4560, y: 480, w: 100, h: 12 },
-            { x: 4880, y: 480, w: 100, h: 12 },
-            { x: 5100, y: 380, w: 120, h: 12 },
-            { x: 5360, y: 480, w: 100, h: 12 },
-            { x: 5680, y: 480, w: 100, h: 12 },
-            { x: 5900, y: 380, w: 120, h: 12 },
-            { x: 6160, y: 480, w: 100, h: 12 },
-            { x: 6480, y: 480, w: 100, h: 12 },
-            { x: 6700, y: 380, w: 120, h: 12 },
-            { x: 6960, y: 480, w: 100, h: 12 },
-            { x: 7280, y: 480, w: 100, h: 12 },
-            { x: 7500, y: 380, w: 120, h: 12 },
-            { x: 7760, y: 480, w: 100, h: 12 },
-            { x: 8080, y: 480, w: 100, h: 12 },
-            { x: 8300, y: 380, w: 120, h: 12 },
-            { x: 8560, y: 480, w: 100, h: 12 },
-            { x: 8880, y: 480, w: 100, h: 12 },
-            { x: 9100, y: 380, w: 120, h: 12 },
-            { x: 9360, y: 480, w: 100, h: 12 },
-            { x: 9680, y: 480, w: 100, h: 12 },
-            { x: 9900, y: 380, w: 120, h: 12 },
-            { x: 10160, y: 480, w: 100, h: 12 }
+            { x: 1400, y: 170, w: 140, h: 12 }
         ],
         doors: {
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: [0, 1, 2, 3], climbStartX: 1060, segments: 4, segMeters: 25,
             rockEveryMs: 2000, rockWarnMs: 900, rockDamagePct: 0.6,
-            roomX0: 2200, roomX1: 10200, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: 10060,
-            roomPlats: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33],
-            bombX: [2700, 3200, 3700, 4200, 4700, 5200, 5700, 6200, 6700, 7200, 7700, 8200, 8700, 9200, 9700], bombRadius: 120, bombRespawnMs: 6000, bombPlayerDamage: 15, hitsToBury: 10,
-            surfaceMs: 7000, retreatMs: 800, hiddenMinMs: 1000, hiddenMaxMs: 2000, underWarnMs: 650, emergeDamage: 25,
-            emergeBiteMin: 30, emergeBiteMax: 40, roadWarnMs: 250, leashDist: 250,
-            handEveryMs: 350, handWarnMs: 300, handUpMs: 450, handDamage: 15, grabMs: 1100,
-            monsterSpeed: 5, monsterClimb: 4, monsterDamage: 25, respectXp: 200
+            roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
+            runMeters: CAVE_RUN.runMeters, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
+            holeHandEveryMs: 450, holeHandWarnMs: 420, holeHandUpMs: 500, holeHandReach: 70, holeHandCdMs: 2600, holeDamage: 30, grabMs: 900,
+            headWarnMs: 800, headLungeMs: 300, headBackMs: 450, headCdMs: 5000, headGlobalMs: 1300, headTrigger: 280, headReach: 115,
+            swallowMs: 1500, swallowDamagePct: 0.5,
+            respectXp: 200
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

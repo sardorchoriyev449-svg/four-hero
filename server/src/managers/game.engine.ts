@@ -318,12 +318,12 @@ export class GameEngine {
                 doors: room.doors ? {
                     state: room.doors.state, choice: room.doors.choice, segment: room.doors.segment, sub: room.doors.sub,
                     wave: room.doors.wave ? { safe: room.doors.wave.safe, phase: room.doors.wave.phase } : null,
-                    monster: room.doors.monster ? { x: Math.round(room.doors.monster.x), y: Math.round(room.doors.monster.y), pose: room.doors.monster.pose,
-                        facing: room.doors.monster.facing, hits: room.doors.monster.hits, maxHits: room.doors.monster.maxHits, mode: room.doors.monster.mode,
-                        hitFlash: room.doors.monster.hitFlash } : null,
-                    emergeAt: room.doors.monster && room.doors.monster.mode === 'warn' ? room.doors.monster.emergeAt : null,
-                    bombs: room.doors.bombs.filter(b => b.alive).map(b => ({ id: b.id, x: b.x })),
-                    hands: room.doors.hands.map(h => ({ id: h.id, x: Math.round(h.x), y: h.y, phase: h.phase }))
+                    monster: room.doors.monster && room.doors.monster.pose !== 'hidden' ? { x: Math.round(room.doors.monster.x), y: Math.round(room.doors.monster.y),
+                        pose: room.doors.monster.pose, facing: room.doors.monster.facing } : null,
+                    floorOpen: room.doors.floorOpen,
+                    hands: room.doors.hands.map(h => ({ id: h.id, x: Math.round(h.x), y: h.y, side: h.side, phase: h.phase })),
+                    heads: room.doors.heads.map((h, i) => h.phase === 'idle' ? null : { i, phase: h.phase }).filter(Boolean),
+                    swallowed: room.doors.swallowed.map(w => ({ id: w.id, i: w.hole }))
                 } : null,
                 squid: room.squid ? { state: room.squid.state, hp: room.squid.hp, maxHp: room.squid.maxHp, x: Math.round(room.squid.x), eyeY: Math.round(room.squid.eyeY),
                     hitFlash: room.squid.hitFlash, slam: room.squid.slam ? { plat: room.squid.slam.plat, phase: room.squid.slam.phase, x0: room.squid.slam.x0, x1: room.squid.slam.x1, y: room.squid.slam.y } : null,
@@ -958,16 +958,7 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
-            // G'OR: stalaktitdagi bombaga tegsa - portlaydi va stalaktit qulaydi; OQ YUZga oddiy o'q/zarba ta'sir qilmaydi
-            const dr = room.doors;
-            const dd = map.doors;
-            if (!bulletDestroyed && dr && dd && dr.state === 'room' && dr.sub !== 'elf') {
-                const bomb = dr.bombs.find(q => q.alive && this.checkOverlap(hitRect, { x: q.x - 16, y: 570 - 32, w: 32, h: 32 }));
-                if (bomb) { bulletDestroyed = true; this.explodeCaveBomb(room, dd, bomb, bullet.playerId); }
-                const mo = dr.monster;
-                if (!bulletDestroyed && mo && dr.sub === 'fight' && (mo.mode === 'surface' || mo.mode === 'emerge') &&
-                    this.checkOverlap(hitRect, { x: mo.x - 60, y: mo.y - 95, w: 120, h: 95 })) bulletDestroyed = true;
-            }
+            // G'OR (map-5): OQ YUZga o'q/zarba umuman ta'sir qilmaydi - faqat qochish
 
             // KALMAR: faqat QIZIL KO'ZI zarar oladi
             const sq = room.squid;
@@ -1567,8 +1558,8 @@ export class GameEngine {
         room.squid = sqd ? { state: 'sleep', hp: sqHp, maxHp: sqHp, timer: 0, tick: 0, x: sqd.baseX, eyeY: 700, hitFlash: 0, lastHitBy: null,
             slam: null, geysers: [], fish: [], splashX: null, nextSlam: 0, nextGeyser: 0, nextFish: 0, counter: 0 } : null;
         room.doors = map.doors ? { state: 'walk', choice: null, timer: 0, tick: 0, segment: 0, wave: null, lastSafe: -1, nextWave: 0, lastPlat: {},
-            sub: null, monster: null, lastHitBy: null, hands: [], nextHand: 0, counter: 0,
-            bombs: map.doors.bombX.map((x, i) => ({ id: 'cbomb_' + i, x, alive: true, respawn: 0 })) } : null;
+            sub: null, monster: null, lastHitBy: null, floorOpen: false, hands: [], holeCd: map.doors.floorHoles.map(() => 0), nextHand: 0,
+            heads: map.doors.wallHoles.map(() => ({ phase: 'idle' as const, t: 0, cd: 0 })), nextHead: 0, swallowed: [], counter: 0 } : null;
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
@@ -1937,32 +1928,9 @@ export class GameEngine {
         }
         if (dr.state === 'room' && dr.sub === 'lever' && Math.abs(p.x - d.leverX) <= 50) {
             dr.sub = 'drop';
-            dr.monster = { x: d.elfX, y: -160, vy: 0, pose: 'drop', facing: -1, hits: 0, maxHits: d.hitsToBury, mode: 'surface', modeT: 0,
-                emergeAt: null, targetId: null, climbTo: null, cd: 0, attackT: 0, hitFlash: 0 };
+            dr.monster = { x: d.elfX, y: -160, vy: 0, pose: 'drop', facing: 1 };
             this.io.to(room.id).emit('leverPulled');
         }
-    }
-    // Poldagi bomba portladi (o'q tegdi yoki maxluq bosdi): yer silkinadi; maxluq yaqinida bo'lsa - yaralanadi,
-    // orqaga sudralib qochadi va 1-2 s hech qayerdan chiqmaydi
-    private explodeCaveBomb(room: RoomState, d: NonNullable<MapDef['doors']>, bomb: NonNullable<RoomState['doors']>['bombs'][number], by: string | null): void {
-        const dr = room.doors!;
-        bomb.alive = false;
-        bomb.respawn = dr.tick + Math.round(d.bombRespawnMs / 30);
-        this.io.to(room.id).emit('caveBomb', { x: bomb.x, y: 556 });
-        Object.values(room.players).forEach(p => {
-            if (!p.isDead && Math.hypot(p.x - bomb.x, p.y - 556) <= d.bombRadius * 0.7) this.hurtPlayer(p, d.bombPlayerDamage);
-        });
-        const mo = dr.monster;
-        if (!mo || dr.sub !== 'fight' || (mo.mode !== 'surface' && mo.mode !== 'emerge')) return;
-        if (Math.hypot(mo.x - bomb.x, (mo.y - 40) - 556) > d.bombRadius) return;
-        mo.hits++;
-        mo.hitFlash = 8;
-        if (by) dr.lastHitBy = by;
-        this.io.to(room.id).emit('monsterHurt', { x: Math.round(mo.x), hits: mo.hits });
-        mo.mode = 'retreat';
-        mo.modeT = Math.round(d.retreatMs / 30);
-        mo.climbTo = null;
-        mo.facing = bomb.x > mo.x ? 1 : -1;   // portlash tomonga qaragan holda orqaga sudraladi
     }
     private updateDoors(room: RoomState, roomId: string): void {
         const map = getMapById(room.selectedLevel);
@@ -2070,6 +2038,12 @@ export class GameEngine {
             }
         }
     }
+    // Tupurib chiqarish / qo'yib yuborish joyi: yo'ldagi teshik ustida bo'lmasin
+    private caveSafeX(d: NonNullable<MapDef['doors']>, x: number): number {
+        const h = d.floorHoles.find(q => x >= q.x - 24 && x <= q.x + q.w + 24);
+        if (h) x = h.x - 40;
+        return Math.max(d.roomX0 + 80, Math.min(d.exitX - 40, x));
+    }
     private updateRoom(room: RoomState, roomId: string, map: MapDef, d: NonNullable<MapDef['doors']>, dr: NonNullable<RoomState['doors']>, alive: PlayerState[]): void {
         const T = (ms: number) => Math.round(ms / 30);
         if (dr.sub === 'elf') {
@@ -2077,33 +2051,41 @@ export class GameEngine {
             return;
         }
         const mo = dr.monster;
-        if (!mo) return;
-        if (mo.hitFlash > 0) mo.hitFlash--;
-        dr.bombs.forEach(b => { if (!b.alive && dr.tick >= b.respawn) b.alive = true; });
-        const plats = d.roomPlats.map(i => map.platforms[i]);
-        const surfAt = (x: number, feet: number) => {
-            let best = 570;
-            plats.forEach(pl => { if (x >= pl.x && x <= pl.x + pl.w && pl.y >= feet - 12 && pl.y < best) best = pl.y; });
-            return best;
-        };
-        const clampX = (x: number) => Math.max(d.roomX0 + 70, Math.min(d.roomX1 - 50, x));
-        if (dr.sub === 'drop') {
-            // Tepadan tushadi: avval malikani bosib (qon), keyin yerga
+        if (dr.sub === 'drop' && mo) {
+            // Tepadan tushadi: malikani bosib (qon), keyin yerga - g'or silkinib, yo'lda teshiklar ochiladi
             const before = mo.y;
             mo.vy = Math.min(900, mo.vy + 900 * this.TICK_SECONDS);
             mo.y += mo.vy * this.TICK_SECONDS;
             if (before < d.elfY + 60 && mo.y >= d.elfY + 60) this.io.to(roomId).emit('elfCrushed', { x: d.elfX, y: d.elfY });
             if (mo.y >= 570) {
-                mo.y = 570; mo.vy = 0; mo.pose = 'crawl';
-                dr.sub = 'shock';
-                dr.timer = T(6000);
-                Object.values(room.players).forEach(p => { p.introDone = false; });
+                mo.y = 570; mo.vy = 0; mo.pose = 'crawl'; mo.facing = 1;
+                dr.sub = 'take';
+                dr.floorOpen = true;
                 this.io.to(roomId).emit('monsterLanded');
+                this.io.to(roomId).emit('floorOpen');
+            }
+            return;
+        }
+        if (dr.sub === 'take' && mo) {
+            // Malikani sudrab eng yaqin teshikka olib kirib ketadi
+            const hole = d.floorHoles.find(h => h.x + h.w / 2 > mo.x) || d.floorHoles[0];
+            const hx = hole.x + hole.w / 2;
+            mo.x = Math.min(hx, mo.x + 7);
+            if (mo.x >= hx) {
+                mo.pose = 'hidden';
+                dr.sub = 'shock';
+                dr.timer = T(7000);
+                Object.values(room.players).forEach(p => { p.introDone = false; });
+                this.io.to(roomId).emit('monsterDive', { x: Math.round(hx) });
             }
             return;
         }
         if (dr.sub === 'shock') {
-            if (--dr.timer <= 0 || alive.every(p => p.introDone)) { dr.sub = 'fight'; mo.cd = T(800); mo.mode = 'surface'; mo.modeT = T(d.surfaceMs); }
+            if (--dr.timer <= 0 || alive.every(p => p.introDone)) {
+                dr.sub = 'fight';
+                dr.nextHead = dr.tick + T(1500);
+                dr.nextHand = dr.tick + T(1000);
+            }
             return;
         }
         if (dr.sub === 'buried') {
@@ -2114,186 +2096,135 @@ export class GameEngine {
             }
             return;
         }
-        // QOCHISH: g'or oxiridagi yorug'likka yetgan qahramon - orqada g'or qulab, maxluqni toshlar bosib qoladi
-        const out = alive.find(p => p.x >= d.exitX);
+        if (dr.sub !== 'fight') return;
+        dr.swallowed = dr.swallowed.filter(w => room.players[w.id] && !room.players[w.id].isDead);
+        const inTunnel = new Set(dr.swallowed.map(w => w.id));
+        const free = alive.filter(p => !inTunnel.has(p.id));
+        const onGround = (p: PlayerState) => Math.abs(p.y + this.PLAYER_HALF_H - 570) <= 12;
+
+        // QOCHISH: yorug'likka yetgan qahramon - orqada g'or qulaydi
+        const out = free.find(p => p.x >= d.exitX);
         if (out) {
+            dr.swallowed.forEach(w => {
+                const p = room.players[w.id], h = d.wallHoles[w.hole];
+                p.x = this.caveSafeX(d, h.x); p.y = 540;
+                this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+                this.io.to(roomId).emit('spitOut', { id: p.id, i: w.hole });
+            });
+            dr.swallowed = [];
+            dr.hands = [];
+            dr.heads.forEach(h => { h.phase = 'idle'; });
             dr.lastHitBy = out.id;
             dr.sub = 'buried';
             dr.timer = T(3600);
-            dr.hands = [];
-            // Maxluq qochayotganlar ortida bo'ladi - qulagan toshlar uni o'sha yerda bosadi
-            mo.mode = 'surface'; mo.climbTo = null; mo.y = 570; mo.pose = 'crawl';
-            mo.x = Math.max(d.roomX0 + 80, Math.min(out.x - 260, mo.x < out.x - 120 ? mo.x : out.x - 260));
-            this.io.to(roomId).emit('monsterBuried', { x: Math.round(mo.x), y: 570, sunX: d.exitX });
+            this.io.to(roomId).emit('monsterBuried', { x: Math.round(out.x - 320), y: 570, sunX: d.exitX });
             return;
         }
-        if (mo.cd > 0) mo.cd--;
-        if (mo.attackT > 0) mo.attackT--;
-        mo.modeT--;
-        // YERDAN QO'LLAR: maxluq ko'rinmay turgan paytda qahramonlar oyog'i ostidan tez-tez chiqib, ushlashga urinadi
-        if (mo.mode === 'hidden' && dr.tick >= dr.nextHand && alive.length) {
-            const p = alive[Math.floor(Math.random() * alive.length)];
-            const y = surfAt(p.x, p.y + this.PLAYER_HALF_H);
-            dr.hands.push({ id: 'hand_' + (++dr.counter), x: clampX(p.x + (Math.random() - 0.5) * 100), y, phase: 'warn', t: T(d.handWarnMs), hit: false });
-            dr.nextHand = dr.tick + T(d.handEveryMs);
-        }
-        for (let i = dr.hands.length - 1; i >= 0; i--) {
-            const h = dr.hands[i];
-            if (--h.t <= 0 && h.phase === 'warn') { h.phase = 'up'; h.t = T(d.handUpMs); continue; }
-            if (h.phase === 'up' && !h.hit && h.t >= T(d.handUpMs) - 5) {
-                const p = alive.find(q => {
-                    const vx = this.playerMotion.get(q.id)?.vx || 0;
-                    const qx = q.x + Math.max(-40, Math.min(40, vx * 0.12));
-                    return Math.abs(qx - h.x) <= 16 && Math.abs(q.y + this.PLAYER_HALF_H - h.y) <= 10;
+
+        // 1) YO'LDAGI TESHIKKA TUSHIB KETDI: qo'l ushlab, chetga otib chiqaradi (-30)
+        free.forEach(p => {
+            if (p.y <= 562) return;
+            const h = d.floorHoles.find(q => p.x >= q.x - 6 && p.x <= q.x + q.w + 6);
+            if (!h) return;
+            this.hurtPlayer(p, d.holeDamage);
+            p.x = h.x - 34; p.y = 540;
+            this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+            this.io.to(p.id).emit('grabbed', { ms: d.grabMs });
+            this.io.to(roomId).emit('handGrab', { x: Math.round(h.x + 10), id: p.id, fall: true });
+        });
+
+        // 2) YO'LDAGI TESHIKLARDAN QO'LLAR: teshik yonidagi platformada turgan qahramonni ushlashga urinadi
+        if (dr.tick >= dr.nextHand) {
+            dr.nextHand = dr.tick + T(d.holeHandEveryMs);
+            free.forEach(p => {
+                if (!onGround(p)) return;
+                let best = -1, bestD = 1e9, side: -1 | 1 = -1;
+                d.floorHoles.forEach((h, k) => {
+                    const dist = p.x < h.x ? h.x - p.x : p.x > h.x + h.w ? p.x - (h.x + h.w) : 0;
+                    if (dist < bestD) { bestD = dist; best = k; side = p.x < h.x + h.w / 2 ? -1 : 1; }
                 });
+                if (best < 0 || bestD > d.holeHandReach + 50 || dr.tick < dr.holeCd[best] || dr.hands.some(hd => hd.hole === best)) return;
+                const h = d.floorHoles[best];
+                dr.hands.push({ id: 'hand_' + (++dr.counter), x: side < 0 ? h.x + 10 : h.x + h.w - 10, y: 570, side, hole: best,
+                    phase: 'warn', t: T(d.holeHandWarnMs), hit: false });
+                dr.holeCd[best] = dr.tick + T(d.holeHandCdMs);
+            });
+        }
+        for (let k = dr.hands.length - 1; k >= 0; k--) {
+            const h = dr.hands[k];
+            if (h.phase === 'warn') {
+                if (--h.t > 0) continue;
+                h.phase = 'up';
+                h.t = T(d.holeHandUpMs);
+                // Otilib chiqqan lahzada: teshik chetidan platformaga cho'ziladi (sakrab turgan - qutuladi)
+                const reachX0 = h.side < 0 ? h.x - 10 - d.holeHandReach : h.x - 6;
+                const reachX1 = h.side < 0 ? h.x + 6 : h.x + 10 + d.holeHandReach;
+                const p = free.find(q => onGround(q) && q.x >= reachX0 && q.x <= reachX1);
                 if (p) {
                     h.hit = true;
-                    this.hurtPlayer(p, d.handDamage);
+                    this.hurtPlayer(p, d.holeDamage);
                     this.io.to(p.id).emit('grabbed', { ms: d.grabMs });
                     this.io.to(roomId).emit('handGrab', { x: Math.round(h.x), id: p.id });
                 }
+                continue;
             }
-            if (h.phase === 'up' && h.t <= 0) dr.hands.splice(i, 1);
+            if (--h.t <= 0) dr.hands.splice(k, 1);
         }
-        // ORQAGA QOCHISH (bomba tekkanda yoki o'zi): orqaga sudralib, qorong'iga yo'qoladi
-        if (mo.mode === 'retreat') {
-            mo.pose = 'crawl';
-            mo.x = clampX(mo.x - mo.facing * d.monsterSpeed * 1.6);
-            if (mo.y < 570) mo.y = Math.min(570, mo.y + 6);
-            if (mo.modeT <= 0) {
-                mo.mode = 'hidden';
-                mo.pose = 'hidden';
-                mo.modeT = T(d.hiddenMinMs + Math.random() * (d.hiddenMaxMs - d.hiddenMinMs));
-                dr.nextHand = dr.tick + T(200);
-                this.io.to(roomId).emit('monsterHide');
-            }
-            return;
+
+        // 3) TUNNEL: tortilgan qahramon ichkarida; keyin boshqa (qo'shni) teshikdan tupurib chiqariladi - jonining yarmi
+        for (let k = dr.swallowed.length - 1; k >= 0; k--) {
+            const w = dr.swallowed[k], p = room.players[w.id], h = d.wallHoles[w.hole];
+            p.x = h.x; p.y = h.y;
+            if (--w.t > 0) continue;
+            const options = [w.hole - 1, w.hole + 1].filter(q => q >= 0 && q < d.wallHoles.length);
+            const ei = options.length ? options[Math.floor(Math.random() * options.length)] : w.hole;
+            const eh = d.wallHoles[ei];
+            p.x = this.caveSafeX(d, eh.x); p.y = Math.min(540, eh.y + 10);
+            dr.swallowed.splice(k, 1);
+            this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+            this.io.to(roomId).emit('spitOut', { id: p.id, i: ei, x: Math.round(p.x), y: Math.round(p.y) });
+            this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.swallowDamagePct));
         }
-        // YASHIRIN: 1-2 s hech qayerdan chiqmaydi, keyin o'ziga qulay joyni tanlaydi
-        if (mo.mode === 'hidden') {
-            if (mo.modeT > 0) return;
-            // Nishon: chiqish eshigiga eng yaqin (eng oldinda yugurayotgan) qahramon
-            const target = alive.slice().sort((a, b) => b.x - a.x)[0];
-            if (!target) return;
-            const feet = target.y + this.PLAYER_HALF_H;
-            const r = Math.random();
-            const kind: 'left' | 'right' | 'top' | 'under' | 'road' = mo.emergeAt && mo.emergeAt.kind === 'road' && mo.targetId === 'leash' ? 'road'
-                : r < 0.42 ? 'road' : r < 0.58 ? 'under' : r < 0.72 ? 'left' : r < 0.86 ? 'right' : 'top';
-            // Yo'l: qahramon yugurayotgan tomonda, sal oldinda (u yetib kelganda) - to'satdan
-            const vx = this.playerMotion.get(target.id)?.vx || 0;
-            const runDir = Math.abs(vx) > 30 ? Math.sign(vx) : (Math.random() < 0.5 ? -1 : 1);
-            const roadX = clampX(target.x + runDir * (110 + Math.min(120, Math.abs(vx) * 0.35)));
-            const at = kind === 'left' ? { x: clampX(target.x - 360), y: 570, kind }
-                : kind === 'right' ? { x: clampX(target.x + 360), y: 570, kind }
-                : kind === 'top' ? { x: clampX(target.x), y: 60, kind }
-                : kind === 'road' ? { x: roadX, y: surfAt(roadX, feet), kind }
-                : { x: clampX(target.x), y: surfAt(target.x, feet), kind };
-            mo.emergeAt = at;
-            mo.targetId = target.id;
-            if (kind === 'under' || kind === 'road') {
-                mo.mode = 'warn';
-                mo.modeT = T(kind === 'road' ? d.roadWarnMs : d.underWarnMs);
-                this.io.to(roomId).emit('underWarn', { x: Math.round(at.x), y: at.y, road: kind === 'road' });
-                return;
-            }
-            this.emergeMonster(room, roomId, d, mo, alive, surfAt);
-            return;
-        }
-        if (mo.mode === 'warn') {
-            if (mo.modeT <= 0) this.emergeMonster(room, roomId, d, mo, alive, surfAt);
-            return;
-        }
-        if (mo.mode === 'emerge') {
-            if (mo.pose === 'drop') {
-                const ground = surfAt(mo.x, mo.y);
-                mo.vy = Math.min(900, mo.vy + 1000 * this.TICK_SECONDS);
-                mo.y = Math.min(ground, mo.y + mo.vy * this.TICK_SECONDS);
-                if (mo.y >= ground) { mo.vy = 0; mo.pose = 'crawl'; }
-                return;
-            }
-            if (mo.modeT <= 0) { mo.mode = 'surface'; mo.modeT = T(d.surfaceMs); mo.pose = 'crawl'; }
-            return;
-        }
-        // 5 M QOIDASI: eng oldingi qahramon 5 m dan uzoqlashsa - maxluq yo'qoladi va uning oldida yo'ldan chiqadi
-        const lead = alive.slice().sort((a, b) => b.x - a.x)[0];
-        if (lead && mo.climbTo === null && mo.modeT < T(d.surfaceMs) - T(800) && Math.hypot(lead.x - mo.x, (lead.y + this.PLAYER_HALF_H) - mo.y) > d.leashDist) {
-            mo.mode = 'hidden';
-            mo.pose = 'hidden';
-            mo.modeT = T(250);
-            mo.emergeAt = { x: lead.x, y: 570, kind: 'road' };
-            mo.targetId = 'leash';
-            return;
-        }
-        // YER USTIDA: quvlaydi; vaqt tugasa - o'zi qorong'iga chekinadi
-        if (mo.modeT <= 0 && mo.climbTo === null) {
-            mo.mode = 'retreat'; mo.modeT = T(d.retreatMs);
-            const near = alive.slice().sort((a, b) => Math.abs(a.x - mo.x) - Math.abs(b.x - mo.x))[0];
-            mo.facing = near && near.x > mo.x ? 1 : -1;
-            return;
-        }
-        const target = alive.slice().sort((a, b) => Math.hypot(a.x - mo.x, a.y - mo.y) - Math.hypot(b.x - mo.x, b.y - mo.y))[0];
-        if (!target) return;
-        const tY = surfAt(target.x, target.y + this.PLAYER_HALF_H);
-        if (mo.climbTo !== null) {
-            mo.pose = 'climb';
-            mo.y = Math.max(mo.climbTo, mo.y - d.monsterClimb);
-            if (mo.y <= mo.climbTo) { mo.y = mo.climbTo; mo.climbTo = null; mo.pose = 'crawl'; }
-        } else {
-            const here = surfAt(mo.x, mo.y);
-            if (mo.y < here - 1) {
-                mo.vy = Math.min(800, mo.vy + 900 * this.TICK_SECONDS);
-                mo.y = Math.min(here, mo.y + mo.vy * this.TICK_SECONDS);
-                if (mo.y >= here) mo.vy = 0;
-            } else if (tY < mo.y - 4) {
-                const pl = plats.find(q => q.y === tY && target.x >= q.x - 10 && target.x <= q.x + q.w + 10) || plats.find(q => q.y === tY)!;
-                const gx = Math.max(pl.x + 14, Math.min(pl.x + pl.w - 14, mo.x));
-                if (Math.abs(gx - mo.x) <= d.monsterSpeed) { mo.x = gx; mo.climbTo = pl.y; }
-                else { mo.facing = gx > mo.x ? 1 : -1; mo.x += mo.facing * d.monsterSpeed; }
-                mo.pose = mo.climbTo !== null ? 'climb' : 'crawl';
-            } else {
-                const dx = target.x - mo.x;
-                mo.facing = dx >= 0 ? 1 : -1;
-                if (Math.abs(dx) > 40) mo.x += mo.facing * d.monsterSpeed;
-                mo.pose = mo.attackT > 0 ? 'attack' : 'crawl';
-            }
-        }
-        mo.x = clampX(mo.x);
-        alive.forEach(p => {
-            if (mo.cd > 0) return;
-            if (Math.abs(p.x - mo.x) <= 70 && Math.abs((p.y + this.PLAYER_HALF_H) - mo.y) <= 60) {
-                this.hurtPlayer(p, d.monsterDamage);
-                this.knockback(p, (p.x < mo.x ? -1 : 1) * 380, -260);
-                mo.cd = T(1200);
-                mo.attackT = T(350);
-                this.io.to(roomId).emit('monsterHit', { x: Math.round(mo.x) });
-            }
-        });
-    }
-    // Chiqish: chapdan / o'ngdan emaklab kiradi, tepadan tushadi yoki qahramon tagidan yorib chiqadi
-    private emergeMonster(room: RoomState, roomId: string, d: NonNullable<MapDef['doors']>, mo: NonNullable<NonNullable<RoomState['doors']>['monster']>,
-        alive: PlayerState[], surfAt: (x: number, feet: number) => number): void {
-        const T = (ms: number) => Math.round(ms / 30);
-        const e = mo.emergeAt!;
-        mo.mode = 'emerge';
-        mo.modeT = T(500);
-        mo.climbTo = null;
-        mo.cd = T(300);
-        if (e.kind === 'top') { mo.x = e.x; mo.y = 80; mo.vy = 0; mo.pose = 'drop'; }
-        else if (e.kind === 'under' || e.kind === 'road') { mo.x = e.x; mo.y = e.y; mo.pose = 'climb'; mo.attackT = T(400); }
-        else { mo.x = e.x; mo.y = 570; mo.pose = 'crawl'; mo.facing = e.kind === 'left' ? 1 : -1; }
-        let hitIds: string[] = [];
-        if (e.kind === 'under' || e.kind === 'top' || e.kind === 'road') {
-            // Chiqib tishlaydi: -30..-40
-            const landY = e.kind === 'top' ? surfAt(e.x, 0) : e.y;
-            alive.forEach(p => {
-                if (Math.abs(p.x - e.x) <= 60 && Math.abs(p.y + this.PLAYER_HALF_H - landY) <= 40) {
-                    this.hurtPlayer(p, d.emergeBiteMin + Math.round(Math.random() * (d.emergeBiteMax - d.emergeBiteMin)));
-                    this.knockback(p, (p.x < e.x ? -1 : 1) * 260, -420);
-                    hitIds.push(p.id);
+
+        // 4) DEVORDAGI TESHIKLAR: ko'zlar yonadi -> bosh otilib chiqadi -> yaqindagini tunnelga tortadi
+        dr.heads.forEach((h, k) => {
+            if (h.phase === 'idle') return;
+            if (--h.t > 0) return;
+            if (h.phase === 'warn') {
+                h.phase = 'lunge';
+                h.t = T(d.headLungeMs);
+                const w = d.wallHoles[k];
+                const busy = new Set(dr.swallowed.map(q => q.id));
+                const victim = free.filter(p => !busy.has(p.id) && Math.hypot(p.x - w.x, p.y - w.y) <= w.r + d.headReach)
+                    .sort((a, b) => Math.hypot(a.x - w.x, a.y - w.y) - Math.hypot(b.x - w.x, b.y - w.y))[0];
+                this.io.to(roomId).emit('headLunge', { i: k, hit: victim ? victim.id : null });
+                if (victim) {
+                    dr.swallowed.push({ id: victim.id, hole: k, t: T(d.swallowMs) });
+                    this.io.to(victim.id).emit('grabbed', { ms: d.swallowMs + 300 });
+                    this.io.to(roomId).emit('swallowed', { id: victim.id, i: k });
                 }
+            } else if (h.phase === 'lunge') { h.phase = 'back'; h.t = T(d.headBackMs); }
+            else h.phase = 'idle';
+        });
+        const active = dr.heads.filter(h => h.phase !== 'idle').length;
+        const maxActive = Math.min(3, 1 + Math.floor(alive.length / 2));
+        if (dr.tick >= dr.nextHead && active < maxActive) {
+            const cands: number[] = [];
+            d.wallHoles.forEach((w, k) => {
+                const h = dr.heads[k];
+                if (h.phase !== 'idle' || dr.tick < h.cd) return;
+                if (free.some(p => Math.abs(p.x - w.x) <= d.headTrigger && p.y > w.y - 60)) cands.push(k);
             });
+            if (cands.length) {
+                const k = cands[Math.floor(Math.random() * cands.length)];
+                const h = dr.heads[k];
+                h.phase = 'warn';
+                h.t = T(d.headWarnMs);
+                h.cd = dr.tick + T(d.headCdMs);
+                dr.nextHead = dr.tick + T(d.headGlobalMs);
+                this.io.to(roomId).emit('headWarn', { i: k });
+            }
         }
-        this.io.to(roomId).emit('monsterEmerge', { x: Math.round(e.x), y: Math.round(e.y), kind: e.kind, hit: hitIds });
     }
 
     // ===== KALMAR =====

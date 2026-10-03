@@ -383,15 +383,18 @@ export interface DoorsState {
     lastSafe: number;
     nextWave: number;
     lastPlat: Record<string, number>;
-    // Ichkari
-    sub: 'elf' | 'lever' | 'drop' | 'shock' | 'fight' | 'buried' | null;
-    monster: { x: number, y: number, vy: number, pose: 'crawl' | 'climb' | 'attack' | 'drop' | 'hidden', facing: 1 | -1,
-        hits: number, maxHits: number, mode: 'surface' | 'retreat' | 'hidden' | 'warn' | 'emerge', modeT: number,
-        emergeAt: { x: number, y: number, kind: 'left' | 'right' | 'top' | 'under' | 'road' } | null, targetId: string | null,
-        climbTo: number | null, cd: number, attackT: number, hitFlash: number } | null;
-    bombs: { id: string, x: number, alive: boolean, respawn: number }[];
-    hands: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: boolean }[];
+    // Ichkari: elf -> richag -> maxluq tushadi (drop) -> malikani olib teshikka kiradi (take) -> qochish (fight)
+    sub: 'elf' | 'lever' | 'drop' | 'take' | 'shock' | 'fight' | 'buried' | null;
+    monster: { x: number, y: number, vy: number, pose: 'drop' | 'crawl' | 'hidden', facing: 1 | -1 } | null;
+    floorOpen: boolean;
+    // Yo'ldagi teshiklardan qo'llar (side: qo'l qaysi tomondagi platformaga cho'ziladi)
+    hands: { id: string, x: number, y: number, side: -1 | 1, hole: number, phase: 'warn' | 'up', t: number, hit: boolean }[];
+    holeCd: number[];
     nextHand: number;
+    // Devordagi teshiklardan bosh (har teshik uchun) va tunnelga tortilganlar
+    heads: { phase: 'idle' | 'warn' | 'lunge' | 'back', t: number, cd: number }[];
+    nextHead: number;
+    swallowed: { id: string, hole: number, t: number }[];
     counter: number;
     lastHitBy: string | null;
 }

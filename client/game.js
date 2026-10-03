@@ -2872,12 +2872,30 @@ function launchGame(socket, roomId, mapData, continued) {
         [[X0 + 420, 70], [X0 + 1050, 90]].forEach(([x, w]) => { cave.fillStyle(0x0d1a20, 1); cave.fillEllipse(x, 571, w, 6); cave.fillStyle(0x4dd0e1, 0.25); cave.fillRect(x - w / 4, 570, w / 2, 1); });
         cave.lineStyle(1, 0x9e9e9e, 0.35);
         [[X0 + 40, 60], [X1 - 60, 60]].forEach(([cx, cy]) => { for (let k = 0; k < 5; k++) cave.lineBetween(cx, cy, cx + Math.cos(k * 0.5) * 60 * (cx > X0 + 100 ? -1 : 1), cy + Math.sin(k * 0.5) * 60); });
-        d.roomPlats.forEach((i) => {
-            const pl = map.platforms[i], g = scene.add.graphics().setDepth(1.4);
-            g.fillStyle(0x050308, 1); g.fillRect(pl.x - 2, pl.y - 2, pl.w + 4, 18);
-            g.fillStyle(0x2a2433, 1); g.fillRect(pl.x, pl.y, pl.w, 14);
-            g.fillStyle(0x3d3548, 1); g.fillRect(pl.x, pl.y, pl.w, 3);
-            g.fillStyle(0x1a1620, 1); g.fillTriangle(pl.x + 10, pl.y + 14, pl.x + pl.w / 2, pl.y + 34, pl.x + pl.w - 10, pl.y + 14);
+        // DEVORDAGI TUNNEL TESHIKLARI: OQ YUZ shulardan boshini chiqaradi
+        const holesG = scene.add.graphics().setDepth(-0.38);
+        // Qorong'ida ham teshiklarning cheti xira ko'rinadi (qayerdan chiqishi mumkinligini bilish uchun)
+        const holesRim = scene.add.graphics().setDepth(4.62);
+        d.wallHoles.forEach((w) => { holesRim.lineStyle(3, 0x6a5a80, 0.22); holesRim.strokeEllipse(w.x, w.y, w.r * 2 + 4, w.r * 2 - 2); });
+        const heads = d.wallHoles.map((w) => {
+            holesG.fillStyle(0x2a2433, 1); holesG.fillEllipse(w.x, w.y, w.r * 2 + 18, w.r * 2 + 12);
+            holesG.fillStyle(0x3d3548, 1); holesG.fillEllipse(w.x - 4, w.y - 5, w.r * 2 + 8, w.r * 2 + 2);
+            holesG.fillStyle(0x020104, 1); holesG.fillEllipse(w.x, w.y, w.r * 2, w.r * 2 - 6);
+            holesG.fillStyle(0x0c0812, 1); holesG.fillEllipse(w.x + 3, w.y + 4, w.r * 1.3, w.r * 1.1);
+            for (let k = 0; k < 7; k++) { const a = k * 0.9; holesG.fillStyle(0x1a1620, 1); holesG.fillRect(w.x + Math.cos(a) * (w.r + 6) - 3, w.y + Math.sin(a) * (w.r + 3) - 3, 6, 6); }
+            const img = scene.add.image(w.x, w.y, 'px_oq_scare').setDepth(4.72).setVisible(false);
+            return { img, base: (w.r * 1.5) / 286 };
+        });
+        // YO'L TESHIKLARI: richag tortilguncha usti yopiq (ko'rinmas qopqoq), keyin qulab ochiladi
+        const floorG = scene.add.graphics().setDepth(1.1).setVisible(false);
+        const covers = d.floorHoles.map((h) => {
+            floorG.fillStyle(0x000000, 1); floorG.fillRect(h.x, 568, h.w, 40);
+            floorG.fillStyle(0x2a1010, 1); floorG.fillRect(h.x + 8, 592, h.w - 16, 8);
+            for (let x = h.x; x < h.x + h.w; x += 10) { floorG.fillStyle(0x1a1620, 1); floorG.fillRect(x, 568 + ((x * 7) % 5), 8, 4); }
+            floorG.fillStyle(0x3d3548, 1); floorG.fillRect(h.x - 4, 568, 6, 20); floorG.fillRect(h.x + h.w - 2, 568, 6, 20);
+            const c = scene.add.rectangle(h.x + h.w / 2, 585, h.w, 30, 0x000000, 0);
+            platforms.add(c);
+            return c;
         });
         // Shiftdagi stalaktitlar - faqat bezak (qo'rqinchli silueta)
         for (let x = X0 + 140, i = 0; x < X1 - 200; x += 260 + (i * 37) % 120, i++) scene.add.image(x, 40, 'px_stal').setOrigin(0.5, 0).setDepth(-0.4).setScale(1, 0.5 + (i % 3) * 0.25);
@@ -2889,13 +2907,6 @@ function launchGame(socket, roomId, mapData, continued) {
         exitG.fillStyle(0xffffff, 1); exitG.fillRect(ex0 + 70, 400, X1 - ex0 - 70, 172);
         const exitGlow = scene.add.circle(ex0 + 90, 480, 160, 0xfff59d, 0.25).setDepth(4.65).setBlendMode(Phaser.BlendModes.ADD);
         scene.tweens.add({ targets: exitGlow, scale: 1.1, alpha: 0.35, duration: 1400, yoyo: true, repeat: -1 });
-        // Polda har 5 m da bomba (holat serverdan): o'q tegsa yoki maxluq bossa portlaydi
-        const bombs = {};
-        d.bombX.forEach((x, i) => {
-            const img = scene.add.image(x, 572, 'px_bomb').setOrigin(0.5, 1).setDepth(1.36);
-            const spark = scene.add.circle(x + 4, 572 - 33, 3, 0xffeb3b).setDepth(4.75);
-            bombs['cbomb_' + i] = { img, spark, x, alive: true };
-        });
         const hands = {};
         // Bog'langan elf malika (shiftdan arqonlar), richag
         const ropes = scene.add.graphics().setDepth(1.5);
@@ -2910,8 +2921,41 @@ function launchGame(socket, roomId, mapData, continued) {
         const brush = scene.make.image({ key: 'light_brush', add: false });
         const brushS = scene.make.image({ key: 'light_brush_s', add: false });
         const fx = scene.add.graphics().setDepth(4.7);       // ko'zlar, kovlanayotgan joylar - qorong'ilik ustida
-        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, bombs, hands, dark, brush, brushS, fx, underWarn: null, peeks: [], nextEdgePeek: 0,
-            barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9 };
+        drObj = { yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, floorG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
+            barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9, floorOpen: false, diving: false, meSwallowed: false };
+    }
+    // Richagdan keyin: yo'l qulab, teshiklar ochiladi
+    function drOpenFloor(scene, instant) {
+        if (!drObj || drObj.floorOpen) return;
+        drObj.floorOpen = true;
+        drObj.covers.forEach((c) => platforms.remove(c, true, true));
+        drObj.covers = [];
+        drObj.floorG.setVisible(true);
+        if (instant) return;
+        scene.cameras.main.shake(1200, 0.014);
+        sfx('rumble'); sfx('explosion', 0.6);
+        const cam = scene.cameras.main;
+        map.doors.floorHoles.forEach((h) => {
+            if (h.x > cam.scrollX + 1400 || h.x + h.w < cam.scrollX - 200) return;
+            for (let k = 0; k < 8; k++) {
+                const r = scene.add.rectangle(h.x + Math.random() * h.w, 572, 8, 8, [0x2a2433, 0x3d3548, 0x1a1620][k % 3]).setDepth(1.2);
+                scene.tweens.add({ targets: r, y: 640, angle: 200, duration: Phaser.Math.Between(400, 800), ease: 'Quad.In', onComplete: () => r.destroy() });
+            }
+            gDust(scene, h.x + h.w / 2, 566, 6, 0x3e2723);
+        });
+    }
+    // Devordagi teshikdan bosh otilib chiqadi (victim - tortiladigan qahramon yoki null) va qaytib kiradi
+    function drHeadLunge(scene, i, victimId) {
+        if (!drObj || !drObj.heads[i]) return;
+        const w = map.doors.wallHoles[i], o = drObj.heads[i];
+        const v = victimId === socket.id ? currentCharacter : otherPlayers[victimId];
+        const tx = v ? Phaser.Math.Linear(w.x, v.x, 0.55) : w.x + Phaser.Math.Between(-30, 30);
+        const ty = v ? Phaser.Math.Linear(w.y, v.y, 0.55) : w.y + 40;
+        scene.tweens.killTweensOf(o.img);
+        o.img.setVisible(true).setPosition(w.x, w.y).setScale(o.base * 0.4).setAlpha(1).setAngle(Phaser.Math.Between(-12, 12));
+        scene.tweens.add({ targets: o.img, x: tx, y: ty, scale: o.base * 1.15, duration: 140, ease: 'Back.Out' });
+        scene.tweens.add({ targets: o.img, x: w.x, y: w.y, scale: o.base * 0.3, delay: 380, duration: 260, ease: 'Quad.In', onComplete: () => o.img.setVisible(false) });
+        sfxAt('roar', w.x, 0.8); sfxAt('chomp', w.x);
     }
     function drDoorsUp(scene, instant) {
         if (!drObj || drShown.doorsUp) return;
@@ -3011,69 +3055,63 @@ function launchGame(socket, roomId, mapData, continued) {
             rg.fillStyle(0x69f0ae, 0.35); rg.fillRect(sp.x, sp.y - 6, sp.w, 6);
         }
         if (S.state !== 'room' && S.state !== 'done') return;
-        // Poldagi bombalar
-        const aliveIds = new Set((S.bombs || []).map(b => b.id));
-        Object.entries(drObj.bombs).forEach(([id, o]) => {
-            const alive = aliveIds.has(id);
-            if (alive && !o.alive) { o.img.setVisible(true).setScale(0); scene.tweens.add({ targets: o.img, scale: 1, duration: 300, ease: 'Back.Out' }); }
-            if (!alive) o.img.setVisible(false);
-            o.spark.setVisible(alive && S.sub !== 'buried').setAlpha(0.5 + 0.5 * Math.sin(t0 / 60 + o.x));
-            o.alive = alive;
-        });
-        // Yerdan chiqayotgan qo'llar: avval yer yoriladi, keyin qo'l otilib chiqadi
+        // Yo'l teshiklari: kech qo'shilgan o'yinchida ham ochiq bo'lsin
+        if (S.floorOpen && !drObj.floorOpen) drOpenFloor(scene, true);
+        // Yo'l teshiklaridan qo'llar: avval barmoqlar ko'rinadi, keyin platforma tomonga otilib cho'ziladi
         const handIds = new Set((S.hands || []).map(h => h.id));
         (S.hands || []).forEach((h) => {
             let o = drObj.hands[h.id];
             if (!o) {
-                const crack = scene.add.graphics().setDepth(1.37);
-                crack.fillStyle(0x0a0a0a, 1); crack.fillRect(h.x - 14, h.y - 2, 28, 3); crack.fillRect(h.x - 6, h.y - 5, 3, 4); crack.fillRect(h.x + 5, h.y - 4, 3, 3);
-                const img = scene.add.image(h.x, h.y + 2, 'px_grab_hand').setOrigin(0.5, 1).setDepth(3.45).setScale(1, 0).setFlipX(Math.random() < 0.5);
-                o = drObj.hands[h.id] = { crack, img, up: false };
-                gDust(scene, h.x, h.y - 4, 2, 0x3e2723);
+                const img = scene.add.image(h.x, h.y + 6, 'px_grab_hand').setOrigin(0.5, 1).setDepth(3.45).setScale(1, 0.35)
+                    .setFlipX(h.side > 0).setAngle(h.side < 0 ? -28 : 28);
+                o = drObj.hands[h.id] = { img, up: false };
+                scene.tweens.add({ targets: img, angle: img.angle + (h.side < 0 ? -6 : 6), duration: 80, yoyo: true, repeat: -1 });
+                gDust(scene, h.x, h.y - 2, 2, 0x3e2723);
+                sfxAt('drip', h.x, 0.5);
             }
             if (h.phase === 'up' && !o.up) {
                 o.up = true;
-                scene.tweens.add({ targets: o.img, scaleY: 1, duration: 90, ease: 'Back.Out' });
-                scene.tweens.add({ targets: o.img, angle: { from: -8, to: 8 }, duration: 70, yoyo: true, repeat: 3 });
-                sfxAt('stab', h.x, 0.5);
+                scene.tweens.killTweensOf(o.img);
+                scene.tweens.add({ targets: o.img, scaleY: 1.25, angle: h.side < 0 ? -62 : 62, duration: 100, ease: 'Back.Out' });
+                sfxAt('stab', h.x, 0.6);
             }
         });
         Object.keys(drObj.hands).forEach((id) => {
             if (handIds.has(id)) return;
             const o = drObj.hands[id];
-            o.crack.destroy();
-            scene.tweens.add({ targets: o.img, scaleY: 0, duration: 120, onComplete: () => o.img.destroy() });
+            scene.tweens.killTweensOf(o.img);
+            scene.tweens.add({ targets: o.img, scaleY: 0, duration: 140, onComplete: () => o.img.destroy() });
             delete drObj.hands[id];
         });
-        // OQ YUZ
+        // OQ YUZ: faqat tushishda va malikani olib ketayotganda ko'rinadi (keyin - tunnellarda)
         const mo = S.monster, spr = drObj.monster;
         const fx = drObj.fx;
         fx.clear();
-        if (mo) {
-            const hidden = mo.pose === 'hidden';
-            spr.setVisible(!hidden && !drObj.buried);
-            drObj.disp.x = mo.mode === 'emerge' && Math.abs(drObj.disp.x - mo.x) > 150 ? mo.x : Phaser.Math.Linear(drObj.disp.x, mo.x, 0.35);
-            drObj.disp.y = mo.mode === 'emerge' && Math.abs(drObj.disp.y - mo.y) > 150 ? mo.y : Phaser.Math.Linear(drObj.disp.y, mo.y, 0.45);
-            const vert = mo.pose === 'climb' || mo.pose === 'drop';
-            const tex = vert ? 'px_oq_climb' : mo.pose === 'attack' ? 'px_oq_attack' : 'px_oq_crawl';
-            spr.setTexture(tex).setFlipX(mo.facing < 0).setPosition(drObj.disp.x, drObj.disp.y).setFlipY(mo.pose === 'drop');
-            if (mo.pose === 'crawl') spr.y += Math.sin(t0 / 90) * 2;
-            if (mo.hitFlash > 0 && Math.floor(t0 / 60) % 2) spr.setTint(0xff5252); else spr.clearTint();
-            // Qorong'ida ham ko'rinadigan qizil ko'zlar
-            if (!hidden && !drObj.buried && S.sub === 'fight') {
-                const dir = mo.facing < 0 ? -1 : 1;
-                // Ko'zlar: emaklashda - o'ngdagi bosh (rasm 58x32, P=3), o'rmalashda - tepadagi bosh (34x50), tushishda - pastdagi
-                const ex = mo.pose === 'climb' || mo.pose === 'drop' ? spr.x : spr.x + dir * 51;
-                const ey = mo.pose === 'climb' ? spr.y - 141 : mo.pose === 'drop' ? spr.y - 9 : spr.y - 87;
-                fx.fillStyle(0xff1744, 0.9); fx.fillRect(ex - 8 * dir - 3, ey, 5, 5); fx.fillRect(ex + 5 * dir - 2, ey - 1, 4, 4);
-            }
-        }
-        // Tagidan chiqish oldidan: qahramon ostida yer yoriladi va titraydi
-        if (drObj.underWarn && t0 < drObj.underWarn.until) {
-            const u = drObj.underWarn, j = Math.sin(t0 / 30) * 3;
-            fx.lineStyle(3, 0x000000, 1);
-            fx.lineBetween(u.x - 34, u.y - 1, u.x - 10 + j, u.y - 7); fx.lineBetween(u.x - 10 + j, u.y - 7, u.x + 6, u.y - 1); fx.lineBetween(u.x + 6, u.y - 1, u.x + 30 - j, u.y - 6);
-            if (Math.random() < 0.4) gDust(scene, u.x + Phaser.Math.Between(-25, 25), u.y - 4, 1, 0x3e2723);
+        if (mo && !drObj.diving) {
+            spr.setVisible(!drObj.buried);
+            drObj.disp.x = Phaser.Math.Linear(drObj.disp.x, mo.x, 0.4);
+            drObj.disp.y = Phaser.Math.Linear(drObj.disp.y, mo.y, 0.5);
+            const drop = mo.pose === 'drop';
+            spr.setTexture(drop ? 'px_oq_climb' : 'px_oq_crawl').setFlipX(mo.facing < 0).setFlipY(drop).setPosition(drObj.disp.x, drObj.disp.y);
+            if (!drop) spr.y += Math.sin(t0 / 70) * 2;
+            // Malikani sudrab ketyapti
+            if (S.sub === 'take') drObj.elf.setPosition(spr.x - 70, 552).setAngle(90);
+        } else if (!drObj.diving) spr.setVisible(false);
+        // Devordagi teshikda qizil ko'zlar - bosh chiqishidan oldin (qorong'ilik ustida ko'rinadi)
+        (S.heads || []).forEach((h) => {
+            if (h.phase !== 'warn') return;
+            const w = d.wallHoles[h.i], a = 0.6 + 0.4 * Math.sin(t0 / 50);
+            fx.fillStyle(0xff1744, a); fx.fillRect(w.x - 12, w.y - 4, 7, 6); fx.fillRect(w.x + 6, w.y - 5, 7, 6);
+            fx.fillStyle(0xff8a80, a); fx.fillRect(w.x - 10, w.y - 3, 2, 2); fx.fillRect(w.x + 8, w.y - 4, 2, 2);
+            fx.lineStyle(2, 0xff1744, 0.25 * a); fx.strokeEllipse(w.x, w.y, w.r * 2 + 6, w.r * 2);
+        });
+        // Tunnelga tortilganlar ko'rinmaydi; o'zim - tanam o'chiriladi, tupurib chiqarilganda qaytadi
+        const swIds = new Set((S.swallowed || []).map(w => w.id));
+        Object.keys(otherPlayers).forEach((id) => { if (swIds.has(id)) { otherPlayers[id].setAlpha(0); if (otherPlayers[id].healthBar) otherPlayers[id].healthBar.clear(); } });
+        if (me && me.body) {
+            const inT = swIds.has(socket.id);
+            if (inT && !drObj.meSwallowed) { drObj.meSwallowed = true; me.setAlpha(0); me.body.enable = false; }
+            else if (!inT && drObj.meSwallowed) { drObj.meSwallowed = false; me.setAlpha(1); me.body.enable = true; }
         }
         // Soyada mo'ralagan bosh: qorong'iroq joydan bir lahza qarab turadi
         drObj.peeks = drObj.peeks.filter(pk => pk.until > t0 || (pk.img.destroy(), false));
@@ -3083,14 +3121,15 @@ function launchGame(socket, roomId, mapData, continued) {
             dark.setVisible(true);
             dark.clear();
             dark.fill(0x000000, 0.94);
-            if (d.exitX - cam.scrollX < 1000) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, 480 - cam.scrollY); }
+            if (d.exitX - cam.scrollX < 1400) { drObj.brush.setScale(1.6); dark.erase(drObj.brush, d.exitX + 60 - cam.scrollX, 480 - cam.scrollY); }
             [currentCharacter, ...Object.values(otherPlayers)].forEach((o) => {
                 if (!o || !o.active) return;
                 const f = 0.92 + Math.sin(t0 / 70 + o.x * 0.01) * 0.04 + (Math.random() < 0.03 ? -0.15 : 0);
                 drObj.brush.setScale(f);
                 dark.erase(drObj.brush, o.x - cam.scrollX, o.y - cam.scrollY);
             });
-            Object.values(drObj.bombs).forEach((o) => { if (o.alive) { drObj.brushS.setScale(0.8 + Math.sin(t0 / 60 + o.x) * 0.1); dark.erase(drObj.brushS, o.x - cam.scrollX, 556 - cam.scrollY); } });
+            // Tunnel ichida - butunlay qorong'i
+            if (drObj.meSwallowed) dark.fill(0x000000, 1);
         }
         // Atmosfera: suv tomchilari, uzoqdan bo'kirish, qorong'ida miltillagan qizil ko'zlar
         if (S.state === 'room' && !drObj.sunlit && t0 > drObj.nextAmbient) {
@@ -5107,8 +5146,9 @@ function launchGame(socket, roomId, mapData, continued) {
         // YER: jarliklar (pits) orasidagi bo'laklardan quriladi - jarlikka tushgan
         // qahramonni server halok qiladi
         const pits = (map.pits || []).slice().sort((a, b) => a.x - b.x);
+        const groundGaps = [...pits, ...((map.doors && map.doors.floorHoles) || [])].sort((a, b) => a.x - b.x);
         let segStart = 0;
-        [...pits, { x: mapWidth, w: 0 }].forEach((pit) => {
+        [...groundGaps, { x: mapWidth, w: 0 }].forEach((pit) => {
             const segEnd = Math.min(pit.x, mapWidth);
             if (segEnd > segStart) {
                 const seg = this.add.rectangle((segStart + segEnd) / 2, 585, segEnd - segStart, 30, map.groundColor || 0x333333);
@@ -5788,38 +5828,54 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('elfCrushed', () => { elfCrushFx(this); sfx('squish'); sfx('roar'); });
         socket.off('monsterLanded');
         socket.on('monsterLanded', () => { sfx('bossStart'); this.cameras.main.shake(400, 0.012); oqJumpscare(this); this.time.delayedCall(700, () => arenaBanner(t('oqyuz_name'), '#fafafa', t('oqyuz_sub'))); });
-        // G'OR: bomba portladi (yer silkinadi), maxluq yaralandi, yashirindi, chiqdi; qo'l ushladi
-        socket.off('caveBomb');
-        socket.on('caveBomb', (d) => { explodeMine(this, d.x, d.y); this.cameras.main.shake(700, 0.016); sfx('rumble'); });
-        socket.off('monsterHurt');
-        socket.on('monsterHurt', (d) => { sfx('roar', 0.9); sfx('scream', 0.35); gDust(this, d.x, 556, 10, 0x55555d); });
-        socket.off('monsterHide');
-        socket.on('monsterHide', () => {
-            if (!drObj || !currentCharacter) return;
-            // Bir lahza: qorong'iroq tomonda (qahramondan uzoqda) boshi mo'ralab turadi
-            const cam = this.cameras.main, me = currentCharacter;
-            const side = me.x - cam.scrollX > 400 ? -1 : 1;
-            const px = me.x + side * Phaser.Math.Between(260, 360), py = Phaser.Math.Between(140, 470);
-            const head = this.add.image(px, py, 'px_oq_scare').setScale(0.12).setAlpha(0).setDepth(4.72).setFlipX(side > 0);
-            this.tweens.add({ targets: head, alpha: 0.55, duration: 300, yoyo: true, hold: 900 });
-            drObj.peeks.push({ img: head, until: this.time.now + 1600 });
-            sfx('roar', 0.2);
+        // G'OR: yo'l teshiklari ochildi, maxluq malikani olib ketdi; devordagi teshikdan bosh, tunnel, qo'llar
+        socket.off('floorOpen');
+        socket.on('floorOpen', () => drOpenFloor(this, false));
+        socket.off('monsterDive');
+        socket.on('monsterDive', (d) => {
+            if (!drObj) return;
+            // Malikani olib teshikka kirib ketadi
+            drObj.diving = true;
+            const spr = drObj.monster;
+            this.tweens.add({ targets: [spr, drObj.elf], y: '+=110', alpha: 0, duration: 650, ease: 'Quad.In', onComplete: () => { spr.setVisible(false); drObj.elf.setVisible(false); drObj.diving = false; } });
+            gDust(this, d.x, 566, 14, 0x3e2723);
+            sfxAt('roar', d.x); sfx('thud'); this.cameras.main.shake(500, 0.012);
         });
-        socket.off('underWarn');
-        socket.on('underWarn', (d) => { if (drObj) drObj.underWarn = { x: d.x, y: d.y, until: this.time.now + (d.road ? 300 : 700) }; if (!d.road) { sfx('rumble'); this.cameras.main.shake(600, 0.006); } });
+        socket.off('headWarn');
+        socket.on('headWarn', (d) => { const w = map.doors.wallHoles[d.i]; if (w) { sfxAt('roar', w.x, 0.35); sfxAt('rumble', w.x, 0.5); } });
+        socket.off('headLunge');
+        socket.on('headLunge', (d) => drHeadLunge(this, d.i, d.hit));
+        socket.off('swallowed');
+        socket.on('swallowed', (d) => {
+            const w = map.doors.wallHoles[d.i];
+            if (!w) return;
+            sfxAt('chomp', w.x); sfxAt('scream', w.x, 0.6);
+            if (d.id === socket.id && currentCharacter) {
+                // Skrimer - aynan tortib ketgan paytda (kamdan-kam: 25 s da bir)
+                oqJumpscare(this);
+                this.cameras.main.flash(250, 140, 0, 0);
+                currentCharacter.setPosition(w.x, w.y);
+                if (currentCharacter.body) { currentCharacter.setVelocity(0, 0); currentCharacter.body.enable = false; }
+                currentCharacter.setAlpha(0);
+                if (drObj) drObj.meSwallowed = true;
+            }
+        });
+        socket.off('spitOut');
+        socket.on('spitOut', (d) => {
+            const w = map.doors.wallHoles[d.i];
+            if (w) { gDust(this, w.x, w.y + 10, 12, 0x3e2723); sfxAt('spit', w.x); }
+            if (d.id === socket.id && currentCharacter) {
+                if (currentCharacter.body) currentCharacter.body.enable = true;
+                currentCharacter.setAlpha(1);
+                if (drObj) drObj.meSwallowed = false;
+                this.cameras.main.shake(400, 0.014);
+                this.cameras.main.flash(200, 120, 0, 0);
+            }
+        });
         socket.off('grabbed');
         socket.on('grabbed', (d) => { rootUntil = this.time.now + d.ms; this.cameras.main.shake(200, 0.008); });
         socket.off('handGrab');
-        socket.on('handGrab', (d) => sfxAt('chomp', d.x));
-        socket.off('monsterEmerge');
-        socket.on('monsterEmerge', (d) => {
-            if (drObj) drObj.underWarn = null;
-            gDust(this, d.x, d.kind === 'top' ? 80 : 560, 16, 0x3e2723);
-            sfxAt('roar', d.x); this.cameras.main.shake(400, 0.012);
-            // Skrimer faqat kerakli paytda: tagingdan yorib chiqib haqiqatan urganda (va kamdan-kam)
-            if (d.kind === 'under' && (d.hit || []).includes(socket.id)) oqJumpscare(this);
-            if ((d.hit || []).includes(socket.id)) { sfx('chomp'); this.cameras.main.flash(180, 140, 0, 0); }
-        });
+        socket.on('handGrab', (d) => { sfxAt('chomp', d.x); if (d.id === socket.id) this.cameras.main.flash(160, 120, 0, 0); });
         socket.off('monsterBuried');
         socket.on('monsterBuried', (d) => {
             if (!drObj) return;
@@ -5845,8 +5901,6 @@ function launchGame(socket, roomId, mapData, continued) {
                 arenaBanner(t('dr_sun_banner'), '#fff59d', null);
             });
         });
-        socket.off('monsterHit');
-        socket.on('monsterHit', (d) => sfxAt('chomp', d.x));
         socket.off('climbStart');
         socket.on('climbStart', () => sfx('banner'));
         socket.off('climbQuake');
@@ -6091,10 +6145,15 @@ function launchGame(socket, roomId, mapData, continued) {
                             { who: 'elf', text: t('pr_d4'), fx: 'shake' }
                         ], () => socket.emit('dialogDone', roomId), { elfName: t('princess_name'), elfFace: 'px_princess_face' });
                     }
-                    if (S.sub === 'drop' && drObj && drObj.lever.texture.key !== 'px_lever_down') drObj.lever.setTexture('px_lever_down');
+                    if (S.sub && S.sub !== 'elf' && S.sub !== 'lever' && drObj && drObj.lever.texture.key !== 'px_lever_down') drObj.lever.setTexture('px_lever_down');
+                    // Kech qo'shilgan: malika allaqachon olib ketilgan
+                    if ((S.sub === 'shock' || S.sub === 'fight' || S.sub === 'buried') && drObj && drObj.elf.visible && !drObj.diving) { drObj.elf.setVisible(false); drObj.ropes.clear(); }
                     if (S.sub === 'shock' && !drShown.shock && currentCharacter) {
                         drShown.shock = true;
-                        startDialog(this, [{ who: 'player', text: t('dr_shock'), fx: 'shake' }], () => socket.emit('dialogDone', roomId));
+                        startDialog(this, [
+                            { who: 'player', text: t('dr_shock'), fx: 'shake' },
+                            { who: 'player', text: t('dr_run') }
+                        ], () => socket.emit('dialogDone', roomId));
                     }
                     if (S.sub === 'fight' && dialog && drShown.shock && !drShown.fightStart) { drShown.fightStart = true; closeDialog(); }
                     if (S.state === 'room' && !drShown.roomCam) { drShown.roomCam = true; this.cameras.main.setBounds(map.doors.roomX0, 0, map.doors.roomX1 - map.doors.roomX0, 600); }
@@ -6595,6 +6654,9 @@ function launchGame(socket, roomId, mapData, continued) {
                     delete otherPlayers[id];
                 }
             });
+
+            // Map-5 g'ori: tunnelga tortilganlar ko'rinmaydi
+            if (isDoors && drState && drState.swallowed) drState.swallowed.forEach((w) => { if (otherPlayers[w.id]) otherPlayers[w.id].setAlpha(0); });
 
             // Elf qishlog'i: eshikdan kirib ketganlar xiralashadi (ichkarida kutishyapti).
             // O'yinchilar alfasi yuqorida yangilangandan KEYIN qo'yiladi - aks holda bekor bo'lardi
