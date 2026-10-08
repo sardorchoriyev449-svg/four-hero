@@ -875,9 +875,11 @@ function launchGame(socket, roomId, mapData, continued) {
         g.clear();
         const phase = time / 220;
         const R = 80, segs = 22, spacing = 50;
+        const camL = g.scene.cameras.main.scrollX - 40;   // ekrandan chapdagi bo'g'inlar chizilmaydi (telefonda FPS)
         for (let i = segs; i >= 1; i--) {
             const r = R - i * 1.6;
             const x = headX - 200 - i * spacing;
+            if (x + r < camL) continue;
             const y = 570 - R + Math.sin(phase - i * 0.5) * 14 + (R - r);
             g.fillStyle(0x37474f, 1);
             g.fillTriangle(x - r * 0.3, y - r * 0.8, x + r * 0.3, y - r * 0.8, x, y - r - 24);
@@ -1619,6 +1621,15 @@ function launchGame(socket, roomId, mapData, continued) {
     const STALL_ROOF_Y = 450; // serverdagi STALL_ROOF_Y bilan bir xil
     let stallSmashed = [];
     let roofs = [];
+    // Uzun xaritadagi ko'p mayda bezaklar: faqat kamera yaqinidagilari chiziladi (telefonda FPS)
+    let marketCull = [];
+    function cullMarket(scene) {
+        const cx = scene.cameras.main.scrollX;
+        for (let i = 0; i < marketCull.length; i++) {
+            const o = marketCull[i];
+            o.setVisible(o.x + o.width > cx - 50 && o.x < cx + 850);
+        }
+    }
     function buildMarketScene(scene) {
         const W = mapWidth;
         buildPixelTextures(scene);
@@ -1640,19 +1651,19 @@ function launchGame(socket, roomId, mapData, continued) {
         stallSmashed = stalls.map(() => false);
         // Rasta tomlari - qattiq (bir tomonlama), ko'rinmas: rasmi soyabonning o'zi
         roofs = stalls.map((st) => {
-            const r = scene.add.rectangle(st.x, STALL_ROOF_Y + 4, 112, 8, 0x000000, 0);
+            const r = scene.add.rectangle(st.x, STALL_ROOF_Y + 4, 112, 8, 0x000000, 0).setVisible(false);
             platforms.add(r);
             makeOneWay(r);
             return r;
         });
         // Osma TAXTA platformalar: arqonlarda (bayroqcha ipiga) osilib turadi
-        const ropes = scene.add.graphics().setDepth(0);
-        ropes.fillStyle(0x5d4037, 1);
+        marketCull = [];
         (map.market.planks || []).forEach((pl) => {
-            scene.add.tileSprite(pl.x, pl.y, pl.w, pl.h, 'px_plank').setOrigin(0, 0).setDepth(1);
-            ropes.fillRect(pl.x + 6, 160, 2, pl.y - 160);
-            ropes.fillRect(pl.x + pl.w - 8, 160, 2, pl.y - 160);
+            marketCull.push(scene.add.tileSprite(pl.x, pl.y, pl.w, pl.h, 'px_plank').setOrigin(0, 0).setDepth(1));
+            marketCull.push(scene.add.rectangle(pl.x + 6, 160, 2, pl.y - 160, 0x5d4037).setOrigin(0, 0).setDepth(0));
+            marketCull.push(scene.add.rectangle(pl.x + pl.w - 8, 160, 2, pl.y - 160, 0x5d4037).setOrigin(0, 0).setDepth(0));
         });
+        cullMarket(scene);
         // OLOMON: bozor bo'ylab (map-4) / kamera yaqinida (map-5) yurgan elflar
         const n = isBoss ? 14 : 16;
         for (let i = 0; i < n; i++) spawnCrowdElf(scene, 150 + Math.random() * (Math.min(W, 1600) - 220), 'walk');
@@ -7123,6 +7134,8 @@ function launchGame(socket, roomId, mapData, continued) {
                     const bs = bulletSprites[bData.id];
                     bs.x = posX;
                     bs.y = posY;
+                    // Holatlar orasida o'q tezligi bo'yicha oldinga siljiydi (update() da) - sakrab ko'rinmasin
+                    bs.ex = isMeleeType ? null : { x: posX, y: posY, vx: bData.vx || 0, vy: bData.vy || 0, t: performance.now() };
                     // Olovli o'q orqasida uchqunlar
                     if (bs.fireArrow && Math.random() < 0.8) {
                         const sp = this.add.rectangle(posX + Phaser.Math.Between(-4, 4), posY + Phaser.Math.Between(-3, 3), 4, 4, [0xffeb3b, 0xff9800, 0xff5722][Phaser.Math.Between(0, 2)]).setDepth(3.9);
@@ -7184,6 +7197,14 @@ function launchGame(socket, roomId, mapData, continued) {
 
     function update() {
         if (window.GameAudio) GameAudio.setMode(musicMode(), map.id || 0);
+        // O'qlar: server holati ~17 marta/s keladi - oraliqda tezligi bo'yicha silliq uchadi
+        const nowB = performance.now();
+        Object.values(bulletSprites).forEach((bs) => {
+            if (!bs || !bs.ex || !bs.active) return;
+            const dt = Math.min(0.12, (nowB - bs.ex.t) / 1000);
+            bs.x = bs.ex.x + bs.ex.vx * dt;
+            bs.y = bs.ex.y + bs.ex.vy * dt;
+        });
         // DARAJA EFFEKTLARI: uchayotgan knight oyog'ida ko'k alanga; mage davolayotganda hamma ustida yashil "+"
         if (!perkFxGfx) perkFxGfx = this.add.graphics().setDepth(2.5);
         perkFxGfx.clear();
@@ -7239,6 +7260,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (isChase && introWall && snakeDisplayX >= map.chase.introWallX + 10) breakIntroWall(this);
         }
         if (isMarket) {
+            cullMarket(this);
             updateStalls(this);
             updateCrowd(this, this.game.loop.delta);
         }

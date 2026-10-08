@@ -906,7 +906,7 @@
         .slot.in-voice .slot-name::after { content: '\f130'; font-family: 'Font Awesome 6 Free'; font-weight: 900; margin-left: 6px; color: #69f0ae; font-size: 10px; }
         .slot.speaking .slot-card { box-shadow: 0 0 0 4px #69f0ae, 0 0 18px #69f0ae; }
         /* ADMIN belgisi */
-        .admin-tag { display: inline-block; background: #d50000; color: #fff; font-size: 8px; padding: 2px 4px; margin-left: 4px; border: 2px solid #000; vertical-align: middle; letter-spacing: 1px; }
+        .admin-tag { display: inline-block; white-space: nowrap; background: #d50000; color: #fff; font-size: 8px; padding: 2px 4px; margin-left: 4px; border: 2px solid #000; vertical-align: middle; letter-spacing: 1px; }
         #pause-menu { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
             background: rgba(14, 11, 26, 0.72); line-height: normal; font-family: "Press Start 2P", "Courier New", monospace; }
         #pause-menu .pm-box { width: 320px; max-width: calc(100% - 32px); max-height: calc(100% - 16px); overflow-y: auto; box-sizing: border-box;
@@ -986,6 +986,11 @@
             .lobby-bottom { margin-top: 4px; flex-wrap: nowrap; }
             #lobby-panel .back-btn, #leave-lobby-btn { padding: 8px 12px; margin: 0; }
             .lobby-bottom-left .lobby-toggle-btn { padding: 8px 10px; font-size: 9px; }
+            /* Tugmalar bitta qatorga sig'sin: faqat belgisi qoladi (START pastga tushib ketmasin) */
+            .lobby-bottom-left { flex-wrap: nowrap; gap: 6px; }
+            .lobby-bottom-left .lobby-toggle-btn span { display: none; }
+            .lobby-bottom-left .lobby-toggle-btn .icon { margin: 0; }
+            #lobby-panel { max-height: calc(100vh - 8px); max-height: calc(100dvh - 8px); overflow-y: auto; box-sizing: border-box; }
             .lobby-bottom-right { width: auto; }
             .lobby-bottom-right button { min-width: 150px; width: auto; padding: 10px 16px; font-size: 13px; }
             /* Xarita va chat oynalari ekran balandligiga sig'adi */

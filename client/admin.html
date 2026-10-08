@@ -109,7 +109,7 @@
     </section>
 
     <section id="tab-rooms" class="hidden">
-        <p style="color:var(--muted); margin:0 0 10px;">Xonalar har 5 soniyada yangilanadi. "Kirish" - o'yin yangi oynada ochiladi va siz xonaga <b style="color:var(--red)">ADMIN</b> belgisi bilan kirasiz (yopiq xonalarga ham).</p>
+        <p style="color:var(--muted); margin:0 0 10px;">Xonalar har 5 soniyada yangilanadi. "Kirish" - o'yin shu oynada ochiladi va siz xonaga <b style="color:var(--red)">ADMIN</b> belgisi bilan kirasiz (yopiq xonalarga ham).</p>
         <div class="rooms" id="rooms"></div>
     </section>
 </div>
@@ -238,7 +238,8 @@
             c.appendChild(ul);
             const b = el('button', 'primary', r.full ? "Xona to'la (4/4)" : 'Kirish');
             b.disabled = r.full;
-            b.onclick = () => window.open('/?adminRoom=' + encodeURIComponent(r.code), '_blank');
+            // O'sha oynada ochiladi (yangi oyna/popup telefonda va ba'zi brauzerlarda bloklanadi)
+            b.onclick = () => { location.href = '/?adminRoom=' + encodeURIComponent(r.code); };
             c.appendChild(b);
             box.appendChild(c);
         });

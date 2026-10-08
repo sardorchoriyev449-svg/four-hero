@@ -484,7 +484,7 @@ export class RoomManager {
 
     public toggleReady(socket: Socket, roomId: string): void {
         const room = this.activeRooms[roomId];
-        if (room && room.players[socket.id]) {
+        if (room && room.players[socket.id] && !room.isStarted) {
             const player = room.players[socket.id];
             player.isReady = !player.isReady;
             this.updateLobby(roomId);

@@ -14,7 +14,7 @@ import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
 import { isLocalTest } from './testmode';
-import { adminLogin, verifyAdmin } from './adminAuth';
+import { adminLogin, verifyAdmin, isAdminLoginName } from './adminAuth';
 config({quiet:true})
 
 // Bitta kutilmagan xato (masalan, noto'g'ri formatdagi socket xabari) butun serverni - hamma
@@ -23,8 +23,15 @@ process.on('unhandledRejection', (err) => console.error('Kutilmagan xato (promis
 process.on('uncaughtException', (err) => console.error('Kutilmagan xato:', err));
 
 const app = express();
+// Render proksi orqasida: haqiqiy mijoz IP si (admin bloklash IP bo'yicha) - X-Forwarded-For dagi oxirgi manzil
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '20kb' }));
+// Buzilgan/juda katta JSON - HTML xato sahifasi (server yo'llari bilan) o'rniga qisqa JSON javob
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!err) { next(); return; }
+    res.status(err.status === 413 ? 413 : 400).json({ success: false, message: 'err_bad_request' });
+});
 
 // Hisobga tegishli har so'rov (manzilida :userId / :id bor) - login paytida berilgan token bilan
 // keladi (X-Auth-Token). Aks holda boshqa birovning ID sini bilgan har kim uning tangasini sarflardi
@@ -65,9 +72,16 @@ app.post('/api/login', async (req, res) => {
     const result = await db.loginUser(nickname, password);
     if (result.success) {
         res.json(withToken(result));
-    } else {
-        res.status(400).json(result);
+        return;
     }
+    // O'yin kirish oynasiga ADMIN login/paroli yozilgan bo'lsa - admin panelga o'tkazamiz
+    // (faqat login aynan admin logini bo'lsa tekshiriladi - oddiy xato urinishlar admin bloklanishiga qo'shilmasin)
+    if (isAdminLoginName(nickname)) {
+        const a = adminLogin(nickname, password, req.ip);
+        if (a.success) { res.json({ success: false, admin: true, adminToken: a.token }); return; }
+        if (a.message === 'err_admin_locked') { res.status(400).json({ success: false, message: 'err_admin_locked' }); return; }
+    }
+    res.status(400).json(result);
 });
 
 // FOYDALANUVCHI MA'LUMOTINI YANGILASH UCHUN (masalan, do'kon ochilganda)
@@ -98,7 +112,7 @@ const adminUserView = (u: db.UserRecord) => {
 };
 // ObjectId bo'lmagan ID - xato bermasin
 const validUid = (uid: string) => /^[a-f0-9]{24}$/i.test(uid);
-app.post('/api/admin/login', (req, res) => { res.json(adminLogin(req.body && req.body.login, req.body && req.body.password)); });
+app.post('/api/admin/login', (req, res) => { res.json(adminLogin(req.body && req.body.login, req.body && req.body.password, req.ip)); });
 app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
     try { res.json({ success: true, users: await db.countUsers(), online: roomManager.onlineStats(), maps: SEASON_MAP_COUNT, maxLevel: db.MAX_LEVEL }); }
     catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
@@ -435,7 +449,8 @@ const io = new Server(server, {
 });
 
 // Barcha o'yin xonalari shu yerda saqlanadi
-const activeRooms: { [key: string]: RoomState } = {};
+// Prototipsiz obyekt: xona kodi o'rniga "__proto__" kabi nom yuborilsa ham "xona" topilmaydi
+const activeRooms: { [key: string]: RoomState } = Object.create(null);
 
 // Menejerlarni xonalarni ulashgan holda yaratamiz
 const roomManager = new RoomManager(io, activeRooms);
@@ -460,8 +475,20 @@ gameEngine.start();
 // O'yinchi ismi: matn, bo'sh joylarsiz, ko'pi bilan 20 belgi
 const cleanNick = (n: unknown) => (typeof n === 'string' ? n.trim().slice(0, 20) : '') || 'Guest';
 
+// Obyektning ichki nomlari ("__proto__", "constructor", "toString"...) - xona/o'yinchi/tanga ID si sifatida kelsa,
+// oddiy obyektdan "topilib" qolib, holatni buzardi. Bunday paketlar umuman qabul qilinmaydi
+const RESERVED_KEYS = new Set(Object.getOwnPropertyNames(Object.prototype));
+const FREE_TEXT = new Set(['text', 'nickname', 'roomName', 'fullName']);
+const hasReservedKey = (v: unknown): boolean => {
+    if (typeof v === 'string') return RESERVED_KEYS.has(v);
+    // Erkin matnlar (chat, ism) tekshirilmaydi - chatda "constructor" deb yozish mumkin
+    if (v && typeof v === 'object' && !Array.isArray(v)) return Object.entries(v as object).some(([k, x]) => !FREE_TEXT.has(k) && typeof x === 'string' && RESERVED_KEYS.has(x));
+    return false;
+};
+
 io.on('connection', (socket) => {
     console.log(`Foydalanuvchi ulandi: ${socket.id}`);
+    socket.use((packet, next) => { if (!packet.slice(1).some(hasReservedKey)) next(); });
 
     // Hisob nomidan kelgan so'rov: userId bo'lsa, token to'g'ri bo'lishi shart.
     // null - mehmon; undefined - token noto'g'ri (klientga "sessiya tugadi" deyiladi, so'rov bajarilmaydi)

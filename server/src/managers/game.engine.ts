@@ -120,7 +120,12 @@ export class GameEngine {
         }, 30);
     }
 
+    // Holat har 2-tikda yuboriladi (~17 marta/s): o'yin mantig'i 33 marta/s hisoblanadi, lekin tarmoq trafigi
+    // va telefondagi ishlov ikki baravar kam - mobil internetda "qotish" kamayadi (klient oraliqni silliqlaydi)
+    private frame = 0;
+    private readonly BROADCAST_EVERY = 2;
     private update(): void {
+        this.frame++;
         const seenPlayers = new Set<string>();
         Object.keys(this.activeRooms).forEach(roomId => {
             const room = this.activeRooms[roomId];
@@ -279,7 +284,8 @@ export class GameEngine {
                 }
             }
 
-            // 5. HOLATNI LOBBIGA BROADCAST QILISh
+            // 5. HOLATNI LOBBIGA BROADCAST QILISh (har BROADCAST_EVERY tikda)
+            if (this.frame % this.BROADCAST_EVERY !== 0) return;
             const players: { [id: string]: object } = {};
             Object.values(room.players).forEach(p => {
                 players[p.id] = {

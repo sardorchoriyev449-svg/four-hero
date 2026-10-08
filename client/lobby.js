@@ -286,6 +286,10 @@ loginBtn.onclick = () => withBusy(loginBtn, async () => {
         const data = await res.json();
         if (data.success) {
             onAuthSuccess(data.user);
+        } else if (data.admin && data.adminToken) {
+            // Admin login/paroli - admin panelga o'tamiz
+            localStorage.setItem('adminToken', data.adminToken);
+            location.href = '/admin.html';
         } else {
             loginError.innerText = tMsg(data.message);
         }
@@ -325,6 +329,8 @@ function onAuthSuccess(user) {
     sessionExpiredShown = false;
     localStorage.setItem('gameUser', JSON.stringify(user));
     enterMainMenu();
+    // Admin paneldan xonaga kirmoqchi edi - hisobga kirgach, o'sha xonaga kiradi
+    if (typeof joinPendingAdminRoom === 'function') joinPendingAdminRoom();
 }
 
 logoutLink.onclick = () => {
@@ -544,16 +550,29 @@ socket.on('clientIdChanged', (id) => {
 // o'sha xonaga kiramiz (?adminRoom=KOD)
 let pendingAdminRoom = new URLSearchParams(location.search).get('adminRoom');
 if (pendingAdminRoom) history.replaceState(null, '', location.pathname);
+// Admin xonaga o'z O'YINCHI hisobi bilan kiradi (lobbi - qahramon, daraja hisobga bog'liq). Hisobga kirmagan
+// bo'lsa - avval kirish so'raladi, kirgach o'sha xonaga avtomatik kiradi
+function joinPendingAdminRoom() {
+    const adminToken = localStorage.getItem('adminToken');
+    if (!pendingAdminRoom || !adminToken || !socket.connected) return;
+    if (!currentUser) {
+        showPanel(authPanel);
+        loginError.innerText = t('admin_login_first');
+        return;
+    }
+    const code = pendingAdminRoom.toUpperCase();
+    pendingAdminRoom = null;
+    sessionStorage.removeItem('lastRoomId');   // "oxirgi xonaga qaytish" admin tanlagan xonaga xalaqit bermasin
+    socket.emit('adminHello', adminToken);
+    setTimeout(() => socket.emit('joinRoomByCode', { roomCode: code, userId: currentUser.id, token: currentUser.token,
+        nickname: currentUser.nickname, clientId: CLIENT_ID }), 300);
+}
 socket.on('connect', () => {
     const adminToken = localStorage.getItem('adminToken');
     if (adminToken) socket.emit('adminHello', adminToken);
     if (pendingAdminRoom && adminToken) {
-        const code = pendingAdminRoom.toUpperCase();
-        pendingAdminRoom = null;
-        sessionStorage.removeItem('lastRoomId');   // "oxirgi xonaga qaytish" admin tanlagan xonaga xalaqit bermasin
-        setTimeout(() => socket.emit('joinRoomByCode', { roomCode: code, userId: currentUser ? currentUser.id : null, token: currentUser ? currentUser.token : null,
-            nickname: currentUser ? currentUser.nickname : 'Admin', clientId: CLIENT_ID }), 400);
-        return;
+        sessionStorage.removeItem('lastRoomId');
+        setTimeout(joinPendingAdminRoom, 200);
     }
 });
 socket.on('connect', () => {
@@ -897,7 +916,7 @@ document.getElementById('toggle-code-btn').onclick = () => { roomCodeHidden = !r
 // Xonada "Sizning personajingiz" - endi lobbida tanlanmaydi, "Mening Personajim"da
 // (hisob darajasida) belgilangan personaj bilan avtomatik o'ynaysiz
 function renderMyCharacterDisplay() {
-    const type = currentUser.defaultCharacter || 'knight';
+    const type = (currentUser && currentUser.defaultCharacter) || 'knight';
     myCharacterDisplay.innerHTML = `
         <span><i class="fa-solid fa-shield-halved" style="color:#00ffcc; margin-right:8px;"></i><b>${tCharName(type)}</b></span>
     `;
