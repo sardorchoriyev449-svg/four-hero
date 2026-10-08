@@ -1,5 +1,6 @@
 export interface PlayerState {
     id: string;
+    isAdmin?: boolean;            // admin panel orqali kirgan - lobbida va o'yinda "ADMIN" belgisi
     x: number;
     y: number;
     characterType: string;
@@ -188,6 +189,7 @@ export interface BulletState {
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
     sy?: number;
+    fire?: boolean;       // kamonchi 4-daraja: olovli o'q
 }
 
 // Sindiriladigan quti: markaz (x, y), sindirilsa sindirgan o'yinchiga tanga beradi
@@ -286,6 +288,7 @@ export interface RoomState {
     redBoxes?: RedBoxState[];     // O'rmon: tushayotgan/yotgan qizil qutilar
     paused?: boolean;             // Yolg'iz o'yinchi pauza qilgan (bir necha o'yinchida pauza yo'q)
     kicked?: string[];             // Xo'jayin chiqarib yuborganlar (hisob ID yoki brauzer oynasi ID) - qayta kira olmaydi
+    round?: number;               // har xarita boshlanganda +1: klient eski xaritada qolib ketsa - sezib, qayta so'raydi
     loadingIds?: string[];        // Xarita boshida hali YUKLANAYOTGAN o'yinchilar - hammasi tayyor bo'lguncha raund kutadi
     loadDeadline?: number;        // Ko'pi bilan shu vaqtgacha kutiladi (ms) - qotib qolgan o'yinchi hammani to'xtatmasin
     stones?: StoneState[];        // Yuruvchi toshlar (map-7)

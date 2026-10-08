@@ -1,5 +1,6 @@
 import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
+import { hasPerk } from '../perks';
 
 export class ArcherCharacter extends BaseCharacter {
     // Kamonchi: zarba 10 ta HP oladi, stamina sal sekinroq ketadi (ritsardan tezroq, sehrgardan sekinroq)
@@ -22,6 +23,7 @@ export class ArcherCharacter extends BaseCharacter {
             color: player.color,
             lifetime: 80,
             bulletType: 'arrow',
+            fire: hasPerk(player, 'firearrow'),   // 4-daraja: olovli o'q (zarari +5 - "dmg5" imkoniyatidan)
             justSpawned: true
         });
     }

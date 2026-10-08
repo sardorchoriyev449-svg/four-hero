@@ -5800,6 +5800,7 @@ function launchGame(socket, roomId, mapData, continued) {
                         <button class="pm-lang" data-lang="en">English</button><button class="pm-lang" data-lang="ru">Русский</button>
                     </div>
                 </div>
+                ${typeof isRoomHost !== 'undefined' && isRoomHost ? `<button class="pm-btn pm-alt" data-act="lobby"><i class="fa-solid fa-people-group"></i> ${t('pause_to_lobby')}</button>` : ''}
                 <button class="pm-btn pm-leave" data-act="leave"><i class="fa-solid fa-right-from-bracket"></i> ${t('pause_leave')}</button>
             </div>`;
             host.appendChild(el);
@@ -5827,6 +5828,11 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (again) again.classList.remove('hidden');
                 };
             });
+            const toLobby = el.querySelector('[data-act="lobby"]');
+            if (toLobby) toLobby.onclick = () => {
+                if (!confirm(t('pause_to_lobby_confirm'))) return;
+                socket.emit('returnToLobby', roomId);
+            };
             el.querySelector('[data-act="leave"]').onclick = () => {
                 if (!confirm(t('pause_leave_confirm'))) return;
                 pauseMenuOpen = false;
@@ -5884,11 +5890,14 @@ function launchGame(socket, roomId, mapData, continued) {
             // Dialog ochiq bo'lsa - ekranga teginish keyingi gapga o'tkazadi (telefonda E tugmasini qidirmasdan)
             if (dialog) { advanceDialog(); return; }
             if (!currentCharacter || pauseMenuOpen) return;
+            // PHONE boshqaruvi: ekranga (yoki joystick yoniga) teginish o'q otmasin - faqat "zarba" tugmasi
+            if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
             let angle = (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
         });
         this.input.on('pointerup', () => {
             if (!currentCharacter) return;
+            if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
             socket.emit('stopAttackInRoom', roomId);
         });
 
@@ -6326,6 +6335,12 @@ function launchGame(socket, roomId, mapData, continued) {
         // SERVERDAN DUNYO YANGILANISHINI ESHITISH
         socket.off('gameStateUpdate');
         socket.on('gameStateUpdate', (data) => {
+            // Server boshqa xaritada (raund) - biz eski xaritada qolib ketganmiz: joriy xaritani so'raymiz
+            if (typeof data.round === 'number' && typeof window.currentRound === 'number' && data.round !== window.currentRound) {
+                const nowS = Date.now();
+                if (!window.lastSyncAsk || nowS - window.lastSyncAsk > 3000) { window.lastSyncAsk = nowS; socket.emit('requestGameSync', roomId); }
+                return;
+            }
             const serverPlayers = data.players;
             const serverBots = data.bots || [];
             serverBotsLast = serverBots;
@@ -6792,6 +6807,7 @@ function launchGame(socket, roomId, mapData, continued) {
             // 1. O'ZIMIZNING PERSONAJ HOLATI (Tezlik va effektlar)
             if (currentCharacter && serverPlayers[socket.id]) {
                 const myData = serverPlayers[socket.id];
+                currentCharacter.isAdmin = !!myData.isAdmin;
                 if (!myData.isDead && typeof currentCharacter.hp === 'number' && myData.hp < currentCharacter.hp - 0.5) sfx('hurt');
                 if (myData.isDead && !currentCharacter.isDead) sfx('death');
                 currentCharacter.hp = myData.hp;
@@ -6846,6 +6862,16 @@ function launchGame(socket, roomId, mapData, continued) {
                 // Agar bu o'yinchi uchun tekstura yo'q bo'lsa, uning rangida yaratamiz
                 createPlayerTexture(this, textureKey, pData.color, 32);
 
+                // SILLIQ HARAKAT: kelgan holatlar vaqt bilan buferga yoziladi (update() 100 ms orqada chizadi -
+                // internet paketlari notekis kelsa ham qahramon tekis harakatlanadi)
+                const nowR = performance.now();
+                const pushSnap = (o) => {
+                    const sn = o.snaps || (o.snaps = []);
+                    const last = sn[sn.length - 1];
+                    if (last && Math.hypot(pData.x - last.x, pData.y - last.y) > 400) sn.length = 0;   // teleport - bufer tozalanadi
+                    sn.push({ t: nowR, x: pData.x, y: pData.y });
+                    while (sn.length > 40 || (sn.length > 2 && nowR - sn[0].t > 1500)) sn.shift();
+                };
                 if (!otherPlayers[id]) {
                     // Yangi o'yinchini ekranga qo'shish
                     let p = this.add.sprite(pData.x, pData.y, textureKey).setDepth(3);
@@ -6864,10 +6890,12 @@ function launchGame(socket, roomId, mapData, continued) {
                     otherPlayers[id].hp = pData.hp;
                     otherPlayers[id].characterType = pData.characterType;
                     otherPlayers[id].weaponMode = pData.weaponMode || 'main';
+                    pushSnap(otherPlayers[id]);
                     otherPlayers[id].special = !!pData.special;
                 }
 
                 otherPlayers[id].isDead = pData.isDead;
+                otherPlayers[id].isAdmin = !!pData.isAdmin;
                 otherPlayers[id].isInvisible = pData.isInvisible;
                 otherPlayers[id].maxHp = pData.maxHp || 100;
                 setHeroLook(otherPlayers[id], pData.look);
@@ -7071,7 +7099,8 @@ function launchGame(socket, roomId, mapData, continued) {
 
                     // QUROL SKINI: egasi tanlagan qurol skinining rangini qo'llaymiz
                     // (alohida tekstura chizish o'rniga, tez va yengil "tint" usuli)
-                    if (bData.bulletType === 'ice') bSprite.setTint(0x80d8ff);          // muz shari - ko'kish
+                    if (bData.fire) { bSprite.setTint(0xff7043); bSprite.fireArrow = true; }   // kamonchi 4-daraja: olovli o'q
+                    else if (bData.bulletType === 'ice') bSprite.setTint(0x80d8ff);          // muz shari - ko'kish
                     else if (bData.bulletType === 'pellet') bSprite.setTint(0xffe082).setScale(0.7); // sochma o'q
                     else if (shooter && shooter.weaponColor && !currentTexture.startsWith('cos_')) {
                         bSprite.setTint(shooter.weaponColor);
@@ -7091,10 +7120,40 @@ function launchGame(socket, roomId, mapData, continued) {
 
                     bulletSprites[bData.id] = bSprite;
                 } else {
-                    bulletSprites[bData.id].x = posX;
-                    bulletSprites[bData.id].y = posY;
+                    const bs = bulletSprites[bData.id];
+                    bs.x = posX;
+                    bs.y = posY;
+                    // Olovli o'q orqasida uchqunlar
+                    if (bs.fireArrow && Math.random() < 0.8) {
+                        const sp = this.add.rectangle(posX + Phaser.Math.Between(-4, 4), posY + Phaser.Math.Between(-3, 3), 4, 4, [0xffeb3b, 0xff9800, 0xff5722][Phaser.Math.Between(0, 2)]).setDepth(3.9);
+                        this.tweens.add({ targets: sp, y: sp.y - 10, alpha: 0, scale: 0.3, duration: 260, onComplete: () => sp.destroy() });
+                    }
                 }
             });
+        });
+    }
+
+    // Qahramonlar ustida: ADMIN belgisi va ovozli chatda gapirayotgan bo'lsa - tovush to'lqinlari
+    let socialGfx = null;
+    function drawSocialTags(scene) {
+        if (!socialGfx || !socialGfx.scene) socialGfx = scene.add.graphics().setDepth(4.2);
+        socialGfx.clear();
+        const speaking = window.voiceSpeaking || new Set();
+        const list = [[socket.id, currentCharacter], ...Object.entries(otherPlayers)];
+        list.forEach(([id, sp]) => {
+            if (!sp || !sp.active) return;
+            const top = sp.y - sp.displayHeight * sp.originY - 16;
+            const visible = sp.alpha > 0.05 && !sp.isDead;
+            if (sp.isAdmin && visible) {
+                if (!sp.adminTag || !sp.adminTag.scene) sp.adminTag = scene.add.text(0, 0, 'ADMIN', { fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#ffffff', backgroundColor: '#d50000', padding: { x: 3, y: 2 } }).setOrigin(0.5).setDepth(4.25);
+                sp.adminTag.setPosition(Math.round(sp.x), Math.round(top - 6)).setVisible(true);
+            } else if (sp.adminTag) sp.adminTag.setVisible(false);
+            if (speaking.has(id) && visible) {
+                const x = sp.x + 22, y = top + 4, a = 0.6 + 0.4 * Math.sin(scene.time.now / 90);
+                socialGfx.fillStyle(0x69f0ae, 1); socialGfx.fillRect(x - 4, y - 2, 3, 5); socialGfx.fillTriangle(x - 1, y - 2, x + 3, y - 6, x + 3, y + 7); socialGfx.fillTriangle(x - 1, y + 3, x + 3, y + 7, x - 1, y - 2);
+                socialGfx.lineStyle(2, 0x69f0ae, a); socialGfx.beginPath(); socialGfx.arc(x + 4, y + 0.5, 5, -0.9, 0.9); socialGfx.strokePath();
+                socialGfx.lineStyle(2, 0x69f0ae, a * 0.6); socialGfx.beginPath(); socialGfx.arc(x + 4, y + 0.5, 9, -0.9, 0.9); socialGfx.strokePath();
+            }
         });
     }
 
@@ -7186,6 +7245,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
         if (isLift) updateLift(this);
         if (isDoors) updateDoors(this);
+        drawSocialTags(this);
         if (isSquid) {
             drawSquid(this);
             if (sqState && sqState.state !== 'sleep') drawBossBar(this, sqState.hp, sqState.maxHp, t('sq_name'));
@@ -7415,13 +7475,24 @@ function launchGame(socket, roomId, mapData, continued) {
             pickupHint.setVisible(false);
         }
 
-        // O'yinchilarni siljitish va joni
+        // O'yinchilarni siljitish va joni: bufer bo'yicha 100 ms orqada - ikki holat orasida silliq
+        const renderT = performance.now() - 100;
         Object.keys(otherPlayers).forEach((id) => {
             let p = otherPlayers[id];
             if (p && p.active && p.targetX !== undefined) {
-                const movingRight = p.targetX >= p.x;
-                p.x = Phaser.Math.Linear(p.x, p.targetX, 0.22);
-                p.y = Phaser.Math.Linear(p.y, p.targetY, 0.4);
+                const prevX = p.x;
+                const sn = p.snaps;
+                if (sn && sn.length) {
+                    let k = sn.length - 1;
+                    while (k > 0 && sn[k].t > renderT) k--;
+                    const a = sn[k], b = sn[k + 1];
+                    if (!b || renderT <= a.t) { p.x = a.x; p.y = a.y; }
+                    else { const f = Math.min(1, (renderT - a.t) / Math.max(1, b.t - a.t)); p.x = a.x + (b.x - a.x) * f; p.y = a.y + (b.y - a.y) * f; }
+                } else {
+                    p.x = Phaser.Math.Linear(p.x, p.targetX, 0.22);
+                    p.y = Phaser.Math.Linear(p.y, p.targetY, 0.4);
+                }
+                const movingRight = p.x >= prevX;
                 drawHealthBar(this, p, p.hp, p.maxHp);
                 if (isApples && !p.isDead) {
                     drawBasket(this, p, movingRight, p.apples || 0, map.apples.applesToCollect, true);
@@ -7430,7 +7501,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 }
 
                 // Qarash tomoni - faqat haqiqatan yurganda o'zgaradi (to'xtaganda oldingisi qoladi)
-                if (Math.abs(p.targetX - p.x) > 0.6) p.facingRight = movingRight;
+                if (Math.abs(p.x - prevX) > 0.3) p.facingRight = movingRight;
                 if (p.facingRight === undefined) p.facingRight = true;
                 updateHeroWeaponVisuals(this, p, p.characterType, p.facingRight);
             }
@@ -7517,7 +7588,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 }
             } else if (isDoors) {
                 const S = drState || { state: 'walk' }, d = map.doors;
-                if (S.state === 'walk') progressText = t('hud_dr_go').replace('{m}', Math.max(0, Math.ceil((d.triggerX - currentCharacter.x) / 50)));
+                if ((S.state === 'climb' || S.state === 'room') && checkpointReached.includes(socket.id)) progressText = t('hud_wait_others');
+                else if (S.state === 'walk') progressText = t('hud_dr_go').replace('{m}', Math.max(0, Math.ceil((d.triggerX - currentCharacter.x) / 50)));
                 else if (S.state === 'free') progressText = S.choice === 'enter' ? t('hud_dr_enter') : t('hud_dr_free_no');
                 else if (S.state === 'climb') {
                     const feet = currentCharacter.y + 24, topY = map.platforms[d.climbPlats[d.climbPlats.length - 1]].y;

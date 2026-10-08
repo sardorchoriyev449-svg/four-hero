@@ -1,0 +1,25 @@
+{
+  "name": "4 Heroes",
+  "short_name": "4 Heroes",
+  "description": "Co-op pixel adventure for up to 4 heroes",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1a1430",
+  "theme_color": "#1a1430",
+  "icons": [
+    {
+      "src": "public/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "public/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

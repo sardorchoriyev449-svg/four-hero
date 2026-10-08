@@ -290,10 +290,12 @@ export class GameEngine {
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main',
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0,
-                    acid: (p.acidTicks || 0) > 0
+                    acid: (p.acidTicks || 0) > 0,
+                    isAdmin: !!p.isAdmin
                 };
             });
             this.io.to(roomId).emit('gameStateUpdate', {
+                round: room.round || 0,
                 players,
                 bots: room.bots,
                 bullets: room.bullets,
@@ -2003,12 +2005,14 @@ export class GameEngine {
         const T = (ms: number) => Math.round(ms / 30);
         const per = d.climbPlats.length / d.segments;
         const goal = d.climbPlats[d.climbPlats.length - 1];
-        // Eng tepadagi platformaga yetildi - butun tog' (10 qavat) o'tildi
-        const atTop = alive.find(p => this.platOfPlayer(map, [goal], p) === goal);
-        if (atTop) {
+        // Eng tepadagi platformaga yetgan - kutadi; HAMMA tirik qahramon yetganda butun tog' (10 qavat) o'tiladi
+        // (bu musobaqa emas - birgalikda o'ynaladi)
+        alive.forEach(p => { if (this.platOfPlayer(map, [goal], p) === goal && !room.checkpointReached.includes(p.id)) room.checkpointReached.push(p.id); });
+        if (alive.length && alive.every(p => room.checkpointReached.includes(p.id))) {
             dr.state = 'done';
             dr.wave = null;
-            this.roomManager.declareWinner(roomId, atTop.id).catch(err => console.error('declareWinner xatosi:', err));
+            this.roomManager.declareWinner(roomId, room.checkpointReached.find(id => alive.some(p => p.id === id)) || alive[0].id)
+                .catch(err => console.error('declareWinner xatosi:', err));
             return;
         }
         // Qahramon qaysi qavatda (oyog'i balandligi bo'yicha)
@@ -2204,8 +2208,9 @@ export class GameEngine {
         const free = alive.filter(p => !inTunnel.has(p.id));
         const onTop = (p: PlayerState) => Math.abs(p.y + this.PLAYER_HALF_H - d.floorY) <= 12;
 
-        // QOCHISH: yorug'likka yetgan qahramon - orqada g'or qulaydi
-        const out = free.find(p => p.x >= d.exitX);
+        // QOCHISH: yorug'likka yetganlar kutadi; HAMMA tirik qahramon yetganda - orqada g'or qulaydi
+        free.forEach(p => { if (p.x >= d.exitX && !room.checkpointReached.includes(p.id)) room.checkpointReached.push(p.id); });
+        const out = alive.length && alive.every(p => room.checkpointReached.includes(p.id)) ? free.find(p => p.x >= d.exitX) : undefined;
         if (out) {
             dr.swallowed.forEach(w => {
                 const p = room.players[w.id], h = d.wallHoles[w.hole];

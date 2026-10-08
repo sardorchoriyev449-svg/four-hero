@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>4 Heroes - Admin</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<style>
+    :root { --bg: #120d1f; --panel: #1d1633; --panel2: #271e45; --line: #3a2f63; --text: #ece8f6; --muted: #a99fc9; --accent: #00e5b8; --gold: #ffd54f; --red: #ff5c6c; --green: #69f0ae; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; border: 0; border-radius: 6px; padding: 8px 12px; background: var(--panel2); color: var(--text); }
+    button:hover { filter: brightness(1.15); }
+    button:disabled { opacity: .45; cursor: default; }
+    button.primary { background: var(--accent); color: #062b24; font-weight: 700; }
+    button.danger { background: var(--red); color: #2b0408; font-weight: 700; }
+    button.ok { background: var(--green); color: #06341c; font-weight: 700; }
+    input, select { background: #0e0a19; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+    .hidden { display: none !important; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+    header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    header h1 { margin: 0; font-size: 20px; flex: 1; }
+    header h1 span { color: var(--red); font-size: 12px; border: 2px solid var(--red); border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+    .login { max-width: 360px; margin: 12vh auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+    .login h2 { margin: 0 0 14px; font-size: 18px; }
+    .login input { width: 100%; margin-bottom: 10px; }
+    .login button { width: 100%; }
+    .msg { min-height: 20px; color: var(--red); font-size: 13px; margin-top: 8px; }
+    .msg.good { color: var(--green); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+    .stat b { display: block; font-size: 22px; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .tabs button.active { background: var(--accent); color: #062b24; font-weight: 700; }
+    .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    .bar input { flex: 1; min-width: 180px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--panel2); position: sticky; top: 0; }
+    tr:hover td { background: rgba(255,255,255,.03); }
+    .nick { font-weight: 700; }
+    .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+    .tag.on { background: rgba(105,240,174,.15); color: var(--green); }
+    .tag.ban { background: rgba(255,92,108,.15); color: var(--red); }
+    .tag.admin { background: var(--red); color: #fff; font-weight: 700; }
+    .tag.priv { background: rgba(255,213,79,.15); color: var(--gold); }
+    .levels { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); }
+    .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px; }
+    .rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    .room { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .room h3 { margin: 0; font-size: 15px; }
+    .room .code { font-family: ui-monospace, Consolas, monospace; color: var(--gold); }
+    .room ul { margin: 0; padding-left: 18px; color: var(--muted); }
+    .empty { color: var(--muted); padding: 20px; text-align: center; }
+    /* Boshqarish oynasi */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+    .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto; padding: 18px; }
+    .modal h2 { margin: 0 0 4px; font-size: 18px; }
+    .modal .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+    .act { border-top: 1px solid var(--line); padding: 12px 0; }
+    .act label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .act .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .act .row input, .act .row select { flex: 1; min-width: 90px; }
+</style>
+</head>
+<body>
+<!-- KIRISH -->
+<div id="login" class="login hidden">
+    <h2><i class="fa-solid fa-user-shield"></i> Admin panel</h2>
+    <input id="lg-login" placeholder="Login" autocomplete="username">
+    <input id="lg-pass" type="password" placeholder="Parol" autocomplete="current-password">
+    <button class="primary" id="lg-btn">Kirish</button>
+    <div class="msg" id="lg-msg"></div>
+</div>
+
+<!-- PANEL -->
+<div id="app" class="wrap hidden">
+    <header>
+        <h1><i class="fa-solid fa-user-shield"></i> 4 Heroes <span>ADMIN</span></h1>
+        <button id="refresh-btn"><i class="fa-solid fa-rotate"></i> Yangilash</button>
+        <a href="/" target="_blank"><button><i class="fa-solid fa-gamepad"></i> O'yin</button></a>
+        <button class="danger" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Chiqish</button>
+    </header>
+    <div class="stats" id="stats"></div>
+    <div class="tabs">
+        <button class="active" data-tab="users"><i class="fa-solid fa-users"></i> Foydalanuvchilar</button>
+        <button data-tab="rooms"><i class="fa-solid fa-door-open"></i> Xonalar</button>
+    </div>
+
+    <section id="tab-users">
+        <div class="bar">
+            <input id="search" placeholder="Nickname bo'yicha qidirish...">
+            <button id="search-btn"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <div class="card">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Nickname</th><th>Ism</th><th>Tanga</th><th>Xaritalar</th><th>Darajalar (K/A/M/S)</th><th>Ro'yxatdan</th><th></th></tr></thead>
+                    <tbody id="users-body"></tbody>
+                </table>
+            </div>
+            <div class="pager"><span id="pager-info"></span><button id="prev-btn"><i class="fa-solid fa-chevron-left"></i></button><button id="next-btn"><i class="fa-solid fa-chevron-right"></i></button></div>
+        </div>
+    </section>
+
+    <section id="tab-rooms" class="hidden">
+        <p style="color:var(--muted); margin:0 0 10px;">Xonalar har 5 soniyada yangilanadi. "Kirish" - o'yin yangi oynada ochiladi va siz xonaga <b style="color:var(--red)">ADMIN</b> belgisi bilan kirasiz (yopiq xonalarga ham).</p>
+        <div class="rooms" id="rooms"></div>
+    </section>
+</div>
+
+<!-- FOYDALANUVCHINI BOSHQARISH -->
+<div id="modal" class="modal-bg hidden">
+    <div class="modal">
+        <h2 id="m-nick"></h2>
+        <div class="sub" id="m-sub"></div>
+        <div class="act">
+            <label><i class="fa-solid fa-coins"></i> Tanga berish (manfiy - ayirish)</label>
+            <div class="row"><input id="m-coins" type="number" placeholder="500"><button class="primary" id="m-coins-btn">Berish</button></div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-map"></i> Ochiq xaritalar soni</label>
+            <div class="row"><select id="m-maps"></select><button class="primary" id="m-maps-btn">Saqlash</button></div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-star"></i> Qahramon darajasi (eng yuqori - <span id="m-maxlvl">15</span>: hamma imkoniyatlar ochiq)</label>
+            <div class="row">
+                <select id="m-hero"><option value="all">Hammasi</option><option value="knight">Knight</option><option value="archer">Archer</option><option value="mage">Mage</option><option value="samurai">Samurai</option></select>
+                <input id="m-level" type="number" min="0" max="15" placeholder="10">
+                <button class="primary" id="m-level-btn">Saqlash</button>
+            </div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-ban"></i> Bloklash</label>
+            <div class="row"><input id="m-reason" placeholder="Sabab (ixtiyoriy)"><button class="danger" id="m-ban-btn">Bloklash</button><button class="ok" id="m-unban-btn">Blokdan chiqarish</button></div>
+        </div>
+        <div class="msg" id="m-msg"></div>
+        <div style="text-align:right; margin-top:8px;"><button id="m-close">Yopish</button></div>
+    </div>
+</div>
+
+<script>
+(() => {
+    const $ = (id) => document.getElementById(id);
+    let token = localStorage.getItem('adminToken') || '';
+    let stats = null, page = 0, query = '', users = [], cur = null, roomsTimer = null;
+    const MSG = {
+        err_admin_off: "Admin o'chiq: .env da admin_login va admin_password yo'q",
+        err_admin_locked: "Juda ko'p noto'g'ri urinish - 10 daqiqa kuting",
+        err_admin_wrong: "Login yoki parol noto'g'ri",
+        err_admin_session: "Sessiya tugadi - qayta kiring",
+        err_user_not_found: "Foydalanuvchi topilmadi",
+        err_bad_amount: "Qiymat noto'g'ri",
+        err_server: "Server xatosi"
+    };
+    const msgOf = (m) => MSG[m] || m || 'Xato';
+    // Matnni xavfsiz qo'shish (nickname'dagi HTML bajarilmasin)
+    const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+    async function api(path, opts = {}) {
+        const res = await fetch('/api/admin' + path, { ...opts, headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token, ...(opts.headers || {}) } });
+        const d = await res.json().catch(() => ({ success: false, message: 'err_server' }));
+        if (res.status === 401 && path !== '/login') { logout(msgOf('err_admin_session')); throw new Error('session'); }
+        return d;
+    }
+    function logout(msg) {
+        token = ''; localStorage.removeItem('adminToken');
+        clearInterval(roomsTimer);
+        $('app').classList.add('hidden'); $('login').classList.remove('hidden');
+        $('lg-msg').textContent = msg || '';
+    }
+    async function login() {
+        $('lg-btn').disabled = true;
+        const d = await api('/login', { method: 'POST', body: JSON.stringify({ login: $('lg-login').value, password: $('lg-pass').value }) }).catch(() => ({ success: false }));
+        $('lg-btn').disabled = false;
+        $('lg-pass').value = '';
+        if (!d.success) { $('lg-msg').textContent = msgOf(d.message); return; }
+        token = d.token; localStorage.setItem('adminToken', token);
+        start();
+    }
+    async function loadStats() {
+        const d = await api('/stats');
+        if (!d.success) return;
+        stats = d;
+        const box = $('stats'); box.innerHTML = '';
+        [[d.users.total, "Foydalanuvchilar"], [d.users.banned, 'Bloklangan'], [d.online.players, "Hozir o'ynayapti"], [d.online.loggedIn, 'Hisobli o\'yinchilar'],
+         [d.online.rooms, 'Xonalar'], [d.online.playing, "O'yin ketayotgan xonalar"]].forEach(([n, l]) => {
+            const s = el('div', 'stat'); s.appendChild(el('b', '', String(n))); s.appendChild(el('span', '', l)); box.appendChild(s);
+        });
+        $('m-maxlvl').textContent = d.maxLevel; $('m-level').max = d.maxLevel;
+        const sel = $('m-maps'); sel.innerHTML = '';
+        for (let i = 1; i <= d.maps; i++) { const o = el('option', '', i === d.maps ? i + ' (hammasi)' : String(i)); o.value = i; sel.appendChild(o); }
+    }
+    async function loadUsers() {
+        const d = await api('/users?page=' + page + '&q=' + encodeURIComponent(query));
+        if (!d.success) return;
+        users = d.users;
+        const body = $('users-body'); body.innerHTML = '';
+        if (!users.length) { const tr = el('tr'); const td = el('td', 'empty', 'Hech kim topilmadi'); td.colSpan = 7; tr.appendChild(td); body.appendChild(tr); }
+        users.forEach((u) => {
+            const tr = el('tr');
+            const nick = el('td'); nick.appendChild(el('span', 'nick', u.nickname));
+            if (u.online) nick.appendChild(el('span', 'tag on', 'onlayn: ' + u.online.room));
+            if (u.banned) nick.appendChild(el('span', 'tag ban', 'BLOK' + (u.banReason ? ': ' + u.banReason : '')));
+            tr.appendChild(nick);
+            tr.appendChild(el('td', '', u.fullName));
+            tr.appendChild(el('td', '', String(u.coins)));
+            tr.appendChild(el('td', '', u.maps + (stats ? ' / ' + stats.maps : '')));
+            tr.appendChild(el('td', 'levels', [u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai].join(' / ')));
+            tr.appendChild(el('td', '', u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '-'));
+            const act = el('td'); const b = el('button', 'primary', 'Boshqarish'); b.onclick = () => openUser(u); act.appendChild(b); tr.appendChild(act);
+            body.appendChild(tr);
+        });
+        const pages = Math.max(1, Math.ceil(d.total / d.pageSize));
+        $('pager-info').textContent = `Jami: ${d.total}  ·  ${page + 1} / ${pages}`;
+        $('prev-btn').disabled = page <= 0; $('next-btn').disabled = page + 1 >= pages;
+    }
+    async function loadRooms() {
+        const d = await api('/rooms');
+        if (!d.success) return;
+        const box = $('rooms'); box.innerHTML = '';
+        if (!d.rooms.length) { box.appendChild(el('div', 'empty', 'Hozir faol xona yo\'q')); return; }
+        d.rooms.forEach((r) => {
+            const c = el('div', 'room');
+            const h = el('h3', '', r.name); if (r.isPrivate) h.appendChild(el('span', 'tag priv', 'yopiq')); c.appendChild(h);
+            const meta = el('div'); meta.appendChild(el('span', 'code', r.code)); meta.appendChild(document.createTextNode('  ·  ' + r.mapName + (r.isStarted ? '  ·  o\'ynayapti' : '  ·  lobbida'))); c.appendChild(meta);
+            const ul = el('ul');
+            r.players.forEach((p) => {
+                const li = el('li', '', (p.isHost ? '👑 ' : '') + p.nickname + ' — ' + p.characterType + ' ' + p.level + '-daraja' + (p.registered ? '' : ' (mehmon)'));
+                if (p.isAdmin) li.appendChild(el('span', 'tag admin', 'ADMIN'));
+                ul.appendChild(li);
+            });
+            c.appendChild(ul);
+            const b = el('button', 'primary', r.full ? "Xona to'la (4/4)" : 'Kirish');
+            b.disabled = r.full;
+            b.onclick = () => window.open('/?adminRoom=' + encodeURIComponent(r.code), '_blank');
+            c.appendChild(b);
+            box.appendChild(c);
+        });
+    }
+    function openUser(u) {
+        cur = u;
+        $('m-nick').textContent = u.nickname;
+        $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · xaritalar: ${u.maps} · darajalar K/A/M/S: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
+        $('m-maps').value = u.maps; $('m-coins').value = ''; $('m-level').value = ''; $('m-reason').value = '';
+        $('m-msg').textContent = ''; $('m-msg').className = 'msg';
+        $('modal').classList.remove('hidden');
+    }
+    async function act(path, body, okText) {
+        const d = await api('/users/' + cur.id + path, { method: 'POST', body: JSON.stringify(body) }).catch(() => null);
+        if (!d) return;
+        $('m-msg').className = 'msg' + (d.success ? ' good' : '');
+        $('m-msg').textContent = d.success ? okText + (d.kicked ? " (o'yindan chiqarildi)" : '') : msgOf(d.message);
+        if (d.success && d.user) { openUser(d.user); $('m-msg').className = 'msg good'; $('m-msg').textContent = okText + (d.kicked ? " (o'yindan chiqarildi)" : ''); loadUsers(); loadStats(); }
+    }
+    $('m-coins-btn').onclick = () => act('/coins', { amount: parseInt($('m-coins').value, 10) }, 'Tanga yangilandi');
+    $('m-maps-btn').onclick = () => act('/maps', { n: parseInt($('m-maps').value, 10) }, 'Xaritalar ochildi');
+    $('m-level-btn').onclick = () => act('/level', { hero: $('m-hero').value, level: parseInt($('m-level').value, 10) }, 'Daraja saqlandi');
+    $('m-ban-btn').onclick = () => { if (confirm(cur.nickname + ' bloklansinmi?')) act('/ban', { ban: true, reason: $('m-reason').value }, 'Bloklandi'); };
+    $('m-unban-btn').onclick = () => act('/ban', { ban: false }, 'Blokdan chiqarildi');
+    $('m-close').onclick = () => $('modal').classList.add('hidden');
+    $('modal').onclick = (e) => { if (e.target === $('modal')) $('modal').classList.add('hidden'); };
+
+    document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+        document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+        const rooms = b.dataset.tab === 'rooms';
+        $('tab-users').classList.toggle('hidden', rooms); $('tab-rooms').classList.toggle('hidden', !rooms);
+        clearInterval(roomsTimer);
+        if (rooms) { loadRooms(); roomsTimer = setInterval(loadRooms, 5000); }
+    });
+    $('search-btn').onclick = () => { query = $('search').value.trim(); page = 0; loadUsers(); };
+    $('search').onkeydown = (e) => { if (e.key === 'Enter') $('search-btn').onclick(); };
+    $('prev-btn').onclick = () => { page = Math.max(0, page - 1); loadUsers(); };
+    $('next-btn').onclick = () => { page++; loadUsers(); };
+    $('refresh-btn').onclick = () => { loadStats(); loadUsers(); if (!$('tab-rooms').classList.contains('hidden')) loadRooms(); };
+    $('logout-btn').onclick = () => logout('');
+    $('lg-btn').onclick = login;
+    $('lg-pass').onkeydown = (e) => { if (e.key === 'Enter') login(); };
+
+    async function start() {
+        $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+        try { await loadStats(); await loadUsers(); } catch (e) { /* sessiya tugagan - kirish oynasi */ }
+    }
+    if (token) start(); else logout('');
+})();
+</script>
+</body>
+</html>

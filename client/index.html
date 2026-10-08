@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>4 Heroes - Multiplayer Arena</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#1a1430">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <!-- Google AdSense (sayt egasini tasdiqlash va reklama) -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3350609734222055" crossorigin="anonymous"></script>
     <script src="/socket.io/socket.io.js"></script>
@@ -67,6 +71,10 @@
 
         /* Yashirish uchun klass */
         .hidden { display: none !important; }
+        /* TELEFON: tugma/yozuvga bosganda matn belgilanib qolmasin, uzun bosishda menyu chiqmasin (kiritish maydonlari bundan mustasno) */
+        body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+        input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+        button { touch-action: manipulation; }
         /* REKLAMA: chap/o'ng chetda uzunchoq bannerlar - faqat keng ekranda va o'yin paytida emas */
         .ad-rail { position: fixed; top: 50%; transform: translateY(-50%); width: 160px; height: 600px; z-index: 5; overflow: hidden; }
         #ad-rail-left { left: 12px; }
@@ -886,6 +894,19 @@
         #pause-btn { position: absolute; z-index: 35; top: 8px; right: 8px; width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; line-height: normal;
             background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); opacity: .85; }
         #pause-btn:hover { opacity: 1; }
+        /* OVOZLI CHAT: o'yindagi mikrofon tugmasi (pauza tugmasi ostida) */
+        #voice-game-btn { position: absolute; z-index: 35; top: 44px; right: 8px; width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; line-height: normal;
+            background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); opacity: .85; }
+        #voice-game-btn.voice-on { background: #00a884; color: #001a14; opacity: 1; }
+        #game-wrapper.hidden #voice-game-btn { display: none; }
+        @media (pointer: coarse) { #voice-game-btn { top: 54px; width: 46px; height: 40px; font-size: 16px; } }
+        #voice-btn.voice-on { background: #00a884; color: #001a14; }
+        #voice-mic-btn.mic-off { background: var(--px-red, #e53935); color: #fff; }
+        /* Lobbi o'rinlari: ovozli chatda - ismi yonida mikrofon; gapirayotgan - kartasi yonadi */
+        .slot.in-voice .slot-name::after { content: '\f130'; font-family: 'Font Awesome 6 Free'; font-weight: 900; margin-left: 6px; color: #69f0ae; font-size: 10px; }
+        .slot.speaking .slot-card { box-shadow: 0 0 0 4px #69f0ae, 0 0 18px #69f0ae; }
+        /* ADMIN belgisi */
+        .admin-tag { display: inline-block; background: #d50000; color: #fff; font-size: 8px; padding: 2px 4px; margin-left: 4px; border: 2px solid #000; vertical-align: middle; letter-spacing: 1px; }
         #pause-menu { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
             background: rgba(14, 11, 26, 0.72); line-height: normal; font-family: "Press Start 2P", "Courier New", monospace; }
         #pause-menu .pm-box { width: 320px; max-width: calc(100% - 32px); max-height: calc(100% - 16px); overflow-y: auto; box-sizing: border-box;
@@ -1148,6 +1169,11 @@
         </div>
 
         <div class="settings-row">
+            <label data-i18n="settings_voice_volume">Voice chat volume</label>
+            <input type="range" id="voice-volume-slider" min="0" max="100" value="100">
+        </div>
+
+        <div class="settings-row">
             <label data-i18n="settings_sfx">Sound Effects</label>
             <input type="range" id="sfx-slider" min="0" max="100" value="80">
             <p class="settings-note" data-i18n="settings_no_music_note">Shots, hits, bosses, coins and dialog sounds.</p>
@@ -1159,6 +1185,15 @@
                 <button class="lang-btn" id="screen-standard-btn"><i class="fa-solid fa-compress"></i> <span data-i18n="screen_standard">Standard</span></button>
                 <button class="lang-btn" id="screen-full-btn"><i class="fa-solid fa-expand"></i> <span data-i18n="screen_full">Full screen</span></button>
             </div>
+        </div>
+
+        <div class="settings-row">
+            <label data-i18n="settings_nickname">Nickname</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="nickname-input" maxlength="20" autocomplete="off" style="flex:1; margin:0;">
+                <button class="lang-btn" id="nickname-save-btn" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="nickname_save">Save</span></button>
+            </div>
+            <p class="settings-note" id="nickname-msg"></p>
         </div>
 
         <div class="settings-row">
@@ -1209,6 +1244,8 @@
                 <button class="lobby-toggle-btn" id="open-my-character-btn"><i class="fa-solid fa-shield-halved icon"></i><span data-i18n="nav_character">My Character</span></button>
                 <button class="lobby-toggle-btn" id="toggle-chat-btn"><i class="fa-solid fa-comments icon"></i><span data-i18n="toggle_chat">Chat</span></button>
                 <button class="lobby-toggle-btn" id="lobby-settings-btn"><i class="fa-solid fa-gear icon"></i><span data-i18n="nav_settings">Settings</span></button>
+                <button class="lobby-toggle-btn" id="voice-btn"><i class="fa-solid fa-headphones icon"></i><span data-i18n="voice_join">Voice chat</span></button>
+                <button class="lobby-toggle-btn hidden" id="voice-mic-btn" style="min-width:0"><i class="fa-solid fa-microphone"></i></button>
             </div>
             <div class="lobby-bottom-right">
                 <button id="ready-btn" class="not-ready"><i class="fa-solid fa-check icon"></i><span data-i18n="ready_btn">Ready</span></button>
@@ -1284,6 +1321,7 @@
     <script src="i18n.js"></script>
     <script src="lobby.js"></script>
     <script src="game.js"></script>
+    <script src="voice.js"></script>
     <script src="ads.js"></script>
 </body>
 </html>

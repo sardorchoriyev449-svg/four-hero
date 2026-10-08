@@ -158,15 +158,26 @@ export interface StonesDef {
     goalX: number;
 }
 
+// MAP-7: kichik toshlar ikki qatorda - pastki yo'l (14 ta) va ular ustida, oralarida yuqori toshlar (10 ta).
+// Hammasi tez tepa-past tebranadi (taxminan 1 soniyada) - sakrash vaqtini topish kerak
 function buildStonesLayout(): { stones: StonesDef, width: number, pitX: number, pitW: number } {
-    const widths = [120, 110, 100, 110, 96, 104, 92, 100, 96, 112];
-    const bases = [482, 440, 470, 410, 446, 392, 432, 384, 440, 404];
-    const gaps = [80, 88, 84, 96, 90, 100, 92, 96, 100, 84];
+    const lowW = [76, 70, 64, 72, 66, 62, 70, 64, 68, 60, 66, 62, 70, 64];
+    const lowY = [486, 470, 490, 462, 482, 458, 478, 452, 474, 450, 470, 456, 476, 460];
+    const gaps = [86, 92, 88, 96, 92, 100, 94, 98, 96, 102, 96, 100, 94, 98];
     const stones: StoneDef[] = [];
     let left = 250 + gaps[0];
+    const lows: { x: number, w: number, y: number }[] = [];
+    for (let i = 0; i < lowW.length; i++) {
+        const x = left + lowW[i] / 2;
+        lows.push({ x, w: lowW[i], y: lowY[i] });
+        stones.push({ x, w: lowW[i], baseY: lowY[i], amp: 32, periodMs: 950 + (i % 4) * 120, phase: i * 1.7 });
+        left += lowW[i] + (gaps[i + 1] || 96);
+    }
+    // Yuqori toshlar: ikki pastki tosh oralig'i ustida, ~120 px balandroqda
     for (let i = 0; i < 10; i++) {
-        stones.push({ x: left + widths[i] / 2, w: widths[i], baseY: bases[i], amp: 16, periodMs: 2400 + (i % 3) * 400, phase: i * 1.3 });
-        left += widths[i] + (gaps[i + 1] || 90);
+        const a = lows[i + 2], b = lows[i + 3];
+        const x = (a.x + b.x) / 2, w = 56 + (i % 3) * 6;
+        stones.push({ x, w, baseY: Math.min(a.y, b.y) - 118 - (i % 2) * 14, amp: 44, periodMs: 1050 + (i % 3) * 150, phase: i * 2.3 + 1 });
     }
     const goalLedge = left;
     return {

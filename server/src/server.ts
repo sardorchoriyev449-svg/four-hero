@@ -9,11 +9,12 @@ import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
-import { MAPS } from './maps';
+import { MAPS, SEASON_MAP_COUNT } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
 import { isLocalTest } from './testmode';
+import { adminLogin, verifyAdmin } from './adminAuth';
 config({quiet:true})
 
 // Bitta kutilmagan xato (masalan, noto'g'ri formatdagi socket xabari) butun serverni - hamma
@@ -82,6 +83,90 @@ app.get('/api/skins', (req, res) => {
 });
 
 // XARITALAR RO'YXATINI OLISH (nom, tavsif, rang - lobbida ko'rsatish uchun)
+// ===== ADMIN PANEL (/admin.html) =====
+// Telegram botdagi hamma ishlar + barcha foydalanuvchilar ro'yxati + faol xonalar. Har so'rov X-Admin-Token bilan
+const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (verifyAdmin(req.get('x-admin-token'))) return next();
+    res.status(401).json({ success: false, message: 'err_admin_session' });
+};
+const adminUserView = (u: db.UserRecord) => {
+    const online = roomManager.findOnline(u.id);
+    const levels: { [c: string]: number } = {};
+    db.HERO_TYPES.forEach(c => { levels[c] = db.xpLevel((u.charXp || {})[c] || 0); });
+    return { id: u.id, nickname: u.nickname, fullName: u.fullName, coins: u.coins, maps: Math.min(u.unlockedLevel + 1, SEASON_MAP_COUNT),
+        levels, banned: !!u.banned, banReason: u.banReason || '', createdAt: u.createdAt || null, online: online ? { room: online.roomName, code: online.roomId } : null };
+};
+// ObjectId bo'lmagan ID - xato bermasin
+const validUid = (uid: string) => /^[a-f0-9]{24}$/i.test(uid);
+app.post('/api/admin/login', (req, res) => { res.json(adminLogin(req.body && req.body.login, req.body && req.body.password)); });
+app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
+    try { res.json({ success: true, users: await db.countUsers(), online: roomManager.onlineStats(), maps: SEASON_MAP_COUNT, maxLevel: db.MAX_LEVEL }); }
+    catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+    try {
+        const page = Math.max(0, parseInt(String(req.query.page || '0'), 10) || 0);
+        const r = await db.listUsers(String(req.query.q || ''), page * 50, 50);
+        res.json({ success: true, total: r.total, page, pageSize: 50, users: r.users.map(adminUserView) });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.get('/api/admin/rooms', requireAdmin, (_req, res) => { res.json({ success: true, rooms: roomManager.adminRooms() }); });
+app.post('/api/admin/users/:uid/ban', requireAdmin, async (req, res) => {
+    try {
+        if (!validUid(String(req.params.uid))) { res.status(400).json({ success: false, message: 'err_user_not_found' }); return; }
+        const ban = !!(req.body && req.body.ban);
+        const reason = String((req.body && req.body.reason) || '').slice(0, 200);
+        const upd = await db.setBanned(String(req.params.uid), ban, reason);
+        if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+        const kicked = ban ? roomManager.kickUser(upd.id, reason) : false;
+        res.json({ success: true, kicked, user: adminUserView(upd) });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/admin/users/:uid/coins', requireAdmin, async (req, res) => {
+    try {
+        const amount = Number(req.body && req.body.amount);
+        if (!validUid(String(req.params.uid)) || !Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000) { res.status(400).json({ success: false, message: 'err_bad_amount' }); return; }
+        const before = await db.getUserById(String(req.params.uid));
+        const upd = await db.adjustCoins(String(req.params.uid), amount);
+        if (!upd || !before) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+        roomManager.notifyCoins(upd.id, upd.coins - before.coins, upd.coins);
+        res.json({ success: true, user: adminUserView(upd) });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/admin/users/:uid/maps', requireAdmin, async (req, res) => {
+    try {
+        const n = Number(req.body && req.body.n);
+        if (!validUid(String(req.params.uid)) || !Number.isInteger(n) || n < 1 || n > SEASON_MAP_COUNT) { res.status(400).json({ success: false, message: 'err_bad_amount' }); return; }
+        const upd = await db.setUnlockedLevel(String(req.params.uid), n - 1);
+        if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+        roomManager.notifyUnlocked(upd.id, n - 1);
+        res.json({ success: true, user: adminUserView(upd) });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/admin/users/:uid/level', requireAdmin, async (req, res) => {
+    try {
+        const hero = String((req.body && req.body.hero) || '').toLowerCase();
+        const level = Number(req.body && req.body.level);
+        const heroes = hero === 'all' ? db.HERO_TYPES : db.HERO_TYPES.includes(hero) ? [hero] : [];
+        if (!validUid(String(req.params.uid)) || !heroes.length || !Number.isInteger(level) || level < 0 || level > db.MAX_LEVEL) { res.status(400).json({ success: false, message: 'err_bad_amount' }); return; }
+        const upd = await db.setHeroLevel(String(req.params.uid), heroes, level);
+        if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+        roomManager.notifyLevel(upd.id, upd.charXp);
+        res.json({ success: true, user: adminUserView(upd) });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
+// HISOB NOMINI O'ZGARTIRISH (Sozlamalar)
+app.post('/api/user/:userId/nickname', async (req, res) => {
+    try {
+        const r = await db.renameUser(req.params.userId, req.body && req.body.nickname);
+        if (r.success && r.user) roomManager.renameOnline(r.user.id, r.user.nickname);
+        res.json(r.success && r.user ? { success: true, nickname: r.user.nickname } : r);
+    } catch (e) {
+        res.status(500).json({ success: false, message: 'err_server' });
+    }
+});
+
 // Test rejimi (localhost): klient "TEST MODE" belgisini ko'rsatadi
 app.get('/api/test-mode', (req, res) => { res.json({ test: isLocalTest(req.socket.remoteAddress) }); });
 
@@ -354,6 +439,17 @@ const activeRooms: { [key: string]: RoomState } = {};
 
 // Menejerlarni xonalarni ulashgan holda yaratamiz
 const roomManager = new RoomManager(io, activeRooms);
+
+// OVOZLI CHAT a'zolari: xona -> socket id lar
+const voiceRooms = new Map<string, Set<string>>();
+function voiceLeave(sid: string): void {
+    voiceRooms.forEach((set, rid) => {
+        if (!set.delete(sid)) return;
+        set.forEach(o => io.to(o).emit('voicePeerLeft', { id: sid }));
+        io.to(rid).emit('voiceMembers', [...set]);
+        if (!set.size) voiceRooms.delete(rid);
+    });
+}
 // Admin Telegram bot (faqat .env da sozlangan bo'lsa ishlaydi)
 startAdminBot(roomManager);
 const gameEngine = new GameEngine(io, activeRooms, roomManager);
@@ -619,6 +715,19 @@ io.on('connection', (socket) => {
     });
 
     // 4b. LOBBIDA "TAYYOR" TUGMASINI BOSISH/QAYTARISH
+    // "Tayyor" - aniq holat bilan (telefonda ikki marta bosilsa ham buzilmaydi)
+    socket.on('setReadyInRoom', (data: { roomId: string, ready: boolean }) => {
+        if (!data || typeof data.roomId !== 'string') return;
+        roomManager.setReady(socket, data.roomId, !!data.ready);
+    });
+    // Klient eski xaritada qolib ketgan - joriy xaritani qayta so'raydi
+    socket.on('requestGameSync', (roomId: string) => {
+        if (typeof roomId === 'string') roomManager.resyncPlayer(socket, roomId);
+    });
+    // Pauza -> "Lobbiga qaytish" (faqat xo'jayin)
+    socket.on('returnToLobby', (roomId: string) => {
+        if (typeof roomId === 'string') roomManager.returnToLobby(socket, roomId);
+    });
     socket.on('toggleReadyInRoom', (roomId: string) => {
         roomManager.toggleReady(socket, roomId);
     });
@@ -711,12 +820,43 @@ io.on('connection', (socket) => {
 
     // 8c. LOBBIDAN CHIQISH (o'yinchi o'zi bosh menyuga qaytmoqchi bo'lganda)
     socket.on('leaveRoom', () => {
+        voiceLeave(socket.id);
         roomManager.leavePlayer(socket);
+    });
+
+    // ADMIN: admin panelda kirgan brauzer o'z tokenini yuboradi - xonada "ADMIN" belgisi bilan ko'rinadi
+    socket.on('adminHello', (token: string) => {
+        if (!verifyAdmin(token)) return;
+        (socket.data as any).isAdmin = true;
+        roomManager.markAdmin(socket);
+    });
+
+    // OVOZLI CHAT (WebRTC): server faqat bir xonadagi o'yinchilar o'rtasida ulanish ma'lumotini uzatadi,
+    // ovozning o'zi o'yinchilar o'rtasida to'g'ridan-to'g'ri (serverdan o'tmaydi)
+    socket.on('voiceJoin', (roomId: string) => {
+        if (typeof roomId !== 'string' || !activeRooms[roomId] || !activeRooms[roomId].players[socket.id]) return;
+        voiceLeave(socket.id);
+        const set = voiceRooms.get(roomId) || new Set<string>();
+        const peers = [...set].filter(id => activeRooms[roomId].players[id]);
+        set.add(socket.id);
+        voiceRooms.set(roomId, set);
+        socket.emit('voicePeers', peers);
+        io.to(roomId).emit('voiceMembers', [...set]);
+    });
+    socket.on('voiceLeave', () => voiceLeave(socket.id));
+    socket.on('voiceSignal', (d: { to: string, data: unknown }) => {
+        if (!d || typeof d.to !== 'string' || !d.data) return;
+        // Faqat bir xil xonada, ikkalasi ham ovozli chatda bo'lsa
+        const ok = [...voiceRooms.entries()].some(([rid, set]) => set.has(socket.id) && set.has(d.to) && activeRooms[rid]
+            && activeRooms[rid].players[socket.id] && activeRooms[rid].players[d.to]);
+        if (!ok) return;
+        io.to(d.to).emit('voiceSignal', { from: socket.id, data: d.data });
     });
 
     // 9. TARMOQDAN UZILISH
     socket.on('disconnect', () => {
         console.log(`Foydalanuvchi uzildi: ${socket.id}`);
+        voiceLeave(socket.id);
         // Darhol chiqarmaymiz - sahifa yangilangan bo'lishi mumkin (o'rni 15s saqlanadi)
         roomManager.handleDisconnect(socket.id);
     });

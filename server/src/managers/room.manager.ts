@@ -154,6 +154,7 @@ export class RoomManager {
             lastAttackAngle: 0,
             userId: userId,
             clientId: typeof clientId === 'string' ? clientId.slice(0, 64) : null,
+            isAdmin: !!(socket.data && (socket.data as any).isAdmin),
             nickname: nickname,
             kills: 0,
             skinId: equippedSkins[characterType] || 'default',
@@ -254,6 +255,7 @@ export class RoomManager {
             isPrivate: room.isPrivate,
             unlockedLevel: room.unlockedLevel,
             selectedLevel: room.selectedLevel,
+            bonusUnlocked: this.bonusUnlocked(room),
             maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor, bonus: !!m.bonus, season: m.season || 1 }))
         };
     }
@@ -299,6 +301,7 @@ export class RoomManager {
         const player = room.players[oldId];
         delete room.players[oldId];
         player.id = socket.id;
+        if (socket.data && (socket.data as any).isAdmin) player.isAdmin = true;
         room.players[socket.id] = player;
         if (room.hostId === oldId) room.hostId = socket.id;
         if (player.userId !== null) this.activeUserSockets.set(player.userId, socket.id);
@@ -315,7 +318,7 @@ export class RoomManager {
         this.updateLobby(roomId);
         this.broadcastRoomList();
         if (room.isStarted) {
-            socket.emit('gameStarted', { map: this.mapPayload(room), continued: null });
+            socket.emit('gameStarted', { map: this.mapPayload(room), continued: null, round: room.round || 0 });
         }
         return 'reclaimed';
     }
@@ -350,6 +353,11 @@ export class RoomManager {
             player.staminaLevel = charUpgrades.stamina || 0;
             RoomManager.refreshPerks(player);
             this.updateLobby(roomId);
+            // Xo'jayin qahramonini almashtirsa - bonus xarita qulfi o'zgarishi mumkin
+            if (room.hostId === socket.id) {
+                if (getMapById(room.selectedLevel).bonus && !this.bonusUnlocked(room)) room.selectedLevel = Math.min(room.unlockedLevel, SEASON_MAP_COUNT - 1);
+                this.broadcastLevelInfo(roomId);
+            }
 
             // Foydalanuvchi "Mening personajim" ekranida keyingi safar shu personaj
             // birinchi ko'rsatilishi uchun, tanlovni hisobida ham eslab qolamiz
@@ -400,6 +408,8 @@ export class RoomManager {
         // Butun son bo'lishi shart (matn/NaN kelsa - tekshiruvlar o'tib ketib, START da xato berardi)
         // Bonus xaritalar doim ochiq; mavsum xaritalari - faqat ochilganlari
         if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || (levelIndex > room.unlockedLevel && !MAPS[levelIndex].bonus)) return;
+        // Bonus (arena) - xo'jayin qahramoni 3-darajaga yetganda ochiladi
+        if (MAPS[levelIndex].bonus && !this.bonusUnlocked(room)) return;
 
         room.selectedLevel = levelIndex;
         // Tanlovni hammaga yuboramiz (avval o'yinchilar ro'yxati yuborilardi -
@@ -413,7 +423,61 @@ export class RoomManager {
         if (!room) return;
         this.io.to(roomId).emit('updateRoomLevel', {
             unlockedLevel: room.unlockedLevel,
-            selectedLevel: room.selectedLevel
+            selectedLevel: room.selectedLevel,
+            bonusUnlocked: this.bonusUnlocked(room)
+        });
+    }
+    // Bonus xarita (arena): xo'jayin qahramoni 3-darajaga yetganda ochiladi
+    public static readonly BONUS_UNLOCK_LEVEL = 3;
+    private bonusUnlocked(room: RoomState): boolean {
+        const host = room.players[room.hostId];
+        return !!host && (host.level || 0) >= RoomManager.BONUS_UNLOCK_LEVEL;
+    }
+    // "TAYYOR": aniq holat (almashtirish emas - telefonda ikki marta bosilsa ham buzilmaydi).
+    // Server o'yinchini tanimasa - klientga xabar: u xonaga qayta ulanib, yana yuboradi
+    public setReady(socket: Socket, roomId: string, ready: boolean): void {
+        const room = this.activeRooms[roomId];
+        const player = room?.players[socket.id];
+        if (!room || !player) { socket.emit('readyFailed'); return; }
+        if (room.isStarted) return;
+        player.isReady = !!ready;
+        this.updateLobby(roomId);
+    }
+    // Klient eski xaritada qolib ketgan (o'tish xabarini o'tkazib yuborgan) - joriy xaritani qayta yuboramiz
+    public resyncPlayer(socket: Socket, roomId: string): void {
+        const room = this.activeRooms[roomId];
+        if (!room || !room.players[socket.id] || !room.isStarted) return;
+        socket.emit('gameStarted', { map: this.mapPayload(room), continued: null, round: room.round || 0 });
+    }
+    // PAUZA -> "LOBBIGA QAYTISH" (faqat xo'jayin): raund to'xtatiladi, hamma xona lobbisiga qaytadi
+    public returnToLobby(socket: Socket, roomId: string): void {
+        const room = this.activeRooms[roomId];
+        if (!room || room.hostId !== socket.id || !room.isStarted) return;
+        room.isOver = true;
+        room.isStarted = false;
+        room.paused = false;
+        room.bots = [];
+        room.bullets = [];
+        Object.values(room.players).forEach((p) => {
+            p.kills = 0;
+            p.hp = p.maxHp || BASE_HP;
+            p.isDead = false;
+            p.respawnTimer = 0;
+            p.isReady = false;
+        });
+        this.applyHostProgress(room, false);
+        this.io.to(roomId).emit('returnedToLobby');
+        this.updateLobby(roomId);
+        this.broadcastLevelInfo(roomId);
+        this.broadcastRoomList();
+    }
+    // Hisob nomi o'zgardi - onlayn bo'lsa, xonadagi ismi ham yangilanadi
+    public renameOnline(userId: string, nickname: string): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (!p) return;
+            p.nickname = nickname;
+            this.updateLobby(room.id);
         });
     }
 
@@ -580,7 +644,7 @@ export class RoomManager {
         const room = this.activeRooms[roomId];
         if (!room || room.hostId !== socket.id || typeof targetId !== 'string' || targetId === socket.id) return;
         const target = room.players[targetId];
-        if (!target) return;
+        if (!target || target.isAdmin) return;   // adminni xonadan chiqarib bo'lmaydi
         room.kicked = room.kicked || [];
         if (target.userId !== null) room.kicked.push('u:' + target.userId);
         if (target.clientId) room.kicked.push('c:' + target.clientId);
@@ -600,6 +664,25 @@ export class RoomManager {
         const players = rooms.reduce((a, r) => a + Object.keys(r.players).length, 0);
         const loggedIn = rooms.reduce((a, r) => a + Object.values(r.players).filter(p => p.userId !== null).length, 0);
         return { rooms: rooms.length, playing: rooms.filter(r => r.isStarted).length, players, loggedIn };
+    }
+    // ADMIN PANEL: hamma faol xonalar (yopiqlari ham) - kod, o'yinchilar, xarita
+    public adminRooms() {
+        return Object.values(this.activeRooms).map(r => ({
+            code: r.id, name: r.name, isPrivate: !!r.isPrivate, isStarted: !!r.isStarted,
+            mapIndex: r.selectedLevel, mapName: getMapById(r.selectedLevel).name,
+            full: Object.keys(r.players).length >= RoomManager.MAX_PLAYERS,
+            players: Object.values(r.players).map(p => ({ nickname: p.nickname, characterType: p.characterType, level: p.level || 0,
+                isAdmin: !!p.isAdmin, isHost: p.id === r.hostId, registered: p.userId !== null }))
+        }));
+    }
+    // Admin tokeni tasdiqlandi - shu socket xonada bo'lsa, "ADMIN" belgisi darhol chiqadi
+    public markAdmin(socket: Socket): void {
+        Object.values(this.activeRooms).forEach(room => {
+            const p = room.players[socket.id];
+            if (!p || p.isAdmin) return;
+            p.isAdmin = true;
+            this.updateLobby(room.id);
+        });
     }
     // Shu hisob hozir qaysi xonada (onlayn bo'lsa)
     public findOnline(userId: string): { roomId: string, roomName: string, socketId: string } | null {
@@ -695,7 +778,8 @@ export class RoomManager {
         GameEngine.startRound(room, map);
         room.paused = false;
 
-        this.io.to(roomId).emit('gameStarted', { map: this.mapPayload(room), continued });
+        room.round = (room.round || 0) + 1;
+        this.io.to(roomId).emit('gameStarted', { map: this.mapPayload(room), continued, round: room.round });
         // YUKLANISH: hamma o'yinchi xaritani yuklab bo'lguncha raund boshlanmaydi (ko'pi bilan 15s)
         room.loadingIds = Object.keys(room.players);
         room.loadDeadline = Date.now() + RoomManager.LOAD_WAIT_MS;
@@ -1000,7 +1084,8 @@ export class RoomManager {
             color: p.color,
             weaponColor: p.weaponColor,
             look: p.look || '',
-            level: p.level || 0
+            level: p.level || 0,
+            isAdmin: !!p.isAdmin
         }));
 
         this.io.to(roomId).emit('updateLobbyPlayers', {

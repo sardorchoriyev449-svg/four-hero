@@ -181,6 +181,11 @@ const charDetailsDesc = document.getElementById('char-details-desc');
 // --- SOZLAMALAR ---
 const volumeSlider = document.getElementById('volume-slider');
 const sfxSlider = document.getElementById('sfx-slider');
+const voiceVolumeSlider = document.getElementById('voice-volume-slider');
+if (voiceVolumeSlider) {
+    voiceVolumeSlider.value = localStorage.getItem('voiceVolume') || '100';
+    voiceVolumeSlider.oninput = () => { localStorage.setItem('voiceVolume', voiceVolumeSlider.value); if (typeof Voice !== 'undefined') Voice.setVolume(); };
+}
 const langEnBtn = document.getElementById('lang-en-btn');
 const langRuBtn = document.getElementById('lang-ru-btn');
 
@@ -221,6 +226,7 @@ let isRoomHost = false;
 let roomMaps = [];        // { id, name, description, accentColor }[] - joriy xonada mavjud xaritalar
 let unlockedLevel = 0;    // xonada ochilgan eng yuqori xarita
 let selectedLevel = 0;    // hozir tanlangan (keyingi o'ynaladigan) xarita
+let bonusUnlocked = false; // bonus xarita (arena) - xo'jayin qahramoni 3-darajaga yetganda
 let latestPlayerListData = null; // oxirgi kelgan o'yinchilar ro'yxati (til almashganda qayta chizish uchun)
 let latestGameOverData = null;   // til almashganda o'yin tugadi ekranini qayta chizish uchun
 let characterReturnPanel = null; // "Mening personajim" dan "Orqaga" bosilganda qaysi panelga qaytish kerak
@@ -459,9 +465,13 @@ document.getElementById('screen-full-btn').onclick = () => window.setScreenMode(
 document.getElementById('touch-layout-btn').onclick = () => { if (window.openTouchEditor) window.openTouchEditor(); };
 // TELEFONDA: o'yin paytidagi birinchi teginishda - haqiqiy to'liq ekran (brauzer manzil satri yashirinadi)
 // va iloji bo'lsa ekran yotiq holatga qotiriladi (Android). Brauzer buni faqat teginishda ruxsat beradi
+let fullscreenAsked = false;
 document.addEventListener('pointerdown', () => {
-    if (!isTouchDevice() || getScreenMode() !== 'full' || document.fullscreenElement) return;
+    if (!isTouchDevice() || getScreenMode() !== 'full' || document.fullscreenElement || fullscreenAsked) return;
+    // Ilova bosh ekrandan (o'rnatilgan holda) ochilgan bo'lsa - u allaqachon to'liq ekran, so'rov kerak emas
+    if (window.matchMedia && (matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches)) return;
     if (gameWrapper.classList.contains('hidden') || !document.documentElement.requestFullscreen) return;
+    fullscreenAsked = true;
     document.documentElement.requestFullscreen().then(() => {
         if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
     }).catch(() => {});
@@ -530,6 +540,22 @@ socket.on('clientIdChanged', (id) => {
 // XONAGA QAYTISH: sahifa yangilansa (yoki internet uzilib, qayta ulansa) - oxirgi
 // xonaga qaytamiz. O'rni saqlanib turgan bo'lsa (15s) - xuddi o'sha holatda
 // (xo'jayinlik, tayyor, o'yin ketayotgan bo'lsa - o'yinning o'zi)
+// ADMIN: admin panelda kirilgan bo'lsa - server bizni "ADMIN" deb biladi; paneldan "Kirish" bosilgan bo'lsa -
+// o'sha xonaga kiramiz (?adminRoom=KOD)
+let pendingAdminRoom = new URLSearchParams(location.search).get('adminRoom');
+if (pendingAdminRoom) history.replaceState(null, '', location.pathname);
+socket.on('connect', () => {
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) socket.emit('adminHello', adminToken);
+    if (pendingAdminRoom && adminToken) {
+        const code = pendingAdminRoom.toUpperCase();
+        pendingAdminRoom = null;
+        sessionStorage.removeItem('lastRoomId');   // "oxirgi xonaga qaytish" admin tanlagan xonaga xalaqit bermasin
+        setTimeout(() => socket.emit('joinRoomByCode', { roomCode: code, userId: currentUser ? currentUser.id : null, token: currentUser ? currentUser.token : null,
+            nickname: currentUser ? currentUser.nickname : 'Admin', clientId: CLIENT_ID }), 400);
+        return;
+    }
+});
 socket.on('connect', () => {
     const lastRoomId = sessionStorage.getItem('lastRoomId');
     if (!lastRoomId) return;
@@ -787,6 +813,7 @@ socket.on('roomJoined', (data) => {
     roomMaps = data.maps || [];
     unlockedLevel = data.unlockedLevel || 0;
     selectedLevel = data.selectedLevel || 0;
+    bonusUnlocked = !!data.bonusUnlocked;
     // Yangi xona: o'yinchilar ro'yxati kelguncha o'rinlarda yuklanish belgisi
     if (!sameRoom) {
         latestPlayerListData = null;
@@ -886,6 +913,7 @@ openMyCharacterBtn.onclick = () => {
 socket.on('updateRoomLevel', (data) => {
     unlockedLevel = data.unlockedLevel;
     selectedLevel = data.selectedLevel;
+    if (data.bonusUnlocked !== undefined) bonusUnlocked = !!data.bonusUnlocked;
     renderLevelList();
 });
 
@@ -921,7 +949,7 @@ function renderLevelList() {
         return;
     }
     shown.forEach((m) => {
-        const locked = !m.bonus && m.id > unlockedLevel;
+        const locked = m.bonus ? !bonusUnlocked : m.id > unlockedLevel;
         const isSelected = m.id === selectedLevel;
         const item = document.createElement('div');
         item.className = 'level-item' + (isSelected ? ' selected' : '') + (locked ? ' locked' : '') + (isRoomHost ? '' : ' readonly');
@@ -929,7 +957,7 @@ function renderLevelList() {
         // Avval o'tilgan xarita: qayta o'ynasa bo'ladi, lekin ball berilmaydi
         const clearedTag = !m.bonus && m.id < unlockedLevel
             ? ` <span style="color:#aaa; font-size:12px;"><i class="fa-solid fa-flag-checkered"></i> ${t('level_cleared_tag')}</span>`
-            : '';
+            : (m.bonus && locked ? ` <span style="color:#ffd54f; font-size:12px;">${t('bonus_locked_tag')}</span>` : '');
         item.innerHTML = `<span>${icon} <span class="level-name">${m.bonus ? '<i class="fa-solid fa-star" style="color:#ffd54f;"></i> ' : mapNumberLabel(m.id)}${tMapName(m.id)}</span>${clearedTag}<span class="level-desc">${tMapDesc(m.id)}</span></span>`;
         if (isRoomHost && !locked) {
             item.onclick = () => {
@@ -971,7 +999,7 @@ function renderPlayerList(data) {
             ? `<span style="color:#ffcc00;"><i class="fa-solid fa-crown"></i> ${t('host_tag')}</span>`
             : (p.isReady ? `<span class="ready-tick"><i class="fa-solid fa-check"></i> ${t('ready_tag')}</span>` : `<span class="ready-tick not-ready-tick"><i class="fa-solid fa-xmark"></i> ${t('not_ready_tag')}</span>`);
         const nameIcon = p.id === socket.id ? '<i class="fa-solid fa-star" style="color:#00ffcc;"></i>' : '<i class="fa-solid fa-user"></i>';
-        li.innerHTML = `${nameIcon} ${name}${p.id === socket.id ? t('you_suffix') : ''} [${tCharName(p.characterType).toUpperCase()}] — ${readyTick}`;
+        li.innerHTML = `${nameIcon} ${name}${p.isAdmin ? ' <span class="admin-tag">ADMIN</span>' : ''}${p.id === socket.id ? t('you_suffix') : ''} [${tCharName(p.characterType).toUpperCase()}] — ${readyTick}`;
         playerListUl.appendChild(li);
 
         // O'zimizning "Tayyor" tugmamiz ko'rinishini serverdagi haqiqiy holat bilan sinxronlaymiz
@@ -1015,6 +1043,7 @@ function renderLobbySlots(players) {
         }
         const me = p.id === socket.id;
         slot.className = 'slot filled' + (me ? ' me' : '');
+        slot.dataset.pid = p.id;
         const status = p.isHost ? ['host', t('host_tag')] : p.isReady ? ['ready', t('ready_tag')] : ['not-ready', t('not_ready_tag')];
         slot.innerHTML = `<div class="slot-name">${p.isHost ? '<i class="fa-solid fa-crown"></i>' : ''}</div>
             <div class="slot-card"><canvas class="slot-hero" width="32" height="40"></canvas></div>
@@ -1022,8 +1051,9 @@ function renderLobbySlots(players) {
             <div class="slot-level">${t('slot_level')}: ${p.level || 0}</div>
             <div class="slot-status ${status[0]}">${status[1].toUpperCase()}</div>`;
         slot.querySelector('.slot-name').appendChild(document.createTextNode((p.nickname || t('guest_name')) + (me ? t('you_suffix') : '')));
+        if (p.isAdmin) { const tag = document.createElement('span'); tag.className = 'admin-tag'; tag.textContent = 'ADMIN'; slot.querySelector('.slot-name').appendChild(tag); }
         // Xo'jayinga: boshqa o'yinchini xonadan chiqarish (KICK)
-        if (isRoomHost && !me) {
+        if (isRoomHost && !me && !p.isAdmin) {
             const kick = document.createElement('button');
             kick.className = 'slot-kick';
             kick.title = t('kick_btn');
@@ -1054,6 +1084,7 @@ function renderXpBar(xp) {
 
 // LOBBIDAN CHIQISH: xonani tark etib, bosh menyuga qaytamiz
 leaveLobbyBtn.onclick = () => {
+    if (typeof Voice !== 'undefined') Voice.stop();
     socket.emit('leaveRoom');
     sessionStorage.removeItem('lastRoomId');
     currentRoomId = null;
@@ -1086,9 +1117,29 @@ window.setSfxVolume = (v) => {
 };
 
 // "Tayyor" tugmasi bosilganda
+let readyClickAt = 0, readyRetryPending = null;
 readyBtn.onclick = () => {
-    socket.emit('toggleReadyInRoom', currentRoomId);
+    const now = Date.now();
+    if (now - readyClickAt < 400) return;   // telefonda tasodifiy ikki marta bosish
+    readyClickAt = now;
+    const want = !readyBtn.classList.contains('is-ready');
+    // Darhol ko'rinadi (server tasdiqlagach - haqiqiy holat bilan yana sinxronlanadi)
+    readyBtn.classList.toggle('is-ready', want);
+    readyBtn.classList.toggle('not-ready', !want);
+    readyBtn.innerHTML = `<i class="fa-solid fa-check icon"></i>${t(want ? 'ready_confirmed_btn' : 'ready_btn')}`;
+    socket.emit('setReadyInRoom', { roomId: currentRoomId, ready: want });
+    readyRetryPending = want;
 };
+// Server bizni xonada topmadi (ulanish yangilangan) - xonaga qayta ulanamiz va "tayyor"ni yana yuboramiz
+socket.on('readyFailed', () => {
+    const lastRoomId = currentRoomId || sessionStorage.getItem('lastRoomId');
+    if (!lastRoomId) return;
+    socket.emit('rejoinRoom', { roomId: lastRoomId, clientId: CLIENT_ID, userId: currentUser ? currentUser.id : null,
+        token: currentUser ? currentUser.token : null, nickname: currentUser ? currentUser.nickname : t('guest_name') });
+    socket.once('roomJoined', () => {
+        if (readyRetryPending !== null) setTimeout(() => socket.emit('setReadyInRoom', { roomId: currentRoomId, ready: readyRetryPending }), 300);
+    });
+});
 
 // Host "Boshlash"ni bosganda, agar hamma tayyor bo'lmasa, server xato qaytaradi
 socket.on('startError', (message) => {
@@ -1189,12 +1240,26 @@ socket.on('gameStarted', (data) => {
     // Faqat "PHONE" boshqaruv turi tanlangan bo'lsa, ekrandagi virtual tugmalarni ko'rsatamiz
     touchControls.classList.toggle('hidden', getControlScheme() !== 'phone');
 
+    // Joriy raund (xarita) - holat yangilanishlari boshqa raunddan kelsa, klient qayta so'raydi
+    window.currentRound = data && typeof data.round === 'number' ? data.round : null;
     // game.js ichidagi Phadser o'yinini ishga tushirish funksiyasi
     if (typeof launchGame === 'function') {
         launchGame(socket, currentRoomId, data && data.map, data && data.continued);
     }
     // Oldingi xarita o'tilib, avtomatik keyingisiga o'tildi
     if (data && data.continued) showLevelComplete(data.continued.fromLevel, false, null, data.continued.xpGained || 0);
+});
+
+// PAUZA -> "LOBBIGA QAYTISH": xo'jayin raundni to'xtatdi - hamma xona lobbisiga qaytadi
+socket.on('returnedToLobby', () => {
+    const lc = document.getElementById('level-complete');
+    if (lc) lc.remove();
+    if (typeof stopGame === 'function') stopGame();
+    window.currentRound = null;
+    gameWrapper.classList.add('hidden');
+    touchControls.classList.add('hidden');
+    if (window.GameAudio) { GameAudio.release(); GameAudio.setMode('menu'); }
+    if (currentRoomId) showPanel(lobbyPanel);
 });
 
 // --- 4. G'ALABA VA TANGA MUKOFOTI ---
@@ -1923,6 +1988,37 @@ function drawHero(ctx, type, body, look, ox, oy) {
 
 // Hamma yuklanish vazifalari ro'yxatga qo'shildi (saqlangan bo'limni tiklash ham - u ham setTimeout 0 da) - endi kutamiz
 setTimeout(() => Boot.start(), 0);
+
+// HISOB NOMI (nickname) - Sozlamalarda o'zgartiriladi
+(function initNicknameChange() {
+    const input = document.getElementById('nickname-input');
+    const btn = document.getElementById('nickname-save-btn');
+    const msg = document.getElementById('nickname-msg');
+    if (!input || !btn) return;
+    const panel = document.getElementById('settings-panel');
+    const fill = () => { input.value = currentUser ? currentUser.nickname : ''; msg.innerText = ''; };
+    // Panel ochilganda (yashirin -> ko'rinadigan) - joriy nom bilan to'ldiriladi
+    let wasHidden = panel.classList.contains('hidden');
+    const obs = new MutationObserver(() => { const hidden = panel.classList.contains('hidden'); if (wasHidden && !hidden) fill(); wasHidden = hidden; });
+    obs.observe(panel, { attributes: true, attributeFilter: ['class'] });
+    btn.onclick = async () => {
+        if (!currentUser) { msg.style.color = '#ff8080'; msg.innerText = t('nickname_login_first'); return; }
+        const nickname = input.value.trim();
+        if (nickname === currentUser.nickname) return;
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/user/' + currentUser.id + '/nickname', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nickname }) });
+            const d = await res.json();
+            if (d.success) {
+                currentUser.nickname = d.nickname;
+                localStorage.setItem('gameUser', JSON.stringify(currentUser));
+                if (welcomeNickname) welcomeNickname.innerText = d.nickname;
+                msg.style.color = '#69f0ae'; msg.innerText = t('nickname_saved');
+            } else { msg.style.color = '#ff8080'; msg.innerText = tMsg(d.message); }
+        } catch (e) { msg.style.color = '#ff8080'; msg.innerText = t('server_unreachable'); }
+        btn.disabled = false;
+    };
+})();
 
 // TEST REJIMI (o'yin kompyuterda localhost'da ishga tushirilgan): barcha xaritalar ochiq - burchakda belgi
 fetch('/api/test-mode').then(r => r.json()).then((d) => {

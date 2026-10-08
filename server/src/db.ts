@@ -582,6 +582,35 @@ export async function setBanned(userId: string, banned: boolean, reason: string 
 }
 
 // Tanga qo'shish/ayirish (manfiy bo'lsa ham balans 0 dan pastga tushmaydi)
+// ADMIN PANEL: foydalanuvchilar ro'yxati (yangilari birinchi), nickname bo'yicha qidiruv
+export async function listUsers(query: string, skip: number, limit: number): Promise<{ total: number, users: UserRecord[] }> {
+    const q = (query || '').trim().slice(0, 40);
+    const filter: any = q ? { nickname: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } } : {};
+    const [total, docs] = await Promise.all([
+        UserModel.countDocuments(filter),
+        UserModel.find(filter).sort({ createdAt: -1 }).skip(Math.max(0, skip)).limit(Math.min(100, Math.max(1, limit)))
+    ]);
+    return { total, users: docs.map(docToUser) };
+}
+
+// HISOB NOMINI (nickname) O'ZGARTIRISH: ro'yxatdan o'tishdagi qoidalar; band bo'lsa (katta-kichik harfidan
+// qat'i nazar) - rad etiladi
+export async function renameUser(userId: string, nicknameRaw: unknown): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    const nickname = str(nicknameRaw);
+    if (!nickname) return { success: false, message: 'err_fields_required' };
+    if (nickname.length < 3 || nickname.length > NICKNAME_MAX) return { success: false, message: 'err_field_length' };
+    const esc = nickname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const taken = await UserModel.findOne({ nickname: { $regex: '^' + esc + '$', $options: 'i' }, _id: { $ne: userId } });
+    if (taken) return { success: false, message: 'err_nickname_taken' };
+    try {
+        const doc = await UserModel.findByIdAndUpdate(userId, { $set: { nickname } }, { returnDocument: 'after' });
+        return doc ? { success: true, user: docToUser(doc) } : { success: false, message: 'err_user_not_found' };
+    } catch (err: any) {
+        if (err && err.code === 11000) return { success: false, message: 'err_nickname_taken' };
+        throw err;
+    }
+}
+
 // ADMIN: qahramon darajasini belgilash. 15-darajada hamma imkoniyatlar ochiladi - undan yuqorisi hech narsa bermaydi
 export const MAX_LEVEL = 15;
 export const HERO_TYPES = CHARACTER_TYPES;
