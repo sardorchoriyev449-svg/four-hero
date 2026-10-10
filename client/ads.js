@@ -138,8 +138,14 @@ const Ads = (() => {
         } catch (e) { cfg = null; }
         if (!cfg || !cfg.enabled) return;
         loadScript();
-        fillBanner('ad-rail-left', cfg.slotLeft);
-        fillBanner('ad-rail-right', cfg.slotRight);
+        // Bannerlar faqat hisobga kirgandan keyin (menyu/lobbi) yuklanadi: login ekranida mazmun yo'q -
+        // Google qoidasi bo'yicha mazmunsiz ekranda reklama ko'rsatish mumkin emas
+        const fillWhenIn = () => {
+            if (!currentUser) { setTimeout(fillWhenIn, 1000); return; }
+            fillBanner('ad-rail-left', cfg.slotLeft);
+            fillBanner('ad-rail-right', cfg.slotRight);
+        };
+        fillWhenIn();
         if (cfg.reward) {
             btn.querySelector('.ad-amount').innerText = '+' + cfg.rewardCoins;
             btn.classList.remove('hidden');

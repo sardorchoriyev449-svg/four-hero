@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
 <link rel="icon" type="image/png" href="/public/icons/icon-192.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>4 Heroes - Multiplayer Arena</title>
+    <title>4 Heroes - Free Co-op Pixel Action Game</title>
+    <meta name="description" content="4 Heroes is a free co-op pixel action game in your browser. Team up with up to 4 friends as a Knight, Archer, Mage or Samurai, beat bosses and unlock new maps.">
+    <link rel="canonical" href="https://4heroes.xyz/">
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#1a1430">
     <meta name="mobile-web-app-capable" content="yes">
@@ -77,11 +79,15 @@
         input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
         button { touch-action: manipulation; }
         /* REKLAMA: chap/o'ng chetda uzunchoq bannerlar - faqat keng ekranda va o'yin paytida emas */
+        .site-blurb { color: #b9b3d6; font-size: 13px; line-height: 1.6; margin: 14px 0 6px; }
+        .site-links { font-size: 12px; margin: 6px 0 0; color: #9a93b8; }
+        .site-links a { color: #00ffcc; }
         .ad-rail { position: fixed; top: 50%; transform: translateY(-50%); width: 160px; height: 600px; z-index: 5; overflow: hidden; }
         #ad-rail-left { left: 12px; }
         #ad-rail-right { right: 12px; }
         @media (max-width: 1180px), (max-height: 640px) { .ad-rail { display: none !important; } }
         body:has(#game-wrapper:not(.hidden)) .ad-rail { display: none !important; }
+        body:has(#auth-panel:not(.hidden)) .ad-rail { display: none !important; }
         #nav-ad-btn { border-color: #ffcc00; }
         #nav-ad-btn i { color: #ffcc00; }
         #nav-ad-btn .ad-amount { margin-left: auto; color: #ffcc00; font-weight: bold; }
@@ -1049,6 +1055,8 @@
             <p id="register-error" class="error-text"></p>
             <p class="link-text" id="show-login-link" data-i18n="have_account">Already have an account? Sign in</p>
         </div>
+        <p class="site-blurb" data-i18n="site_blurb">A free co-op pixel action game for up to 4 players. Choose a Knight, Archer, Mage or Samurai, team up with friends and beat giant bosses together.</p>
+        <p class="site-links"><a href="/about.html" data-i18n="link_about">About the game</a> &middot; <a href="/privacy.html" data-i18n="link_privacy">Privacy Policy</a></p>
     </div>
 
     <!-- ===== BOSH MENYU (HUB) ===== -->
