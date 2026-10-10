@@ -3108,7 +3108,8 @@ export class GameEngine {
         // Gorilla platformalari joyiga qaytadi (gorilla yo'q paytda ularni hech kim qaytarmaydi)
         const gd = getMapById(room.selectedLevel).gorilla;
         (room.gPlats || []).forEach((pl, i) => { pl.state = 'idle'; pl.timer = 0; pl.riders = []; if (gd) pl.y = gd.platforms[i].y; });
-        Object.values(room.players).filter(p => !p.isDead).forEach(p => {
+        // Boss - jamoaviy g'alaba: xonadagi HAMMAGA (o'sha payt o'lik/arvoh bo'lganlarga ham) tanga va XP
+        Object.values(room.players).forEach(p => {
             this.roomManager.awardReward(room.id, p.id, ar.bossCoins, ar.bossXp).catch(err => console.error('awardReward xatosi:', err));
         });
         this.io.to(room.id).emit('arenaBossDown', { boss, coins: ar.bossCoins, xp: ar.bossXp });

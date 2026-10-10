@@ -711,7 +711,8 @@ export const MAPS: MapDef[] = [
         description: "The giant robot snake smashed into the market. Shoot it until it dies!",
         mode: 'boss',
         killsToWin: 0,
-        xpReward: 40,
+        xpReward: 80,          // Season 1 boss: hammaga 2x (avval 40)
+        bossCoins: 200,        // hammaga (avval faqat bitta o'yinchiga 100)
         accentColor: 0xff5252,
         groundColor: 0x5d5566,
         // "Cheksiz" bozor: rastalar va taxtalar ilon o'lguncha davom etadi. Boshidagi
@@ -811,7 +812,8 @@ export const MAPS: MapDef[] = [
         description: "The lair of a giant stone gorilla: it roars, shoves, bursts rocks from the ground and smashes platforms into the ceiling!",
         mode: 'gorilla',
         killsToWin: 0,
-        xpReward: 40,
+        xpReward: 80,          // Season 1 boss: hammaga 2x (avval 40)
+        bossCoins: 200,        // hammaga (avval faqat bitta o'yinchiga 100)
         accentColor: 0xffab40,
         groundColor: 0x3a3440,
         mapWidth: 800,
@@ -1111,7 +1113,7 @@ MAPS.push({
     platforms: [],
     gorilla: MAPS.find(m => m.gorilla)!.gorilla,
     fatElf: { ...MAPS.find(m => m.fatElf)!.fatElf!, x: 600, doorX: 780 },
-    arena: { killsPerBoss: 5, botCoins: 10, botXp: 5, bossCoins: 100, bossXp: 50, spawnIntervalMs: 1400, maxBots: 4,
+    arena: { killsPerBoss: 5, botCoins: 50, botXp: 15, bossCoins: 250, bossXp: 100, spawnIntervalMs: 1400, maxBots: 4,
         // Robot ilon: boshi chap eshikdan chiqadi (startX - to'xtaydigan joyi), oldinga yurmaydi
         snake: { ...MAPS.find(m => m.boss)!.boss!, baseHp: 900, hpPerExtraPlayer: 600, startX: 150, advanceSpeed: 160,
             contactDamage: 20, mineIntervalMs: 2600, fireIntervalMs: 6500, fireRange: 460, fireSafeY: 400 } },

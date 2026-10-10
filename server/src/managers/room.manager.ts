@@ -238,6 +238,11 @@ export class RoomManager {
     // (freshHost) xona uning eng so'nggi ochilgan xaritasidan davom etadi
     private applyHostProgress(room: RoomState, freshHost: boolean): void {
         const host = room.players[room.hostId];
+        // Yangi xo'jayin qahramoni 5-darajadan past (yoki mehmon) - arena tanlangan bo'lsa, oddiy xaritaga qaytadi
+        if (!room.isStarted && getMapById(room.selectedLevel).bonus && !this.bonusUnlocked(room)) {
+            room.selectedLevel = Math.min(room.unlockedLevel, SEASON_MAP_COUNT - 1);
+            room.killsToWin = getMapById(room.selectedLevel).killsToWin;
+        }
         if (!host || typeof host.unlockedLevel !== 'number') return;
         room.unlockedLevel = Math.min(host.unlockedLevel, SEASON_MAP_COUNT - 1);
         // O'yin ketayotganda xarita almashmaydi - faqat lobbida moslanadi
@@ -408,7 +413,7 @@ export class RoomManager {
         // Butun son bo'lishi shart (matn/NaN kelsa - tekshiruvlar o'tib ketib, START da xato berardi)
         // Bonus xaritalar doim ochiq; mavsum xaritalari - faqat ochilganlari
         if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || (levelIndex > room.unlockedLevel && !MAPS[levelIndex].bonus)) return;
-        // Bonus (arena) - xo'jayin qahramoni 3-darajaga yetganda ochiladi
+        // Bonus (arena) - xo'jayin qahramoni 5-darajaga yetganda ochiladi
         if (MAPS[levelIndex].bonus && !this.bonusUnlocked(room)) return;
 
         room.selectedLevel = levelIndex;
@@ -427,8 +432,8 @@ export class RoomManager {
             bonusUnlocked: this.bonusUnlocked(room)
         });
     }
-    // Bonus xarita (arena): xo'jayin qahramoni 3-darajaga yetganda ochiladi
-    public static readonly BONUS_UNLOCK_LEVEL = 3;
+    // Bonus (arena) - xo'jayin qahramoni 5-darajaga yetganda ochiladi
+    public static readonly BONUS_UNLOCK_LEVEL = 5;
     private bonusUnlocked(room: RoomState): boolean {
         const host = room.players[room.hostId];
         return !!host && (host.level || 0) >= RoomManager.BONUS_UNLOCK_LEVEL;
@@ -709,6 +714,8 @@ export class RoomManager {
             p.charXp = { ...charXp };
             RoomManager.refreshPerks(p);
             this.updateLobby(room.id);
+            // Xo'jayin darajasi o'zgardi - arena qulfi darhol yangilanadi
+            if (room.hostId === p.id && !room.isStarted) { this.applyHostProgress(room, false); this.broadcastLevelInfo(room.id); }
         });
     }
     // Admin xaritalarni ochib bergan bo'lsa - o'yinchi onlayn bo'lsa, lobbisi darhol yangilanadi
