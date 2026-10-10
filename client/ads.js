@@ -22,6 +22,7 @@ const Ads = (() => {
             s.async = true;
             s.crossOrigin = 'anonymous';
             s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(cfg.client);
+            s.setAttribute('data-ad-client', cfg.client);   // H5 o'yin reklamalari (adBreak) shu atributni talab qiladi
             s.setAttribute('data-ad-frequency-hint', '30s');
             if (cfg.test) s.setAttribute('data-adbreak-test', 'on');
             document.head.appendChild(s);
@@ -83,7 +84,7 @@ const Ads = (() => {
         if (!cfg || !cfg.enabled || !cfg.reward || !currentUser || busy) return;
         busy = true;
         btn.classList.add('loading');
-        let nonce = null, viewed = false;
+        let nonce = null, viewed = false, answered = false;
         window.adBreak({
             type: 'reward',
             name: 'coins_' + cfg.rewardCoins,
@@ -91,6 +92,7 @@ const Ads = (() => {
             afterAd: unmuteGame,
             // Reklama tayyor: o'yinchidan tasdiq so'raymiz (reklama faqat bosish orqali ochiladi)
             beforeReward: (showAdFn) => {
+                answered = true;
                 pendingShow = showAdFn;
                 modalText.innerText = t('ad_offer').replace('{0}', cfg.rewardCoins);
                 modal.classList.remove('hidden');
@@ -98,14 +100,20 @@ const Ads = (() => {
             adDismissed: () => alert(t('ad_dismissed')),
             adViewed: () => { viewed = true; if (nonce) claim(nonce); },
             adBreakDone: (info) => {
+                answered = true;
                 done();
                 closeModal();
                 const st = info && info.breakStatus;
                 if (!viewed && st !== 'dismissed' && st !== 'viewed' && st !== 'ignored') alert(t('ad_not_ready'));
             }
         });
-        // Tarmoq javob bermasa - tugma qotib qolmasin
-        setTimeout(() => { if (busy && modal.classList.contains('hidden') && !savedVol) done(); }, 8000);
+        // Google javob bermasa (sayt hali tasdiqlanmagan / reklama yo'q / reklama bloklovchi) - tugma qotib
+        // qolmasin va o'yinchi nima bo'lganini bilsin
+        setTimeout(() => {
+            if (answered || !busy || !modal.classList.contains('hidden') || savedVol !== null) return;
+            done();
+            alert(t('ad_not_ready'));
+        }, 8000);
 
         watchBtn.onclick = async () => {
             const show = pendingShow;
