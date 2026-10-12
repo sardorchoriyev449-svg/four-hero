@@ -454,6 +454,38 @@ const CAVE_RUN = (() => {
     return { runMeters, exitX, roomX1, floorY, blocks, floorHoles, wallHoles };
 })();
 
+// SEASON 2 MAP-6 "HIS BACK": map-5 dagi tog' tepasidan yo'l davom etadi (100 m), so'ng bahaybat YOG'OCH
+// ZIGZAG YO'LAK tepaga (130 m) - rasmdagidek: ikki devor orasida uzluksiz zigzag (qiyaliklar burchakda tutashadi,
+// sakrash shart emas), har burchakdan devorgacha tekis maydoncha. Tepada Gorila Rock portlovchi bochkalar dumalatadi:
+// bochka qiyalikdan burchakka yetgach yo pastki qiyalikda davom etadi, yo maydonchaga burilib devorgacha boradi
+export interface BackRamp { lowX: number, lowY: number, highX: number, highY: number }
+export interface BackDef {
+    towerX0: number;          // yo'lak minorasi (chap devor) - yo'lning 100-metri
+    towerX1: number;
+    groundY: number;
+    topY: number;             // eng tepadagi maydoncha (Gorila Rock turgan joy)
+    climbMeters: number;
+    ramps: BackRamp[];        // pastdan tepaga; ramps[k].high === ramps[k+1].low (bitta burchak)
+    ledges: { x0: number, x1: number, y: number }[];   // har burchakdan devorgacha tekis maydoncha (ledges[k] - ramps[k] ning past burchagi, k>=1)
+    ledgeChance: number;      // bochka burchakda maydonchaga burilish ehtimoli
+    gorillaX: number;
+    barrelEveryMs: number;
+    barrelSpeed: number;      // px/s (gorizontal)
+    barrelR: number;
+    barrelDamage: number;
+    barrelMax: number;
+    barrelAhead: number;      // bochka qahramondan shuncha qiyalik yuqorida paydo bo'ladi
+}
+const BACK_TOWER = (() => {
+    // Burchaklar: chapdagisi devordan 130 px, o'ngdagisi 195 px ichkarida; har qiyalik 143 px ko'tariladi (~17°)
+    const groundY = 570, X0 = 5100, X1 = 5900, VL = X0 + 130, VR = X0 + 605, RISE = 143, N = 46;
+    const V = Array.from({ length: N + 1 }, (_, k) => ({ x: k % 2 === 0 ? VL : VR, y: groundY - k * RISE }));
+    const ramps: BackRamp[] = Array.from({ length: N }, (_, k) => ({ lowX: V[k].x, lowY: V[k].y, highX: V[k + 1].x, highY: V[k + 1].y }));
+    // ledges[k]: V[k] burchagidan devorgacha (0 - yer, N - eng tepa: alohida)
+    const ledges = V.map((v, k) => (k === 0 || k === N) ? { x0: 0, x1: 0, y: v.y } : (v.x === VL ? { x0: X0, x1: VL, y: v.y } : { x0: VR, x1: X1, y: v.y }));
+    return { X0, X1, groundY, ramps, ledges, topY: V[N].y };
+})();
+
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
 // Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
@@ -477,7 +509,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors' | 'back';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     bossCoins?: number;      // Boss xaritasi: bossni o'ldirgan (oxirgi zarbani bergan) o'yinchiga shuncha tanga (yo'q bo'lsa - odatdagi 100)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
@@ -505,6 +537,7 @@ export interface MapDef {
     farm?: FarmDef;             // Season 2, map-3
     squid?: SquidDef;           // Season 2, map-4
     doors?: DoorsDef;           // Season 2, map-5
+    back?: BackDef;             // Season 2, map-6
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
@@ -1090,6 +1123,31 @@ export const MAPS: MapDef[] = [
             swallowMs: 1500, swallowDamagePct: 0.5, grabImmuneMs: 6000, huntMeters: 200, huntSpeed: 620,
             shroomHp: 60, shroomDamage: 20, shroomSpeed: 115, shroomEveryMs: 5000, shroomMax: 1, shroomRespawnMs: 3000,
             respectXp: 200
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // bu xaritada bot yo'q
+    },
+    {
+        id: 15,
+        name: "His Back",
+        description: "The road goes on from the mountain top to a giant wooden path climbing into the sky. Someone you know is waiting at the top...",
+        season: 2,
+        mode: 'back',
+        killsToWin: 0,
+        xpReward: 25,
+        accentColor: 0xffab40,
+        groundColor: 0x3b3046,
+        mapWidth: BACK_TOWER.X1,
+        platforms: [
+            // 0: minoraning chap devori - pastda kirish joyi ochiq (yo'ldan kiriladi). Qiyalik/maydonchalar - klientda (qiya fizika)
+            { x: BACK_TOWER.X0 - 30, y: BACK_TOWER.topY - 400, w: 30, h: (BACK_TOWER.groundY - 110) - (BACK_TOWER.topY - 400) }
+        ],
+        back: {
+            towerX0: BACK_TOWER.X0, towerX1: BACK_TOWER.X1, groundY: BACK_TOWER.groundY, topY: BACK_TOWER.topY, climbMeters: 130,
+            ramps: BACK_TOWER.ramps, ledges: BACK_TOWER.ledges, ledgeChance: 0.35, gorillaX: BACK_TOWER.X1 - 150,
+            barrelEveryMs: 1500, barrelSpeed: 170, barrelR: 18, barrelDamage: 20, barrelMax: 8, barrelAhead: 2
         },
         playerSpawns: [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }

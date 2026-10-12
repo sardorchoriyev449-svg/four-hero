@@ -8,7 +8,7 @@ import { MAPS, getMapById, SEASON_MAP_COUNT } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
-import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf } from '../perks';
+import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -885,6 +885,7 @@ export class RoomManager {
             giantFlower: map.giantFlower || null,
             lift: map.lift || null,
             farm: map.farm || null,
+            back: map.back || null,
             squid: map.squid || null,
             doors: map.doors || null,
             season: map.season || 1,
@@ -933,10 +934,12 @@ export class RoomManager {
         const xpGain = clearedMap.xpReward ?? ((clearedMap.season || 1) >= 2 ? 25 : db.XP_PER_MAP);
         let levelCleared = false;
         Object.values(room.players).forEach((p) => {
+            const levelBefore = p.level || 0;
             p.xp = (p.xp || 0) + xpGain;
             p.charXp = { ...(p.charXp || {}) };
             p.charXp[p.characterType] = (p.charXp[p.characterType] || 0) + xpGain;
             RoomManager.refreshPerks(p);
+            this.grantLevelUpCoins(p, levelBefore);
             if (clearedId + 1 > p.unlockedLevel) {
                 p.unlockedLevel = clearedId + 1;
                 if (p.id === room.hostId && clearedId < maxLevel) levelCleared = true;
@@ -1026,14 +1029,36 @@ export class RoomManager {
         await this.awardReward(roomId, playerId, 0, xp);
     }
 
+    // ODDIY DARAJA MUKOFOTI: yangi imkoniyat ochilmaydigan darajaga chiqqanda (masalan 4, 6-9, 11-14) tanga.
+    // 4-daraja - 200, 6 va undan yuqori - 100 x (daraja - 3): 6 -> 300, 7 -> 400, 8 -> 500, 9 -> 600, 11 -> 800 ...
+    public static plainLevelCoins(characterType: string, level: number): number {
+        if (level < 4 || (PERK_TABLE[characterType] || []).some(pk => pk.level === level)) return 0;
+        return level === 4 ? 200 : 100 * (level - 3);
+    }
+    // Daraja oshdi: oraliqdagi har oddiy daraja uchun tanga (faqat hisobli o'yinchiga - mehmonda tanga saqlanmaydi)
+    private grantLevelUpCoins(p: PlayerState, levelBefore: number): void {
+        const after = p.level || 0;
+        if (after <= levelBefore || p.userId === null) return;
+        let coins = 0;
+        for (let L = levelBefore + 1; L <= after; L++) coins += RoomManager.plainLevelCoins(p.characterType, L);
+        if (coins <= 0) return;
+        db.addCoins(p.userId, coins).then((u) => {
+            if (!u) return;
+            this.io.to(p.id).emit('coinsUpdated', { amount: coins, totalCoins: u.coins });
+            this.io.to(p.id).emit('levelReward', { level: after, coins });
+        }).catch(err => console.error('levelReward xatosi:', err));
+    }
+
     public async awardReward(roomId: string, playerId: string, coins: number, xp: number): Promise<void> {
         const player = this.activeRooms[roomId]?.players[playerId];
         if (!player) return;
         if (xp > 0) {
+            const levelBefore = player.level || 0;
             player.xp = (player.xp || 0) + xp;
             player.charXp = { ...(player.charXp || {}) };
             player.charXp[player.characterType] = (player.charXp[player.characterType] || 0) + xp;
             RoomManager.refreshPerks(player);
+            this.grantLevelUpCoins(player, levelBefore);
             this.io.to(playerId).emit('xpGained', { amount: xp });
         }
         let totalCoins: number | null = null;

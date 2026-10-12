@@ -330,6 +330,17 @@ document.addEventListener('keydown', (e) => {
     window.togglePauseMenu();
 });
 
+// Phaser 3.60 xatosi: generateTexture uchun umumiy (statik) kamera chizilgan obyektlarni o'z ro'yxatida saqlab qoladi -
+// shu orqali har raunddagi eski o'yin butunligicha xotirada qolardi (uzoq o'ynaganda telefon sekinlashardi). Tozalanadi
+function clearPhaserTargetCamera() {
+    const G = window.Phaser && Phaser.GameObjects && Phaser.GameObjects.Graphics;
+    if (!G || !G.TargetCamera) return;
+    // Kamera eski sahna/menejerlarga ham havola saqlaydi - Phaser o'zi yaratgandek yangisiga almashtiriladi
+    const Cam = Phaser.Cameras && Phaser.Cameras.Scene2D && (Phaser.Cameras.Scene2D.BaseCamera || Phaser.Cameras.Scene2D.Camera);
+    if (Cam) G.TargetCamera = new Cam(0, 0, 0, 0);
+    else if (Array.isArray(G.TargetCamera.renderList)) G.TargetCamera.renderList.length = 0;
+}
+
 function stopGame() {
     hideLoadingOverlay(true);
     window.togglePauseMenu = null;
@@ -338,9 +349,16 @@ function stopGame() {
     const pauseBtn = document.getElementById('pause-btn');
     if (pauseBtn) pauseBtn.remove();
     if (phaserGame) {
+        // WebGL konteksti: Phaser o'yinni yo'q qilsa ham brauzer uni (teksturalar, shaderlar bilan) saqlab turadi -
+        // har raundda GPU/xotira to'lib borardi. Yo'q qilish tugagach kontekst majburan bo'shatiladi
+        const gl = phaserGame.renderer && phaserGame.renderer.gl;
         phaserGame.destroy(true);
         phaserGame = null;
+        if (gl) setTimeout(() => { try { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch (e) { } }, 300);
     }
+    clearPhaserTargetCamera();
+    window.__game = null;
+    window.onblur = null;
     currentCharacter = undefined;
     window.onCoinsGained = null;
     otherPlayers = {};
@@ -377,6 +395,15 @@ function launchGame(socket, roomId, mapData, continued) {
     const isFarm = !!map.farm;           // Season 2 map-3: zombi poliz
     const isSquid = !!map.squid;         // Season 2 map-4: daryo va Kalmar
     const isDoors = !!map.doors;         // Season 2 map-5: sariq eshik / OQ YUZ / tepaga chiqish
+    const isBack = !!map.back;           // Season 2 map-6: yog'och zigzag yo'lak, Gorila Rock bochka dumalatadi
+    // Faqat lokal sinovda (localhost): avtomatik brauzer testlari o'yin ichki holatini o'qiy oladi. Haqiqiy saytda yo'q.
+    // (eval emas - u butun funksiyani sekinlashtiradi)
+    if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+        window.__game = {
+            get map() { return map; }, get hero() { return currentCharacter; }, get dialog() { return dialog; },
+            get backState() { return backState; }, get backBarrels() { return backBarrels; }, get backOnRamp() { return backOnRamp; }
+        };
+    }
     // O'YIN OVOZLARI: sfx - har doim bir xil balandlikda; sfxAt - qahramondan uzoqlashgan sari pasayadi
     const sfx = (name, v = 1) => { if (window.GameAudio) GameAudio.sfx(name, v); };
     const sfxAt = (name, x, v = 1) => {
@@ -504,6 +531,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
     const config = {
         type: Phaser.AUTO,
+        banner: false,   // konsolga har raundda Phaser yozuvi chiqmasin
         parent: 'game-container', // O'yin aynan index.html dagi shu div ichiga tushadi
         // Ichki o'lcham doim 800x600; ekrandagi o'lchami - #game-container qutisiga moslashadi
         // (telefonga sig'adi, "To'liq ekran" rejimida butun oynani egallaydi)
@@ -3025,6 +3053,263 @@ function launchGame(socket, roomId, mapData, continued) {
         drObj = { caveBg, startDoor, fallingRocks: [], shrooms: {}, yellow, black, glow, hintDoor, cliff, rockGfx, elf, ropes, lever, hintLever, monster, hands, heads, covers, bridgeG, dark, brush, brushS, fx, peeks: [], nextEdgePeek: 0,
             barrier: null, disp: { x: d.elfX, y: -200 }, sunlit: false, nextAmbient: 0, eyes: [], lastScare: -1e9, floorOpen: false, diving: false, meSwallowed: false };
     }
+    // ===== HIS BACK (Season 2, map-6): tog' tepasidagi yo'l -> bahaybat yog'och zigzag yo'lak (200 m) -> Gorila Rock =====
+    // Qiya taxtalar arcade fizikasida yo'q - qahramon oyog'i har kadr taxta yuzasiga "yopishtiriladi" (backRampStep)
+    let backState = null, backObj = null, backOnRamp = false, backWasOnRamp = false;
+    const backBarrels = {};
+    const backTalked = {};
+    // Yuzalar (bir marta tuziladi): qiya taxtalar, har burchakdan devorgacha maydonchalar va eng tepa - {x0,y0,x1,y1}
+    let backSurf = null;
+    function backSurfaces() {
+        if (backSurf) return backSurf;
+        const B = map.back;
+        backSurf = B.ramps.map(r => (r.lowX < r.highX ? { x0: r.lowX, y0: r.lowY, x1: r.highX, y1: r.highY } : { x0: r.highX, y0: r.highY, x1: r.lowX, y1: r.lowY }));
+        B.ledges.forEach(l => { if (l.x1 > l.x0) backSurf.push({ x0: l.x0, y0: l.y, x1: l.x1, y1: l.y }); });
+        backSurf.push({ x0: B.towerX0, y0: B.topY, x1: B.towerX1, y1: B.topY });
+        return backSurf;
+    }
+    const backSurfY = (f, x) => (x < f.x0 || x > f.x1) ? null : f.y0 + (f.y1 - f.y0) * ((x - f.x0) / (f.x1 - f.x0));
+    const BACK_PLANK = 16;   // taxta qalinligi: pastdan sakraganda bosh shu yerga uriladi
+    // Qahramon oyog'i taxta yuzasiga qo'yiladi (yuqoridan tushganda yoki taxtada yurganda). Burchakda (ikki qiyalik
+    // tutashgan joy) eng balanddagisi tanlanadi - yurib keyingi qiyalikka chiqiladi. Pastdan teshib o'tib bo'lmaydi
+    function backRampStep(c) {
+        const b = c.body;
+        backOnRamp = false;
+        if (!b) return;
+        const S = backSurfaces();
+        if (b.velocity.y < 0) {
+            const top = b.top, prevTop = b.prev.y;
+            let hit = null;
+            for (const f of S) {
+                const sy = backSurfY(f, c.x);
+                if (sy === null) continue;
+                const under = sy + BACK_PLANK;
+                if (prevTop >= under - 1 && top < under && (hit === null || under > hit)) hit = under;
+            }
+            if (hit !== null) { c.y += hit - top; b.velocity.y = 0; }
+            backWasOnRamp = false;
+            return;
+        }
+        const feet = b.bottom, prevFeet = b.prev.y + b.height;
+        let best = null;
+        for (const f of S) {
+            const sy = backSurfY(f, c.x);
+            if (sy === null) continue;
+            const crossed = prevFeet <= sy + 3 && feet >= sy - 1;
+            const stick = backWasOnRamp && feet - sy <= 12 && feet - sy >= -10;
+            if ((crossed || stick) && (best === null || sy < best)) best = sy;
+        }
+        if (best === null) { backWasOnRamp = false; return; }
+        c.y += best - feet;
+        b.velocity.y = 0;
+        backOnRamp = true;
+        backWasOnRamp = true;
+    }
+    function buildBackTextures(scene) {
+        const B = map.back;
+        const L = Math.ceil(Math.hypot(B.ramps[0].highX - B.ramps[0].lowX, B.ramps[0].highY - B.ramps[0].lowY)) + 4;
+        if (!scene.textures.exists('px_back_plank')) {
+            // Qiya yo'lak taxtasi: ko'ndalang taxtalar, ustki yorug' qirra, pastda to'sin
+            const g = scene.add.graphics();
+            g.fillStyle(0x2b1a10, 1); g.fillRect(0, 0, L, 26);
+            g.fillStyle(0x8d5a32, 1); g.fillRect(0, 2, L, 14);
+            g.fillStyle(0xb57a45, 1); g.fillRect(0, 2, L, 3);
+            for (let x = 0; x < L; x += 26) { g.fillStyle(0x5d3a1e, 1); g.fillRect(x, 4, 2, 12); g.fillStyle(0xffcc80, 0.25); g.fillRect(x + 6, 7, 8, 2); }
+            g.fillStyle(0x4e3020, 1); g.fillRect(0, 17, L, 7);
+            for (let x = 10; x < L; x += 60) { g.fillStyle(0x1a0f08, 1); g.fillRect(x, 18, 4, 4); }
+            g.generateTexture('px_back_plank', L, 26);
+            g.destroy();
+        }
+        if (!scene.textures.exists('px_back_deck')) {
+            const g = scene.add.graphics();
+            g.fillStyle(0x2b1a10, 1); g.fillRect(0, 0, 64, 18);
+            g.fillStyle(0x8d5a32, 1); g.fillRect(0, 2, 64, 12);
+            g.fillStyle(0xb57a45, 1); g.fillRect(0, 2, 64, 3);
+            g.fillStyle(0x5d3a1e, 1); g.fillRect(30, 4, 2, 10); g.fillRect(62, 4, 2, 10);
+            g.generateTexture('px_back_deck', 64, 18);
+            g.destroy();
+        }
+        // Burchak maydonchalari: kengligi bo'yicha alohida tekstura (tileSprite emas - 70 ta tileSprite telefonni sekinlashtiradi)
+        new Set(B.ledges.filter(l => l.x1 > l.x0).map(l => l.x1 - l.x0)).forEach((w) => {
+            const key = 'px_back_ledge_' + w;
+            if (scene.textures.exists(key)) return;
+            const g = scene.add.graphics();
+            g.fillStyle(0x2b1a10, 1); g.fillRect(0, 0, w, 18);
+            g.fillStyle(0x8d5a32, 1); g.fillRect(0, 2, w, 12);
+            g.fillStyle(0xb57a45, 1); g.fillRect(0, 2, w, 3);
+            for (let x = 30; x < w; x += 32) { g.fillStyle(0x5d3a1e, 1); g.fillRect(x, 4, 2, 10); }
+            g.generateTexture(key, w, 18);
+            g.destroy();
+        });
+        if (!scene.textures.exists('px_back_wall')) {
+            const g = scene.add.graphics();
+            g.fillStyle(0x3e2716, 1); g.fillRect(0, 0, 30, 64);
+            g.fillStyle(0x5d3a1e, 1); g.fillRect(2, 0, 12, 64); g.fillRect(16, 0, 12, 64);
+            g.fillStyle(0x1a0f08, 1); g.fillRect(14, 0, 2, 64); g.fillRect(0, 62, 30, 2);
+            g.fillStyle(0x9e9e9e, 1); g.fillRect(6, 8, 3, 3); g.fillRect(21, 40, 3, 3);
+            g.generateTexture('px_back_wall', 30, 64);
+            g.destroy();
+        }
+        if (!scene.textures.exists('px_back_scaf')) {
+            // Yo'lak ortidagi yog'och iskala (takrorlanadi)
+            const g = scene.add.graphics();
+            const post = 0x2a1a10, beam = 0x22150d;
+            [20, 400, 780].forEach(x => { g.fillStyle(post, 1); g.fillRect(x - 7, 0, 14, 420); });
+            g.lineStyle(8, beam, 1);
+            g.lineBetween(20, 0, 400, 210); g.lineBetween(400, 0, 20, 210); g.lineBetween(400, 210, 780, 420); g.lineBetween(780, 210, 400, 420);
+            g.lineBetween(20, 210, 400, 420); g.lineBetween(400, 210, 20, 420); g.lineBetween(400, 0, 780, 210); g.lineBetween(780, 0, 400, 210);
+            g.fillStyle(beam, 1); g.fillRect(0, 205, 800, 10);
+            g.generateTexture('px_back_scaf', 800, 420);
+            g.destroy();
+        }
+        if (!scene.textures.exists('px_back_barrel')) {
+            // Portlovchi bochka: yog'och, temir halqalar, qizil "TNT" belgisi
+            const W = [0x4e2c14, 0x6d3f1e, 0x8d5a32, 0xa86d3e];
+            const g = gridNew(12, 12);
+            for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) {
+                if (Math.hypot(x - 5.5, y - 5.5) > 5.9) continue;
+                g[y][x] = shade(0.85 - (x + y) / 26, x, y, W);
+            }
+            for (let k = 0; k < 12; k++) { if (g[2][k] !== null) g[2][k] = 0x37474f; if (g[9][k] !== null) g[9][k] = 0x37474f; }
+            for (let y = 4; y < 8; y++) for (let x = 3; x < 9; x++) g[y][x] = (x + y) % 2 ? 0xd50000 : 0xff1744;
+            g[5][5] = 0xffeb3b; g[6][6] = 0xffeb3b;
+            gridToTexture(scene, 'px_back_barrel', gridOutline(g, 0x120a05), 3);
+        }
+        if (!scene.textures.exists('px_back_rock')) {
+            const R = [0x2a2433, 0x3d3548, 0x524862, 0x6a5f7c];
+            const g = gridNew(16, 8);
+            for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) g[y][x] = shade(0.8 - y / 10 + ((x * 7 + y * 3) % 5) / 30, x, y, R);
+            gridToTexture(scene, 'px_back_rock', g, 4);
+        }
+        const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
+        ['idle', 'roar', 'slam', 'rest'].forEach(pose => mk('px_gor_' + pose, gorillaGrid(pose), 4));
+        const head = (pose) => gorillaGrid(pose).slice(1, 18).map(row => row.slice(13, 33));
+        mk('px_gor_face', head('roar'), 6);
+        mk('px_gor_face_sad', head('rest'), 6);
+    }
+    function buildBackScene(scene) {
+        const B = map.back, W = mapWidth, X0 = B.towerX0, X1 = B.towerX1;
+        buildBackTextures(scene);
+        // Osmon (ekranga mahkam): kechki binafsha-to'q sariq; balandlashgan sari yulduzlar ko'rinadi
+        const sky = scene.add.graphics().setScrollFactor(0).setDepth(-6);
+        [0x1b1433, 0x2a1b45, 0x3d2352, 0x5a2d5c, 0x83405f, 0xb15d5b].forEach((c, i) => { sky.fillStyle(c, 1); sky.fillRect(0, i * 100, 800, 100); });
+        // Yulduzlar, tog'lar, bulutlar - bir marta teksturaga chiziladi (Graphics har kadr qayta chizilsa telefon sekinlashadi)
+        if (!scene.textures.exists('px_back_stars')) {
+            const g = scene.add.graphics();
+            for (let i = 0; i < 90; i++) { g.fillStyle(0xffffff, 0.4 + (i % 3) * 0.2); g.fillRect((i * 97) % 800, (i * 53) % 420, 2, 2); }
+            g.generateTexture('px_back_stars', 800, 420);
+            g.destroy();
+        }
+        const stars = scene.add.image(0, 0, 'px_back_stars').setOrigin(0, 0).setScrollFactor(0).setDepth(-5.9).setAlpha(0);
+        // Uzoqdagi tog' cho'qqilari (biz ulardan balandda) - tepaga chiqqan sari pastga ketib yo'qoladi
+        const farG = scene.add.graphics();
+        const farW = Math.ceil(W * 0.25 + 900);
+        farG.fillStyle(0x2c2140, 1);
+        for (let x = 0; x < farW; x += 8) {
+            const top = 470 - Math.round((Math.abs(Math.sin(x * 0.009)) * 90 + Math.abs(Math.sin(x * 0.023)) * 30) / 8) * 8;
+            farG.fillRect(x, top, 8, 620 - top);
+        }
+        const far = bakeGraphics(scene, farG, 0, 340, farW, 280, -5);
+        far.forEach(pt => pt.setScrollFactor(0.25, 0.25));
+        // Bulutlar - yo'lak bo'ylab tepaga chiqqanda yonidan o'tib turadi
+        if (!scene.textures.exists('px_back_cloud')) {
+            const g = scene.add.graphics();
+            g.fillStyle(0xf8bbd0, 1); g.fillRect(0, 12, 150, 18); g.fillRect(20, 0, 90, 12);
+            g.generateTexture('px_back_cloud', 150, 30);
+            g.destroy();
+        }
+        for (let k = 0; k < 40; k++) {
+            scene.add.image((k * 271) % 1600 + X0 * 0.55 - 500, 248 - k * 330 * 0.55, 'px_back_cloud').setOrigin(0, 0).setScrollFactor(0.55).setDepth(-4.5).setAlpha(0.18);
+        }
+        // Yo'l (tog' tepasi): tosh yer
+        scene.add.tileSprite(0, 570, W, 30, 'px_back_rock').setOrigin(0, 0).setDepth(1);
+        const deco = scene.add.graphics().setDepth(0.5);
+        for (let x = 300; x < X0 - 200; x += 420 + ((x * 13) % 260)) {
+            deco.fillStyle(0x3d3548, 1); deco.fillRect(x, 548, 40, 22); deco.fillRect(x + 8, 538, 22, 12);
+            deco.fillStyle(0x524862, 1); deco.fillRect(x + 4, 548, 30, 4);
+        }
+        // Yo'l chetidagi ustun - "100 m"dan keyin yo'lak boshlanadi
+        deco.fillStyle(0x4e3020, 1); deco.fillRect(X0 - 160, 500, 8, 70);
+        deco.fillStyle(0x8d5a32, 1); deco.fillRect(X0 - 196, 492, 80, 22);
+        deco.fillStyle(0x2b1a10, 1); deco.fillRect(X0 - 150, 498, 22, 4); deco.fillRect(X0 - 136, 494, 6, 12);
+        // Yo'lak ortidagi iskala (ekranga mahkam tileSprite - kamera bilan siljiydi)
+        const scaf = scene.add.tileSprite(0, 0, X1 - X0, 600, 'px_back_scaf').setOrigin(0, 0).setScrollFactor(0).setDepth(-0.6).setVisible(false);
+        // Chap devor (pastda kirish ochiq)
+        const wallPl = map.platforms[0];
+        scene.add.tileSprite(wallPl.x, wallPl.y, wallPl.w, wallPl.h, 'px_back_wall').setOrigin(0, 0).setDepth(1.2);
+        // Qiya taxtalar
+        const ramps = B.ramps.map((r) => {
+            const ang = Math.atan2(r.highY - r.lowY, r.highX - r.lowX);
+            return scene.add.image((r.lowX + r.highX) / 2, (r.lowY + r.highY) / 2, 'px_back_plank').setOrigin(0.5, 0.08).setRotation(ang).setDepth(1.3);
+        });
+        // Har burchakdan devorgacha tekis maydoncha
+        const ledges = B.ledges.filter(l => l.x1 > l.x0).map(l => scene.add.image(l.x0, l.y, 'px_back_ledge_' + (l.x1 - l.x0)).setOrigin(0, 0).setDepth(1.31));
+        // Eng tepadagi maydoncha va Gorila Rock
+        scene.add.tileSprite(B.towerX0, B.topY, B.towerX1 - B.towerX0, 18, 'px_back_deck').setOrigin(0, 0).setDepth(1.3);
+        const gor = scene.add.image(B.gorillaX, B.topY + 2, 'px_gor_idle').setOrigin(0.5, 1).setDepth(1.4).setFlipX(true);
+        const pile = scene.add.graphics().setDepth(1.35);
+        [[60, 0], [100, 0], [80, -30]].forEach(([dx, dy]) => { pile.fillStyle(0x6d3f1e, 1); pile.fillCircle(B.gorillaX + dx, B.topY - 18 + dy, 17); pile.fillStyle(0xd50000, 1); pile.fillRect(B.gorillaX + dx - 6, B.topY - 22 + dy, 12, 8); });
+        scene.cameras.main.setBounds(0, B.topY - 260, W, 600 - (B.topY - 260));
+        backObj = { sky, stars, far, scaf, ramps, ledges, gor, nextPose: 0 };
+    }
+    function syncBackBarrels(scene, list) {
+        const ids = new Set();
+        list.forEach((b) => {
+            ids.add(b.id);
+            let sp = backBarrels[b.id];
+            if (!sp) sp = backBarrels[b.id] = scene.add.image(b.x, b.y, 'px_back_barrel').setDepth(3);
+            sp.tx = b.x; sp.ty = b.y; sp.dir = b.dir || 1;
+        });
+        Object.keys(backBarrels).forEach((id) => { if (!ids.has(id)) { backBarrels[id].destroy(); delete backBarrels[id]; } });
+    }
+    // Bochka portlashi: chaqnash, olov halqasi, parchalar. Ekranda bo'lsa - ovoz va silkinish
+    function backBoom(scene, x, y) {
+        const cam = scene.cameras.main;
+        if (x < cam.scrollX - 80 || x > cam.scrollX + 880 || y < cam.scrollY - 80 || y > cam.scrollY + 680) return;
+        sfx('explosion', 0.8);
+        cam.shake(220, 0.007);
+        const flash = scene.add.circle(x, y, 14, 0xffeb3b, 1).setDepth(7);
+        scene.tweens.add({ targets: flash, scale: 5, alpha: 0, duration: 300, onComplete: () => flash.destroy() });
+        const ring = scene.add.circle(x, y, 16, 0xff6d00, 0.85).setDepth(7);
+        scene.tweens.add({ targets: ring, scale: 3.6, alpha: 0, duration: 420, onComplete: () => ring.destroy() });
+        for (let k = 0; k < 10; k++) {
+            const chip = scene.add.rectangle(x, y, 6, 6, k % 2 ? 0x6d3f1e : 0xff9100).setDepth(7);
+            scene.tweens.add({ targets: chip, x: x + Phaser.Math.Between(-70, 70), y: y + Phaser.Math.Between(-80, 30), angle: 240, alpha: 0,
+                duration: Phaser.Math.Between(350, 650), ease: 'Quad.Out', onComplete: () => chip.destroy() });
+        }
+    }
+    function updateBack(scene) {
+        if (!backObj) return;
+        const B = map.back, cam = scene.cameras.main;
+        // Iskala: faqat minora oralig'ida va yerdan yuqorida; yuqoriga chiqqan sari yulduzlar chiqadi
+        const sx = B.towerX0 - cam.scrollX;
+        const bottom = Math.min(600, B.groundY - cam.scrollY);
+        const topEdge = Math.max(0, B.topY - cam.scrollY);
+        backObj.scaf.setVisible(sx < 800 && sx > -(B.towerX1 - B.towerX0) && bottom > topEdge);
+        if (backObj.scaf.visible) {
+            // O'lchami o'zgarmaydi (har kadr qayta chizilmasin) - pastki qismi yer ortida qoladi
+            backObj.scaf.setPosition(sx, topEdge);
+            backObj.scaf.tilePositionY = cam.scrollY + topEdge;
+        }
+        backObj.stars.setAlpha(Math.max(0, Math.min(1, -cam.scrollY / 3000)));
+        // Ekrandan tashqaridagi taxtalar chizilmaydi
+        const y0 = cam.scrollY - 200, y1 = cam.scrollY + 800;
+        for (const o of backObj.ramps) o.setVisible(o.y > y0 && o.y < y1);
+        for (const o of backObj.ledges) o.setVisible(o.y > y0 && o.y < y1);
+        // Bochkalar: server joyiga silliq yaqinlashadi, yurgan masofasiga qarab aylanadi
+        Object.values(backBarrels).forEach((sp) => {
+            const nx = sp.x + (sp.tx - sp.x) * 0.35, ny = sp.y + (sp.ty - sp.y) * 0.35;
+            sp.rotation += ((nx - sp.x) / 18) * 1;
+            sp.setPosition(nx, ny);
+        });
+        // Gorila Rock tepada: bochka otayotgandek qo'llarini ko'tarib tushiradi
+        if (backState && backState.state === 'climb' && scene.time.now > backObj.nextPose) {
+            const up = backObj.gor.texture.key !== 'px_gor_slam';
+            backObj.gor.setTexture(up ? 'px_gor_slam' : 'px_gor_idle');
+            backObj.nextPose = scene.time.now + (up ? 350 : 1100 + Math.random() * 700);
+        } else if (backState && backState.state === 'talk2') backObj.gor.setTexture('px_gor_rest');
+    }
+
     // Richagdan keyin: ustunlar orasidagi tosh ko'priklar qulab, bo'shliqlar ochiladi
     function drOpenFloor(scene, instant) {
         if (!drObj || drObj.floorOpen) return;
@@ -5337,7 +5622,8 @@ function launchGame(socket, roomId, mapData, continued) {
         // dunyo va kamera chegaralari shunga mos kengaytiriladi (kamera keyinroq,
         // o'yinchi yaratilganda uni kuzatib borishni boshlaydi)
         // Map-5: tog' tepaga cho'ziladi (10 qavat) - dunyo chegarasi yuqoriga
-        const worldTop = map.doors ? Math.min(0, map.platforms[map.doors.climbPlats[map.doors.climbPlats.length - 1]].y - 200) : 0;
+        const worldTop = map.doors ? Math.min(0, map.platforms[map.doors.climbPlats[map.doors.climbPlats.length - 1]].y - 200)
+            : map.back ? map.back.topY - 400 : 0;
         this.physics.world.setBounds(0, worldTop, mapWidth, 600 - worldTop);
         this.cameras.main.setBounds(0, 0, mapWidth, 600);
 
@@ -5393,7 +5679,7 @@ function launchGame(socket, roomId, mapData, continued) {
             platforms.add(plat);
             // Bozorda: devor/taxtalar o'z piksel rasmi bilan chiziladi; taxtalar bir tomonlama
             // (pastdan sakrab o'tib, ustiga qo'nish mumkin)
-            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower || isFarm || isSquid || isDoors) {
+            if (isMarket || isForest || isFatElf || isUnderworld || isGFlower || isFarm || isSquid || isDoors || isBack) {
                 plat.setVisible(false);
                 if (p.h <= 14) makeOneWay(plat);
             }
@@ -5555,6 +5841,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isFarm) buildFarmScene(this);
         if (isSquid) buildSquidScene(this);
         if (isDoors) buildDoorsScene(this);
+        if (isBack) buildBackScene(this);
         if (isStory) {
             talkHint = this.add.text(map.story.sellerX, 452, '[E]', {
                 fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 3
@@ -5655,7 +5942,6 @@ function launchGame(socket, roomId, mapData, continued) {
                 this.cameras.main.startFollow(currentCharacter, true, 0.12, 0.12);
             }
 
-            console.log("Qahramon muvaffaqiyatli yaratildi va harakatga tayyor:", currentCharacter);
         });
 
         // E - dialog, gaplashish, eshik, yaqindagi tanga (klaviaturada E, telefonda "E" tugmasi)
@@ -6316,6 +6602,15 @@ function launchGame(socket, roomId, mapData, continued) {
             this.tweens.add({ targets: txt, y: txt.y - 34, alpha: 0, duration: 1100, onComplete: () => txt.destroy() });
         });
 
+        // HIS BACK: bochka portladi (qahramonga tegdi yoki o'q tekkan)
+        socket.off('barrelBoom');
+        socket.on('barrelBoom', (d) => {
+            if (!d) return;
+            backBoom(this, d.x, d.y);
+            const id = Object.keys(backBarrels).find(k => Math.hypot(backBarrels[k].x - d.x, backBarrels[k].y - d.y) < 60);
+            if (id) { backBarrels[id].destroy(); delete backBarrels[id]; }
+        });
+
         // GORILLA ITARDI / YERDAN TOSH OTILDI: qahramon shu tezlik bilan uchib ketadi
         socket.off('knockback');
         socket.on('knockback', (d) => {
@@ -6450,6 +6745,40 @@ function launchGame(socket, roomId, mapData, continued) {
                 sqState = data.squid || null;
                 if (sqState && sqState.state !== 'sleep' && sqState.state !== 'dying' && !sqWallsUp) raiseSquidWalls(this, true);
                 if (sqState) { syncSquidFish(this, sqState.fish || []); bossHitSound('squid', sqState.hp, sqState.x); }
+            }
+
+            // HIS BACK: Gorila Rock bilan suhbatlar (yo'lak boshida va tepada), dumalayotgan bochkalar
+            if (isBack && data.back) {
+                const prev = backState ? backState.state : null;
+                backState = data.back;
+                const talkOpts = { elfName: t('gorilla_speaker'), voice: 'deep' };
+                if (backState.state === 'talk1' && !backTalked[1] && currentCharacter) {
+                    backTalked[1] = true;
+                    this.cameras.main.shake(700, 0.012);
+                    sfx('roar');
+                    startDialog(this, [
+                        { who: 'elf', text: t('back_t1_1'), fx: 'shake' },
+                        { who: 'player', text: t('back_t1_2') },
+                        { who: 'elf', text: t('back_t1_3') },
+                        { who: 'elf', text: t('back_t1_4') },
+                        { who: 'elf', text: t('back_t1_5') },
+                        { who: 'elf', text: t('back_t1_6') },
+                        { who: 'player', text: t('back_t1_7') },
+                        { who: 'elf', text: t('back_t1_8') },
+                        { who: 'elf', text: t('back_t1_9'), fx: 'shake' }
+                    ], () => socket.emit('dialogDone', roomId), { ...talkOpts, elfFace: 'px_gor_face' });
+                }
+                if (backState.state === 'talk2' && !backTalked[2] && currentCharacter) {
+                    backTalked[2] = true;
+                    sfx('roar');
+                    startDialog(this, [
+                        { who: 'elf', text: t('back_t2_1'), fx: 'shake' },
+                        { who: 'player', text: t('back_t2_2') }
+                    ], () => socket.emit('dialogDone', roomId), { ...talkOpts, elfFace: 'px_gor_face_sad' });
+                }
+                // Suhbat vaqti tugab o'yin boshlandi (kimdir o'qimay qoldi) - oyna yopiladi
+                if ((prev === 'talk1' || prev === 'talk2') && backState.state !== prev && dialog) closeDialog();
+                syncBackBarrels(this, backState.barrels || []);
             }
 
             // FERMA: holat; suhbat (hammaga); sabzi sug'urilgan bo'lsa (kech qo'shilgan) - darhol
@@ -7180,6 +7509,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isLift) return liftState && liftState.state === 'rising' ? 'action' : 'calm';
         if (isFarm) return farmState && farmState.state === 'fight' ? 'action' : 'calm';
         if (isSquid) return sqState && sqState.state !== 'sleep' ? 'action' : 'calm';
+        if (isBack) return backState && backState.state === 'climb' ? 'action' : 'calm';
         if (isDoors) return drState && (drState.state === 'climb' || (drState.state === 'room' && drState.sub === 'fight')) ? 'action' : 'calm';
         if (isUnderworld) {
             return Object.values(flowerSprites).some(f => f.state !== 'hidden' && f.state !== 'dead') ? 'action' : 'calm';
@@ -7267,6 +7597,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
         if (isLift) updateLift(this);
         if (isDoors) updateDoors(this);
+        if (isBack) updateBack(this);
         drawSocialTags(this);
         if (isSquid) {
             drawSquid(this);
@@ -7625,6 +7956,12 @@ function launchGame(socket, roomId, mapData, continued) {
                 const st = sqState ? sqState.state : 'sleep';
                 progressText = st === 'sleep' ? t('hud_sq_go').replace('{m}', Math.max(0, Math.ceil((map.squid.triggerX - currentCharacter.x) / 50)))
                     : st === 'rise' ? t('hud_sq_rise') : st === 'fight' ? t('hud_sq_fight') : '';
+            } else if (isBack) {
+                const st = backState ? backState.state : 'walk';
+                const B = map.back;
+                const h = Math.max(0, Math.min(B.climbMeters, Math.round((B.groundY - (currentCharacter.y + 24)) / 50)));
+                progressText = st === 'walk' ? t('hud_back_go').replace('{m}', Math.max(0, Math.ceil((B.towerX0 - currentCharacter.x) / 50)))
+                    : st === 'climb' ? t('hud_back_climb').replace('{h}', h).replace('{n}', B.climbMeters) : '';
             } else if (isFarm) {
                 const st = farmState ? farmState.state : 'idle';
                 const near = Math.abs(currentCharacter.x - map.farm.carrotX) <= map.farm.talkRange;
@@ -7727,7 +8064,8 @@ function launchGame(socket, roomId, mapData, continued) {
             currentCharacter.setVelocityX(0);
         }
 
-        let isGrounded = currentCharacter.body.touching.down || currentCharacter.body.blocked.down;
+        if (isBack) backRampStep(currentCharacter);
+        let isGrounded = currentCharacter.body.touching.down || currentCharacter.body.blocked.down || (isBack && backOnRamp);
         if (isStones) {
             if (isGrounded) lastGroundedAt = this.time.now;
             else if (this.time.now - lastGroundedAt < 120 && currentCharacter.body.velocity.y >= 0) isGrounded = true;

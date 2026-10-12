@@ -300,6 +300,9 @@ export interface RoomState {
     gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
     squid?: SquidState | null;
     doors?: DoorsState | null;
+    // Season 2 map-6 "HIS BACK": yo'l -> Gorila Rock suhbati -> zigzag yo'lakda bochkalar orasidan tepaga -> so'nggi suhbat
+    back?: { state: 'walk' | 'talk1' | 'climb' | 'talk2' | 'done', timer: number, tick: number, nextBarrel: number, counter: number,
+        barrels: { id: string, ramp: number, x: number, y: number, dir: number, phase: 'roll' | 'ledge', vy: number }[] } | null;
     farm?: { state: 'idle' | 'talk' | 'fight' | 'done', timer: number, tick: number, kills: number, target: number, spawned: number, nextSpawnTick: number, lastDogTick: number,
         rooted: Record<string, number>, rootCd: Record<string, number> } | null;
     lift?: { state: 'hidden' | 'emerge' | 'ready' | 'rising' | 'arrived' | 'done', y: number, t: number, spawned: number, nextBotTick: number } | null;

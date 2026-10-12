@@ -272,6 +272,9 @@ export class GameEngine {
             // 4n. SARIQ ESHIK (Season 2, map-5)
             this.updateDoors(room, roomId);
 
+            // 4o. HIS BACK (Season 2, map-6)
+            this.updateBack(room, roomId);
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
@@ -323,6 +326,7 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                back: room.back ? { state: room.back.state, barrels: room.back.barrels.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), dir: b.dir })) } : null,
                 doors: room.doors ? {
                     state: room.doors.state, choice: room.doors.choice, segment: room.doors.segment, sub: room.doors.sub,
                     wave: room.doors.wave ? { safes: room.doors.wave.safes, phase: room.doors.wave.phase,
@@ -968,6 +972,17 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
+            // HIS BACK: o'q tekkan bochka portlaydi (yo'lni tozalash mumkin)
+            const bk = room.back, bkd = map.back;
+            if (!bulletDestroyed && bk && bkd && bk.barrels.length) {
+                const bi = bk.barrels.findIndex(b => this.checkOverlap(hitRect, { x: b.x - bkd.barrelR, y: b.y - bkd.barrelR, w: bkd.barrelR * 2, h: bkd.barrelR * 2 }));
+                if (bi >= 0) {
+                    bulletDestroyed = true;
+                    const b = bk.barrels.splice(bi, 1)[0];
+                    this.io.to(room.id).emit('barrelBoom', { x: Math.round(b.x), y: Math.round(b.y), id: null });
+                }
+            }
+
             // G'OR (map-5): OQ YUZga o'q/zarba umuman ta'sir qilmaydi - faqat qochish. Qo'ziqorinchalar esa o'ladi
             const drs = room.doors;
             if (!bulletDestroyed && drs && drs.state === 'room' && drs.sub === 'fight' && drs.shrooms.length) {
@@ -1081,7 +1096,8 @@ export class GameEngine {
                 }
             }
 
-            if (bulletDestroyed || bullet.lifetime <= 0 || bullet.x < 0 || bullet.x > map.mapWidth || bullet.y < 0 || bullet.y > 600) {
+            const minBulletY = map.back ? map.back.topY - 600 : 0;
+            if (bulletDestroyed || bullet.lifetime <= 0 || bullet.x < 0 || bullet.x > map.mapWidth || bullet.y < minBulletY || bullet.y > 600) {
                 room.bullets.splice(i, 1);
             }
         }
@@ -1589,6 +1605,7 @@ export class GameEngine {
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
+        room.back = map.back ? { state: 'walk', timer: 0, tick: 0, nextBarrel: 0, counter: 0, barrels: [] } : null;
         if (map.arena) {
             room.gorilla = null;
             room.fatElf = null;
@@ -2569,6 +2586,122 @@ export class GameEngine {
         sq.geysers = [];
         sq.fish = [];
         this.io.to(room.id).emit('squidDown');
+    }
+
+    // ===== HIS BACK (Season 2, map-6) =====
+    // Qiyalik yuzasi (y) berilgan x da; x qiyalik oralig'idan tashqarida bo'lsa - null
+    private rampSurfaceY(r: { lowX: number, lowY: number, highX: number, highY: number }, x: number): number | null {
+        const a = Math.min(r.lowX, r.highX), b = Math.max(r.lowX, r.highX);
+        if (x < a || x > b) return null;
+        return r.lowY + (r.highY - r.lowY) * ((x - r.lowX) / (r.highX - r.lowX));
+    }
+    // Qahramon qaysi balandlikdagi qiyalikda (taxminan): bochka qayerda paydo bo'lishini tanlash uchun
+    private backRampIndex(B: NonNullable<MapDef['back']>, p: PlayerState): number {
+        const step = B.ramps.length > 1 ? B.ramps[0].lowY - B.ramps[1].lowY : 210;
+        return Math.max(0, Math.min(B.ramps.length - 1, Math.floor((B.groundY - (p.y + this.PLAYER_HALF_H)) / step)));
+    }
+    private updateBack(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const B = map.back, bk = room.back;
+        if (!B || !bk || room.isOver) return;
+        const T = (ms: number) => Math.round(ms / 30);
+        const dt = this.TICK_SECONDS;
+        bk.tick++;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        if (bk.state === 'walk') {
+            // Minoraga (yo'lning 100-metriga) yetildi - tepadan Gorila Rock gapiradi
+            if (alive.some(p => p.x >= B.towerX0 + 20)) {
+                bk.state = 'talk1';
+                bk.timer = T(30000);
+                Object.values(room.players).forEach(p => { p.introDone = false; });
+            }
+            return;
+        }
+        if (bk.state === 'talk1') {
+            if (--bk.timer <= 0 || alive.every(p => p.introDone)) {
+                bk.state = 'climb';
+                bk.nextBarrel = bk.tick + T(900);
+            }
+            return;
+        }
+        if (bk.state === 'talk2') {
+            if (--bk.timer <= 0 || alive.every(p => p.introDone)) {
+                bk.state = 'done';
+                this.roomManager.declareWinner(roomId, this.topKillerId(room)).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        if (bk.state !== 'climb') return;
+        // Hamma tirik qahramon eng tepadagi maydonchada - so'nggi suhbat
+        const atTop = (p: PlayerState) => p.y + this.PLAYER_HALF_H <= B.topY + 10 && p.x >= B.towerX0 && p.x <= B.towerX1;
+        if (alive.length > 0 && alive.every(atTop)) {
+            bk.barrels.forEach(b => this.io.to(roomId).emit('barrelBoom', { x: Math.round(b.x), y: Math.round(b.y), id: null }));
+            bk.barrels = [];
+            bk.state = 'talk2';
+            bk.timer = T(30000);
+            Object.values(room.players).forEach(p => { p.introDone = false; });
+            return;
+        }
+        // Yangi bochka: tasodifiy tirik qahramondan barrelAhead qiyalik yuqorida (eng tepadan oshmaydi), qiyalikning baland uchida
+        const climbers = alive.filter(p => !atTop(p) && p.x >= B.towerX0 - 40);
+        if (bk.tick >= bk.nextBarrel && bk.barrels.length < B.barrelMax && climbers.length) {
+            const target = climbers[Math.floor(Math.random() * climbers.length)];
+            const ri = Math.min(B.ramps.length - 1, this.backRampIndex(B, target) + B.barrelAhead);
+            const r = B.ramps[ri];
+            bk.barrels.push({ id: 'brl' + (++bk.counter), ramp: ri, x: r.highX + Math.sign(r.lowX - r.highX), y: r.highY - B.barrelR, dir: Math.sign(r.lowX - r.highX), phase: 'roll', vy: 0 });
+            bk.nextBarrel = bk.tick + T(B.barrelEveryMs * (0.75 + Math.random() * 0.5));
+        }
+        const lowest = climbers.length ? Math.min(...climbers.map(p => this.backRampIndex(B, p))) : 0;
+        for (let i = bk.barrels.length - 1; i >= 0; i--) {
+            const b = bk.barrels[i];
+            b.x += b.dir * B.barrelSpeed * dt;
+            if (b.phase === 'ledge') {
+                // Burchakdan devorgacha maydonchada: devorga urilib portlaydi (maydonchada turgan qahramonga tegishi mumkin)
+                const L = B.ledges[b.ramp];
+                b.y = L.y - B.barrelR;
+                if (b.dir < 0 ? b.x <= L.x0 + B.barrelR : b.x >= L.x1 - B.barrelR) {
+                    bk.barrels.splice(i, 1);
+                    this.io.to(roomId).emit('barrelBoom', { x: Math.round(b.x), y: Math.round(b.y), id: null });
+                    continue;
+                }
+            } else if (b.ramp < 0) {
+                // Eng pastki qiyalikdan yerga tushdi - yo'l bo'ylab dumalab, minoradan chiqib ketadi
+                b.y = B.groundY - B.barrelR;
+                if (b.x < B.towerX0 - 500 || b.x > B.towerX1) { bk.barrels.splice(i, 1); continue; }
+            } else {
+                const r = B.ramps[b.ramp];
+                const sy = this.rampSurfaceY(r, b.x);
+                if (sy === null) {
+                    // Past burchakka yetdi: yo maydonchaga burilib devorga qarab ketadi, yo pastki qiyalikda davom etadi
+                    const k = b.ramp;
+                    b.x = r.lowX;
+                    if (k === 0) { b.ramp = -1; b.dir = -1; b.y = B.groundY - B.barrelR; }
+                    else if (Math.random() < B.ledgeChance) {
+                        b.phase = 'ledge';
+                        b.dir = B.ledges[k].x0 < r.lowX - 1 ? -1 : 1;
+                        b.y = B.ledges[k].y - B.barrelR;
+                    } else {
+                        b.ramp = k - 1;
+                        b.dir = Math.sign(B.ramps[k - 1].lowX - B.ramps[k - 1].highX);
+                        b.y = r.lowY - B.barrelR;
+                    }
+                } else b.y = sy - B.barrelR;
+            }
+            // Hech kim yo'q joyga tushib ketgan bochkalar o'chadi
+            if (b.ramp >= 0 && b.ramp < lowest - 3) { bk.barrels.splice(i, 1); continue; }
+            // Qahramonga tegdi - portlaydi
+            const hit = alive.find(p => {
+                const cx = Math.max(p.x - this.PLAYER_HALF_W, Math.min(b.x, p.x + this.PLAYER_HALF_W));
+                const cy = Math.max(p.y - this.PLAYER_HALF_H, Math.min(b.y, p.y + this.PLAYER_HALF_H));
+                return Math.hypot(b.x - cx, b.y - cy) <= B.barrelR;
+            });
+            if (hit) {
+                bk.barrels.splice(i, 1);
+                this.hurtPlayer(hit, B.barrelDamage);
+                this.knockback(hit, (b.dir || 1) * 220, -260);
+                this.io.to(roomId).emit('barrelBoom', { x: Math.round(b.x), y: Math.round(b.y), id: hit.id });
+            }
+        }
     }
 
     // ===== FERMA =====

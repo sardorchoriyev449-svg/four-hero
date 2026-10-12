@@ -1155,10 +1155,16 @@ socket.on('readyFailed', () => {
     if (!lastRoomId) return;
     socket.emit('rejoinRoom', { roomId: lastRoomId, clientId: CLIENT_ID, userId: currentUser ? currentUser.id : null,
         token: currentUser ? currentUser.token : null, nickname: currentUser ? currentUser.nickname : t('guest_name') });
-    socket.once('roomJoined', () => {
-        if (readyRetryPending !== null) setTimeout(() => socket.emit('setReadyInRoom', { roomId: currentRoomId, ready: readyRetryPending }), 300);
-    });
+    // Faqat bitta kutuvchi (bir necha marta xato kelsa ham ko'paymaydi) va faqat o'sha xonaga qaytganda ishlaydi
+    if (readyRetryHandler) socket.off('roomJoined', readyRetryHandler);
+    readyRetryHandler = (d) => {
+        socket.off('roomJoined', readyRetryHandler);
+        readyRetryHandler = null;
+        if (readyRetryPending !== null && d && d.roomId === lastRoomId) setTimeout(() => socket.emit('setReadyInRoom', { roomId: currentRoomId, ready: readyRetryPending }), 300);
+    };
+    socket.on('roomJoined', readyRetryHandler);
 });
+let readyRetryHandler = null;
 
 // Host "Boshlash"ni bosganda, agar hamma tayyor bo'lmasa, server xato qaytaradi
 socket.on('startError', (message) => {
@@ -1285,6 +1291,19 @@ socket.on('returnedToLobby', () => {
 
 // QUTI SINDIRILDI: hisobdagi tanga yangilanadi (mehmonda totalCoins = null -
 // saqlanmaydi), o'yin ichida esa "+10" yozuvi chiqadi
+// ODDIY DARAJA MUKOFOTI: qahramon yangi darajaga chiqdi (yangi imkoniyatsiz) - tanga berildi. O'yin sahnasi
+// almashib turgan bo'lsa ham ko'rinsin - sahifa ustidagi plashka
+socket.on('levelReward', (d) => {
+    if (!d || !d.coins) return;
+    const el = document.createElement('div');
+    el.className = 'level-reward-toast';
+    el.textContent = t('level_reward').replace('{l}', d.level).replace('{c}', d.coins);
+    document.body.appendChild(el);
+    try { GameAudio.sfx('coin'); } catch (e) { }
+    setTimeout(() => el.classList.add('out'), 3200);
+    setTimeout(() => el.remove(), 3800);
+});
+
 socket.on('coinsUpdated', (data) => {
     if (data.totalCoins !== null && data.totalCoins !== undefined && currentUser) {
         currentUser.coins = data.totalCoins;
