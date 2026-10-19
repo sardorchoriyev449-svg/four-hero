@@ -79,9 +79,55 @@
         input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
         button { touch-action: manipulation; }
         /* REKLAMA: chap/o'ng chetda uzunchoq bannerlar - faqat keng ekranda va o'yin paytida emas */
+        /* DO'KON oynasi */
+        #shop-panel { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
+        #shop-panel .shop-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a; padding: 16px; width: min(560px, calc(100% - 24px)); max-height: calc(100% - 20px); overflow-y: auto; box-sizing: border-box; text-align: center; }
+        #shop-panel .shop-title { font: 16px "Press Start 2P", monospace; color: #ffca28; margin-bottom: 12px; text-shadow: 2px 2px 0 #000; }
+        #shop-panel .shop-cards { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+        #shop-panel .shop-card { flex: 1 1 200px; background: #251e40; border: 3px solid #000; padding: 12px 10px; color: #f3f0ff; display: flex; flex-direction: column; gap: 6px; }
+        #shop-panel .shop-icon { font-size: 34px; color: #ff5252; margin-bottom: 6px; }
+        #shop-panel .shop-card:nth-child(2) .shop-icon { color: #69f0ae; }
+        #shop-panel .shop-name { font: 11px "Press Start 2P", monospace; margin-bottom: 8px; }
+        #shop-panel .shop-desc { font: 8px/1.9 'Press Start 2P', monospace; color: #b9b3d6; flex: 1; }
+        #shop-panel .shop-status { font: 8px/1.6 'Press Start 2P', monospace; margin: 4px 0 6px; color: #9a93b8; }
+        #shop-panel .shop-status.need { color: #ff8a80; font-weight: bold; }
+        #shop-panel .shop-buy { width: 100%; margin: 0; background: #ffca28; color: #1a1200; font: 12px "Press Start 2P", monospace; padding: 10px; border: 3px solid #000; }
+        #shop-panel .shop-buy:disabled { background: #555; color: #999; }
+        #shop-panel .mf-icon { width: 42px; height: 54px; margin: 0 auto 4px; image-rendering: pixelated; display: block; }
+        #shop-panel .shop-tool .shop-icon { color: #4fc3f7; }
+        #shop-panel .shop-pxicon { height: 40px; image-rendering: pixelated; display: block; margin: 0 auto; }
+        #shop-panel .px-coin { height: 12px; image-rendering: pixelated; vertical-align: -1px; }
+        #shop-panel .shop-sec { flex: 1 1 100%; text-align: left; font: 10px "Press Start 2P", monospace; color: #8bc34a; border-bottom: 3px solid #4a3f7a; padding: 8px 2px 6px; text-shadow: 2px 2px 0 #000; }
+        #shop-panel .mf-offer { flex: 1 1 100%; font: 8px/2 "Press Start 2P", monospace; color: #ffca28; text-align: left; }
+        #shop-panel .mf-chip-ic { height: 18px; image-rendering: pixelated; vertical-align: middle; margin: 0 3px; }
+        #shop-panel .mf-order { text-align: left; }
+        #shop-panel .mf-ord-row { display: flex; align-items: center; gap: 4px; font: 8px "Press Start 2P", monospace; color: #f3f0ff; }
+        #shop-panel .mf-ord-row span { flex: 1; }
+        #shop-panel .mf-ord-row b.ok { color: #69f0ae; } #shop-panel .mf-ord-row b.no { color: #ff8a80; }
+        #shop-panel .mf-locked { opacity: .55; }
+        #shop-panel .mf-locked .mf-icon { filter: grayscale(1) brightness(.6); }
+        #shop-panel .mf-box { width: min(700px, calc(100% - 24px)); }
+        #shop-panel .mf-card { flex: 1 1 26%; min-width: 140px; box-sizing: border-box; padding: 8px; gap: 2px; }
+        #shop-panel .mf-box .shop-cards { gap: 8px; }
+        #shop-panel .mf-box .mf-card:not(:only-child) { flex: 1 1 16%; min-width: 112px; padding: 6px 4px; }
+        #shop-panel .mf-box .mf-card .shop-name { font-size: 9px; }
+        #shop-panel .mf-box .mf-card .shop-desc { font-size: 7px; }
+        #shop-panel .mf-box .mf-icon { width: 34px; height: 44px; }
+        #shop-panel .mf-card .shop-name { margin-bottom: 2px; }
+        #shop-panel .mf-card .shop-buy { padding: 6px; }
+        #shop-panel .shop-msg { min-height: 18px; margin: 10px 0 6px; color: #ff8a80; font: 9px/1.6 'Press Start 2P', monospace; }
+        #shop-panel .shop-close { width: auto; padding: 8px 18px; margin: 0; background: #302752; color: #f3f0ff; border: 3px solid #000; font: 10px "Press Start 2P", monospace; }
         .level-reward-toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3000; pointer-events: none;
             font: 13px "Press Start 2P", monospace; color: #1a1200; background: #ffca28; border: 4px solid #000; box-shadow: 0 0 0 3px #c79100;
             padding: 12px 18px; white-space: nowrap; max-width: calc(100vw - 32px); transition: opacity .5s, transform .5s; animation: lr-in .35s ease-out; }
+        #admin-banner { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3100; pointer-events: none;
+            width: min(560px, calc(100vw - 32px)); font: 11px/1.7 "Press Start 2P", monospace; color: #f3f0ff; background: #1b1630;
+            border: 4px solid #000; box-shadow: inset 0 0 0 3px #ff5252, 6px 6px 0 rgba(0,0,0,.55); padding: 12px 16px; transition: opacity .6s, transform .6s;
+            animation: lr-in .35s ease-out; overflow-wrap: anywhere; }
+        #admin-banner b { display: block; color: #ffca28; font-weight: normal; margin-bottom: 6px; text-shadow: 2px 2px 0 #000; }
+        #admin-banner.out { opacity: 0; transform: translate(-50%, -20px); }
+        #maint-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3050; pointer-events: none; text-align: center;
+            font: 9px/1.6 "Press Start 2P", monospace; color: #1a1200; background: #ffca28; border-top: 4px solid #000; padding: 8px 16px; }
         .level-reward-toast.out { opacity: 0; transform: translate(-50%, -20px); }
         @keyframes lr-in { from { transform: translate(-50%, -30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         @media (max-width: 520px) { .level-reward-toast { font-size: 10px; padding: 10px 12px; } }
@@ -98,9 +144,18 @@
         #nav-ad-btn i { color: #ffcc00; }
         #nav-ad-btn .ad-amount { margin-left: auto; color: #ffcc00; font-weight: bold; }
         #nav-ad-btn.loading { opacity: .6; pointer-events: none; }
-        #ad-modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        #ad-modal, #px-dialog { position: fixed; inset: 0; background: rgba(14,11,26,.72); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        #px-dialog { z-index: 3000; }
         #ad-modal.hidden { display: none !important; }
-        #ad-modal .ad-box { background: #1b1b1b; border: 3px solid #ffcc00; padding: 22px; max-width: 340px; width: 100%; text-align: center; color: #eee; }
+        #ad-modal .ad-box, #px-dialog .pxd-box { background: var(--px-panel, #1b1630); border: 4px solid #000; padding: 22px; max-width: 360px; width: 100%; box-sizing: border-box; text-align: center;
+            color: var(--px-text, #f3f0ff); font-family: 'Press Start 2P', 'Courier New', monospace; font-size: 10px; line-height: 1.8;
+            box-shadow: inset 0 0 0 4px var(--px-edge, #4a3f7a), 10px 10px 0 rgba(0,0,0,.55); animation: px-panel-in .18s steps(3) backwards; }
+        #px-dialog .pxd-text { margin: 4px 0 18px; white-space: pre-line; word-break: break-word; }
+        #px-dialog .pxd-row { display: flex; gap: 10px; }
+        #px-dialog .pxd-row button { flex: 1; margin: 0; font-family: inherit; font-size: 10px; padding: 10px; border: 4px solid #000; cursor: pointer;
+            background: var(--px-accent, #00ffcc); color: #062b24; box-shadow: inset -3px -3px 0 rgba(0,0,0,.3); }
+        #px-dialog .pxd-row .pxd-no { background: var(--px-panel-2, #302752); color: var(--px-text, #f3f0ff); }
+        #px-dialog .pxd-row button:focus-visible { outline: 3px solid var(--px-gold, #ffca28); outline-offset: 2px; }
         #ad-modal .ad-box i.fa-coins { color: #ffcc00; font-size: 36px; display: block; margin-bottom: 10px; }
         #ad-modal .ad-row { display: flex; gap: 10px; margin-top: 16px; }
         #ad-modal .ad-row button { flex: 1; }
@@ -776,7 +831,17 @@
         ::-webkit-scrollbar-track { background: var(--px-bg); border-left: 2px solid var(--px-ink); }
         ::-webkit-scrollbar-thumb { background: var(--px-edge); border: 2px solid var(--px-ink); }
         ::-webkit-scrollbar-thumb:hover { background: var(--px-accent-d); }
+        /* Yangi Chrome va Firefox: standart xususiyat (aks holda oq-kulrang brauzer chizig'i chiqadi) */
+        html, .panel, #pause-menu .pm-box, #shop-panel .shop-box { scrollbar-color: var(--px-edge) var(--px-bg); }
         ::selection { background: var(--px-accent); color: var(--px-ink); }
+        /* Piksel slayderlar (ovoz balandligi va h.k.) - brauzerning yumaloq slayderi o'rniga */
+        input[type="range"] { -webkit-appearance: none; appearance: none; height: 22px; cursor: pointer; }
+        input[type="range"]::-webkit-slider-runnable-track { height: 10px; background: var(--px-bg); border: 3px solid var(--px-ink); box-shadow: inset 0 0 0 2px var(--px-edge); }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 20px; margin-top: -8px; background: var(--px-accent); border: 3px solid var(--px-ink); box-shadow: inset -3px -3px 0 var(--px-accent-d); }
+        input[type="range"]::-moz-range-track { height: 4px; background: var(--px-bg); border: 3px solid var(--px-ink); }
+        input[type="range"]::-moz-range-progress { height: 4px; background: var(--px-accent-d); }
+        input[type="range"]::-moz-range-thumb { width: 12px; height: 16px; border-radius: 0; background: var(--px-accent); border: 3px solid var(--px-ink); }
+        input[type="range"]:focus-visible { outline: 3px solid var(--px-gold); outline-offset: 2px; }
 
         @media (max-width: 520px) {
             .panel { padding: 22px 16px 18px; }
@@ -880,6 +945,9 @@
         .perk-row { display: flex; align-items: center; gap: 12px; background: var(--px-panel-2); border: 3px solid var(--px-ink);
             padding: 8px 12px; margin-bottom: 6px; text-align: left; font-size: 10px; }
         .perk-row.locked { filter: grayscale(1); opacity: .5; }
+        .perks-toggle { width: 100%; margin: 8px 0 0; font-size: 9px; padding: 8px; }
+        .perks-all { margin-top: 8px; }
+        .xpboost-row .xpboost-lv { margin-top: 6px; font-size: 9px; color: #b388ff; }
         .perk-lv { flex-shrink: 0; width: 54px; text-align: center; padding: 6px 0; background: var(--px-bg); border: 3px solid var(--px-ink);
             color: var(--px-gold); font-size: 9px; }
         .perk-row.unlocked .perk-lv { background: var(--px-accent); color: #062b24; }
@@ -907,6 +975,55 @@
         #pause-btn { position: absolute; z-index: 35; top: 8px; right: 8px; width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; line-height: normal;
             background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); opacity: .85; }
         #pause-btn:hover { opacity: 1; }
+        /* INVENTAR: o'yindagi sumka tugmasi (pauza va mikrofon tugmalari ostida) */
+        #inv-game-btn { position: absolute; z-index: 35; top: 80px; right: 8px; width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; line-height: normal;
+            background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); opacity: .85; }
+        #inv-game-btn:hover { opacity: 1; }
+        @media (pointer: coarse) { #inv-game-btn { top: 100px; width: 46px; height: 40px; font-size: 16px; } }
+        /* INVENTAR OYNASI (piksel): kataklar, tanlov, pastda sotish */
+        #inv-panel { position: fixed; inset: 0; z-index: 2600; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.7); padding: 12px; }
+        #inv-panel .inv-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(720px, 100%);
+            max-height: calc(100vh - 24px); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; color: #f3f0ff; font: 9px/1.6 "Press Start 2P", monospace; }
+        #inv-panel button { font: 9px "Press Start 2P", monospace; border: 3px solid #000; background: #302752; color: #f3f0ff; padding: 8px 10px; margin: 0; width: auto; cursor: pointer;
+            box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 #000; }
+        #inv-panel button:disabled { filter: grayscale(1) brightness(.6); cursor: not-allowed; }
+        #inv-panel .inv-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        #inv-panel .inv-title { flex: 1; font-size: 14px; color: #ffca28; text-shadow: 2px 2px 0 #000; }
+        #inv-panel .inv-coinbox { color: #ffca28; background: #000; padding: 6px 10px; border: 3px solid #4a3f7a; }
+        #inv-panel .inv-x { padding: 6px 9px; background: #e53935; }
+        #inv-panel .inv-farm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; color: #b9b3d6; font-size: 8px; }
+        #inv-panel .inv-farm:empty { display: none; }
+        #inv-panel .inv-lv { color: #8bc34a; }
+        #inv-panel .inv-xpbar { width: 90px; height: 10px; background: #000; border: 2px solid #4a3f7a; position: relative; }
+        #inv-panel .inv-xpbar i { position: absolute; left: 0; top: 0; bottom: 0; background: #8bc34a; }
+        #inv-panel .inv-full { color: #ff5252; }
+        #inv-panel .inv-offer { color: #ffca28; }
+        #inv-panel .inv-offer img { height: 16px; image-rendering: pixelated; vertical-align: middle; margin: 0 2px; }
+        #inv-panel .inv-slot.offer::after { content: 'x2'; position: absolute; right: 2px; top: 2px; color: #ffca28; font-size: 7px; text-shadow: 1px 1px 0 #000; }
+        #inv-panel .inv-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+        #inv-panel .inv-tab.active { background: #00ffcc; color: #062b24; }
+        #inv-panel .inv-body { flex: 1; overflow-y: auto; min-height: 150px; background: #0e0b1a; border: 3px solid #000; box-shadow: inset 0 0 0 2px #4a3f7a; padding: 10px; }
+        #inv-panel .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 8px; }
+        #inv-panel .inv-slot { position: relative; height: 66px; padding: 0 !important; background: #251e40 !important; display: flex; align-items: center; justify-content: center;
+            box-shadow: inset 0 0 0 2px #3a3060, inset -4px -4px 0 rgba(0,0,0,.35) !important; }
+        #inv-panel .inv-slot img { max-width: 48px; max-height: 50px; image-rendering: pixelated; pointer-events: none; }
+        #inv-panel .inv-slot.sel { background: #3d3410 !important; border-color: #ffca28; box-shadow: inset 0 0 0 2px #ffca28 !important; }
+        #inv-panel .inv-slot.tool { opacity: .85; }
+        #inv-panel .inv-badge { position: absolute; right: 3px; bottom: 2px; color: #fff; text-shadow: 2px 2px 0 #000; font-size: 9px; }
+        #inv-panel .inv-sub { position: absolute; left: 3px; top: 2px; color: #ffe082; text-shadow: 1px 1px 0 #000; font-size: 6px; max-width: 60px; overflow: hidden; white-space: nowrap; }
+        #inv-panel .inv-empty { color: #9a93b8; text-align: center; padding: 40px 10px; line-height: 2; }
+        #inv-panel .inv-detail:empty { display: none; }
+        #inv-panel .inv-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding: 8px; background: #251e40; border: 3px solid #000; }
+        #inv-panel .inv-line img { height: 30px; image-rendering: pixelated; }
+        #inv-panel .inv-muted { color: #9a93b8; flex: 1; }
+        #inv-panel .inv-qty { display: flex; align-items: center; gap: 6px; }
+        #inv-panel .inv-qty b { min-width: 34px; text-align: center; color: #ffca28; }
+        #inv-panel .inv-qty button { padding: 5px 9px; }
+        #inv-panel .inv-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        #inv-panel .inv-info { flex: 1; min-width: 160px; color: #b9b3d6; }
+        #inv-panel .inv-sell { background: #ffca28; color: #1a1200; }
+        #inv-panel .inv-sell-all { background: #ff9100; color: #1a0d00; }
+        @media (max-width: 520px) { #inv-panel .inv-box { padding: 10px; } #inv-panel .inv-title { font-size: 11px; } }
         /* OVOZLI CHAT: o'yindagi mikrofon tugmasi (pauza tugmasi ostida) */
         #voice-game-btn { position: absolute; z-index: 35; top: 44px; right: 8px; width: 34px; height: 30px; padding: 0; margin: 0; font-size: 12px; line-height: normal;
             background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); opacity: .85; }
@@ -926,6 +1043,10 @@
             background: var(--px-panel); border: 4px solid var(--px-ink); padding: 22px;
             box-shadow: inset 0 0 0 4px var(--px-edge), 10px 10px 0 rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 12px; }
         #pause-menu .pm-title { text-align: center; font-size: 18px; color: var(--px-gold); text-shadow: 3px 3px 0 var(--px-ink); margin-bottom: 6px; }
+        #pause-menu .pm-goal { display: flex; flex-direction: column; gap: 6px; background: #0e0b1a; border: 3px solid #000; box-shadow: inset 0 0 0 2px #4a3f7a; padding: 8px 10px; }
+        #pause-menu .pm-goal[hidden] { display: none; }
+        #pause-menu .pm-goal-h { color: var(--px-gold, #ffca28); font-size: 8px; }
+        #pause-menu .pm-goal-t { color: #7df9ff; font-size: 8px; line-height: 1.8; }
         #pause-menu .pm-note { text-align: center; font-size: 8px; color: var(--px-muted); line-height: 1.7; }
         #pause-menu .pm-btn { margin: 0; font-size: 11px; }
         #pause-menu .pm-alt { background: var(--px-panel-2); color: var(--px-text); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 4px 0 var(--px-ink); }
@@ -970,7 +1091,6 @@
         .upgrade-row .upgrade-pay button { min-width: 92px; margin: 0; padding: 7px 10px; font-size: 9px; }
         .upgrade-row .upgrade-pay-points { background: #b388ff; color: #1a0640; box-shadow: inset -3px -3px 0 #7c4dff, 0 3px 0 var(--px-ink); }
         .upgrade-row .upgrade-pay-coins { background: var(--px-gold); color: #3b2a00; box-shadow: inset -3px -3px 0 var(--px-gold-d), 0 3px 0 var(--px-ink); }
-        .level-item.level-soon .level-name { color: var(--px-gold); }
 
         /* ===== DETALLAR (bosh kiyimi, yuz, qurol ko'rinishlari) ===== */
         .cos-note { text-align: left; margin: 0 0 10px; }
@@ -1054,9 +1174,9 @@
             <p class="link-text" id="show-register-link" data-i18n="no_account">Don't have an account? Register</p>
         </div>
         <div id="register-form" class="hidden">
-            <input type="text" id="register-fullname" maxlength="40" data-i18n-ph="fullname_ph" placeholder="Full name">
-            <input type="text" id="register-nickname" maxlength="20" data-i18n-ph="nickname_ph" placeholder="Nickname">
-            <input type="password" id="register-password" maxlength="72" data-i18n-ph="password_ph" placeholder="Password">
+            <input type="text" id="register-fullname" minlength="4" maxlength="40" data-i18n-ph="reg_fullname_ph" placeholder="Full name (4+ characters)">
+            <input type="text" id="register-nickname" minlength="4" maxlength="20" data-i18n-ph="reg_nickname_ph" placeholder="Nickname (4-20 characters)">
+            <input type="password" id="register-password" minlength="8" maxlength="72" data-i18n-ph="reg_password_ph" placeholder="Password (8+ characters)">
             <button id="register-btn" data-i18n="register_btn">Register</button>
             <p id="register-error" class="error-text"></p>
             <p class="link-text" id="show-login-link" data-i18n="have_account">Already have an account? Sign in</p>
@@ -1082,9 +1202,11 @@
         </div>
         <button id="nav-play-btn" class="hub-btn"><i class="fa-solid fa-play"></i><span data-i18n="nav_play">Play</span></button>
         <button id="nav-character-btn" class="hub-btn"><i class="fa-solid fa-shield-halved"></i><span data-i18n="nav_character">My Character</span></button>
+        <button id="nav-inventory-btn" class="hub-btn"><i class="fa-solid fa-bag-shopping"></i><span data-i18n="nav_inventory">Inventory</span></button>
         <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
         <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad">Watch an ad</span><span class="ad-amount">+500</span></button>
-        <button id="nav-donate-btn" class="hub-btn"><i class="fa-solid fa-heart"></i><span data-i18n="nav_donate">Support the Author</span></button>
+        <!-- Donat ma'lumotlari tayyor bo'lguncha yashirin (bo'sh "tez orada" oynasi ochilmasin): "hidden" ni olib tashlash kifoya -->
+        <button id="nav-donate-btn" class="hub-btn hidden"><i class="fa-solid fa-heart"></i><span data-i18n="nav_donate">Support the Author</span></button>
         <div class="control-scheme-row" style="margin: 16px 0 0;">
             <button class="control-scheme-btn" id="control-pc-btn"><i class="fa-solid fa-desktop"></i> PC</button>
             <button class="control-scheme-btn" id="control-phone-btn"><i class="fa-solid fa-mobile-screen-button"></i> PHONE</button>
@@ -1210,7 +1332,7 @@
         <div class="settings-row">
             <label data-i18n="settings_nickname">Nickname</label>
             <div style="display:flex; gap:8px; align-items:center;">
-                <input type="text" id="nickname-input" maxlength="20" autocomplete="off" style="flex:1; margin:0;">
+                <input type="text" id="nickname-input" minlength="4" maxlength="20" autocomplete="off" style="flex:1; margin:0;">
                 <button class="lang-btn" id="nickname-save-btn" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="nickname_save">Save</span></button>
             </div>
             <p class="settings-note" id="nickname-msg"></p>
@@ -1340,6 +1462,8 @@
     <script src="cosmetics.js"></script>
     <script src="i18n.js"></script>
     <script src="lobby.js"></script>
+    <script src="farmart.js"></script>
+    <script src="inventory.js"></script>
     <script src="game.js"></script>
     <script src="voice.js"></script>
     <script src="ads.js"></script>

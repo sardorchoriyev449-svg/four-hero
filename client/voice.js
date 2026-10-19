@@ -165,7 +165,10 @@ const Voice = (() => {
     // Kim gapiryapti (har 120 ms): lobbi o'rni yonadi, o'yinda boshi tepasida belgi
     // So'zlar orasidagi qisqa pauzada belgi lipillamasin - oxirgi ovozdan keyin 400 ms yonib turadi
     const lastSpoke = {};
+    let idleCleared = false;
     setInterval(() => {
+        // Ovozli chat o'chiq: bir marta tozalab qo'yamiz, keyin hech narsa qilmaymiz
+        if (!on) { if (idleCleared) return; idleCleared = true; } else idleCleared = false;
         const sp = window.voiceSpeaking, now = Date.now();
         if (on) {
             if (stream && micOn && level(myAnalyser) > 0.04) lastSpoke[socket.id] = now;

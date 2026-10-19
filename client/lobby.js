@@ -1,5 +1,41 @@
 const socket = io();
 
+// O'YIN USLUBIDAGI DIALOG: brauzerning oq alert()/confirm() oynalari o'rniga (o'yinni to'xtatmaydi,
+// dizaynga mos). Bir vaqtda bittasi - qolganlari navbatda kutadi
+const pxDialogQueue = [];
+function pxDialogNext() {
+    if (document.getElementById('px-dialog') || !pxDialogQueue.length) return;
+    const { text, confirm: isConfirm, onYes, onNo } = pxDialogQueue.shift();
+    const el = document.createElement('div');
+    el.id = 'px-dialog';
+    el.innerHTML = `<div class="pxd-box" role="dialog" aria-modal="true"><p class="pxd-text"></p><div class="pxd-row">${isConfirm
+        ? `<button class="pxd-no">${t('dlg_no')}</button><button class="pxd-yes">${t('dlg_yes')}</button>`
+        : `<button class="pxd-yes">${t('dlg_ok')}</button>`}</div></div>`;
+    el.querySelector('.pxd-text').textContent = String(text == null ? '' : text);
+    const close = (yes) => {
+        window.removeEventListener('keydown', onKey, true);
+        el.remove();
+        if (yes && onYes) onYes();
+        if (!yes && onNo) onNo();
+        pxDialogNext();
+    };
+    // Dialog ochiq paytda tugmalar o'yinga (hujum, sakrash) bormasin
+    const onKey = (e) => {
+        e.stopImmediatePropagation();
+        if (e.key === 'Enter') { e.preventDefault(); close(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(!isConfirm); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    el.addEventListener('pointerdown', (e) => e.stopPropagation());
+    el.querySelector('.pxd-yes').onclick = () => close(true);
+    const no = el.querySelector('.pxd-no');
+    if (no) no.onclick = () => close(false);
+    document.body.appendChild(el);
+    el.querySelector('.pxd-yes').focus({ preventScroll: true });
+}
+function pxAlert(text) { pxDialogQueue.push({ text }); pxDialogNext(); }
+function pxConfirm(text, onYes, onNo) { pxDialogQueue.push({ text, confirm: true, onYes, onNo }); pxDialogNext(); }
+
 // HISOB TOKENI: server hisobga tegishli har so'rovni (/api/...) login paytida bergan token bilan
 // tekshiradi. Token avtomatik qo'shiladi; 401 - sessiya tugagan (qayta kirish kerak)
 const nativeFetch = window.fetch.bind(window);
@@ -307,6 +343,10 @@ registerBtn.onclick = () => withBusy(registerBtn, async () => {
         registerError.innerText = t('fill_all_fields');
         return;
     }
+    // Uzunlik talablari (server ham tekshiradi): ism va nickname - kamida 4, parol - kamida 8 belgi
+    if (fullName.length < 4) { registerError.innerText = t('err_fullname_short'); return; }
+    if (nickname.length < 4) { registerError.innerText = t('err_nickname_short'); return; }
+    if (password.length < 8) { registerError.innerText = t('err_password_short'); return; }
     try {
         const res = await fetch('/api/register', {
             method: 'POST',
@@ -530,8 +570,7 @@ const PANEL_RESTORERS = {
     'create-lobby-panel': () => navCreateLobbyBtn.onclick(),
     'my-saved-room-panel': () => navMySavedRoomBtn.onclick(),
     'character-panel': () => navCharacterBtn.onclick(),
-    'settings-panel': () => navSettingsBtn.onclick(),
-    'donate-panel': () => navDonateBtn.onclick()
+    'settings-panel': () => navSettingsBtn.onclick()
 };
 
 // Server "hali shu yerdamisan?" deb so'raydi (shu identifikatorli boshqa ulanish paydo bo'lganda)
@@ -601,7 +640,7 @@ function onSessionExpired() {
     gameWrapper.classList.add('hidden');
     touchControls.classList.add('hidden');
     showPanel(authPanel);
-    if (!sessionExpiredShown) { sessionExpiredShown = true; alert(t('session_expired')); }
+    if (!sessionExpiredShown) { sessionExpiredShown = true; pxAlert(t('session_expired')); }
 }
 socket.on('sessionExpired', onSessionExpired);
 
@@ -618,11 +657,11 @@ socket.on('accountBanned', (data) => {
     gameWrapper.classList.add('hidden');
     touchControls.classList.add('hidden');
     showPanel(authPanel);
-    alert(t('account_banned') + (data && data.reason ? ': ' + data.reason : ''));
+    pxAlert(t('account_banned') + (data && data.reason ? ': ' + data.reason : ''));
 });
 
 // XONADAN CHIQARILDI (xo'jayin kick qildi) - o'yin to'xtaydi, bosh menyuga
-socket.on('kickedFromRoom', () => {
+socket.on('kickedFromRoom', (kd) => {
     sessionStorage.removeItem('lastRoomId');
     currentRoomId = null;
     isRoomHost = false;
@@ -634,7 +673,7 @@ socket.on('kickedFromRoom', () => {
     gameWrapper.classList.add('hidden');
     touchControls.classList.add('hidden');
     showPanel(currentUser ? mainMenuPanel : authPanel);
-    alert(t('kicked_msg'));
+    pxAlert(t(kd && kd.byAdmin ? 'kicked_admin_msg' : 'kicked_msg'));
 });
 // Xonada qolganlarga: kim chiqarildi (chatda tizim xabari)
 socket.on('playerKicked', (d) => {
@@ -647,7 +686,7 @@ socket.on('playerKicked', (d) => {
 });
 
 // XONA YOPILDI (egasi chiqib ketdi) - o'yin to'xtaydi, bosh menyuga qaytamiz
-socket.on('roomClosed', () => {
+socket.on('roomClosed', (cd) => {
     sessionStorage.removeItem('lastRoomId');
     currentRoomId = null;
     isRoomHost = false;
@@ -659,7 +698,7 @@ socket.on('roomClosed', () => {
     gameWrapper.classList.add('hidden');
     touchControls.classList.add('hidden');
     showPanel(currentUser ? mainMenuPanel : authPanel);
-    alert(t('host_left'));
+    pxAlert(t(cd && cd.reason === 'admin' ? 'room_closed_admin' : 'host_left'));
 });
 
 // Xona endi yo'q (masalan, hamma chiqib ketgan) - bosh menyuga
@@ -725,7 +764,7 @@ async function fetchMySavedRoom() {
             <h3><i class="fa-solid fa-door-open"></i> ${escapeHtml(r.name)}</h3>
             <p class="saved-room-meta">
                 <span class="room-code-tag">[${r.roomCode}]</span> &middot;
-                ${t('saved_room_map_progress')}: ${tMapName(roomMaps.length ? Math.min(r.unlockedLevel, roomMaps.length - 1) : r.unlockedLevel)}
+                ${t('saved_room_map_progress')}: ${tMapName(roomMaps.length ? Math.min(r.unlockedLevel, Math.max(0, roomMaps.filter(m => !m.bonus).length - 1)) : r.unlockedLevel)}
                 ${r.isPrivate ? ' &middot; <i class="fa-solid fa-lock"></i> ' + t('visibility_private') : ''}
             </p>
         `;
@@ -798,7 +837,7 @@ socket.on('updateRoomList', (rooms) => {
 createRoomBtn.onclick = () => {
     const roomName = roomNameInput.value.trim();
     if (!roomName) {
-        alert(t('enter_room_name_alert'));
+        pxAlert(t('enter_room_name_alert'));
         return;
     }
     socket.emit('createRoom', { roomName, userId: currentUser.id, token: currentUser.token, nickname: currentUser.nickname, isPrivate: createRoomIsPrivate, clientId: CLIENT_ID });
@@ -808,7 +847,7 @@ createRoomBtn.onclick = () => {
 joinCodeBtn.onclick = () => {
     const roomCode = joinCodeInput.value.trim().toUpperCase();
     if (!roomCode) {
-        alert(t('enter_room_code_alert'));
+        pxAlert(t('enter_room_code_alert'));
         return;
     }
     socket.emit('joinRoomByCode', { roomCode, userId: currentUser ? currentUser.id : null, token: currentUser ? currentUser.token : null, nickname: currentUser ? currentUser.nickname : t('guest_name'), clientId: CLIENT_ID });
@@ -819,7 +858,7 @@ joinCodeInput.addEventListener('keydown', (e) => {
 
 // Xonaga kirishda xatolik (xona to'la yoki hisob boshqa joyda faol)
 socket.on('joinError', (message) => {
-    alert(tMsg(message));
+    pxAlert(tMsg(message));
 });
 
 // Lobbiga muvaffaqiyatli kirganda
@@ -960,15 +999,14 @@ function renderLevelList() {
     const mapNameEl = document.getElementById('lobby-map-name');
     if (mapNameEl) mapNameEl.innerText = mapNumberLabel(selectedLevel) + tMapName(selectedLevel);
     levelListDiv.innerHTML = '';
-    // BONUS - mashq xaritalari (doim ochiq); SEASON 1 - tugagan (10 ta); SEASON 2 - yangi xaritalar, oxirida "tez orada"
-    const seasonMaps = roomMaps.filter(m => mapSeasonOf(m) === 's2');
+    // BONUS - mashq xaritalari (doim ochiq); SEASON 1 va SEASON 2 - tugagan (10 tadan, "tez orada" yo'q)
     const shown = roomMaps.filter(m => mapSeasonOf(m) === mapsTab);
     if (!shown.length) {
         levelListDiv.innerHTML = `<div class="maps-soon"><i class="fa-solid fa-hourglass-half"></i>${t('coming_soon')}</div>`;
         return;
     }
     shown.forEach((m) => {
-        const locked = m.bonus ? !bonusUnlocked : m.id > unlockedLevel;
+        const locked = m.bonus ? (!m.shop && !bonusUnlocked) : m.id > unlockedLevel;   // do'kon doim ochiq
         const isSelected = m.id === selectedLevel;
         const item = document.createElement('div');
         item.className = 'level-item' + (isSelected ? ' selected' : '') + (locked ? ' locked' : '') + (isRoomHost ? '' : ' readonly');
@@ -986,13 +1024,6 @@ function renderLevelList() {
         }
         levelListDiv.appendChild(item);
     });
-    // Keyingi (hali chiqmagan) xarita - "TEZ ORADA": har yangilanishda o'zi bir raqam suriladi
-    if (mapsTab === 's2' && seasonMaps.length) {
-        const soon = document.createElement('div');
-        soon.className = 'level-item locked readonly level-soon';
-        soon.innerHTML = `<span><i class="fa-solid fa-hourglass-half"></i> <span class="level-name">${seasonMaps.length + 1}. ${t('coming_soon')}</span><span class="level-desc">${t('coming_soon_desc')}</span></span>`;
-        levelListDiv.appendChild(soon);
-    }
 }
 
 // Lobbidagi o'yinchilar ro'yxati yangilanganda
@@ -1078,9 +1109,8 @@ function renderLobbySlots(players) {
             kick.title = t('kick_btn');
             kick.innerHTML = '<i class="fa-solid fa-xmark"></i>';
             kick.onclick = () => {
-                if (confirm(t('kick_confirm').replace('{name}', p.nickname || t('guest_name')))) {
-                    socket.emit('kickPlayer', { roomId: currentRoomId, targetId: p.id });
-                }
+                pxConfirm(t('kick_confirm').replace('{name}', p.nickname || t('guest_name')),
+                    () => socket.emit('kickPlayer', { roomId: currentRoomId, targetId: p.id }));
             };
             slot.appendChild(kick);
         }
@@ -1260,7 +1290,10 @@ socket.on('gameStarted', (data) => {
     if (window.GameAudio) GameAudio.release();
     levelCompleteTimers.forEach(clearTimeout);
     levelCompleteTimers = [];
-    lobbyPanel.classList.add('hidden');
+    // Barcha menyu panellari yopiladi: mavsum yakuni ("VICTORY!") oynasida "OK" bosmagan o'yinchida
+    // ham yangi o'yin toza ochilsin (aks holda panel o'yin yonida qolib, maydonni surib yuborardi)
+    ALL_PANELS.forEach(p => p.classList.add('hidden'));
+    latestGameOverData = null;
     gameWrapper.classList.remove('hidden');
     // Faqat "PHONE" boshqaruv turi tanlangan bo'lsa, ekrandagi virtual tugmalarni ko'rsatamiz
     touchControls.classList.toggle('hidden', getControlScheme() !== 'phone');
@@ -1293,16 +1326,79 @@ socket.on('returnedToLobby', () => {
 // saqlanmaydi), o'yin ichida esa "+10" yozuvi chiqadi
 // ODDIY DARAJA MUKOFOTI: qahramon yangi darajaga chiqdi (yangi imkoniyatsiz) - tanga berildi. O'yin sahnasi
 // almashib turgan bo'lsa ham ko'rinsin - sahifa ustidagi plashka
+// Tepadagi oltin plashka: yangisi kelsa - eskisining matni almashadi (ikkitasi ustma-ust chiqmasin)
+let topToast = null, topToastTimers = [];
+function showTopToast(text) {
+    topToastTimers.forEach(clearTimeout);
+    if (!topToast || !topToast.isConnected) {
+        topToast = document.createElement('div');
+        topToast.className = 'level-reward-toast';
+        document.body.appendChild(topToast);
+    }
+    topToast.classList.remove('out');
+    topToast.textContent = text;
+    const el = topToast;
+    topToastTimers = [setTimeout(() => el.classList.add('out'), 3200), setTimeout(() => { el.remove(); if (topToast === el) topToast = null; }, 3800)];
+}
 socket.on('levelReward', (d) => {
     if (!d || !d.coins) return;
-    const el = document.createElement('div');
-    el.className = 'level-reward-toast';
-    el.textContent = t('level_reward').replace('{l}', d.level).replace('{c}', d.coins);
-    document.body.appendChild(el);
+    showTopToast(t('level_reward').replace('{l}', d.level).replace('{c}', d.coins));
     try { GameAudio.sfx('coin'); } catch (e) { }
-    setTimeout(() => el.classList.add('out'), 3200);
-    setTimeout(() => el.remove(), 3800);
 });
+// Xarita o'tilganda yangi darajaga chiqildi (o'yin to'xtamaydi - faqat xabar)
+socket.on('levelUp', (d) => {
+    if (!d || d.ms || d.id !== socket.id) return;
+    showTopToast(t('level_up_toast').replace('{l}', d.level));
+});
+
+// ===== ADMIN XABARLARI =====
+// E'lon: ekran tepasida 10 soniya (o'yin paytida ham ko'rinadi)
+let adminBannerTimer = null;
+socket.on('adminAnnounce', (d) => {
+    if (!d || typeof d.text !== 'string') return;
+    let el = document.getElementById('admin-banner');
+    if (!el) { el = document.createElement('div'); el.id = 'admin-banner'; document.body.appendChild(el); }
+    el.innerHTML = '';
+    const head = document.createElement('b'); head.textContent = '📢 ' + t('admin_announce');
+    const body = document.createElement('span'); body.textContent = d.text;
+    el.append(head, body);
+    el.classList.remove('out');
+    clearTimeout(adminBannerTimer);
+    adminBannerTimer = setTimeout(() => el.classList.add('out'), 10000);
+});
+// Texnik ishlar rejimi: pastda doimiy yozuv (o'chirilguncha)
+socket.on('maintenance', (d) => {
+    let el = document.getElementById('maint-banner');
+    if (!d || !d.on) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'maint-banner'; document.body.appendChild(el); }
+    el.textContent = '🛠 ' + t('maint_banner') + (d.message ? ' - ' + d.message : '');
+});
+// Chat taqig'i (admin): chatda tizim yozuvi
+socket.on('chatMuted', (d) => {
+    const until = d && d.until;
+    let text;
+    if (d && d.changed && !until) text = t('chat_unmuted');
+    else if (until === -1) text = t('chat_muted_forever');
+    else text = t('chat_muted_until').replace('{t}', new Date(until).toLocaleString());
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    line.style.color = d && d.changed && !until ? '#69f0ae' : '#ff8a80';
+    line.textContent = '⚠ ' + text;
+    chatBox.appendChild(line);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    if (d && d.changed) showTopToast(text);
+});
+// Admin hisob nomini o'zgartirdi
+socket.on('nicknameChanged', (d) => {
+    if (!d || !currentUser) return;
+    currentUser.nickname = d.nickname;
+    localStorage.setItem('gameUser', JSON.stringify(currentUser));
+    if (welcomeNickname) welcomeNickname.innerText = d.nickname;
+    showTopToast(t('admin_renamed').replace('{n}', d.nickname));
+});
+// Admin sovg'a berdi / la'natni olib tashladi va h.k.
+socket.on('adminNotice', (d) => { if (d && d.key) showTopToast(t(d.key)); });
+socket.on('roundStoppedByAdmin', () => showTopToast(t('admin_round_stopped')));
 
 socket.on('coinsUpdated', (data) => {
     if (data.totalCoins !== null && data.totalCoins !== undefined && currentUser) {
@@ -1431,6 +1527,7 @@ async function loadCharacterScreen() {
             currentUser.defaultCharacter = data.defaultCharacter;
             currentUser.charXp = data.charXp || {};
             currentUser.upgrades = data.upgrades;
+            currentUser.xpBoost = data.xpBoost || {};
             currentUser.skillPoints = data.skillPoints;
             currentUser.ownedSkins = data.ownedSkins;
             currentUser.equippedSkins = data.equippedSkins;
@@ -1492,17 +1589,37 @@ function renderPerks() {
     const pr = xpProgress(xp);
     document.getElementById('char-level-label').innerText = t('slot_level') + ' ' + pr.level;
     document.getElementById('char-xp-fill').style.width = Math.round(100 * pr.cur / pr.need) + '%';
-    document.getElementById('char-xp-text').innerText = 'XP ' + pr.cur + ' / ' + pr.need;
+    document.getElementById('char-xp-text').innerText = pr.max ? t('level_max') : 'XP ' + pr.cur + ' / ' + pr.need;
     box.innerHTML = '';
-    (PERK_TABLE[selectedCharTab] || []).forEach((perk) => {
-        const open = pr.level >= perk.level;
-        const row = document.createElement('div');
-        row.className = 'perk-row ' + (open ? 'unlocked' : 'locked');
-        row.innerHTML = `<span class="perk-lv">${t('perk_level')} ${perk.level}</span>
-            <span><b>${open ? '' : '<i class="fa-solid fa-lock"></i> '}${t('perk_' + perk.id)}</b><span class="perk-desc">${t('perk_' + perk.id + '_d')}</span></span>`;
-        box.appendChild(row);
-    });
+    // Bir xil darajadagi imkoniyatlar bitta qatorda
+    const byLevel = {};
+    (PERK_TABLE[selectedCharTab] || []).forEach((perk) => { (byLevel[perk.level] = byLevel[perk.level] || []).push(perk.id); });
+    const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
+    const row = (L) => {
+        const open = pr.level >= L, el = document.createElement('div');
+        el.className = 'perk-row ' + (open ? 'unlocked' : 'locked');
+        el.innerHTML = `<span class="perk-lv">${t('perk_level')} ${L}</span><span>${byLevel[L].map(id =>
+            `<b>${open ? '' : '<i class="fa-solid fa-lock"></i> '}${t('perk_' + id)}</b><span class="perk-desc">${t('perk_' + id + '_d')}</span>`).join('')}</span>`;
+        return el;
+    };
+    // Ro'yxat uzun - yashirin turadi: faqat keyingi mukofot ko'rinadi, "Ko'rsatish" bosilsa - hammasi
+    const next = levels.find(L => L > pr.level);
+    if (next !== undefined) box.appendChild(row(next));
+    const toggle = document.createElement('button');
+    toggle.className = 'perks-toggle';
+    const list = document.createElement('div');
+    list.className = 'perks-all' + (perksExpanded ? '' : ' hidden');
+    levels.forEach(L => list.appendChild(row(L)));
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+    note.innerText = t('perks_coins_note');
+    list.appendChild(note);
+    toggle.innerHTML = `<i class="fa-solid fa-chevron-${perksExpanded ? 'up' : 'down'}"></i> ${t(perksExpanded ? 'perks_hide' : 'perks_show').replace('{n}', levels.length)}`;
+    toggle.onclick = () => { perksExpanded = !perksExpanded; renderPerks(); };
+    box.appendChild(toggle);
+    box.appendChild(list);
 }
+let perksExpanded = false;
 
 // Kuchaytirish narxi - YO ball, YO tanga (indeks - hozirgi daraja): server/src/perks.ts dagi UPGRADE_COSTS bilan bir xil
 const UPGRADE_COSTS = [
@@ -1587,6 +1704,45 @@ function renderUpgrades() {
         upgradesContent.appendChild(row);
     });
 
+    // XP KUCHAYTIRISH: 10 darajagacha; har darajasi - har o'ldirish, boss va xarita uchun +15 XP (narxi 300, 500, 700 ...)
+    const BOOST_MAX = 10;
+    const boost = Math.min(BOOST_MAX, (currentUser.xpBoost && currentUser.xpBoost[selectedCharTab]) || 0);
+    const boostCost = 300 + 200 * boost;
+    const brow = document.createElement('div');
+    brow.className = 'upgrade-row xpboost-row';
+    brow.innerHTML = `<div class="upgrade-info">
+            <span class="upgrade-name"><i class="fa-solid fa-star" style="color:#b388ff; margin-right:6px;"></i>${t('char_xpboost')}</span>
+            <span class="upgrade-desc">${t('char_xpboost_desc').replace('{n}', boost * 15)}</span>
+            <div class="upgrade-dots">${Array.from({ length: BOOST_MAX }, (_, i) => `<span class="upgrade-dot ${i < boost ? 'filled' : ''}"></span>`).join('')}</div>
+        </div>`;
+    // Boshqa kuchaytirishlar kabi: YO 2 ta ochko (har safar 2), YO tanga (300, 500, 700 ...)
+    if (boost >= BOOST_MAX) {
+        const mx = document.createElement('button');
+        mx.innerText = t('char_maxed');
+        mx.disabled = true;
+        brow.appendChild(mx);
+        upgradesContent.appendChild(brow);
+    } else {
+    const bpay = document.createElement('div');
+    bpay.className = 'upgrade-pay';
+    const bpts = document.createElement('button');
+    bpts.className = 'upgrade-pay-points';
+    bpts.innerHTML = `<i class="fa-solid fa-star"></i> 2`;
+    bpts.title = t('upgrade_pay_points').replace('{n}', 2);
+    bpts.disabled = points < 2;
+    bpts.onclick = () => withBusy(bpts, () => buyXpBoost('points'));
+    const bbtn = document.createElement('button');
+    bbtn.className = 'upgrade-pay-coins';
+    bbtn.innerHTML = `<i class="fa-solid fa-coins"></i> ${boostCost}`;
+    bbtn.title = t('upgrade_pay_coins').replace('{n}', boostCost);
+    bbtn.disabled = (currentUser.coins || 0) < boostCost;
+    bbtn.onclick = () => withBusy(bbtn, () => buyXpBoost('coins'));
+    bpay.appendChild(bpts);
+    bpay.appendChild(bbtn);
+    brow.appendChild(bpay);
+    upgradesContent.appendChild(brow);
+    }
+
     if (points <= 0) {
         const note = document.createElement('p');
         note.className = 'settings-note';
@@ -1594,6 +1750,25 @@ function renderUpgrades() {
         note.innerText = t('char_no_points');
         upgradesContent.appendChild(note);
     }
+}
+
+async function buyXpBoost(payWith = 'coins') {
+    try {
+        const data = await fetch('/api/character/' + currentUser.id + '/xpboost', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ characterType: selectedCharTab, roomId: currentRoomId, payWith })
+        }).then(r => r.json());
+        if (!data.success) { pxAlert(tMsg(data.message)); return; }
+        currentUser.xpBoost = data.xpBoost;
+        currentUser.coins = data.coins;
+        if (data.skillPoints) currentUser.skillPoints = data.skillPoints;
+        localStorage.setItem('gameUser', JSON.stringify(currentUser));
+        characterCoinBalance.innerText = currentUser.coins;
+        coinBalance.innerText = currentUser.coins;
+        if (typeof showTopToast === 'function') showTopToast(t('xpboost_bought').replace('{n}', (data.xpBoost[selectedCharTab] || 0) * 15));
+        renderUpgrades();
+        renderShop();
+    } catch (e) { pxAlert(t('server_unreachable')); }
 }
 
 async function upgradeStat(stat, payWith = 'points') {
@@ -1615,10 +1790,10 @@ async function upgradeStat(stat, payWith = 'points') {
             renderShop();
             syncRoomIfNeeded();
         } else {
-            alert(tMsg(data.message));
+            pxAlert(tMsg(data.message));
         }
     } catch (e) {
-        alert(t('server_unreachable'));
+        pxAlert(t('server_unreachable'));
     }
 }
 
@@ -1732,7 +1907,7 @@ async function cosRequest(action, body) {
             body: JSON.stringify(body)
         });
         const data = await res.json();
-        if (!data.success) { alert(tMsg(data.message)); return null; }
+        if (!data.success) { pxAlert(tMsg(data.message)); return null; }
         currentUser.coins = data.user.coins;
         currentUser.ownedCosmetics = data.user.ownedCosmetics;
         currentUser.equippedCosmetics = data.user.equippedCosmetics;
@@ -1741,13 +1916,13 @@ async function cosRequest(action, body) {
         coinBalance.innerText = currentUser.coins;
         return data;
     } catch (e) {
-        alert(t('server_unreachable'));
+        pxAlert(t('server_unreachable'));
         return null;
     }
 }
 // Sotib olingach darhol kiydiriladi
 async function buyCosmetic(charType, slot, item) {
-    if (!confirm(t('cos_buy_confirm').replace('{name}', cosName(slot, item)).replace('{price}', item.price))) return;
+    if (!(await new Promise(r => pxConfirm(t('cos_buy_confirm').replace('{name}', cosName(slot, item)).replace('{price}', item.price), () => r(true), () => r(false))))) return;
     if (await cosRequest('buy', { characterType: charType, slot, itemId: item.id })) {
         await cosRequest('equip', { characterType: charType, slot, itemId: item.id });
     }
@@ -1774,10 +1949,10 @@ async function buySkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(tMsg(data.message));
+            pxAlert(tMsg(data.message));
         }
     } catch (e) {
-        alert(t('server_unreachable'));
+        pxAlert(t('server_unreachable'));
     }
 }
 
@@ -1792,10 +1967,10 @@ async function equipSkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(tMsg(data.message));
+            pxAlert(tMsg(data.message));
         }
     } catch (e) {
-        alert(t('server_unreachable'));
+        pxAlert(t('server_unreachable'));
     }
 }
 
@@ -1863,10 +2038,10 @@ async function buyWeaponSkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(tMsg(data.message));
+            pxAlert(tMsg(data.message));
         }
     } catch (e) {
-        alert(t('server_unreachable'));
+        pxAlert(t('server_unreachable'));
     }
 }
 
@@ -1881,10 +2056,10 @@ async function equipWeaponSkin(characterType, skinId) {
             applyShopUpdate(data.user);
             syncRoomIfNeeded();
         } else {
-            alert(tMsg(data.message));
+            pxAlert(tMsg(data.message));
         }
     } catch (e) {
-        alert(t('server_unreachable'));
+        pxAlert(t('server_unreachable'));
     }
 }
 
@@ -1991,8 +2166,10 @@ function escapeHtml(str) {
     let last = 0;
     function loop(ts) {
         // O'yin ketayotganda fon ko'rinmaydi - chizmaymiz (resurs tejash)
+        // O'yin paytida har kadr uyg'onmaymiz - yarim soniyada bir tekshiramiz
         const inGame = !document.getElementById('game-wrapper').classList.contains('hidden');
-        if (!inGame && ts - last > 66) { last = ts; draw(ts); }
+        if (inGame) { setTimeout(() => requestAnimationFrame(loop), 500); return; }
+        if (ts - last > 66) { last = ts; draw(ts); }
         requestAnimationFrame(loop);
     }
     resize();
@@ -2037,7 +2214,9 @@ setTimeout(() => Boot.start(), 0);
     const fill = () => { input.value = currentUser ? currentUser.nickname : ''; msg.innerText = ''; };
     // Panel ochilganda (yashirin -> ko'rinadigan) - joriy nom bilan to'ldiriladi
     let wasHidden = panel.classList.contains('hidden');
-    const obs = new MutationObserver(() => { const hidden = panel.classList.contains('hidden'); if (wasHidden && !hidden) fill(); wasHidden = hidden; });
+    // Ochiq turgan panel qayta ochilsa ham (sahifa yangilanganda tiklangan, hisob hali yuklanmagan paytda) - maydon
+    // bo'sh qolsa to'ldiriladi (aks holda nickname maydoni bo'sh turib qolardi)
+    const obs = new MutationObserver(() => { const hidden = panel.classList.contains('hidden'); if (!hidden && (wasHidden || !input.value)) fill(); wasHidden = hidden; });
     obs.observe(panel, { attributes: true, attributeFilter: ['class'] });
     btn.onclick = async () => {
         if (!currentUser) { msg.style.color = '#ff8080'; msg.innerText = t('nickname_login_first'); return; }

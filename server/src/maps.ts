@@ -85,6 +85,146 @@ export interface StoryDef {
     talkRange: number;
     lineCount: number;
     doorX: number;
+    // MY FARM hosilini sotib oluvchi elf (meva rastasi) - E bosilsa butun hosil sotiladi
+    buyerX?: number;
+    buyRange?: number;
+}
+
+// ===== MY FARM (BONUS): HOSTNING fermasi - faqat xona egasi ekadi, yig'adi, baliq tutadi; qolganlar kuzatadi.
+// Ekinlar hisobda saqlanadi va REAL VAQTDA o'sadi (yomg'ir paytida 2x tez). Urug'lar host leveliga qarab ochiladi
+export interface CropDef {
+    id: string;
+    level: number;     // host shu levelga yetganda urug' ochiladi
+    seed: number;      // urug' narxi
+    growMs: number;    // ekilgandan pishguncha (yomg'irsiz)
+    sell: number;      // bozorda bitta hosil narxi
+}
+export const CROPS: CropDef[] = [
+    { id: 'carrot', level: 0, seed: 5, growMs: 30000, sell: 13 },
+    { id: 'tomato', level: 1, seed: 8, growMs: 50000, sell: 24 },
+    { id: 'corn', level: 2, seed: 12, growMs: 75000, sell: 38 },
+    { id: 'strawberry', level: 3, seed: 16, growMs: 100000, sell: 52 },
+    { id: 'pumpkin', level: 4, seed: 22, growMs: 140000, sell: 74 },
+    { id: 'watermelon', level: 5, seed: 30, growMs: 180000, sell: 102 },
+    { id: 'pepper', level: 6, seed: 34, growMs: 190000, sell: 120 },
+    { id: 'eggplant', level: 7, seed: 38, growMs: 200000, sell: 134 },
+    { id: 'pineapple', level: 8, seed: 44, growMs: 210000, sell: 152 },
+    { id: 'grapes', level: 9, seed: 50, growMs: 220000, sell: 170 }
+];
+// BALIQLAR: og'irligi tasodifiy (kg) - narxi og'irligiga yarasha. Katta baliq tortishda chiziq tezroq yuradi
+export interface FishDef { id: string; chance: number; minKg: number; maxKg: number; base: number; perKg: number; net: boolean; golden?: boolean; }
+export const FISH: FishDef[] = [
+    { id: 'perch', chance: 0.4, minKg: 0.2, maxKg: 0.8, base: 6, perKg: 14, net: true },
+    { id: 'carp', chance: 0.3, minKg: 0.8, maxKg: 2.5, base: 8, perKg: 10, net: true },
+    { id: 'pike', chance: 0.2, minKg: 2, maxKg: 5, base: 10, perKg: 8, net: false },
+    { id: 'catfish', chance: 0.1, minKg: 5, maxKg: 12, base: 12, perKg: 6, net: false },
+    // OLTIN BALIQ: juda kam (faqat udochkada), yashil zona juda tor - tutilsa yutuq
+    { id: 'goldfish', chance: 0.025, minKg: 0.4, maxKg: 1.2, base: 120, perKg: 100, net: false, golden: true }
+];
+export function rollFish(netOnly: boolean): { id: string, kg: number, value: number } {
+    const pool = FISH.filter(f => !netOnly || f.net);
+    let r = Math.random() * pool.reduce((a, f) => a + f.chance, 0);
+    let f = pool[pool.length - 1];
+    for (const x of pool) { if ((r -= x.chance) <= 0) { f = x; break; } }
+    const kg = Math.round((f.minKg + Math.random() ** 1.6 * (f.maxKg - f.minKg)) * 10) / 10;
+    return { id: f.id, kg, value: Math.round(f.base + f.perKg * kg) };
+}
+// MEVALI DARAXTLAR (bog'): bir marta ekiladi, ulg'aygach har cycleMs da yield ta meva beradi
+export interface FruitTreeDef { id: string; level: number; price: number; matureMs: number; cycleMs: number; yield: number; sell: number; }
+export const FRUIT_TREES: FruitTreeDef[] = [
+    { id: 'apple', level: 1, price: 150, matureMs: 180000, cycleMs: 120000, yield: 3, sell: 28 },
+    { id: 'pear', level: 3, price: 220, matureMs: 240000, cycleMs: 140000, yield: 3, sell: 36 },
+    { id: 'cherry', level: 5, price: 300, matureMs: 300000, cycleMs: 160000, yield: 4, sell: 40 }
+];
+export const ORCHARD_SLOTS = 3;
+// BAXAYBAT DARAXT: 400 tangaga ochiladi, "moviy suv" quyilgach ko'k olmalar o'sadi (shoxlarda - platformalardan
+// sakrab teriladi). 100 ta terilganda daraxt og'zini ochadi - BOSS jangi. Yengilgach yana quriydi (yana moviy suv kerak)
+export interface GiantTreeDef {
+    x: number; price: number; needApples: number; regrowMs: number; appleSell: number;
+    spots: { x: number, y: number }[];          // olma o'sadigan joylar (shox ustida)
+    mouth: { x: number, y: number, w: number, h: number };   // jangda - zarar oladigan joy
+    arenaX0: number; arenaX1: number;
+    bossHp: number; bossHpPerPlayer: number;
+    rootDamage: number; appleDamage: number; pillarDamage: number;
+    rewardCoins: number; rewardXp: number;
+}
+// QO'ZIQORINLAR (zararkunanda): host fermaga absentMs davomida kirmasa - count ta chiqadi, grядkadagi ekinni yeydi
+export interface ShroomDef { absentMs: number; count: number; hp: number; eatMs: number; sporeRange: number; sporeDamage: number; sporeEveryMs: number; killCoins: number; }
+// FERMA DARAJASI: hosil, meva, baliq, buyurtmalar XP beradi. Daraja oshsa - inventar sig'imi kattalashadi,
+// uy, ombor va platforma kattaroq/chiroyliroq bo'ladi. L-darajaga jami 60 * L * (L+1) / 2 XP kerak (10 - eng yuqori)
+export const FARM_MAX_LEVEL = 10;
+export function farmLevel(xp: number): number {
+    let l = 0;
+    while (l < FARM_MAX_LEVEL && (xp || 0) >= 30 * (l + 1) * (l + 2)) l++;
+    return l;
+}
+export function farmLevelXp(l: number): number { return 30 * l * (l + 1); }
+export function farmCapacity(level: number): number { return 80 + 40 * level; }
+// BUGUNGI TAKLIF: har kuni (UTC) 2 ta mahsulot ikki baravar qimmat sotiladi - hamma uchun bir xil
+export function dailyOffer(now: number): string[] {
+    const pool = [...CROPS.map(c => c.id), ...FRUIT_TREES.map(t => t.id), 'blueapple', ...FISH.filter(f => !f.golden).map(f => f.id)];
+    const day = Math.floor(now / 86400000);
+    const h = (n: number) => (Math.imul(n ^ 0x9e3779b9, 0x85ebca6b) >>> 5);
+    const a = h(day) % pool.length;
+    let b = h(day + 7777) % pool.length;
+    if (b === a) b = (b + 1) % pool.length;
+    return [pool[a], pool[b]];
+}
+// BEZAKLAR (do'kondan, bir marta): fermada hammaga ko'rinadi
+export const FARM_DECOR: { id: string, price: number }[] = [
+    { id: 'flowers', price: 80 }, { id: 'lantern', price: 120 }, { id: 'paint', price: 150 }, { id: 'dog', price: 250 }
+];
+export const FARM_PLOTS = 6;       // bitta maydondagi grядkalar
+export const FARM_ZONES = 4;       // 1-maydon ochiq, qolgan 3 tasi - "Free plot" (sotib olinadi)
+export interface MyFarmDef {
+    zoneX0: number; zoneW: number;  // maydonlar: chap cheti va kengligi
+    plotX0: number; plotW: number; plotGap: number;
+    range: number;                  // grядka markazidan shu masofada E ishlaydi
+    zonePrice: number;              // "Free plot" maydoni narxi
+    riverX0: number;                // daryo qirg'og'i
+    dockX1: number;                 // platforma (ko'prikcha) uchi
+    dockPrice: number;
+    netCooldownMs: number;
+    boardX: number;                 // buyurtmalar taxtasi (uy yonida)
+    decor: { id: string, price: number }[];
+    maxLevel: number;
+    toolUses: number;               // udochka / setka shuncha marta ishlatilgach sinadi
+    waterBoost: number;             // sug'orilgan grядka shuncha ulush tezroq o'sadi (0.5 = 1.5x)
+    goldenChance: number;           // o'g'itli hosil - ba'zan "oltin" (5 ta)
+    orchardX: number[];             // mevali daraxt joylari
+    fruitTrees: FruitTreeDef[];
+    tree: GiantTreeDef;
+    shrooms: ShroomDef;
+    crops: CropDef[];
+    fish: FishDef[];
+    // YOMG'IR: har slotMs da (agar navbati kelsa) offsetMs dan boshlab durMs davomida - ekinlar 2x tez o'sadi
+    rain: { slotMs: number, offsetMs: number, durMs: number, every: number };
+}
+// k-grядka (0..23) markazi: maydon = k/6
+export function farmPlotX(F: MyFarmDef, k: number): number {
+    const zone = Math.floor(k / FARM_PLOTS), i = k % FARM_PLOTS;
+    return F.zoneX0 + zone * F.zoneW + F.plotX0 + i * (F.plotW + F.plotGap) + F.plotW / 2;
+}
+export function farmZoneCenter(F: MyFarmDef, zone: number): number { return F.zoneX0 + zone * F.zoneW + F.zoneW / 2; }
+// Yomg'ir jadvali hamma uchun bir xil (vaqtdan hisoblanadi) - klientda ham aynan shu formula
+export function farmRainSlot(n: number, every: number): boolean { return ((Math.imul(n ^ 0x5bd1e995, 0x27d4eb2d) >>> 7) % every) === 0; }
+export function farmIsRaining(F: MyFarmDef, now: number): boolean {
+    const R = F.rain, n = Math.floor(now / R.slotMs), off = now - n * R.slotMs;
+    return farmRainSlot(n, R.every) && off >= R.offsetMs && off < R.offsetMs + R.durMs;
+}
+// Ekilgandan beri "samarali" o'sish vaqti: yomg'irli daqiqalar ikki marta hisoblanadi
+export function farmGrown(F: MyFarmDef, t: number, now: number, growMs: number, w?: number): boolean {
+    const el = now - t + (w ? F.waterBoost * Math.max(0, now - w) : 0);   // sug'orilgandan beri - tezroq
+    if (el >= growMs) return true;
+    if (el <= 0) return false;
+    const R = F.rain;
+    let extra = 0;
+    for (let n = Math.floor(t / R.slotMs); n <= Math.floor(now / R.slotMs); n++) {
+        if (!farmRainSlot(n, R.every)) continue;
+        const a = Math.max(t, n * R.slotMs + R.offsetMs), b = Math.min(now, n * R.slotMs + R.offsetMs + R.durMs);
+        if (b > a) extra += b - a;
+    }
+    return el + extra >= growMs;
 }
 
 // ELF QISHLOG'I: elf bahaybat daraxt tepasida turib olma otadi, qahramonlar
@@ -476,6 +616,7 @@ export interface BackDef {
     barrelMax: number;
     barrelAhead: number;      // bochka qahramondan shuncha qiyalik yuqorida paydo bo'ladi
 }
+const AX_ROBOT = 2100;   // Season 2 map-8: jang maydoni boshlanishi (40 m yo'ldan keyin)
 const BACK_TOWER = (() => {
     // Burchaklar: chapdagisi devordan 130 px, o'ngdagisi 195 px ichkarida; har qiyalik 143 px ko'tariladi (~17°)
     const groundY = 570, X0 = 5100, X1 = 5900, VL = X0 + 130, VR = X0 + 605, RISE = 143, N = 46;
@@ -485,6 +626,111 @@ const BACK_TOWER = (() => {
     const ledges = V.map((v, k) => (k === 0 || k === N) ? { x0: 0, x1: 0, y: v.y } : (v.x === VL ? { x0: X0, x1: VL, y: v.y } : { x0: VR, x1: X1, y: v.y }));
     return { X0, X1, groundY, ramps, ledges, topY: V[N].y };
 })();
+
+// SEASON 2 MAP-7 "INFINITY TNT": ikki qoya orasidagi yog'och bino (rasmdagidek). Gorila Rock endi o'lmaydi:
+// bochka otadi, platformaga sakrab uradi, osmonga 5 ta bochka otib yomg'irdek tushiradi. Yengish yo'li - pastdagi
+// cheksiz TNT bochkani (1600 HP) otib portlatish: 0 ga tushgach 3 soniya - bino portlab quladi, qoyaga chiqib ulgurmagan halok
+export interface TntDef {
+    floor: number;            // platforms indeksi: bino poli
+    building: number[];       // portlaganda qulaydigan platformalar
+    surfaces: number[];       // gorilla turadigan/sakraydigan platformalar
+    cliffY: number;           // qoyalar usti (xavfsiz joy)
+    leftCliffX: number;       // chap qoya o'ng cheti
+    rightCliffX: number;      // o'ng qoya chap cheti
+    box: { x: number, y: number, w: number, h: number };   // INFINITY TNT
+    hp: number;               // 1 o'yinchi uchun
+    hpPerExtraPlayer: number; // har qo'shimcha o'yinchiga (2 kishi - hp + 1 x shu, 4 kishi - hp + 3 x shu)
+    fuseMs: number;
+    introMs: number;
+    gorHalfW: number;
+    gorH: number;
+    gorSpeed: number;
+    gorStartX: number;
+    bombDamage: number;       // qo'ldan otilgan bochka
+    bombRadius: number;
+    skyBombs: number;
+    skyDamage: number;
+    skyRadius: number;
+    skyWarnMs: number;
+    slamDamage: number;
+    slamRange: number;
+    contactDamage: number;    // tegsa (Season 1 dagi Gorila Rock'dan kuchliroq)
+    contactSpeed: number;     // tegsa - qanchalik qattiq itaradi
+    clapDamage: number;       // QARSAK: faqat gorilla bilan bir xil balandlikda turganlarga
+    clapWarnMs: number;
+    clapSpeed: number;
+    restMs: number;           // hujumlar orasidagi tanaffus
+}
+
+// SEASON 2 MAP-8 "IRON GIANT": 40 m yo'l, so'ng jang maydoni (rasmdagidek): chapda 3 ta suzuvchi platforma,
+// o'ngda ulkan robot. Joni faqat BOSHIGA tekkanda kamayadi (bosh baland - platformalardan otiladi).
+// Hujumlar (navbat bilan): qo'l bilan tepadan uradi, ZARBADAN KEYIN ko'zidan lazer otadi; tepadan ketma-ket
+// 4 marta uradi; qo'lidagi quroldan 5 ta chaqmoq; tanasidagi lyukdan robot bot chiqaradi va tutab o'chadi
+// (dam oladi) - bot yengilgach yana yonadi
+export interface RobotDef {
+    arenaX: number;           // jang maydoni chap cheti (yo'lning 40-metri)
+    triggerX: number;         // shu yerga yetilsa - robot uyg'onadi, maydon yopiladi
+    head: { x: number, y: number, w: number, h: number };   // faqat shu joyga zarar
+    eyeY: number;
+    shoulder: { x: number, y: number };   // uradigan qo'l yelkasi
+    fistRest: { x: number, y: number };   // qo'lning tinch turgan joyi
+    hpPerPlayer: number;
+    introMs: number;
+    smashWarnMs: number; smashDamage: number; smashW: number;
+    comboWarnMs: number; comboDamage: number;
+    laserWarnMs: number; laserFireMs: number; laserDamage: number;
+    botHp: number;            // tashlangan robot bot joni (har o'yinchiga)
+    boltCount: number; boltEveryMs: number; boltSpeed: number; boltDamage: number;   // qo'lidagi quroldan chaqmoqlar
+    restMs: number;
+    dyingMs: number;
+}
+
+// SEASON 2 MAP-9 "ROAD TO SKYLAND": boshida do'kon (Eliksir, Chip), oldida RANETS AVTOMATI (1000 tanga).
+// Yo'l oxirida jarlik - Skyland'ga faqat ranets bilan uchib o'tiladi (ranetsi bor qahramon jarlikka yetsa - o'tildi).
+// Avtomatga o'q/zarba tegsa - qo'l-oyoqlari chiqib jang boshlanadi: hujumda qalqon ko'taradi (faqat olov
+// sochayotganda va sakrab tushgandan keyin zarar oladi), qo'lidan olov sochadi, sakrab o'yinchini havoda
+// quvib ustiga tushadi. Yengilsa - sinadi va har o'yinchiga ranets tushadi (E bilan olinadi)
+export interface VendDef {
+    machineX: number;         // avtomat markazi (tinch turgan joyi)
+    w: number; h: number;     // tanasi (shkaf)
+    legH: number;             // jangda oyoqlari tanani shuncha ko'taradi
+    price: number;            // ranets narxi (shu o'yin uchun)
+    buyRange: number;
+    edgeX: number;            // jarlik cheti (shu yerga ranets bilan yetilsa - uchib ketadi)
+    x0: number; x1: number;   // jangda yura oladigan oraliq
+    hp: number;
+    transformMs: number; dyingMs: number; flyMs: number;
+    walkSpeed: number;
+    contactDamage: number; contactSpeed: number;
+    flameWarnMs: number; flameMs: number; flameLen: number; flameH: number; flameDamage: number; flameEveryMs: number;
+    jumpMs: number; jumpPeak: number; jumpTrackSpeed: number; landDamage: number; landSpeed: number;
+    jumpLockAt: number;       // sakrashning shu ulushidan keyin quvmaydi - tushadigan joy qotadi (qochib ulgurish mumkin)
+    vulnMs: number;           // sakrab tushgandan keyin qalqonsiz turadi
+    restMs: number;
+}
+
+// SEASON 2 MAP-10 "SKY BATTLE" (Osmondagi jang): o'yinchilar ranetsda uchadi (W/S - tepa/past, A/D - chap/o'ng).
+// Tepada va pastda bulutlar - o'tib bo'lmaydi; yonlar keng, lekin chegaralangan. To'lqinlar: har birida o'yinchilar
+// soncha (1-4) uchar mashinali bot - o'yinchiga nishonlab o'q otadi; vaqti-vaqti bilan osmondan chaqmoq (oldin belgi).
+// To'lqinlardan keyin BOSS - uchar kema (Osmon qal'asi); yengilsa - xarita o'tildi
+export interface SkyDef {
+    top: number; bottom: number;            // uchish chegarasi (bulutlar)
+    introMs: number; waves: number; waveGapMs: number;
+    enemyHp: number; enemyHpPerWave: number; enemySpeed: number; enemyW: number; enemyH: number;
+    enemyShotEveryMs: number; enemyShotSpeed: number; enemyShotDamage: number;
+    strikeEveryMs: number; strikeWarnMs: number; strikeMs: number; strikeW: number; strikeDamage: number;
+    bossHpPerPlayer: number; bossW: number; bossH: number; bossSpeed: number;
+    bossRestMs: number; bossShotSpeed: number; bossShotDamage: number; bossDyingMs: number;
+}
+
+// BONUS "NO MORE FRIENDS" (Boshqa do'st emas): o'yinchilar bir-biriga qarshi (PvP). Har kim o'zi uchun:
+// o'ldirilgan qahramon bir oz o'tib qayta tug'iladi; birinchi bo'lib killsToWin ta o'ldirgan - g'olib
+export interface PvpDef {
+    killsToWin: number;
+    respawnMs: number;
+    spawnShieldMs: number;     // qayta tug'ilgandan keyin shuncha vaqt zarar olmaydi
+    shieldBlock: number;       // ritsar qalqoni ushlab turilsa - zararning shuncha ulushi to'siladi
+}
 
 // ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
 // +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
@@ -509,7 +755,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors' | 'back';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors' | 'back' | 'tnt' | 'robot' | 'shop' | 'vend' | 'sky' | 'pvp' | 'myfarm';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     bossCoins?: number;      // Boss xaritasi: bossni o'ldirgan (oxirgi zarbani bergan) o'yinchiga shuncha tanga (yo'q bo'lsa - odatdagi 100)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
@@ -538,6 +784,13 @@ export interface MapDef {
     squid?: SquidDef;           // Season 2, map-4
     doors?: DoorsDef;           // Season 2, map-5
     back?: BackDef;             // Season 2, map-6
+    tnt?: TntDef;               // Season 2, map-7
+    robot?: RobotDef;           // Season 2, map-8
+    vend?: VendDef;             // Season 2, map-9 (ranets avtomati, jarlik)
+    sky?: SkyDef;               // Season 2, map-10 (osmondagi jang)
+    pvp?: PvpDef;               // BONUS: o'yinchilar bir-biriga qarshi
+    shop?: { counterX: number, range: number, prices: { elixir: number, chip: number, [item: string]: number | undefined } };   // BONUS: do'kon
+    myFarm?: MyFarmDef;         // BONUS: My Farm (o'z ekinlari)
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
     bonus?: boolean;            // BONUS xarita: mavsum ketma-ketligiga kirmaydi, doim ochiq, "o'tilmaydi"
     pits?: PitDef[];
@@ -730,7 +983,9 @@ export const MAPS: MapDef[] = [
             sellerX: 810,     // Baliq sotuvchi elf - bozorning o'rtasida
             talkRange: 110,   // Shu masofada E bosilsa - suhbat boshlanadi
             lineCount: 19,    // Suhbat qatorlari soni (klientdagi skript bilan bir xil)
-            doorX: 40
+            doorX: 40,
+            buyerX: 300,      // Birinchi meva rastasi (eshik yonida) - My Farm hosilini sotib oladi
+            buyRange: 80
         },
         // Katta devordagi eshikdan chiqishadi
         playerSpawns: [
@@ -1153,6 +1408,152 @@ export const MAPS: MapDef[] = [
             { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // bu xaritada bot yo'q
+    },
+    {
+        id: 16,
+        name: "Hot Potato",
+        description: "A wooden house hanging between two cliffs. Gorila Rock can't be hurt anymore - blow up the INFINITY TNT and run to the cliffs!",
+        season: 2,
+        mode: 'tnt',
+        killsToWin: 0,
+        xpReward: 70,
+        bossCoins: 250,
+        accentColor: 0xff7043,
+        groundColor: 0x3b3046,
+        mapWidth: 800,
+        // Pastda yer yo'q - bino jarlik ustida osilib turibdi
+        pits: [{ x: 0, w: 800 }],
+        platforms: [
+            { x: 70, y: 530, w: 660, h: 14 },    // 0: pol
+            { x: 0, y: 330, w: 70, h: 270 },     // 1: chap qoya (xavfsiz)
+            { x: 730, y: 330, w: 70, h: 270 },   // 2: o'ng qoya (xavfsiz)
+            { x: 74, y: 476, w: 40, h: 12 },     // 3: chap kursi
+            { x: 686, y: 476, w: 40, h: 12 },    // 4: o'ng kursi
+            { x: 120, y: 430, w: 170, h: 12 },   // 5: chap minora - o'rta qavat (qoya tomonga keng - tez qochish)
+            { x: 510, y: 430, w: 170, h: 12 },   // 6: o'ng minora - o'rta qavat
+            { x: 330, y: 340, w: 140, h: 12 },   // 7: markaziy ark
+            { x: 150, y: 250, w: 140, h: 12 },   // 8: chap minora tomi
+            { x: 510, y: 250, w: 140, h: 12 },   // 9: o'ng minora tomi
+            { x: 364, y: 458, w: 72, h: 72 }     // 10: INFINITY TNT (ustiga chiqish mumkin)
+        ],
+        tnt: {
+            floor: 0, building: [0, 3, 4, 5, 6, 7, 8, 9, 10], surfaces: [0, 5, 6, 7, 8, 9],
+            cliffY: 330, leftCliffX: 70, rightCliffX: 730, box: { x: 364, y: 458, w: 72, h: 72 },
+            hp: 1600, hpPerExtraPlayer: 800, fuseMs: 3000, introMs: 2500,
+            gorHalfW: 62, gorH: 130, gorSpeed: 130, gorStartX: 600,
+            bombDamage: 22, bombRadius: 70, skyBombs: 5, skyDamage: 25, skyRadius: 60, skyWarnMs: 1100,
+            slamDamage: 25, slamRange: 110, contactDamage: 25, contactSpeed: 1150,
+            clapDamage: 30, clapWarnMs: 650, clapSpeed: 650, restMs: 1200
+        },
+        playerSpawns: [
+            { x: 100, y: 500 }, { x: 140, y: 500 }, { x: 180, y: 500 }, { x: 220, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // bu xaritada bot yo'q
+    },
+    {
+        id: 17,
+        name: "Iron Giant",
+        description: "A road through the meadow leads to a giant robot. Only its head can be hurt - jump on the floating platforms!",
+        season: 2,
+        mode: 'robot',
+        killsToWin: 0,
+        xpReward: 70,
+        bossCoins: 250,
+        accentColor: 0x4fc3f7,
+        groundColor: 0x5d4037,
+        mapWidth: AX_ROBOT + 800,
+        platforms: [
+            // Suzuvchi platformalar (rasmdagidek: chapda uchta)
+            { x: AX_ROBOT + 80, y: 214, w: 120, h: 12 },    // 0: eng tepa
+            { x: AX_ROBOT + 252, y: 338, w: 132, h: 12 },   // 1: o'rta
+            { x: AX_ROBOT + 90, y: 448, w: 115, h: 12 },    // 2: pastki
+            // 3: robot tanasi - devor (orqasiga o'tib bo'lmaydi)
+            { x: AX_ROBOT + 684, y: 0, w: 116, h: 570 },
+            // 4: robotning pastki qo'li - ustida turish mumkin (boshning yonida: qilichli qahramonlar ham yeta oladi)
+            { x: AX_ROBOT + 628, y: 376, w: 126, h: 12 }
+        ],
+        robot: {
+            arenaX: AX_ROBOT, triggerX: AX_ROBOT + 60,
+            head: { x: AX_ROBOT + 580, y: 172, w: 84, h: 190 }, eyeY: 232,
+            shoulder: { x: AX_ROBOT + 770, y: 459 }, fistRest: { x: AX_ROBOT + 620, y: 458 },
+            hpPerPlayer: 1600, introMs: 2200,
+            smashWarnMs: 800, smashDamage: 25, smashW: 80,
+            comboWarnMs: 450, comboDamage: 20,
+            laserWarnMs: 900, laserFireMs: 500, laserDamage: 30,
+            botHp: 160, restMs: 1100, dyingMs: 3200,
+            boltCount: 5, boltEveryMs: 380, boltSpeed: 650, boltDamage: 12
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: AX_ROBOT + 300, xEnd: AX_ROBOT + 500, y: 90 }
+    },
+    {
+        id: 18,
+        name: "Road to Skyland",
+        description: "A shop and a jetpack vending machine stand before a deep chasm. Buy a jetpack and fly to Skyland - and don't hurt the machine!",
+        season: 2,
+        mode: 'vend',
+        killsToWin: 0,
+        xpReward: 70,
+        accentColor: 0x80d8ff,
+        groundColor: 0x5d4037,
+        mapWidth: 2600,
+        platforms: [
+            // Suzuvchi platformalar (jangda qochish uchun)
+            { x: 1240, y: 440, w: 140, h: 12 },
+            { x: 1500, y: 340, w: 140, h: 12 },
+            { x: 1770, y: 440, w: 140, h: 12 },
+            { x: 1620, y: 220, w: 120, h: 12 },
+            // Jarlik cheti - ranetssiz o'tib bo'lmaydi
+            { x: 2200, y: 0, w: 30, h: 570 }
+        ],
+        pits: [{ x: 2230, w: 370 }],   // jarlik (yer yo'q - Skyland'gacha bo'shliq)
+        shop: { counterX: 600, range: 110, prices: { elixir: 50, chip: 50 } },
+        vend: {
+            machineX: 960, w: 110, h: 170, legH: 64,
+            price: 1000, buyRange: 95,
+            edgeX: 2200, x0: 320, x1: 2140,
+            hp: 1600,
+            transformMs: 1600, dyingMs: 2200, flyMs: 1600,
+            walkSpeed: 150,
+            contactDamage: 20, contactSpeed: 600,
+            flameWarnMs: 550, flameMs: 1400, flameLen: 270, flameH: 80, flameDamage: 14, flameEveryMs: 250,
+            jumpMs: 1300, jumpPeak: 300, jumpTrackSpeed: 480, landDamage: 40, landSpeed: 700, jumpLockAt: 0.45,
+            vulnMs: 1300, restMs: 700
+        },
+        playerSpawns: [
+            { x: 60, y: 500 }, { x: 95, y: 500 }, { x: 130, y: 500 }, { x: 165, y: 500 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 }
+    },
+    {
+        id: 19,
+        name: "Sky Battle",
+        description: "Fly with a jetpack above the clouds: dodge the shots of the flying bot cars and the lightning, shoot them down - and beat the Sky Fortress!",
+        season: 2,
+        mode: 'sky',
+        killsToWin: 0,
+        xpReward: 90,
+        bossCoins: 250,
+        accentColor: 0x4fc3f7,
+        groundColor: 0x90caf9,
+        mapWidth: 3200,
+        platforms: [],
+        pits: [{ x: 0, w: 3200 }],     // yer yo'q - osmon
+        sky: {
+            top: 80, bottom: 520,
+            introMs: 2500, waves: 3, waveGapMs: 2200,
+            enemyHp: 120, enemyHpPerWave: 40, enemySpeed: 170, enemyW: 76, enemyH: 44,
+            enemyShotEveryMs: 1900, enemyShotSpeed: 380, enemyShotDamage: 25,
+            strikeEveryMs: 5200, strikeWarnMs: 1000, strikeMs: 320, strikeW: 56, strikeDamage: 22,
+            bossHpPerPlayer: 1500, bossW: 300, bossH: 140, bossSpeed: 120,
+            bossRestMs: 900, bossShotSpeed: 360, bossShotDamage: 12, bossDyingMs: 2600
+        },
+        playerSpawns: [
+            { x: 120, y: 260 }, { x: 160, y: 320 }, { x: 200, y: 260 }, { x: 240, y: 320 }
+        ],
+        botSpawnZone: { xStart: 0, xEnd: 0, y: 90 }
     }
 ];
 
@@ -1179,6 +1580,90 @@ MAPS.push({
         { x: 50, y: 500 }, { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }
     ],
     botSpawnZone: { xStart: 260, xEnd: 740, y: 90 }
+});
+
+// DO'KON (BONUS): o'rtacha kattalikdagi do'kon - Eliksir (kislotadan keyin jon tiklanishini qaytaradi) va
+// Chip (chaqmoqdan keyin stamina tez to'lishini qaytaradi). Jang yo'q, doim ochiq
+MAPS.push({
+    id: MAPS.length,
+    name: "Shop",
+    description: "A small shop. Buy an Elixir (brings back HP regeneration after acid) or a Chip (brings back fast stamina after lightning).",
+    mode: 'shop',
+    bonus: true,
+    killsToWin: 0,
+    accentColor: 0xffca28,
+    groundColor: 0x5d4037,
+    mapWidth: 800,
+    platforms: [],
+    shop: { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, rod: 100, net: 300, fert: 25, water: 150,
+        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250 } },
+    playerSpawns: [
+        { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }, { x: 210, y: 500 }
+    ],
+    botSpawnZone: { xStart: 0, xEnd: 0, y: 90 }
+});
+
+// BONUS "NO MORE FRIENDS": kichik maydon (qadimiy arena), simmetrik platformalar - PvP
+MAPS.push({
+    id: MAPS.length,
+    name: "No More Friends",
+    description: "Every hero for himself! Fight the other players - the first to 5 kills wins.",
+    mode: 'pvp',
+    bonus: true,
+    killsToWin: 0,
+    xpReward: 30,
+    accentColor: 0xff5252,
+    groundColor: 0x6d5a45,
+    mapWidth: 1200,
+    platforms: [
+        { x: 140, y: 440, w: 190, h: 12 }, { x: 870, y: 440, w: 190, h: 12 },
+        { x: 470, y: 350, w: 260, h: 12 },
+        { x: 110, y: 255, w: 160, h: 12 }, { x: 930, y: 255, w: 160, h: 12 },
+        { x: 520, y: 170, w: 160, h: 12 }
+    ],
+    pvp: { killsToWin: 5, respawnMs: 3000, spawnShieldMs: 1500, shieldBlock: 0.75 },
+    playerSpawns: [
+        { x: 90, y: 500 }, { x: 1110, y: 500 }, { x: 235, y: 380 }, { x: 965, y: 380 }
+    ],
+    botSpawnZone: { xStart: 0, xEnd: 0, y: 90 }
+});
+
+// Baxaybat daraxt shoxlari (x - chap cheti): chapdan va o'ngdan zinapoyadek, tepada - toj. Sakrash ~130px
+const GIANT_TREE_PLATS: PlatformDef[] = (() => {
+    const T = 3460, left = [[3090, 470, 130], [3260, 390, 120], [3100, 310, 120], [3260, 230, 120], [3120, 150, 120]];
+    const out: PlatformDef[] = [];
+    left.forEach(([x, y, w]) => { out.push({ x, y, w, h: 12 }); out.push({ x: T + (T - (x + w)), y, w, h: 12 }); });
+    out.push({ x: T - 70, y: 100, w: 140, h: 12 });
+    return out;
+})();
+
+// BONUS "MY FARM": tinch ferma - har o'yinchiga o'z maydoni (6 grядka). Jang yo'q, doim ochiq
+MAPS.push({
+    id: MAPS.length,
+    name: "My Farm",
+    description: "The host's farm! Plant crops, let them grow (rain makes them grow twice as fast), fish in the river and sell everything at the S1 city market.",
+    mode: 'myfarm',
+    bonus: true,
+    killsToWin: 0,
+    accentColor: 0x8bc34a,
+    groundColor: 0x6d4c41,
+    mapWidth: 4540,
+    platforms: GIANT_TREE_PLATS,
+    myFarm: { zoneX0: 630, zoneW: 460, plotX0: 30, plotW: 48, plotGap: 24, range: 32, zonePrice: 250,
+        riverX0: 3940, dockX1: 4200, dockPrice: 200, netCooldownMs: 30000, toolUses: 20, waterBoost: 0.5, goldenChance: 0.15,
+        orchardX: [2600, 2750, 2900], fruitTrees: FRUIT_TREES,
+        boardX: 575, decor: FARM_DECOR, maxLevel: FARM_MAX_LEVEL,
+        tree: { x: 3460, price: 400, needApples: 100, regrowMs: 20000, appleSell: 20,
+            spots: GIANT_TREE_PLATS.map(p => ({ x: p.x + p.w / 2, y: p.y - 22 })),
+            mouth: { x: 3410, y: 405, w: 100, h: 90 }, arenaX0: 3060, arenaX1: 3860,
+            bossHp: 2400, bossHpPerPlayer: 1200, rootDamage: 25, appleDamage: 15, pillarDamage: 30, rewardCoins: 250, rewardXp: 100 },
+        shrooms: { absentMs: 15 * 3600000, count: 5, hp: 80, eatMs: 90000, sporeRange: 90, sporeDamage: 12, sporeEveryMs: 2500, killCoins: 15 },
+        crops: CROPS, fish: FISH,
+        rain: { slotMs: 8 * 60000, offsetMs: 60000, durMs: 150000, every: 2 } },
+    playerSpawns: [
+        { x: 160, y: 500 }, { x: 190, y: 500 }, { x: 220, y: 500 }, { x: 130, y: 500 }
+    ],
+    botSpawnZone: { xStart: 0, xEnd: 0, y: 90 }
 });
 
 // Mavsum xaritalari soni (bonus xaritalarsiz) - ochilish ketma-ketligi shular bo'yicha

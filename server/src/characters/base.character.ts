@@ -38,7 +38,8 @@ export abstract class BaseCharacter {
             player.staminaRegenDelay--;
         } else if (player.stamina < (player.maxStamina || 100)) {
             // "Stamina" ko'nikmasi tiklanishni ham tezlashtiradi: har daraja +20% (max +100%)
-            const regen = this.STAMINA_REGEN_PER_TICK * (1 + this.staminaLevelOf(player) * 0.2);
+            // Chaqmoq la'nati (robot): asl tezlikdan ham ancha sekin, kuchaytirishlar ishlamaydi - do'kondan Chip kerak
+            const regen = this.STAMINA_REGEN_PER_TICK * (player.boltCurse ? 0.35 : (1 + this.staminaLevelOf(player) * 0.2));
             player.stamina = Math.min(player.maxStamina || 100, player.stamina + regen);
         }
     }

@@ -1,5 +1,11 @@
 export interface PlayerState {
+    jetpack?: boolean;             // Season 2 map-9: ranets (faqat shu xaritada, sotib olingan yoki avtomatdan tushgan)
+    vendBuying?: boolean;          // ranets to'lovi ketmoqda (ikki marta to'lanmasin)
+    acidCurse?: boolean;           // semiz elf kislotasi: jon o'zi tiklanmaydi (do'kondagi Eliksir davolaydi)
+    boltCurse?: boolean;           // robot chaqmog'i: stamina juda sekin to'ladi (do'kondagi Chip davolaydi)
     id: string;
+    mutedUntil?: number;          // admin chat taqiqi (ms; -1 - doimiy)
+    xpBoost?: { [character: string]: number };   // XP kuchaytirish darajalari (hisobdan)
     isAdmin?: boolean;            // admin panel orqali kirgan - lobbida va o'yinda "ADMIN" belgisi
     x: number;
     y: number;
@@ -65,6 +71,7 @@ export interface BotState {
     maxHp: number;                 // HP satrini (progress bar) to'g'ri chizish uchun
     freezeDuration: number;
     targetPlayerId: string | null; // Bot "o'zi uchun" tanlagan raqib - shuni ta'qib qiladi
+    retargetTimer?: number;        // shuncha tikdan keyin raqib qayta ko'rib chiqiladi (botlar o'yinchilar orasida bo'linsin)
     isBlocking: boolean;           // Vaqti-vaqti bilan qalqon ko'tarib himoyalanadi (shu payt zarar yemaydi)
     blockTimer: number;            // Qalqon holati necha tik davom etishini/yo'qligini boshqaradi
     isAttacking: boolean;          // Klientga qilich zarbasi animatsiyasini ko'rsatish uchun (qisqa muddatli belgi)
@@ -287,6 +294,7 @@ export interface RoomState {
     checkpointReached: string[];  // Chekpointga yetib kelgan o'yinchilar (id)
     redBoxes?: RedBoxState[];     // O'rmon: tushayotgan/yotgan qizil qutilar
     paused?: boolean;             // Yolg'iz o'yinchi pauza qilgan (bir necha o'yinchida pauza yo'q)
+    freezeUntil?: number;         // LEVEL UP: shu vaqtgacha (Date.now) o'yin hamma uchun to'xtab turadi
     kicked?: string[];             // Xo'jayin chiqarib yuborganlar (hisob ID yoki brauzer oynasi ID) - qayta kira olmaydi
     round?: number;               // har xarita boshlanganda +1: klient eski xaritada qolib ketsa - sezib, qayta so'raydi
     loadingIds?: string[];        // Xarita boshida hali YUKLANAYOTGAN o'yinchilar - hammasi tayyor bo'lguncha raund kutadi
@@ -300,6 +308,44 @@ export interface RoomState {
     gflower?: GiantFlowerState | null; // Season 2 map-1: Gigant gul
     squid?: SquidState | null;
     doors?: DoorsState | null;
+    // BONUS "NO MORE FRIENDS" (PvP): qayta tug'ilish vaqtlari, himoya, tugadimi
+    // MY FARM: HOSTning fermasi (hisobdan yuklanadi) va baliq ovi holati
+    myFarm?: { owner: string | null, farm: import('./db').FarmData | null, loading: boolean, sig: string, tick: number,
+        fishing: { state: 'wait' | 'bite', biteAt: number, until: number, fish: { id: string, kg: number, value: number } } | null,
+        respawnAt: { [pid: string]: number }, worldOn: boolean, seq: number, loadedFor?: string,
+        // Qo'ziqorinlar (zararkunanda): k - qaysi grядkada, born - chiqqan vaqti (shundan eatMs o'tsa - ekinni yeydi)
+        shrooms: { id: string, x: number, k: number, hp: number, maxHp: number, born: number, nextPuff: number, ate: boolean, hitFlash: number }[],
+        // Baxaybat daraxt BOSS jangi
+        boss: { hp: number, maxHp: number, hitFlash: number, nextAt: number, last: string,
+            apples: { id: number, x: number, y: number, vx: number, vy: number }[],
+            queue: { at: number, x: number, y: number, vx: number, vy: number }[],
+            roots: { x: number, phase: 'warn' | 'up', at: number }[],
+            pillars: { x: number, phase: 'warn' | 'up', at: number, hit: string[] }[] } | null } | null;
+    pvp?: { respawnAt: { [id: string]: number }, shieldUntil: { [id: string]: number }, tick: number, done: boolean } | null;
+    // Season 2 map-10 "SKY BATTLE": uchar mashinali botlar to'lqinlari, chaqmoqlar, boss (uchar kema)
+    sky?: { state: 'intro' | 'wave' | 'gap' | 'boss' | 'dying' | 'done', tick: number, timer: number, wave: number, counter: number, nextStrike: number,
+        enemies: { id: string, x: number, y: number, hp: number, maxHp: number, target: string | null, ox: number, oy: number, nextShot: number, hitFlash: number, facing: number, minion?: boolean }[],
+        shots: { id: string, x: number, y: number, vx: number, vy: number, t: number, dmg: number }[],
+        strikes: { id: string, x: number, t: number, phase: 'warn' | 'hit', hit: string[] }[],
+        boss: { x: number, y: number, hp: number, maxHp: number, hitFlash: number, facing: number, act: 'volley' | 'fan' | 'drop' | null, actT: number, actN: number, nextAct: number, step: number, phase: number } | null } | null;
+    // Season 2 map-9 "ROAD TO SKYLAND": ranets avtomati (tinch -> jahli chiqsa jang) va jarlik
+    vend?: { state: 'idle' | 'transform' | 'fight' | 'dying' | 'broken' | 'fly' | 'done', hp: number, maxHp: number, tick: number, timer: number,
+        x: number, y: number, facing: number, hitFlash: number, shieldFlash: number, vuln: number, step: number, nextAct: number,
+        act: { kind: 'flame' | 'jump', t: number, phase: 'warn' | 'fire' | 'air', x0: number, target: string | null, hit: string[], nextHit: number, landX: number | null } | null,
+        contactCd: { [id: string]: number }, jets: { id: string, x: number, y: number }[], flyId: string | null } | null;
+    // Season 2 map-8 "IRON GIANT": robot boss
+    robot?: { state: 'walk' | 'intro' | 'on' | 'off' | 'dying' | 'done', hp: number, maxHp: number, tick: number, timer: number, step: number,
+        hitFlash: number, nextAct: number,
+        act: { kind: 'smash' | 'combo' | 'throw' | 'bolts', t: number, n: number } | null,
+        fist: { x: number, y: number, phase: 'rest' | 'aim' | 'down' | 'hold' | 'back', t: number, tx: number, ty: number, warn: number, dmg: number, hit: string[] },
+        laser: { x1: number, y1: number, x2: number, y2: number, phase: 'warn' | 'fire', t: number, hit: string[] } | null,
+        bolts: { id: string, x: number, y: number, vx: number, vy: number, t: number }[], counter: number, holoCd?: number } | null;
+    // Season 2 map-7 "INFINITY TNT": Gorila Rock (o'lmaydi) va cheksiz TNT bochka
+    tnt?: { state: 'intro' | 'fight' | 'fuse' | 'boom' | 'done', hp: number, maxHp: number, tick: number, timer: number, hitFlash: number, counter: number,
+        gor: { x: number, y: number, surf: number, facing: number, act: 'idle' | 'walk' | 'grab' | 'throw' | 'leap' | 'sky' | 'panic' | 'clap', t: number,
+            x0: number, y0: number, x1: number, y1: number, peak: number, dur: number, target: string | null, plan: 'throw' | 'leap' | 'sky' | 'clap' | null, thrown: number },
+        bombs: { id: string, x: number, y: number, vx: number, vy: number, kind: 'throw' | 'sky', landY: number }[],
+        warns: { id: string, x: number, y: number }[], nextAct: number, step: number, contactCd: { [id: string]: number } } | null;
     // Season 2 map-6 "HIS BACK": yo'l -> Gorila Rock suhbati -> zigzag yo'lakda bochkalar orasidan tepaga -> so'nggi suhbat
     back?: { state: 'walk' | 'talk1' | 'climb' | 'talk2' | 'done', timer: number, tick: number, nextBarrel: number, counter: number,
         barrels: { id: string, ramp: number, x: number, y: number, dir: number, phase: 'roll' | 'ledge', vy: number }[] } | null;

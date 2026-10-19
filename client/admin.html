@@ -7,66 +7,138 @@
 <meta name="robots" content="noindex, nofollow">
 <title>4 Heroes - Admin</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-    :root { --bg: #120d1f; --panel: #1d1633; --panel2: #271e45; --line: #3a2f63; --text: #ece8f6; --muted: #a99fc9; --accent: #00e5b8; --gold: #ffd54f; --red: #ff5c6c; --green: #69f0ae; }
+    /* O'YIN DIZAYNI (piksel 2D): o'yindagi ranglar, qora qalin ramka, ichki "chet", qattiq soya, to'rtburchak burchaklar */
+    :root {
+        --bg: #0e0b1a; --panel: #1b1630; --panel2: #251e40; --panel3: #302752; --edge: #4a3f7a; --ink: #000;
+        --text: #f3f0ff; --muted: #9a93b8; --accent: #00ffcc; --accent-d: #00a383; --gold: #ffca28; --gold-d: #c79100;
+        --red: #ff5252; --red-d: #b71c1c; --green: #69f0ae; --green-d: #00a152;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    html { background: var(--bg); }
+    body {
+        margin: 0; color: var(--text); min-height: 100vh;
+        font: 10px/1.9 "Press Start 2P", "Courier New", monospace; image-rendering: pixelated;
+        /* Pog'onali tungi osmon (o'yin menyusidagi kabi) */
+        background: linear-gradient(#0e0b1a 0 30%, #130f24 30% 50%, #18122d 50% 68%, #1d1636 68% 84%, #221a3f 84%) fixed;
+    }
+    ::selection { background: var(--accent); color: var(--ink); }
+    ::-webkit-scrollbar { width: 12px; height: 12px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--edge); border: 2px solid var(--ink); }
+    html, .table-wrap, .modal { scrollbar-color: var(--edge) var(--bg); }
     button, input, select { font: inherit; }
-    button { cursor: pointer; border: 0; border-radius: 6px; padding: 8px 12px; background: var(--panel2); color: var(--text); }
-    button:hover { filter: brightness(1.15); }
-    button:disabled { opacity: .45; cursor: default; }
-    button.primary { background: var(--accent); color: #062b24; font-weight: 700; }
-    button.danger { background: var(--red); color: #2b0408; font-weight: 700; }
-    button.ok { background: var(--green); color: #06341c; font-weight: 700; }
-    input, select { background: #0e0a19; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+    button {
+        cursor: pointer; border: 4px solid var(--ink); border-radius: 0; padding: 8px 12px; margin: 0;
+        background: var(--panel2); color: var(--text); text-transform: uppercase; letter-spacing: 1px; font-size: 9px; line-height: 1.6;
+        box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), inset 3px 3px 0 var(--panel3), 0 4px 0 var(--ink);
+        transition: transform .06s steps(1), filter .1s; position: relative;
+    }
+    button:hover { filter: brightness(1.15); transform: translateY(-2px); }
+    button:active { transform: translateY(3px); box-shadow: inset 3px 3px 0 rgba(0,0,0,.35), 0 1px 0 var(--ink); }
+    button:disabled { filter: grayscale(1) brightness(.7); transform: none; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #062b24; box-shadow: inset -3px -3px 0 var(--accent-d), inset 3px 3px 0 rgba(255,255,255,.45), 0 4px 0 var(--ink); }
+    button.danger { background: var(--red); color: #fff; box-shadow: inset -3px -3px 0 var(--red-d), inset 3px 3px 0 rgba(255,255,255,.3), 0 4px 0 var(--ink); }
+    button.ok { background: var(--green); color: #06341c; box-shadow: inset -3px -3px 0 var(--green-d), inset 3px 3px 0 rgba(255,255,255,.45), 0 4px 0 var(--ink); }
+    a { color: inherit; text-decoration: none; }
+    input, select {
+        background: var(--bg); color: var(--text); border: 4px solid var(--ink); border-radius: 0; padding: 8px 10px; font-size: 10px;
+        box-shadow: inset 3px 3px 0 rgba(0,0,0,.5), inset 0 0 0 2px var(--edge); outline: none;
+    }
+    input:focus, select:focus { box-shadow: inset 3px 3px 0 rgba(0,0,0,.5), inset 0 0 0 2px var(--accent); }
     .hidden { display: none !important; }
-    .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
-    header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-    header h1 { margin: 0; font-size: 20px; flex: 1; }
-    header h1 span { color: var(--red); font-size: 12px; border: 2px solid var(--red); border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
-    .login { max-width: 360px; margin: 12vh auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
-    .login h2 { margin: 0 0 14px; font-size: 18px; }
-    .login input { width: 100%; margin-bottom: 10px; }
+    /* Piksel panel */
+    .pxpanel, .login, .stat, .card, .room, .modal {
+        background: var(--panel); border: 4px solid var(--ink); border-radius: 0;
+        box-shadow: inset 0 0 0 3px var(--edge), 8px 8px 0 rgba(0,0,0,.55);
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 18px 16px 30px; }
+    header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+    header h1 { margin: 0; font-size: 16px; flex: 1; color: var(--gold); text-shadow: 3px 3px 0 var(--ink), -1px -1px 0 var(--ink); letter-spacing: 1px; }
+    header h1 i { color: var(--accent); }
+    header h1 span { color: #fff; background: #d50000; font-size: 9px; border: 3px solid var(--ink); padding: 2px 6px; margin-left: 8px; vertical-align: middle; text-shadow: none; letter-spacing: 1px; }
+    .login { max-width: 400px; margin: 12vh auto; padding: 26px; }
+    .login h2 { margin: 0 0 18px; font-size: 13px; color: var(--accent); text-shadow: 3px 3px 0 var(--ink); }
+    .login input { width: 100%; margin-bottom: 12px; }
     .login button { width: 100%; }
-    .msg { min-height: 20px; color: var(--red); font-size: 13px; margin-top: 8px; }
+    .msg { min-height: 20px; color: var(--red); font-size: 9px; margin-top: 10px; }
     .msg.good { color: var(--green); }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
-    .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-    .stat b { display: block; font-size: 22px; }
-    .stat span { color: var(--muted); font-size: 12px; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-    .tabs button.active { background: var(--accent); color: #062b24; font-weight: 700; }
-    .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .stat { padding: 12px 14px; }
+    .stat b { display: block; font-size: 18px; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); margin-bottom: 4px; }
+    .stat span { color: var(--muted); font-size: 8px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .tabs button.active { background: var(--accent); color: #062b24; box-shadow: inset -3px -3px 0 var(--accent-d), inset 3px 3px 0 rgba(255,255,255,.45), 0 4px 0 var(--ink); }
+    .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
     .bar input { flex: 1; min-width: 180px; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .card { overflow: hidden; padding: 3px; }
     .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; min-width: 760px; }
-    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-    th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--panel2); position: sticky; top: 0; }
-    tr:hover td { background: rgba(255,255,255,.03); }
-    .nick { font-weight: 700; }
-    .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
-    .tag.on { background: rgba(105,240,174,.15); color: var(--green); }
-    .tag.ban { background: rgba(255,92,108,.15); color: var(--red); }
-    .tag.admin { background: var(--red); color: #fff; font-weight: 700; }
-    .tag.priv { background: rgba(255,213,79,.15); color: var(--gold); }
-    .levels { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); }
-    .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px; }
-    .rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-    .room { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
-    .room h3 { margin: 0; font-size: 15px; }
-    .room .code { font-family: ui-monospace, Consolas, monospace; color: var(--gold); }
-    .room ul { margin: 0; padding-left: 18px; color: var(--muted); }
-    .empty { color: var(--muted); padding: 20px; text-align: center; }
+    table { width: 100%; border-collapse: collapse; min-width: 820px; }
+    th, td { text-align: left; padding: 9px 10px; vertical-align: middle; font-size: 9px; }
+    td { border-bottom: 2px solid var(--panel3); }
+    th { color: var(--gold); font-weight: normal; font-size: 8px; background: var(--panel2); position: sticky; top: 0; border-bottom: 4px solid var(--ink); letter-spacing: 1px; }
+    tr:hover td { background: var(--panel2); }
+    .nick { color: var(--accent); }
+    .tag { display: inline-block; font-size: 7px; padding: 2px 5px; margin-left: 6px; border: 2px solid var(--ink); vertical-align: middle; line-height: 1.5; }
+    .tag.on { background: var(--green); color: #06341c; }
+    .tag.ban { background: var(--red); color: #fff; }
+    .tag.admin { background: #d50000; color: #fff; }
+    .tag.priv { background: var(--gold); color: #3e2a00; }
+    .levels { color: var(--muted); }
+    .pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; padding: 12px 10px 10px; color: var(--muted); font-size: 9px; }
+    .rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .room { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .room h3 { margin: 0; font-size: 11px; color: var(--accent); text-shadow: 2px 2px 0 var(--ink); }
+    .room .code { color: var(--gold); }
+    .room ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: 8px; }
+    .room button { margin-top: 4px; }
+    .note { color: var(--muted); margin: 0 0 14px; font-size: 8px; }
+    .empty { color: var(--muted); padding: 22px; text-align: center; }
     /* Boshqarish oynasi */
-    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
-    .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto; padding: 18px; }
-    .modal h2 { margin: 0 0 4px; font-size: 18px; }
-    .modal .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
-    .act { border-top: 1px solid var(--line); padding: 12px 0; }
-    .act label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
-    .act .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(14,11,26,.78); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+    .modal { width: 100%; max-width: 500px; max-height: 92vh; overflow-y: auto; padding: 20px; }
+    .modal h2 { margin: 0 0 6px; font-size: 14px; color: var(--accent); text-shadow: 3px 3px 0 var(--ink); word-break: break-all; }
+    .modal .sub { color: var(--muted); font-size: 8px; margin-bottom: 12px; }
+    .act { border-top: 3px solid var(--panel3); padding: 12px 0; }
+    .act label { display: block; color: var(--gold); font-size: 8px; margin-bottom: 8px; }
+    .act .row { display: flex; gap: 10px; flex-wrap: wrap; }
     .act .row input, .act .row select { flex: 1; min-width: 90px; }
+    /* Tasdiq oynasi (brauzerning oq confirm() o'rniga) */
+    #px-confirm { z-index: 20; }   /* boshqarish oynasi ustida */
+    #px-confirm .modal { max-width: 380px; text-align: center; }
+    #px-confirm p { margin: 4px 0 18px; font-size: 10px; }
+    #px-confirm .row { display: flex; gap: 10px; }
+    #px-confirm .row button { flex: 1; }
+    .tag.mute { background: #ff9100; color: #2a1300; }
+    .tag.curse { background: #7c4dff; color: #fff; }
+    .bar select { min-width: 150px; }
+    .room .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .room .btns button { flex: 1; min-width: 110px; }
+    .room li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .room li button.x { padding: 1px 6px; font-size: 7px; margin: 0 0 0 auto; box-shadow: inset -2px -2px 0 var(--red-d), 0 2px 0 var(--ink); border-width: 3px; }
+    .act .status { color: var(--muted); font-size: 8px; margin-bottom: 8px; }
+    /* Statistika: piksel ustunli grafiklar */
+    .panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .pane { padding: 14px; }
+    .pane h3 { margin: 0 0 12px; font-size: 10px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
+    .chart { display: flex; align-items: flex-end; gap: 3px; height: 130px; padding: 6px; background: var(--bg); border: 4px solid var(--ink); box-shadow: inset 0 0 0 2px var(--edge); }
+    .chart .col { flex: 1; min-width: 3px; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; }
+    .chart .col i { display: block; background: var(--accent); box-shadow: inset -2px 0 0 var(--accent-d), inset 0 2px 0 rgba(255,255,255,.4); min-height: 2px; }
+    .chart.gold .col i { background: var(--gold); box-shadow: inset -2px 0 0 var(--gold-d), inset 0 2px 0 rgba(255,255,255,.4); }
+    .chart .col:hover i { filter: brightness(1.3); }
+    .chart-x { display: flex; justify-content: space-between; color: var(--muted); font-size: 7px; margin-top: 6px; }
+    .mini { min-width: 0; }
+    .mini td, .mini th { padding: 6px 8px; font-size: 8px; }
+    .mini td:first-child { white-space: nowrap; }
+    textarea { width: 100%; min-height: 90px; resize: vertical; font: 10px/1.7 "Press Start 2P", monospace; background: var(--bg); color: var(--text);
+        border: 4px solid var(--ink); border-radius: 0; padding: 10px; box-shadow: inset 3px 3px 0 rgba(0,0,0,.5), inset 0 0 0 2px var(--edge); outline: none; margin-bottom: 10px; }
+    textarea:focus { box-shadow: inset 3px 3px 0 rgba(0,0,0,.5), inset 0 0 0 2px var(--accent); }
+    .maint-state { display: inline-block; padding: 4px 8px; border: 3px solid var(--ink); margin-bottom: 10px; font-size: 8px; }
+    .maint-state.on { background: var(--gold); color: #3e2a00; }
+    .maint-state.off { background: var(--green); color: #06341c; }
+    .log-act { color: var(--accent); }
+    @media (max-width: 600px) { header h1 { font-size: 12px; } body { font-size: 9px; } .panes { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -91,11 +163,22 @@
     <div class="tabs">
         <button class="active" data-tab="users"><i class="fa-solid fa-users"></i> Foydalanuvchilar</button>
         <button data-tab="rooms"><i class="fa-solid fa-door-open"></i> Xonalar</button>
+        <button data-tab="stats2"><i class="fa-solid fa-chart-column"></i> Statistika</button>
+        <button data-tab="control"><i class="fa-solid fa-bullhorn"></i> E'lon / Texnik</button>
+        <button data-tab="log"><i class="fa-solid fa-scroll"></i> Jurnal</button>
     </div>
 
     <section id="tab-users">
         <div class="bar">
             <input id="search" placeholder="Nickname bo'yicha qidirish...">
+            <select id="f-sort" title="Saralash">
+                <option value="new">Yangilari birinchi</option><option value="old">Eskilari birinchi</option>
+                <option value="coins">Eng ko'p tanga</option><option value="level">Eng yuqori daraja (XP)</option>
+            </select>
+            <select id="f-only" title="Filtr">
+                <option value="all">Hammasi</option><option value="online">Faqat onlayn</option><option value="banned">Bloklanganlar</option>
+                <option value="muted">Chati taqiqlanganlar</option><option value="cursed">La'natlanganlar</option>
+            </select>
             <button id="search-btn"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
         <div class="card">
@@ -110,9 +193,65 @@
     </section>
 
     <section id="tab-rooms" class="hidden">
-        <p style="color:var(--muted); margin:0 0 10px;">Xonalar har 5 soniyada yangilanadi. "Kirish" - o'yin shu oynada ochiladi va siz xonaga <b style="color:var(--red)">ADMIN</b> belgisi bilan kirasiz (yopiq xonalarga ham).</p>
+        <p class="note">Xonalar har 5 soniyada yangilanadi. "Kirish" - o'yin shu oynada ochiladi va siz xonaga <b style="color:var(--red)">ADMIN</b> belgisi bilan kirasiz (yopiq xonalarga ham).</p>
+        <div class="msg" id="rooms-msg"></div>
         <div class="rooms" id="rooms"></div>
     </section>
+
+    <section id="tab-stats2" class="hidden">
+        <div class="panes">
+            <div class="pane pxpanel"><h3><i class="fa-solid fa-signal"></i> Onlayn (oxirgi 24 soat, har 5 daqiqa)</h3><div class="chart" id="ch-online"></div><div class="chart-x" id="ch-online-x"></div></div>
+            <div class="pane pxpanel"><h3><i class="fa-solid fa-user-plus"></i> Ro'yxatdan o'tishlar (14 kun)</h3><div class="chart gold" id="ch-regs"></div><div class="chart-x" id="ch-regs-x"></div></div>
+        </div>
+        <div class="panes">
+            <div class="pane pxpanel"><h3><i class="fa-solid fa-calendar-day"></i> Kunlar bo'yicha</h3>
+                <div class="table-wrap"><table class="mini"><thead><tr><th>Kun</th><th>Ro'yxat</th><th>O'yinlar</th><th>Reklama</th><th>Reklama tanga</th><th>Admin tanga</th></tr></thead><tbody id="days-body"></tbody></table></div>
+            </div>
+            <div class="pane pxpanel"><h3><i class="fa-solid fa-map-location-dot"></i> Xaritalar (14 kun): eng ko'p o'ynalgan / yutqazilgan</h3>
+                <div class="table-wrap"><table class="mini"><thead><tr><th>Xarita</th><th>O'ynaldi</th><th>O'tildi</th><th>Yutqazildi</th></tr></thead><tbody id="maps-body"></tbody></table></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tab-control" class="hidden">
+        <div class="panes">
+            <div class="pane pxpanel">
+                <h3><i class="fa-solid fa-bullhorn"></i> Hammaga e'lon</h3>
+                <p class="note">Hozir saytda turgan hamma o'yinchilarga (o'yin paytida ham) ekran tepasida 10 soniya ko'rinadi.</p>
+                <textarea id="ann-text" maxlength="200" placeholder="Masalan: 10 daqiqadan keyin server yangilanadi"></textarea>
+                <button class="primary" id="ann-btn"><i class="fa-solid fa-paper-plane"></i> Yuborish</button>
+                <div class="msg" id="ann-msg"></div>
+            </div>
+            <div class="pane pxpanel">
+                <h3><i class="fa-solid fa-screwdriver-wrench"></i> Texnik ishlar rejimi</h3>
+                <p class="note">Yoqilganda yangi xona ochish va o'yin boshlash yopiladi (hozir o'ynayotganlar o'yinini tugatadi). Hammaga pastda yozuv chiqadi.</p>
+                <div class="maint-state off" id="mt-state">O'CHIQ</div>
+                <input id="mt-msg" maxlength="200" placeholder="Xabar (ixtiyoriy): masalan, 20:00 gacha" style="width:100%; margin-bottom:10px;">
+                <div class="row" style="display:flex; gap:10px; flex-wrap:wrap;"><button class="danger" id="mt-on">Yoqish</button><button class="ok" id="mt-off">O'chirish</button></div>
+                <div class="msg" id="mt-res"></div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tab-log" class="hidden">
+        <div class="card">
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Vaqt</th><th>Admin</th><th>Amal</th><th>Kimga</th><th>Tafsilot</th></tr></thead>
+                    <tbody id="log-body"></tbody>
+                </table>
+            </div>
+            <div class="pager"><span id="log-info"></span><button id="log-prev"><i class="fa-solid fa-chevron-left"></i></button><button id="log-next"><i class="fa-solid fa-chevron-right"></i></button></div>
+        </div>
+    </section>
+</div>
+
+<!-- TASDIQ OYNASI -->
+<div id="px-confirm" class="modal-bg hidden">
+    <div class="modal">
+        <p id="pxc-text"></p>
+        <div class="row"><button id="pxc-no">Yo'q</button><button class="danger" id="pxc-yes">Ha</button></div>
+    </div>
 </div>
 
 <!-- FOYDALANUVCHINI BOSHQARISH -->
@@ -137,6 +276,31 @@
             </div>
         </div>
         <div class="act">
+            <label><i class="fa-solid fa-signature"></i> Nickname'ni o'zgartirish (kamida 4 belgi)</label>
+            <div class="row"><input id="m-nickname" maxlength="20" placeholder="Yangi nickname"><button class="primary" id="m-rename-btn">Saqlash</button></div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-key"></i> Yangi parol (kamida 8 belgi)</label>
+            <div class="row"><input id="m-pass" type="text" maxlength="72" placeholder="Yangi parol" autocomplete="off"><button class="primary" id="m-pass-btn">Almashtirish</button></div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-skull"></i> La'natlar</label>
+            <div class="status" id="m-curses"></div>
+            <div class="row"><button id="m-cure-acid">Kislotani olish</button><button id="m-cure-bolt">Chaqmoqni olish</button><button class="ok" id="m-cure-all">Hammasini olish</button></div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-gift"></i> Sovg'a (detal / skin)</label>
+            <div class="row"><select id="m-gift"></select><button class="primary" id="m-gift-btn">Berish</button></div>
+        </div>
+        <div class="act">
+            <label><i class="fa-solid fa-comment-slash"></i> Chat taqig'i</label>
+            <div class="status" id="m-mute-state"></div>
+            <div class="row">
+                <select id="m-mute"><option value="10">10 daqiqa</option><option value="60">1 soat</option><option value="1440">1 kun</option><option value="10080">7 kun</option><option value="-1">Doimiy</option></select>
+                <button class="danger" id="m-mute-btn">Taqiqlash</button><button class="ok" id="m-unmute-btn">Olib tashlash</button>
+            </div>
+        </div>
+        <div class="act">
             <label><i class="fa-solid fa-ban"></i> Bloklash</label>
             <div class="row"><input id="m-reason" placeholder="Sabab (ixtiyoriy)"><button class="danger" id="m-ban-btn">Bloklash</button><button class="ok" id="m-unban-btn">Blokdan chiqarish</button></div>
         </div>
@@ -157,8 +321,19 @@
         err_admin_session: "Sessiya tugadi - qayta kiring",
         err_user_not_found: "Foydalanuvchi topilmadi",
         err_bad_amount: "Qiymat noto'g'ri",
-        err_server: "Server xatosi"
+        err_server: "Server xatosi",
+        err_password_short: "Parol kamida 8 belgi bo'lsin",
+        err_nickname_short: "Nickname kamida 4 belgi bo'lsin",
+        err_nickname_taken: "Bu nickname band",
+        err_field_length: "Juda uzun",
+        err_fields_required: "Maydonni to'ldiring",
+        err_bad_item: "Noma'lum buyum",
+        err_room_not_found: "Xona topilmadi (yoki o'yin ketmayapti)"
     };
+    const ACTIONS = { ban: 'Blokladi', unban: 'Blokdan chiqardi', coins: 'Tanga', maps: 'Xaritalar', level: 'Daraja', password: 'Parol almashtirdi',
+        rename: 'Nickname', curses: "La'nat olib tashladi", gift: "Sovg'a", mute: 'Chat taqig\'i', unmute: 'Taqiq olib tashlandi',
+        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi" };
+    let logPage = 0, catalogLoaded = false;
     const msgOf = (m) => MSG[m] || m || 'Xato';
     // Matnni xavfsiz qo'shish (nickname'dagi HTML bajarilmasin)
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -198,7 +373,7 @@
         for (let i = 1; i <= d.maps; i++) { const o = el('option', '', i === d.maps ? i + ' (hammasi)' : String(i)); o.value = i; sel.appendChild(o); }
     }
     async function loadUsers() {
-        const d = await api('/users?page=' + page + '&q=' + encodeURIComponent(query));
+        const d = await api('/users?page=' + page + '&q=' + encodeURIComponent(query) + '&sort=' + $('f-sort').value + '&only=' + $('f-only').value);
         if (!d.success) return;
         users = d.users;
         const body = $('users-body'); body.innerHTML = '';
@@ -208,6 +383,8 @@
             const nick = el('td'); nick.appendChild(el('span', 'nick', u.nickname));
             if (u.online) nick.appendChild(el('span', 'tag on', 'onlayn: ' + u.online.room));
             if (u.banned) nick.appendChild(el('span', 'tag ban', 'BLOK' + (u.banReason ? ': ' + u.banReason : '')));
+            if (u.mutedUntil) nick.appendChild(el('span', 'tag mute', 'CHAT YO\'Q'));
+            if (u.curses && (u.curses.acid || u.curses.bolt)) nick.appendChild(el('span', 'tag curse', "LA'NAT"));
             tr.appendChild(nick);
             tr.appendChild(el('td', '', u.fullName));
             tr.appendChild(el('td', '', String(u.coins)));
@@ -234,6 +411,9 @@
             r.players.forEach((p) => {
                 const li = el('li', '', (p.isHost ? '👑 ' : '') + p.nickname + ' — ' + p.characterType + ' ' + p.level + '-daraja' + (p.registered ? '' : ' (mehmon)'));
                 if (p.isAdmin) li.appendChild(el('span', 'tag admin', 'ADMIN'));
+                const x = el('button', 'danger x', 'chiqarish');
+                x.onclick = () => pxConfirm(p.nickname + ' xonadan chiqarilsinmi?', () => roomAct(r.code, '/kick', { playerId: p.id }));
+                li.appendChild(x);
                 ul.appendChild(li);
             });
             c.appendChild(ul);
@@ -242,11 +422,56 @@
             // O'sha oynada ochiladi (yangi oyna/popup telefonda va ba'zi brauzerlarda bloklanadi)
             b.onclick = () => { location.href = '/?adminRoom=' + encodeURIComponent(r.code); };
             c.appendChild(b);
+            const btns = el('div', 'btns');
+            if (r.isStarted) { const st = el('button', '', "Raundni to'xtatish"); st.onclick = () => pxConfirm(r.name + ': raund to\'xtatilsinmi? Hamma lobbiga qaytadi', () => roomAct(r.code, '/stop')); btns.appendChild(st); }
+            const cl = el('button', 'danger', 'Xonani yopish'); cl.onclick = () => pxConfirm(r.name + ' yopilsinmi? Hamma bosh menyuga chiqadi', () => roomAct(r.code, '/close'));
+            btns.appendChild(cl);
+            c.appendChild(btns);
             box.appendChild(c);
+        });
+    }
+    async function roomAct(code, path, body) {
+        const d = await api('/rooms/' + encodeURIComponent(code) + path, { method: 'POST', body: JSON.stringify(body || {}) }).catch(() => null);
+        $('rooms-msg').className = 'msg' + (d && d.success ? ' good' : '');
+        $('rooms-msg').textContent = !d ? '' : d.success ? 'Bajarildi' : msgOf(d.message);
+        loadRooms(); loadStats();
+    }
+    async function loadCatalog() {
+        if (catalogLoaded) return;
+        const d = await api('/catalog');
+        if (!d.success) return;
+        const sel = $('m-gift'); sel.innerHTML = '';
+        const groups = {};
+        d.items.forEach((i) => {
+            if (!groups[i.group]) { groups[i.group] = document.createElement('optgroup'); groups[i.group].label = i.group; sel.appendChild(groups[i.group]); }
+            const o = el('option', '', i.label); o.value = i.value; groups[i.group].appendChild(o);
+        });
+        catalogLoaded = true;
+    }
+    // Sovg'a ro'yxatida - bor narsalar belgilanadi
+    function markOwned(u) {
+        const own = u.owned || { cosmetics: [], skins: {}, weaponSkins: {} };
+        [...$('m-gift').options].forEach((o) => {
+            const [kind, a, id] = o.value.split('|');
+            let has = false;
+            if (kind === 'cos') has = own.cosmetics.includes(a + ':' + id);   // "head:crown" / "knight.sword:holo"
+            else if (kind === 'skin') has = (own.skins[a] || []).includes(id);
+            else if (kind === 'wskin') has = (own.weaponSkins[a] || []).includes(id);
+            o.textContent = o.textContent.replace(/ ✓$/, '') + (has ? ' ✓' : '');
         });
     }
     function openUser(u) {
         cur = u;
+        $('m-nickname').value = ''; $('m-pass').value = '';
+        const cs = [];
+        if (u.curses && u.curses.acid) cs.push('kislota (jon tiklanmaydi)');
+        if (u.curses && u.curses.bolt) cs.push('chaqmoq (stamina sekin)');
+        $('m-curses').textContent = cs.length ? 'Bor: ' + cs.join(', ') : "La'nat yo'q";
+        ['m-cure-acid', 'm-cure-bolt', 'm-cure-all'].forEach(id => { $(id).disabled = !cs.length; });
+        $('m-cure-acid').disabled = !(u.curses && u.curses.acid); $('m-cure-bolt').disabled = !(u.curses && u.curses.bolt);
+        $('m-mute-state').textContent = u.mutedUntil === -1 ? 'Doimiy taqiq' : u.mutedUntil ? 'Taqiq: ' + new Date(u.mutedUntil).toLocaleString() + ' gacha' : "Taqiq yo'q";
+        $('m-unmute-btn').disabled = !u.mutedUntil;
+        loadCatalog().then(() => markOwned(u)).catch(() => { });
         $('m-nick').textContent = u.nickname;
         $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · xaritalar: ${u.maps} · darajalar K/A/M/S: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
         $('m-maps').value = u.maps; $('m-coins').value = ''; $('m-level').value = ''; $('m-reason').value = '';
@@ -263,23 +488,129 @@
     $('m-coins-btn').onclick = () => act('/coins', { amount: parseInt($('m-coins').value, 10) }, 'Tanga yangilandi');
     $('m-maps-btn').onclick = () => act('/maps', { n: parseInt($('m-maps').value, 10) }, 'Xaritalar ochildi');
     $('m-level-btn').onclick = () => act('/level', { hero: $('m-hero').value, level: parseInt($('m-level').value, 10) }, 'Daraja saqlandi');
-    $('m-ban-btn').onclick = () => { if (confirm(cur.nickname + ' bloklansinmi?')) act('/ban', { ban: true, reason: $('m-reason').value }, 'Bloklandi'); };
+    // Piksel tasdiq oynasi (brauzerning oq confirm() oynasi o'rniga)
+    const pxConfirm = (text, onYes) => {
+        $('pxc-text').textContent = text; $('px-confirm').classList.remove('hidden');
+        const close = () => $('px-confirm').classList.add('hidden');
+        $('pxc-no').onclick = close;
+        $('pxc-yes').onclick = () => { close(); onYes(); };
+    };
+    $('m-ban-btn').onclick = () => pxConfirm(cur.nickname + ' bloklansinmi?', () => act('/ban', { ban: true, reason: $('m-reason').value }, 'Bloklandi'));
     $('m-unban-btn').onclick = () => act('/ban', { ban: false }, 'Blokdan chiqarildi');
+    $('m-rename-btn').onclick = () => { const n = $('m-nickname').value.trim(); if (n) pxConfirm(cur.nickname + ' -> ' + n + ' ?', () => act('/rename', { nickname: n }, "Nickname o'zgardi")); };
+    $('m-pass-btn').onclick = () => { const pw = $('m-pass').value; pxConfirm(cur.nickname + ' paroli almashtirilsinmi?', () => act('/password', { password: pw }, 'Parol almashtirildi - o\'yinchiga yangi parolni ayting')); };
+    $('m-cure-acid').onclick = () => act('/curses', { kind: 'acid' }, "Kislota la'nati olindi");
+    $('m-cure-bolt').onclick = () => act('/curses', { kind: 'bolt' }, "Chaqmoq la'nati olindi");
+    $('m-cure-all').onclick = () => act('/curses', { kind: 'all' }, "La'natlar olindi");
+    $('m-gift-btn').onclick = () => { if ($('m-gift').value) act('/gift', { item: $('m-gift').value }, "Sovg'a berildi"); };
+    $('m-mute-btn').onclick = () => act('/mute', { minutes: parseInt($('m-mute').value, 10) }, 'Chat taqiqlandi');
+    $('m-unmute-btn').onclick = () => act('/mute', { minutes: 0 }, 'Taqiq olib tashlandi');
+
+    // ===== Statistika =====
+    function barChart(box, xBox, vals, labels, tip) {
+        box.innerHTML = ''; xBox.innerHTML = '';
+        const top = Math.max(0, ...vals), max = Math.max(1, top);
+        vals.forEach((v, i) => {
+            const c = el('div', 'col'); c.title = tip(i, v);
+            const bar = el('i'); bar.style.height = Math.round(v / max * 100) + '%'; c.appendChild(bar); box.appendChild(c);
+        });
+        if (!vals.length) box.appendChild(el('div', 'empty', "Hali ma'lumot yo'q"));
+        if (labels.length) { xBox.appendChild(el('span', '', labels[0])); xBox.appendChild(el('span', '', 'max: ' + top)); xBox.appendChild(el('span', '', labels[labels.length - 1])); }
+    }
+    async function loadStats2() {
+        const d = await api('/stats2');
+        if (!d.success) return;
+        const hm = (t) => new Date(t).toTimeString().slice(0, 5);
+        barChart($('ch-online'), $('ch-online-x'), d.online.map(o => o.players), d.online.map(o => hm(o.t)), (i, v) => hm(d.online[i].t) + ' - ' + v + " o'yinchi, " + d.online[i].rooms + ' xona');
+        barChart($('ch-regs'), $('ch-regs-x'), d.days.map(x => x.regs), d.days.map(x => x.day.slice(5)), (i, v) => d.days[i].day + ' - ' + v);
+        const db = $('days-body'); db.innerHTML = '';
+        d.days.slice().reverse().forEach((x) => {
+            const tr = el('tr');
+            [x.day, x.regs, x.plays, x.ads, x.adCoins, x.adminCoins].forEach(v => tr.appendChild(el('td', '', String(v))));
+            db.appendChild(tr);
+        });
+        const mb = $('maps-body'); mb.innerHTML = '';
+        if (!d.maps.length) { const tr = el('tr'); const td = el('td', 'empty', "Hali o'yin yo'q"); td.colSpan = 4; tr.appendChild(td); mb.appendChild(tr); }
+        const maxLoss = Math.max(0, ...d.maps.map(m => m.losses));
+        d.maps.forEach((m) => {
+            const tr = el('tr');
+            tr.appendChild(el('td', 'nick', (m.index + 1) + '. ' + m.name));
+            [m.plays, m.wins].forEach(v => tr.appendChild(el('td', '', String(v))));
+            const lt = el('td', '', String(m.losses)); if (m.losses && m.losses === maxLoss) lt.style.color = 'var(--red)'; tr.appendChild(lt);
+            mb.appendChild(tr);
+        });
+    }
+    // ===== E'lon va texnik rejim =====
+    $('ann-btn').onclick = () => {
+        const text = $('ann-text').value.trim();
+        if (!text) return;
+        pxConfirm("E'lon hammaga yuborilsinmi?", async () => {
+            const d = await api('/announce', { method: 'POST', body: JSON.stringify({ text }) }).catch(() => null);
+            if (!d) return;
+            $('ann-msg').className = 'msg' + (d.success ? ' good' : '');
+            $('ann-msg').textContent = d.success ? "Yuborildi (" + d.sent + ' ta ulanish)' : msgOf(d.message);
+            if (d.success) $('ann-text').value = '';
+        });
+    };
+    function showMaint(d) {
+        $('mt-state').className = 'maint-state ' + (d.on ? 'on' : 'off');
+        $('mt-state').textContent = d.on ? 'YOQILGAN' + (d.message ? ': ' + d.message : '') : "O'CHIQ";
+    }
+    async function loadMaint() { const d = await api('/maintenance'); if (d.success) { showMaint(d); $('mt-msg').value = d.message || ''; } }
+    async function setMaint(on) {
+        const d = await api('/maintenance', { method: 'POST', body: JSON.stringify({ on, message: $('mt-msg').value }) }).catch(() => null);
+        if (!d) return;
+        $('mt-res').className = 'msg' + (d.success ? ' good' : ''); $('mt-res').textContent = d.success ? 'Saqlandi' : msgOf(d.message);
+        if (d.success) showMaint(d);
+    }
+    $('mt-on').onclick = () => pxConfirm('Texnik ishlar rejimi yoqilsinmi? Yangi o\'yinlar yopiladi', () => setMaint(true));
+    $('mt-off').onclick = () => setMaint(false);
+    // ===== Jurnal =====
+    async function loadLog() {
+        const d = await api('/log?page=' + logPage);
+        if (!d.success) return;
+        const body = $('log-body'); body.innerHTML = '';
+        if (!d.items.length) { const tr = el('tr'); const td = el('td', 'empty', "Hali amal yo'q"); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
+        d.items.forEach((it) => {
+            const tr = el('tr');
+            tr.appendChild(el('td', '', new Date(it.at).toLocaleString()));
+            tr.appendChild(el('td', '', it.admin));
+            tr.appendChild(el('td', 'log-act', ACTIONS[it.action] || it.action));
+            tr.appendChild(el('td', 'nick', it.target || '-'));
+            tr.appendChild(el('td', '', it.detail || ''));
+            body.appendChild(tr);
+        });
+        const pages = Math.max(1, Math.ceil(d.total / d.pageSize));
+        $('log-info').textContent = `Jami: ${d.total}  ·  ${logPage + 1} / ${pages}`;
+        $('log-prev').disabled = logPage <= 0; $('log-next').disabled = logPage + 1 >= pages;
+    }
+    $('log-prev').onclick = () => { logPage = Math.max(0, logPage - 1); loadLog(); };
+    $('log-next').onclick = () => { logPage++; loadLog(); };
+    $('f-sort').onchange = $('f-only').onchange = () => { page = 0; loadUsers(); };
     $('m-close').onclick = () => $('modal').classList.add('hidden');
     $('modal').onclick = (e) => { if (e.target === $('modal')) $('modal').classList.add('hidden'); };
 
     document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
         document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
-        const rooms = b.dataset.tab === 'rooms';
-        $('tab-users').classList.toggle('hidden', rooms); $('tab-rooms').classList.toggle('hidden', !rooms);
+        const tab = b.dataset.tab;
+        ['users', 'rooms', 'stats2', 'control', 'log'].forEach(n => $('tab-' + n).classList.toggle('hidden', n !== tab));
         clearInterval(roomsTimer);
-        if (rooms) { loadRooms(); roomsTimer = setInterval(loadRooms, 5000); }
+        if (tab === 'rooms') { loadRooms(); roomsTimer = setInterval(loadRooms, 5000); }
+        if (tab === 'stats2') loadStats2();
+        if (tab === 'control') loadMaint();
+        if (tab === 'log') { logPage = 0; loadLog(); }
     });
     $('search-btn').onclick = () => { query = $('search').value.trim(); page = 0; loadUsers(); };
     $('search').onkeydown = (e) => { if (e.key === 'Enter') $('search-btn').onclick(); };
     $('prev-btn').onclick = () => { page = Math.max(0, page - 1); loadUsers(); };
     $('next-btn').onclick = () => { page++; loadUsers(); };
-    $('refresh-btn').onclick = () => { loadStats(); loadUsers(); if (!$('tab-rooms').classList.contains('hidden')) loadRooms(); };
+    $('refresh-btn').onclick = () => {
+        loadStats(); loadUsers();
+        if (!$('tab-rooms').classList.contains('hidden')) loadRooms();
+        if (!$('tab-stats2').classList.contains('hidden')) loadStats2();
+        if (!$('tab-control').classList.contains('hidden')) loadMaint();
+        if (!$('tab-log').classList.contains('hidden')) loadLog();
+    };
     $('logout-btn').onclick = () => logout('');
     $('lg-btn').onclick = login;
     $('lg-pass').onkeydown = (e) => { if (e.key === 'Enter') login(); };

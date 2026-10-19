@@ -1,6 +1,8 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
+import zlib from 'zlib';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { RoomState } from './types';
@@ -9,7 +11,7 @@ import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
-import { MAPS, SEASON_MAP_COUNT } from './maps';
+import { MAPS, SEASON_MAP_COUNT, dailyOffer, farmLevel, farmCapacity, farmLevelXp } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
@@ -45,6 +47,44 @@ app.param('id', requireAuth);
 // Login/ro'yxatdan o'tish javobiga token qo'shiladi (klient uni saqlab, keyingi so'rovlarda yuboradi)
 const withToken = (result: { success: boolean, user?: db.UserRecord }) =>
     result.success && result.user ? { ...result, user: { ...result.user, token: signUser(result.user.id) } } : result;
+
+// SIQISH (gzip): matnli fayllar (game.js ~570 KB, index.html, lobby.js...) siqilgan holda beriladi - 4-5 baravar
+// kichik, sahifa telefonda ancha tez ochiladi. Siqilgan nusxa xotirada saqlanadi (fayl o'zgarsa - qayta siqiladi)
+const CLIENT_DIR = path.join(__dirname, '../../client');
+const GZ_TYPES: { [ext: string]: string } = {
+    '.js': 'application/javascript; charset=utf-8', '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml; charset=utf-8'
+};
+const gzCache = new Map<string, { mtime: number, size: number, etag: string, gz: Buffer }>();
+app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (!/\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) return next();
+    let rel: string;
+    try { rel = decodeURIComponent(req.path); } catch { return next(); }
+    if (rel.endsWith('/')) rel += 'index.html';
+    const type = GZ_TYPES[path.extname(rel).toLowerCase()];
+    if (!type) return next();
+    const file = path.join(CLIENT_DIR, rel);
+    if (!file.startsWith(CLIENT_DIR + path.sep)) return next();
+    fs.stat(file, (err, st) => {
+        if (err || !st.isFile()) return next();
+        let c = gzCache.get(file);
+        if (!c || c.mtime !== st.mtimeMs || c.size !== st.size) {
+            try { c = { mtime: st.mtimeMs, size: st.size, etag: 'W/"gz-' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"', gz: zlib.gzipSync(fs.readFileSync(file), { level: 9 }) }; }
+            catch { return next(); }
+            gzCache.set(file, c);
+        }
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Vary', 'Accept-Encoding');
+        res.setHeader('ETag', c.etag);
+        if (req.headers['if-none-match'] === c.etag) { res.status(304).end(); return; }
+        res.setHeader('Content-Type', type);
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Content-Length', String(c.gz.length));
+        if (req.method === 'HEAD') { res.end(); return; }
+        res.end(c.gz);
+    });
+});
 
 // Client papkasidagi fayllarni (index.html, game.js, lobby.js) serve qilish
 // no-cache: brauzer har safar fayl o'zgarganini tekshiradi (o'zgarmagan bo'lsa -
@@ -108,8 +148,25 @@ const adminUserView = (u: db.UserRecord) => {
     const levels: { [c: string]: number } = {};
     db.HERO_TYPES.forEach(c => { levels[c] = db.xpLevel((u.charXp || {})[c] || 0); });
     return { id: u.id, nickname: u.nickname, fullName: u.fullName, coins: u.coins, maps: Math.min(u.unlockedLevel + 1, SEASON_MAP_COUNT),
-        levels, banned: !!u.banned, banReason: u.banReason || '', createdAt: u.createdAt || null, online: online ? { room: online.roomName, code: online.roomId } : null };
+        levels, banned: !!u.banned, banReason: u.banReason || '', createdAt: u.createdAt || null, online: online ? { room: online.roomName, code: online.roomId } : null,
+        mutedUntil: db.isMuted(u.mutedUntil) ? u.mutedUntil : 0, curses: { acid: !!u.cursedAcid, bolt: !!u.cursedBolt },
+        owned: { cosmetics: u.ownedCosmetics || [], skins: u.ownedSkins || {}, weaponSkins: u.ownedWeaponSkins || {} } };
 };
+// ADMIN AMALLARI JURNALI: har o'zgartiruvchi amal yoziladi (kim - admin va IP)
+const adminWho = (req: express.Request) => 'admin@' + (req.ip || '?');
+const logAdmin = (req: express.Request, action: string, target: string, detail: string = '') => { db.addAdminLog(adminWho(req), action, target, detail); };
+// TEXNIK ISHLAR REJIMI: yoqilganda yangi xona ochish / o'yin boshlash yopiladi (o'ynayotganlar o'yinini tugatadi)
+const maintenance = { on: false, message: '' };
+db.getSetting('maintenance').then(v => { if (v) { maintenance.on = !!v.on; maintenance.message = String(v.message || ''); } }).catch(() => { });
+// ONLAYN TARIXI (grafik uchun): har 5 daqiqada o'lchanadi, oxirgi 24 soat xotirada
+const onlineHistory: { t: number, players: number, rooms: number }[] = [];
+const sampleOnline = () => {
+    const o = roomManager.onlineStats();
+    onlineHistory.push({ t: Date.now(), players: o.players, rooms: o.rooms });
+    if (onlineHistory.length > 288) onlineHistory.shift();
+};
+setInterval(sampleOnline, 5 * 60 * 1000).unref();
+setTimeout(sampleOnline, 3000).unref();
 // ObjectId bo'lmagan ID - xato bermasin
 const validUid = (uid: string) => /^[a-f0-9]{24}$/i.test(uid);
 app.post('/api/admin/login', (req, res) => { res.json(adminLogin(req.body && req.body.login, req.body && req.body.password, req.ip)); });
@@ -120,7 +177,8 @@ app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
     try {
         const page = Math.max(0, parseInt(String(req.query.page || '0'), 10) || 0);
-        const r = await db.listUsers(String(req.query.q || ''), page * 50, 50);
+        const sort = String(req.query.sort || 'new'), only = String(req.query.only || 'all');
+        const r = await db.listUsers(String(req.query.q || ''), page * 50, 50, sort, only, only === 'online' ? roomManager.onlineUserIds() : []);
         res.json({ success: true, total: r.total, page, pageSize: 50, users: r.users.map(adminUserView) });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
@@ -133,6 +191,7 @@ app.post('/api/admin/users/:uid/ban', requireAdmin, async (req, res) => {
         const upd = await db.setBanned(String(req.params.uid), ban, reason);
         if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
         const kicked = ban ? roomManager.kickUser(upd.id, reason) : false;
+        logAdmin(req, ban ? 'ban' : 'unban', upd.nickname, reason);
         res.json({ success: true, kicked, user: adminUserView(upd) });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
@@ -144,6 +203,8 @@ app.post('/api/admin/users/:uid/coins', requireAdmin, async (req, res) => {
         const upd = await db.adjustCoins(String(req.params.uid), amount);
         if (!upd || !before) { res.json({ success: false, message: 'err_user_not_found' }); return; }
         roomManager.notifyCoins(upd.id, upd.coins - before.coins, upd.coins);
+        logAdmin(req, 'coins', upd.nickname, (amount > 0 ? '+' : '') + amount + ' -> ' + upd.coins);
+        if (upd.coins - before.coins > 0) db.bumpStat({ adminCoins: upd.coins - before.coins });
         res.json({ success: true, user: adminUserView(upd) });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
@@ -154,6 +215,7 @@ app.post('/api/admin/users/:uid/maps', requireAdmin, async (req, res) => {
         const upd = await db.setUnlockedLevel(String(req.params.uid), n - 1);
         if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
         roomManager.notifyUnlocked(upd.id, n - 1);
+        logAdmin(req, 'maps', upd.nickname, String(n));
         res.json({ success: true, user: adminUserView(upd) });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
@@ -166,7 +228,178 @@ app.post('/api/admin/users/:uid/level', requireAdmin, async (req, res) => {
         const upd = await db.setHeroLevel(String(req.params.uid), heroes, level);
         if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
         roomManager.notifyLevel(upd.id, upd.charXp);
+        logAdmin(req, 'level', upd.nickname, hero + ' = ' + level);
         res.json({ success: true, user: adminUserView(upd) });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+// --- Yangi admin amallari ---
+// Ixtiyoriy handler xatosini bitta joyda ushlash
+const adminRoute = (fn: (req: express.Request, res: express.Response) => Promise<void>) => async (req: express.Request, res: express.Response) => {
+    try { await fn(req, res); } catch (e) { console.error('admin xatosi:', e); if (!res.headersSent) res.status(500).json({ success: false, message: 'err_server' }); }
+};
+const badUser = (req: express.Request, res: express.Response) => {
+    if (validUid(String(req.params.uid))) return false;
+    res.status(400).json({ success: false, message: 'err_user_not_found' });
+    return true;
+};
+// 1. Parolni almashtirish
+app.post('/api/admin/users/:uid/password', requireAdmin, adminRoute(async (req, res) => {
+    if (badUser(req, res)) return;
+    const r = await db.adminSetPassword(String(req.params.uid), req.body && req.body.password);
+    if (!r.success || !r.user) { res.json({ success: false, message: r.message }); return; }
+    logAdmin(req, 'password', r.user.nickname);
+    res.json({ success: true, user: adminUserView(r.user) });
+}));
+// 2. Hisob nomini (nickname) majburan o'zgartirish
+app.post('/api/admin/users/:uid/rename', requireAdmin, adminRoute(async (req, res) => {
+    if (badUser(req, res)) return;
+    const before = await db.getUserById(String(req.params.uid));
+    const r = await db.renameUser(String(req.params.uid), req.body && req.body.nickname);
+    if (!r.success || !r.user) { res.json({ success: false, message: r.message }); return; }
+    roomManager.notifyRename(r.user.id, r.user.nickname);
+    logAdmin(req, 'rename', r.user.nickname, (before ? before.nickname : '?') + ' -> ' + r.user.nickname);
+    res.json({ success: true, user: adminUserView(r.user) });
+}));
+// 3a. La'natlarni olib tashlash
+app.post('/api/admin/users/:uid/curses', requireAdmin, adminRoute(async (req, res) => {
+    if (badUser(req, res)) return;
+    const k = String((req.body && req.body.kind) || 'all');
+    const kinds: ('acid' | 'bolt')[] = k === 'acid' ? ['acid'] : k === 'bolt' ? ['bolt'] : ['acid', 'bolt'];
+    const upd = await db.adminClearCurses(String(req.params.uid), kinds);
+    if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+    roomManager.notifyCurses(upd.id, kinds);
+    logAdmin(req, 'curses', upd.nickname, kinds.join('+'));
+    res.json({ success: true, user: adminUserView(upd) });
+}));
+// 3b. Sovg'a: detal / personaj skini / qurol skini. Katalog - tanlash ro'yxati uchun
+app.get('/api/admin/catalog', requireAdmin, (_req, res) => {
+    const items: { value: string, label: string, group: string }[] = [];
+    HEAD_ITEMS.forEach(i => items.push({ value: 'cos|head|' + i.id, label: i.name, group: 'Bosh' }));
+    FACE_ITEMS.forEach(i => items.push({ value: 'cos|face|' + i.id, label: i.name, group: 'Yuz' }));
+    Object.keys(WEAPON_ITEMS).forEach(c => Object.keys(WEAPON_ITEMS[c]).forEach(slot => WEAPON_ITEMS[c][slot].forEach(i =>
+        items.push({ value: 'cos|' + c + '.' + slot + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Qurol detali' }))));
+    Object.keys(SKIN_CATALOG).forEach(c => SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'skin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Personaj skini' }); }));
+    Object.keys(WEAPON_SKIN_CATALOG).forEach(c => WEAPON_SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'wskin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Qurol rangi' }); }));
+    res.json({ success: true, items });
+});
+app.post('/api/admin/users/:uid/gift', requireAdmin, adminRoute(async (req, res) => {
+    if (badUser(req, res)) return;
+    const [kind, a, id] = String((req.body && req.body.item) || '').split('|');
+    let upd: db.UserRecord | null = null, label = '';
+    if (kind === 'cos') {
+        const [c, slot] = a.includes('.') ? a.split('.') : ['knight', a];
+        const item = findCosmetic(c, slot, id);
+        if (!item) { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
+        upd = await db.adminGiftCosmetic(String(req.params.uid), cosmeticKey(c, slot, id));
+        label = item.name;
+    } else if ((kind === 'skin' || kind === 'wskin') && isKnownSkin(a, id, kind === 'wskin') && id !== 'default') {
+        upd = await db.adminGiftSkin(String(req.params.uid), kind === 'wskin' ? 'weapon' : 'hero', a, id);
+        label = (kind === 'wskin' ? 'weapon ' : '') + a + ':' + id;
+    } else { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
+    if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+    roomManager.notifyGift(upd.id);
+    logAdmin(req, 'gift', upd.nickname, label);
+    res.json({ success: true, user: adminUserView(upd) });
+}));
+// 5. Chat taqig'i: minutes > 0 - shuncha daqiqa, -1 - doimiy, 0 - olib tashlash
+app.post('/api/admin/users/:uid/mute', requireAdmin, adminRoute(async (req, res) => {
+    if (badUser(req, res)) return;
+    const minutes = Number(req.body && req.body.minutes);
+    if (!Number.isInteger(minutes) || minutes < -1 || minutes > 525600) { res.status(400).json({ success: false, message: 'err_bad_amount' }); return; }
+    const until = minutes === -1 ? -1 : minutes === 0 ? 0 : Date.now() + minutes * 60000;
+    const upd = await db.adminSetMute(String(req.params.uid), until);
+    if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+    roomManager.notifyMute(upd.id, until);
+    logAdmin(req, minutes === 0 ? 'unmute' : 'mute', upd.nickname, minutes === -1 ? 'forever' : minutes ? minutes + ' min' : '');
+    res.json({ success: true, user: adminUserView(upd) });
+}));
+// 6. Xonalarni boshqarish: o'yinchini chiqarish / xonani yopish / raundni to'xtatish
+app.post('/api/admin/rooms/:code/kick', requireAdmin, adminRoute(async (req, res) => {
+    const nick = roomManager.adminKick(String(req.params.code), String((req.body && req.body.playerId) || ''));
+    if (!nick) { res.json({ success: false, message: 'err_room_not_found' }); return; }
+    logAdmin(req, 'room_kick', nick, String(req.params.code));
+    res.json({ success: true });
+}));
+app.post('/api/admin/rooms/:code/close', requireAdmin, adminRoute(async (req, res) => {
+    if (!roomManager.adminCloseRoom(String(req.params.code))) { res.json({ success: false, message: 'err_room_not_found' }); return; }
+    logAdmin(req, 'room_close', String(req.params.code));
+    res.json({ success: true });
+}));
+app.post('/api/admin/rooms/:code/stop', requireAdmin, adminRoute(async (req, res) => {
+    if (!roomManager.adminStopRound(String(req.params.code))) { res.json({ success: false, message: 'err_room_not_found' }); return; }
+    logAdmin(req, 'room_stop', String(req.params.code));
+    res.json({ success: true });
+}));
+// 7. Hamma onlayn o'yinchilarga e'lon (ekran tepasida chiqadi)
+app.post('/api/admin/announce', requireAdmin, adminRoute(async (req, res) => {
+    const text = String((req.body && req.body.text) || '').trim().slice(0, 200);
+    if (!text) { res.status(400).json({ success: false, message: 'err_fields_required' }); return; }
+    io.emit('adminAnnounce', { text });
+    logAdmin(req, 'announce', '', text);
+    res.json({ success: true, sent: io.engine.clientsCount });
+}));
+// 8. Texnik ishlar rejimi
+app.get('/api/admin/maintenance', requireAdmin, (_req, res) => { res.json({ success: true, ...maintenance }); });
+app.post('/api/admin/maintenance', requireAdmin, adminRoute(async (req, res) => {
+    maintenance.on = !!(req.body && req.body.on);
+    maintenance.message = String((req.body && req.body.message) || '').trim().slice(0, 200);
+    await db.setSetting('maintenance', { on: maintenance.on, message: maintenance.message });
+    io.emit('maintenance', maintenance);
+    logAdmin(req, maintenance.on ? 'maint_on' : 'maint_off', '', maintenance.message);
+    res.json({ success: true, ...maintenance });
+}));
+// 9. Kengaytirilgan statistika (oxirgi 14 kun)
+app.get('/api/admin/stats2', requireAdmin, adminRoute(async (_req, res) => {
+    const DAYS = 14;
+    const [regs, dayStats] = await Promise.all([db.registrationsByDay(DAYS), db.getDayStats(DAYS)]);
+    const days: string[] = [];
+    for (let i = DAYS - 1; i >= 0; i--) days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    const regMap: { [d: string]: number } = {}; regs.forEach(r => { regMap[r.day] = r.n; });
+    const statMap: { [d: string]: any } = {}; dayStats.forEach(d => { statMap[d.day] = d.c; });
+    const sum = (field: 'plays' | 'wins' | 'losses') => {
+        const t: { [m: string]: number } = {};
+        dayStats.forEach(d => Object.entries(d.c[field] || {}).forEach(([m, n]) => { t[m] = (t[m] || 0) + (Number(n) || 0); }));
+        return t;
+    };
+    const plays = sum('plays'), wins = sum('wins'), losses = sum('losses');
+    const mapsTable = Object.keys({ ...plays, ...losses, ...wins }).map(Number).filter(i => MAPS[i]).map(i => ({
+        index: i, name: MAPS[i].name, plays: plays[i] || 0, wins: wins[i] || 0, losses: losses[i] || 0
+    })).sort((a, b) => b.plays - a.plays);
+    res.json({ success: true,
+        days: days.map(d => ({ day: d, regs: regMap[d] || 0, ads: (statMap[d] || {}).ads || 0, adCoins: (statMap[d] || {}).adCoins || 0,
+            adminCoins: (statMap[d] || {}).adminCoins || 0, plays: Object.values((statMap[d] || {}).plays || {}).reduce((a: number, n: any) => a + (Number(n) || 0), 0) })),
+        online: onlineHistory, maps: mapsTable });
+}));
+// 10. Admin amallari jurnali
+app.get('/api/admin/log', requireAdmin, adminRoute(async (req, res) => {
+    const page = Math.max(0, parseInt(String(req.query.page || '0'), 10) || 0);
+    const r = await db.listAdminLog(page * 50, 50);
+    res.json({ success: true, total: r.total, page, pageSize: 50, items: r.items });
+}));
+
+// INVENTAR: yig'ilgan hosil, baliqlar, asboblar; keraksizini sotish (bozordagi narxda)
+app.get('/api/inventory/:userId', async (req, res) => {
+    try {
+        const inv = await db.getInventory(req.params.userId);
+        if (!inv) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+        const level = farmLevel(inv.farmXp);
+        res.json({ success: true, ...inv, prices: RoomManager.cropPrices(), offer: dailyOffer(Date.now()), farmLevel: level, cap: farmCapacity(level),
+            levelXp: [farmLevelXp(level), farmLevelXp(Math.min(level + 1, 10))] });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/inventory/:userId/sell', async (req, res) => {
+    try {
+        const b = req.body || {};
+        const crops: { [c: string]: number } = {};
+        if (b.crops && typeof b.crops === 'object' && !Array.isArray(b.crops)) {
+            Object.keys(b.crops).slice(0, 30).forEach((k) => { const n = Number(b.crops[k]); if (/^[a-z]{2,20}$/.test(k) && Number.isInteger(n) && n > 0 && n <= 100000) crops[k] = n; });
+        }
+        const fish: string[] = Array.isArray(b.fish) ? b.fish.filter((u: unknown) => typeof u === 'string' && u.length <= 40).slice(0, 500) : [];
+        const r = b.all === true ? await db.sellInventory(req.params.userId, 'all', 'all', RoomManager.cropPrices(), dailyOffer(Date.now()))
+            : await db.sellInventory(req.params.userId, crops, fish, RoomManager.cropPrices(), dailyOffer(Date.now()));
+        let xp = 0;
+        if (r.success) { roomManager.farmChanged(req.params.userId); db.bumpStat({ farmCoins: r.earned || 0 }); xp = await roomManager.saleHeroXp(req.params.userId, r.earned || 0); }
+        res.json({ ...r, xp });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 
@@ -234,6 +467,7 @@ app.post('/api/ads/:userId/reward', async (req, res) => {
         }
         adTickets.delete(req.params.userId);
         const r = await db.claimAdReward(req.params.userId, AD_REWARD_COINS, AD_COOLDOWN_MS, AD_DAILY_CAP);
+        if (r.success) db.bumpStat({ ads: 1, adCoins: AD_REWARD_COINS });
         res.json(r.success ? { success: true, coins: r.user!.coins, left: r.left, reward: AD_REWARD_COINS } : r);
     } catch (e) {
         res.status(500).json({ success: false, message: 'err_server' });
@@ -258,6 +492,11 @@ app.get('/api/my-rooms/:userId', async (req, res) => {
 app.get('/api/my-rooms/:userId/latest', async (req, res) => {
     try {
         const room = await db.getMostRecentRoomByHost(req.params.userId);
+        // Progress hozir HISOBDA saqlanadi (xona yozuvidagi eski qiymat yangilanmaydi) - xo'jayinning haqiqiy progressi
+        if (room) {
+            const user = await db.getUserById(req.params.userId);
+            if (user) room.unlockedLevel = Math.max(room.unlockedLevel || 0, user.unlockedLevel || 0);
+        }
         res.json({ success: true, room });
     } catch (err) {
         res.status(500).json({ success: false, message: 'err_load_room' });
@@ -283,6 +522,7 @@ app.get('/api/character/:userId', async (req, res) => {
             charXp: user.charXp,
             unlockedLevel: user.unlockedLevel,
             upgrades: user.upgrades,
+            xpBoost: user.xpBoost || {},
             skillPoints: user.skillPoints,
             ownedSkins: user.ownedSkins,
             equippedSkins: user.equippedSkins,
@@ -315,6 +555,20 @@ app.post('/api/character/:userId/default', async (req, res) => {
 // KO'NIKMA BALLINI SARFLAB, TANLANGAN PERSONAJNING "damage" YOKI "stamina" NI OSHIRISH
 // MUHIM: bu FAQAT lobbida/xonada, aynan o'sha personaj hozir tanlangan bo'lsa ishlaydi -
 // "Mening Personajim" ekranini bosh menyudan ochib kuchaytirib bo'lmaydi (faqat ko'rish mumkin)
+// XP KUCHAYTIRISH: tanlangan personajga +1 daraja (har jang mukofotiga +50 XP), narxi 300, 500, 700 ...
+app.post('/api/character/:userId/xpboost', async (req, res) => {
+    try {
+        const { characterType, roomId, payWith } = req.body || {};
+        if (typeof characterType !== 'string') { res.status(400).json({ success: false, message: 'err_bad_skill' }); return; }
+        const r = await db.buyXpBoost(req.params.userId, characterType, payWith === 'points' ? 'points' : 'coins');
+        if (r.success && typeof roomId === 'string' && activeRooms[roomId]) {
+            const p = Object.values(activeRooms[roomId].players).find(pl => pl.userId === req.params.userId);
+            if (p) p.xpBoost = r.user!.xpBoost;
+        }
+        res.json(r.success ? { success: true, coins: r.user!.coins, xpBoost: r.user!.xpBoost, skillPoints: r.user!.skillPoints } : r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
 app.post('/api/character/:userId/upgrade', async (req, res) => {
     const { characterType, stat, roomId, payWith } = req.body || {};
     if (typeof stat !== 'string' || typeof characterType !== 'string') {
@@ -445,7 +699,10 @@ app.post('/api/cosmetics/:userId/equip', async (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*" }
+    cors: { origin: "*" },
+    // O'yin holati (sekundiga ~17 marta, 2-5 KB JSON) siqilib yuboriladi: kalitlar va o'zgarmagan qismlar
+    // (minalar, o'yinchi maydonlari) har safar takrorlanadi - siqilganda bir necha baravar kichrayadi
+    perMessageDeflate: { threshold: 512 }
 });
 
 // Barcha o'yin xonalari shu yerda saqlanadi
@@ -501,6 +758,9 @@ io.on('connection', (socket) => {
 
     // Yangi ulanish bo'lganda mavjud xonalar ro'yxatini yuborish
     roomManager.broadcastRoomList();
+    if (maintenance.on) socket.emit('maintenance', maintenance);
+    // Texnik ishlar paytida (admin o'zi - mumkin)
+    const blockedByMaintenance = (): boolean => maintenance.on && !(socket.data as any).isAdmin;
 
     // 1. XONA YARATISH (endi userId/nickname bilan)
     // Hisobli (ro'yxatdan o'tgan) foydalanuvchi yaratsa, xona bazada SAQLANADI -
@@ -510,6 +770,7 @@ io.on('connection', (socket) => {
         if (!data) return;
         const userId = authedUserId(data);
         if (userId === undefined) return;
+        if (blockedByMaintenance()) { socket.emit('joinError', 'err_maintenance'); return; }
         const roomName = (typeof data.roomName === 'string' && data.roomName.trim() ? data.roomName.trim() : 'Room').slice(0, 40);
         const isPrivate = !!data.isPrivate;
         let roomId: string;
@@ -619,6 +880,7 @@ io.on('connection', (socket) => {
                 fail('err_room_not_open');
                 return;
             }
+            if (blockedByMaintenance()) { fail('err_maintenance'); return; }
 
             // Xo'jayin o'zi qaytib kelganda, xonani saqlangan progress bilan qayta tiklaymiz
             activeRooms[roomCode] = {
@@ -684,6 +946,7 @@ io.on('connection', (socket) => {
     socket.on('requestStartGame', (roomId: string) => {
         const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
         if (room && room.hostId === socket.id && !room.isStarted) {
+            if (blockedByMaintenance()) { socket.emit('startError', 'err_maintenance'); return; }
             // BARCHA (xo'jayindan tashqari) O'YINCHILAR "TAYYOR" BOSGANMI TEKSHIRAMIZ
             const otherPlayers = Object.values(room.players).filter(p => p.id !== room.hostId);
             const allReady = otherPlayers.every(p => p.isReady);
@@ -708,6 +971,37 @@ io.on('connection', (socket) => {
     socket.on('doorsInteract', (roomId: string) => {
         const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
         if (room && room.isStarted) gameEngine.doorsInteract(room, socket.id);
+    });
+    // RANETS AVTOMATI (S2 map-9): sotib olish / singan avtomatdan olish
+    socket.on('vendBuy', (d: { roomId: string }) => {
+        if (!d || typeof d.roomId !== 'string') return;
+        roomManager.vendBuy(socket, d.roomId).catch(err => console.error('vendBuy xatosi:', err));
+    });
+    socket.on('vendPick', (d: { roomId: string }) => {
+        if (!d || typeof d.roomId !== 'string') return;
+        roomManager.vendPick(socket, d.roomId);
+    });
+    // DO'KON (bonus): Eliksir / Chip
+    // MY FARM: ekish / yig'ish; S1 bozorida - hosilni sotish
+    socket.on('farmAct', (d: { roomId: string, action: string, k: number, crop?: string, arg?: string }) => {
+        if (!d || typeof d.roomId !== 'string') return;
+        roomManager.farmAct(socket, d.roomId, d.action, d.k, d.arg !== undefined ? d.arg : d.crop);
+    });
+    socket.on('farmBag', () => { roomManager.farmBag(socket); });
+    socket.on('myFarmSync', (roomId: string) => {
+        if (typeof roomId === 'string' && activeRooms[roomId] && activeRooms[roomId].players[socket.id]) roomManager.sendMyFarm(roomId);
+    });
+    socket.on('produceSell', (d: { roomId: string, what?: string }) => {
+        if (d && typeof d.roomId === 'string') roomManager.produceSell(socket, d.roomId, d.what === 'fish' ? 'fish' : 'crops');
+    });
+    socket.on('shopBuy', (d: { roomId: string, item: string }) => {
+        if (!d || typeof d.roomId !== 'string') return;
+        roomManager.shopBuy(socket, d.roomId, d.item).catch(err => console.error('shopBuy xatosi:', err));
+    });
+    // Yuruvchi toshlar (map-7): qahramon toshga qo'ndi
+    socket.on('stoneStep', (d: { roomId: string, i: number }) => {
+        const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
+        if (room && room.isStarted) gameEngine.stepStone(room, socket.id, Number(d.i));
     });
     socket.on('pullCarrot', (roomId: string) => {
         const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;

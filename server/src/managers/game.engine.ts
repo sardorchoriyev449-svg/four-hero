@@ -1,3 +1,4 @@
+import * as db from '../db';
 import { Server } from 'socket.io';
 import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
@@ -132,6 +133,8 @@ export class GameEngine {
             if (!room.isStarted) return;
             // Yolg'iz o'yinchi pauza qilgan - o'yin to'xtab turadi
             if (room.paused) return;
+            // LEVEL UP: kimdir yangi darajaga chiqdi - o'yin hamma uchun bir necha soniya to'xtaydi (nur tushadi)
+            if (room.freezeUntil && Date.now() < room.freezeUntil) return;
             // Hali kimdir xaritani yuklayapti - raund to'xtab turadi (kutish vaqti tugasa - boshlanadi)
             if (room.loadingIds && room.loadingIds.length > 0) {
                 if (Date.now() < (room.loadDeadline || 0)) return;
@@ -177,14 +180,15 @@ export class GameEngine {
                     player.specialTicks--;
                     // Mage: 2 soniya davomida xonadagi barcha tirik qahramonlar davolanadi (~40 HP)
                     if (player.characterType === 'mage') {
-                        Object.values(room.players).forEach(ally => {
-                            if (!ally.isDead) ally.hp = Math.min(ally.maxHp || BASE_HP, ally.hp + 0.6);
+                        // PvP da ittifoqchi yo'q - faqat o'zini davolaydi
+                        (room.pvp ? [player] : Object.values(room.players)).forEach(ally => {
+                            if (!ally.isDead && !ally.acidCurse) ally.hp = Math.min(ally.maxHp || BASE_HP, ally.hp + 0.6);
                         });
                     }
                 }
                 // JON TIKLANISHI ("regen" kuchaytirishi): tirik qahramon asta-sekin o'zi davolanadi
                 const regen = regenPerSecondOf(player);
-                if (regen > 0 && player.hp < (player.maxHp || BASE_HP)) {
+                if (regen > 0 && !player.acidCurse && player.hp < (player.maxHp || BASE_HP)) {
                     player.hp = Math.min(player.maxHp || BASE_HP, player.hp + regen * this.TICK_SECONDS);
                 }
                 // Drobovik qayta o'qlanishi
@@ -275,11 +279,37 @@ export class GameEngine {
             // 4o. HIS BACK (Season 2, map-6)
             this.updateBack(room, roomId);
 
+            // 4p. INFINITY TNT (Season 2, map-7)
+            this.updateTnt(room, roomId);
+
+            // 4q. IRON GIANT (Season 2, map-8)
+            this.updateRobot(room, roomId);
+
+            // 4r. ROAD TO SKYLAND (Season 2, map-9): ranets avtomati, jarlik
+            this.updateVend(room, roomId);
+
+            // 4s. SKY BATTLE (Season 2, map-10): osmondagi jang
+            this.updateSky(room, roomId);
+
+            // 4t. NO MORE FRIENDS (bonus, PvP): qayta tug'ilish
+            this.updatePvp(room, roomId);
+
+            // 4u. MY FARM (bonus): o'yinchilar o'zgarsa (kirdi/chiqdi) - maydonlar qayta yuboriladi
+            if (room.myFarm) {
+                const mf = room.myFarm;
+                mf.tick++;
+                const sig = room.hostId + '|' + Object.keys(room.players).length;
+                if (sig !== mf.sig || mf.tick % 150 === 0) this.roomManager.sendMyFarm(roomId);
+                this.roomManager.tickFishing(roomId);
+                if (mf.tick % 2000 === 0) this.roomManager.farmTouch(roomId);   // har minutda: host shu yerda (qo'ziqorinlar chiqmasin)
+                this.updateMyFarmWorld(room, roomId);
+            }
+
             // 4b. MAG'LUBIYAT SHARTI: agar xonadagi BARCHA o'yinchilar arvoh
             // (o'lik) bo'lib qolsa, o'yin "O'YIN TUGADI" bilan yakunlanadi
             if (!room.isOver) {
                 const allPlayers = Object.values(room.players);
-                const allDead = allPlayers.length > 0 && allPlayers.every(p => p.isDead);
+                const allDead = allPlayers.length > 0 && allPlayers.every(p => p.isDead) && !room.pvp && !room.myFarm;
                 if (allDead) {
                     this.roomManager.declareGameOverLoss(roomId).catch(err => {
                         console.error('declareGameOverLoss xatosi:', err);
@@ -300,6 +330,7 @@ export class GameEngine {
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0,
                     acid: (p.acidTicks || 0) > 0,
+                    curseA: !!p.acidCurse, curseB: !!p.boltCurse, jet: !!p.jetpack,
                     isAdmin: !!p.isAdmin
                 };
             });
@@ -319,6 +350,8 @@ export class GameEngine {
                 flyingMines: room.flyingMines || [],
                 redBoxes: room.redBoxes || [],
                 stones: room.stones || [],
+                // Toshlar tebranishi uchun server vaqti: klient toshni o'zi har kadr silliq hisoblaydi
+                stonesT: room.stones && room.stones.length ? (room.levelTicks || 0) * 30 : null,
                 gorilla: room.gorilla || null,
                 fatElf: room.fatElf || null,
                 acid: room.acid || [],
@@ -326,6 +359,27 @@ export class GameEngine {
                 gflower: room.gflower ? { state: room.gflower.state, hp: room.gflower.hp, maxHp: room.gflower.maxHp, hx: Math.round(room.gflower.hx), hy: Math.round(room.gflower.hy),
                     side: room.gflower.side, hitFlash: room.gflower.hitFlash, bite: room.gflower.bite ? room.gflower.bite.phase : null,
                     whip: room.gflower.whip ? { plat: room.gflower.whip.plat, phase: room.gflower.whip.phase, x0: room.gflower.whip.x0, x1: room.gflower.whip.x1, y: room.gflower.whip.y } : null } : null,
+                robot: room.robot ? { state: room.robot.state, hp: room.robot.hp, maxHp: room.robot.maxHp, hitFlash: room.robot.hitFlash,
+                    fist: { x: Math.round(room.robot.fist.x), y: Math.round(room.robot.fist.y), phase: room.robot.fist.phase, tx: Math.round(room.robot.fist.tx), ty: Math.round(room.robot.fist.ty) },
+                    laser: room.robot.laser ? { x1: Math.round(room.robot.laser.x1), y1: Math.round(room.robot.laser.y1), x2: Math.round(room.robot.laser.x2), y2: Math.round(room.robot.laser.y2), phase: room.robot.laser.phase } : null,
+                    act: room.robot.act ? room.robot.act.kind : null,
+                    bolts: room.robot.bolts.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy) })) } : null,
+                tnt: room.tnt ? { state: room.tnt.state, hp: room.tnt.hp, maxHp: room.tnt.maxHp, hitFlash: room.tnt.hitFlash, fuse: room.tnt.state === 'fuse' ? Math.ceil(room.tnt.timer * 30 / 1000) : 0,
+                    gor: { x: Math.round(room.tnt.gor.x), y: Math.round(room.tnt.gor.y), facing: room.tnt.gor.facing, act: room.tnt.gor.act },
+                    bombs: room.tnt.bombs.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), kind: b.kind })),
+                    warns: room.tnt.warns } : null,
+                pvp: room.pvp ? { shield: Object.keys(room.pvp.shieldUntil).filter(id => room.pvp!.shieldUntil[id] > room.pvp!.tick),
+                    respawn: Object.fromEntries(Object.entries(room.pvp.respawnAt).map(([id, t]) => [id, Math.max(0, Math.ceil((t - room.pvp!.tick) * 30 / 1000))])), win: getMapById(room.selectedLevel).pvp!.killsToWin } : null,
+                sky: room.sky ? { state: room.sky.state, wave: room.sky.wave,
+                    enemies: room.sky.enemies.map(e => ({ id: e.id, x: Math.round(e.x), y: Math.round(e.y), hp: e.hp, maxHp: e.maxHp, f: e.facing, hf: e.hitFlash > 0 ? 1 : 0 })),
+                    shots: room.sky.shots.map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), vx: Math.round(s.vx), vy: Math.round(s.vy) })),
+                    strikes: room.sky.strikes.map(s => ({ id: s.id, x: Math.round(s.x), phase: s.phase })),
+                    boss: room.sky.boss ? { x: Math.round(room.sky.boss.x), y: Math.round(room.sky.boss.y), hp: room.sky.boss.hp, maxHp: room.sky.boss.maxHp,
+                        hf: room.sky.boss.hitFlash > 0 ? 1 : 0, f: room.sky.boss.facing, act: room.sky.boss.act } : null } : null,
+                vend: room.vend ? { state: room.vend.state, hp: room.vend.hp, maxHp: room.vend.maxHp, x: Math.round(room.vend.x), y: Math.round(room.vend.y),
+                    facing: room.vend.facing, hitFlash: room.vend.hitFlash, shield: room.vend.shieldFlash > 0, vuln: this.vendVulnerable(room.vend),
+                    act: room.vend.act ? room.vend.act.kind : null, phase: room.vend.act ? room.vend.act.phase : null,
+                    landX: room.vend.act && room.vend.act.landX !== null ? Math.round(room.vend.act.landX) : null, jets: room.vend.jets, flyId: room.vend.flyId } : null,
                 back: room.back ? { state: room.back.state, barrels: room.back.barrels.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), dir: b.dir })) } : null,
                 doors: room.doors ? {
                     state: room.doors.state, choice: room.doors.choice, segment: room.doors.segment, sub: room.doors.sub,
@@ -646,18 +700,22 @@ export class GameEngine {
             let target: PlayerState | null = bot.targetPlayerId ? (room.players[bot.targetPlayerId] || null) : null;
             if (target && (target.isInvisible || target.isDead)) target = null;
 
-            if (!target) {
-                // Yangi raqib: o'ziga ENG YAQIN (tirik, ko'rinadigan) o'yinchini tanlaydi -
-                // botlar xona bo'ylab tarqoq turgani uchun, bu tabiiy ravishda turli
-                // botlarni turli o'yinchilarga yo'naltiradi
-                let closest: PlayerState | null = null;
-                let minDist = Infinity;
-                Object.values(room.players).forEach((p) => {
-                    if (p.isInvisible || p.isDead) return;
-                    const d = Math.hypot(p.x - bot.x, p.y - bot.y);
-                    if (d < minDist) { minDist = d; closest = p; }
+            // Raqib vaqti-vaqti bilan qayta tanlanadi (har ~2.5-3.4 s): masofa + shu o'yinchini allaqachon nechta bot
+            // quvayotgani hisobga olinadi - botlar hammasi bitta o'yinchiga yopishib qolmay, o'yinchilar orasida
+            // bo'linadi. Almashish faqat boshqasi sezilarli qulayroq bo'lsa (har tikda u yoqdan-bu yoqqa sakramasin)
+            bot.retargetTimer = (bot.retargetTimer || 0) - 1;
+            if (!target || bot.retargetTimer <= 0) {
+                bot.retargetTimer = 85 + Math.floor(Math.random() * 30);
+                const chasing: { [id: string]: number } = {};
+                room.bots.forEach(b => { if (b !== bot && b.targetPlayerId) chasing[b.targetPlayerId] = (chasing[b.targetPlayerId] || 0) + 1; });
+                const score = (pl: PlayerState) => Math.hypot(pl.x - bot.x, pl.y - bot.y) + 220 * (chasing[pl.id] || 0);
+                let best: PlayerState | null = null, bestScore = Infinity;
+                Object.values(room.players).forEach((pl) => {
+                    if (pl.isInvisible || pl.isDead) return;
+                    const sc = score(pl);
+                    if (sc < bestScore) { bestScore = sc; best = pl; }
                 });
-                target = closest;
+                if (best && (!target || bestScore < score(target) - 120)) target = best;
                 bot.targetPlayerId = target ? (target as PlayerState).id : null;
             }
 
@@ -972,6 +1030,118 @@ export class GameEngine {
                 if (gor.hp <= 0) this.gorillaDefeated(room, gor);
             }
 
+            // NO MORE FRIENDS (PvP): o'q / zarba boshqa o'yinchiga tegadi (o'ziga emas; qayta tug'ilgan - qisqa himoyada)
+            const pv = room.pvp, pvd = map.pvp;
+            if (!bulletDestroyed && pv && pvd && !pv.done) {
+                const shooter = room.players[bullet.playerId];
+                const victim = Object.values(room.players).find(v => v.id !== bullet.playerId && !v.isDead &&
+                    this.checkOverlap(hitRect, { x: v.x - this.PLAYER_HALF_W, y: v.y - this.PLAYER_HALF_H, w: this.PLAYER_HALF_W * 2, h: this.PLAYER_HALF_H * 2 }));
+                if (victim) {
+                    bulletDestroyed = true;
+                    if ((pv.shieldUntil[victim.id] || 0) <= pv.tick) {
+                        const blocked = victim.characterType === 'knight' && victim.isHoldingAbility;
+                        const dmg = Math.round(damage * (blocked ? 1 - pvd.shieldBlock : 1));
+                        this.hurtPlayer(victim, dmg);
+                        this.knockback(victim, (bullet.vx < 0 ? -1 : 1) * (blocked ? 120 : 260), -160);
+                        this.io.to(room.id).emit('pvpHit', { id: victim.id, x: Math.round(victim.x), y: Math.round(victim.y), blocked });
+                        if (victim.isDead) {
+                            pv.respawnAt[victim.id] = pv.tick + Math.round(pvd.respawnMs / 30);
+                            if (shooter && shooter.id !== victim.id) shooter.kills++;
+                            this.io.to(room.id).emit('pvpKill', { killer: shooter ? shooter.nickname : '', victim: victim.nickname, killerId: shooter ? shooter.id : null, victimId: victim.id });
+                            if (shooter && shooter.kills >= pvd.killsToWin) {
+                                pv.done = true;
+                                this.roomManager.declareWinner(room.id, shooter.id).catch(err => console.error('declareWinner xatosi:', err));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // SKY BATTLE: uchar mashinali botlar va boss (uchar kema)
+            const sk = room.sky, skd = map.sky;
+            if (!bulletDestroyed && sk && skd) {
+                for (let k = sk.enemies.length - 1; k >= 0 && !bulletDestroyed; k--) {
+                    const en = sk.enemies[k];
+                    if (!this.checkOverlap(hitRect, { x: en.x - skd.enemyW / 2, y: en.y - skd.enemyH / 2, w: skd.enemyW, h: skd.enemyH })) continue;
+                    bulletDestroyed = true;
+                    en.hp = Math.max(0, en.hp - damage);
+                    en.hitFlash = 4;
+                    if (en.hp <= 0) this.skyEnemyDown(room, k, bullet.playerId);
+                }
+                const bs = sk.boss;
+                if (!bulletDestroyed && bs && sk.state === 'boss' && this.checkOverlap(hitRect, { x: bs.x - skd.bossW / 2, y: bs.y - skd.bossH / 2, w: skd.bossW, h: skd.bossH })) {
+                    bulletDestroyed = true;
+                    bs.hp = Math.max(0, bs.hp - damage);
+                    bs.hitFlash = 4;
+                    if (bs.hp <= 0) {
+                        sk.state = 'dying'; sk.timer = Math.round(skd.bossDyingMs / 30); sk.shots = []; sk.enemies = [];
+                        this.io.to(room.id).emit('skyBossDown', { x: Math.round(bs.x), y: Math.round(bs.y) });
+                    }
+                }
+            }
+
+            // MY FARM: qo'ziqorinlar va baxaybat daraxtning og'zi (boss jangida)
+            const mfw = room.myFarm, mfd = map.myFarm;
+            if (!bulletDestroyed && mfw && mfd) {
+                for (const sh of mfw.shrooms) {
+                    if (!this.checkOverlap(hitRect, { x: sh.x - 22, y: 516, w: 44, h: 56 })) continue;
+                    bulletDestroyed = true;
+                    sh.hp = Math.max(0, sh.hp - damage);
+                    sh.hitFlash = 4;
+                    if (sh.hp <= 0) this.roomManager.shroomKilled(room.id, sh.id, bullet.playerId);
+                    break;
+                }
+                const tb = mfw.boss;
+                if (!bulletDestroyed && tb && this.checkOverlap(hitRect, mfd.tree.mouth)) {
+                    bulletDestroyed = true;
+                    tb.hp = Math.max(0, tb.hp - damage);
+                    tb.hitFlash = 4;
+                    if (tb.hp <= 0) this.roomManager.treeBossDefeated(room.id);
+                }
+            }
+
+            // RANETS AVTOMATI: tinch turganiga tegsa - jahli chiqadi; jangda qalqon to'sadi (olov sochayotganda
+            // va sakrab tushgandan keyingina zarar oladi)
+            const vn = room.vend, vnd = map.vend;
+            if (!bulletDestroyed && vn && vnd && (vn.state === 'idle' || vn.state === 'transform' || vn.state === 'fight') && this.checkOverlap(hitRect, this.vendRect(vn, vnd))) {
+                bulletDestroyed = true;
+                if (vn.state === 'idle') this.vendProvoke(room);
+                else if (vn.state === 'fight' && this.vendVulnerable(vn)) {
+                    vn.hp = Math.max(0, vn.hp - damage);
+                    vn.hitFlash = 4;
+                    if (vn.hp <= 0) this.vendDefeated(room);
+                } else {
+                    if (vn.shieldFlash <= 0) this.io.to(room.id).emit('vendBlock', {});
+                    vn.shieldFlash = 8;
+                }
+            }
+
+            // IRON GIANT: faqat BOSHI zarar oladi (tanasi, qo'llari - yo'q)
+            const rb = room.robot, rbd2 = map.robot;
+            // Bot chiqargandan keyin (o'chiq) - atrofida GOLOGRAMMA QALQON: hech qanday zarba o'tmaydi
+            // (faqat robotning o'ziga - boshi va tanasi; tagidagi bot turgan joy ochiq, aks holda botni o'ldirib bo'lmay qolardi)
+            const holoHead = rbd2 ? { x: rbd2.head.x - 20, y: rbd2.head.y - 20, w: rbd2.head.w + 40, h: rbd2.head.h + 40 } : null;
+            const holoBody = rbd2 ? { x: rbd2.arenaX + 684, y: rbd2.head.y - 20, w: 116, h: 300 } : null;
+            if (!bulletDestroyed && rb && rbd2 && rb.state === 'off' && (this.checkOverlap(hitRect, holoHead!) || this.checkOverlap(hitRect, holoBody!))) {
+                bulletDestroyed = true;
+                if ((rb.holoCd || 0) <= rb.tick) { rb.holoCd = rb.tick + 6; this.io.to(room.id).emit('robotHoloHit', { x: Math.round(hitRect.x + hitRect.w / 2), y: Math.round(hitRect.y + hitRect.h / 2) }); }
+            }
+            if (!bulletDestroyed && rb && rbd2 && rb.state === 'on' && this.checkOverlap(hitRect, rbd2.head)) {
+                bulletDestroyed = true;
+                rb.hp = Math.max(0, rb.hp - damage);
+                rb.hitFlash = 4;
+                if (rb.hp <= 0) this.robotDefeated(room);
+            }
+
+            // INFINITY TNT: faqat bochkaning o'zi zarar oladi (Gorila Rock'ka o'q ta'sir qilmaydi)
+            const tn = room.tnt, tnd = map.tnt;
+            if (!bulletDestroyed && tn && tnd && tn.state === 'fight' && this.checkOverlap(hitRect, tnd.box)) {
+                bulletDestroyed = true;
+                tn.hp = Math.max(0, tn.hp - damage);
+                tn.hitFlash = 4;
+                if (tn.hp <= 0) this.tntFuse(room);
+            }
+
             // HIS BACK: o'q tekkan bochka portlaydi (yo'lni tozalash mumkin)
             const bk = room.back, bkd = map.back;
             if (!bulletDestroyed && bk && bkd && bk.barrels.length) {
@@ -1144,7 +1314,7 @@ export class GameEngine {
         const ar = getMapById(room.selectedLevel).arena;
         // Har bot uchun o'ldirganga tajriba (arenada - tanga ham)
         if (killer && !room.isOver) {
-            this.roomManager.awardReward(room.id, killer.id, ar ? ar.botCoins : 0, ar ? ar.botXp : GameEngine.KILL_XP)
+            this.roomManager.awardReward(room.id, killer.id, ar ? ar.botCoins : 0, ar ? ar.botXp : GameEngine.KILL_XP, true)
                 .catch(err => console.error('awardReward xatosi:', err));
         }
         if (dead.skin === 'zombie' && room.farm && room.farm.state === 'fight') {
@@ -1233,11 +1403,9 @@ export class GameEngine {
             const def = cfg.stones[i];
             const bobY = def.baseY + def.amp * Math.sin((2 * Math.PI * tMs) / def.periodMs + def.phase);
             if (st.state === 'idle' || st.state === 'shake') st.y = bobY;
-            if (st.state === 'idle') {
-                const onIt = alive.some(p => Math.abs(p.x - st.x) <= st.w / 2 + 10 &&
-                    Math.abs(p.y + this.PLAYER_HALF_H - st.y) <= 10);
-                if (onIt) { st.state = 'shake'; st.timer = Math.round(cfg.fallDelayMs / 30); }
-            } else if (st.state === 'shake') {
+            // Toshga qadam qo'yilganini klient aytadi (stepStone): u haqiqiy to'qnashuvni ko'radi. Server o'zi
+            // taxmin qilganda tebranayotgan tosh va tarmoq kechikishi tufayli tegilmagan toshlar ham qulardi
+            if (st.state === 'shake') {
                 if (--st.timer <= 0) { st.state = 'fall'; st.vy = 0; }
             } else if (st.state === 'fall') {
                 st.vy = Math.min(900, st.vy + 900 * this.TICK_SECONDS);
@@ -1258,6 +1426,18 @@ export class GameEngine {
                 console.error('declareWinner xatosi:', err);
             });
         }
+    }
+
+    // Qahramon toshga ustidan qo'ndi (klient fizikasi): tosh titray boshlaydi. Server faqat qahramon
+    // haqiqatan shu tosh yonida ekanini tekshiradi (tarmoq kechikishi uchun keng zaxira bilan)
+    public stepStone(room: RoomState, playerId: string, i: number): void {
+        const cfg = getMapById(room.selectedLevel).stones;
+        const p = room.players[playerId];
+        const st = room.stones && Number.isInteger(i) ? room.stones[i] : undefined;
+        if (!cfg || !p || p.isDead || !st || st.state !== 'idle' || room.isOver) return;
+        if (Math.abs(p.x - st.x) > st.w / 2 + 30 || Math.abs(p.y + this.PLAYER_HALF_H - st.y) > 70) return;
+        st.state = 'shake';
+        st.timer = Math.round(cfg.fallDelayMs / 30);
     }
 
     // ===== TOSH GORILLA (map-8) =====
@@ -1605,7 +1785,27 @@ export class GameEngine {
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
+        room.freezeUntil = 0;
         room.back = map.back ? { state: 'walk', timer: 0, tick: 0, nextBarrel: 0, counter: 0, barrels: [] } : null;
+        const rbd = map.robot;
+        const rbHp = rbd ? rbd.hpPerPlayer * Math.max(1, Object.keys(room.players).length) : 0;
+        room.robot = rbd ? { state: 'walk', hp: rbHp, maxHp: rbHp, tick: 0, timer: 0, step: 0, hitFlash: 0, nextAct: 0, act: null,
+            fist: { x: rbd.fistRest.x, y: rbd.fistRest.y, phase: 'rest', t: 0, tx: 0, ty: 0, warn: 0, dmg: 0, hit: [] }, laser: null, bolts: [], counter: 0 } : null;
+        room.pvp = map.pvp ? { respawnAt: {}, shieldUntil: {}, tick: 0, done: false } : null;
+        room.myFarm = map.myFarm ? { owner: null, farm: null, loading: false, sig: '', tick: 0, fishing: null, respawnAt: {}, worldOn: false, seq: 0, shrooms: [], boss: null } : null;
+        if (map.pvp) Object.values(room.players).forEach(p => { p.kills = 0; });
+        const skd0 = map.sky;
+        room.sky = skd0 ? { state: 'intro', tick: 0, timer: Math.round(skd0.introMs / 30), wave: 0, counter: 0, nextStrike: Math.round((skd0.introMs + 4000) / 30),
+            enemies: [], shots: [], strikes: [], boss: null } : null;
+        const vd = map.vend;
+        room.vend = vd ? { state: 'idle', hp: vd.hp, maxHp: vd.hp, tick: 0, timer: 0, x: vd.machineX, y: 570, facing: -1,
+            hitFlash: 0, shieldFlash: 0, vuln: 0, step: 0, nextAct: 0, act: null, contactCd: {}, jets: [], flyId: null } : null;
+        const td = map.tnt;
+        // INFINITY TNT joni: 1 kishi - 1600, har qo'shimcha o'yinchiga +800 (2 - 2400, 3 - 3200, 4 - 4000)
+        const tntHp = td ? td.hp + td.hpPerExtraPlayer * Math.max(0, Object.keys(room.players).length - 1) : 0;
+        room.tnt = td ? { state: 'intro', hp: tntHp, maxHp: tntHp, tick: 0, timer: Math.round(td.introMs / 30), hitFlash: 0, counter: 0,
+            gor: { x: td.gorStartX, y: map.platforms[td.floor].y, surf: td.floor, facing: -1, act: 'idle', t: 0, x0: 0, y0: 0, x1: 0, y1: 0, peak: 0, dur: 0, target: null, plan: null, thrown: 0 },
+            bombs: [], warns: [], nextAct: 0, step: 0, contactCd: {} } : null;
         if (map.arena) {
             room.gorilla = null;
             room.fatElf = null;
@@ -1613,7 +1813,7 @@ export class GameEngine {
         } else {
             room.arena = null;
         }
-        Object.values(room.players).forEach(p => { p.acidTicks = 0; });
+        Object.values(room.players).forEach(p => { p.acidTicks = 0; p.jetpack = !!map.sky; });   // ranets - faqat shu xaritada (osmondagi jangda - hammada)
         // O'rmonda itlar darhol emas - daraxt yoniga yetilganda chiqadi
         if (map.mode === 'waves' && !map.forest) GameEngine.spawnWave(room, map);
     }
@@ -1746,10 +1946,19 @@ export class GameEngine {
         room.acid = [];
         room.doorOpen = true;   // o'ngdagi eshik ochiladi
     }
-    // Kislota tegdi: maksimal jonning 30% i, 2 soniya stamina tiklanmaydi
+    // Kislota tegdi: maksimal jonning 30% i, 2 soniya stamina tiklanmaydi va LA'NAT - jon o'zi tiklanmaydi
+    // (do'kondan Eliksir sotib olinmaguncha, hisobda saqlanadi)
     private acidHit(p: PlayerState, def: NonNullable<MapDef['fatElf']>): void {
         this.hurtPlayer(p, Math.round((p.maxHp || 100) * def.acidDamagePct));
         p.acidTicks = Math.round(def.acidStaminaLockMs / 30);
+        this.curse(p, 'acid');
+    }
+    private curse(p: PlayerState, kind: 'acid' | 'bolt'): void {
+        const had = kind === 'acid' ? p.acidCurse : p.boltCurse;
+        if (kind === 'acid') p.acidCurse = true; else p.boltCurse = true;
+        if (had) return;
+        if (p.userId !== null) db.setCurse(p.userId, kind, true);
+        this.io.to(p.id).emit('cursed', { kind });
     }
 
     private updateFatElf(room: RoomState, roomId: string): void {
@@ -2588,6 +2797,908 @@ export class GameEngine {
         this.io.to(room.id).emit('squidDown');
     }
 
+    // ===== NO MORE FRIENDS (bonus, PvP) =====
+    private updatePvp(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const d = map.pvp, pv = room.pvp;
+        if (!d || !pv || room.isOver) return;
+        pv.tick++;
+        // O'lgan qahramon bir oz o'tib qayta tug'iladi - boshqalardan eng uzoq boshlang'ich joyda, qisqa himoya bilan
+        Object.values(room.players).forEach((p) => {
+            if (!p.isDead) return;
+            if (pv.respawnAt[p.id] === undefined) pv.respawnAt[p.id] = pv.tick + Math.round(d.respawnMs / 30);
+            if (pv.tick < pv.respawnAt[p.id] || pv.done) return;
+            delete pv.respawnAt[p.id];
+            const others = Object.values(room.players).filter(o => o.id !== p.id && !o.isDead);
+            const spot = map.playerSpawns.slice().sort((a, b) => {
+                const da = others.length ? Math.min(...others.map(o => Math.abs(o.x - a.x) + Math.abs(o.y - a.y))) : 0;
+                const db2 = others.length ? Math.min(...others.map(o => Math.abs(o.x - b.x) + Math.abs(o.y - b.y))) : 0;
+                return db2 - da;
+            })[0];
+            p.isDead = false;
+            p.hp = p.maxHp || 100;
+            p.stamina = p.maxStamina || 100;
+            p.x = spot.x; p.y = spot.y;
+            pv.shieldUntil[p.id] = pv.tick + Math.round(d.spawnShieldMs / 30);
+            this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+            this.io.to(roomId).emit('pvpRespawn', { id: p.id });
+        });
+    }
+
+    // ===== MY FARM: qayta tug'ilish, qo'ziqorinlar (sporalar, ekinni yeyish), baxaybat daraxt BOSS hujumlari =====
+    private updateMyFarmWorld(room: RoomState, roomId: string): void {
+        const mf = room.myFarm, map = getMapById(room.selectedLevel), F = map.myFarm;
+        if (!mf || !F || room.isOver) return;
+        const now = Date.now(), dt = this.TICK_SECONDS;
+        // O'lgan qahramon 5 soniyadan keyin ferma uyida qayta tug'iladi (tinch xarita - mag'lubiyat yo'q)
+        Object.values(room.players).forEach((p) => {
+            if (!p.isDead) { delete mf.respawnAt[p.id]; return; }
+            if (mf.respawnAt[p.id] === undefined) { mf.respawnAt[p.id] = now + 5000; return; }
+            if (now < mf.respawnAt[p.id]) return;
+            delete mf.respawnAt[p.id];
+            const sp = map.playerSpawns[0];
+            p.isDead = false; p.hp = p.maxHp || 100; p.stamina = p.maxStamina || 100; p.x = sp.x; p.y = sp.y;
+            this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
+        });
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        const SD = F.shrooms;
+        mf.shrooms.forEach((sh) => {
+            if (sh.hitFlash > 0) sh.hitFlash--;
+            if (now >= sh.nextPuff) {
+                const near = alive.filter(p => Math.abs(p.x - sh.x) <= SD.sporeRange && p.y > 420);
+                if (near.length) {
+                    sh.nextPuff = now + SD.sporeEveryMs;
+                    near.forEach(p => this.hurtPlayer(p, SD.sporeDamage));
+                    this.io.to(roomId).emit('mfSpore', { x: sh.x });
+                }
+            }
+            if (!sh.ate && now - sh.born >= SD.eatMs) { sh.ate = true; this.roomManager.shroomEat(roomId, sh.k); }
+        });
+        const b = mf.boss, T = F.tree;
+        if (b) {
+            if (b.hitFlash > 0) b.hitFlash--;
+            const G = 900;
+            // Tikonli olmalar (ballistik)
+            b.queue = b.queue.filter((q) => { if (now < q.at) return true; b.apples.push({ id: ++mf.seq, x: q.x, y: q.y, vx: q.vx, vy: q.vy }); return false; });
+            b.apples = b.apples.filter((a) => {
+                a.vy += G * dt; a.x += a.vx * dt; a.y += a.vy * dt;
+                const hit = alive.find(p => Math.abs(p.x - a.x) <= 24 && Math.abs(p.y - a.y) <= 34);
+                if (hit) { this.hurtPlayer(hit, T.appleDamage); this.knockback(hit, a.vx > 0 ? 240 : -240, -180); return false; }
+                return a.y < 600 && a.x > T.arenaX0 - 400 && a.x < T.arenaX1 + 400;
+            });
+            // Yerdan chiqadigan tomirlar (ogohlantirish -> otilib chiqadi)
+            b.roots = b.roots.filter((r) => {
+                if (r.phase === 'warn' && now >= r.at) {
+                    r.phase = 'up'; r.at = now + 650;
+                    alive.filter(p => Math.abs(p.x - r.x) <= 36 && p.y > 470).forEach((p) => { this.hurtPlayer(p, T.rootDamage); this.knockback(p, 0, -520); });
+                    return true;
+                }
+                return !(r.phase === 'up' && now >= r.at);
+            });
+            // Tepagacha otilib chiqadigan uzun tomirlar
+            b.pillars = b.pillars.filter((pl) => {
+                if (pl.phase === 'warn' && now >= pl.at) { pl.phase = 'up'; pl.at = now + 1200; }
+                if (pl.phase === 'up') {
+                    alive.forEach((p) => {
+                        if (pl.hit.includes(p.id) || Math.abs(p.x - pl.x) > 28) return;
+                        pl.hit.push(p.id);
+                        this.hurtPlayer(p, T.pillarDamage);
+                        this.knockback(p, p.x < pl.x ? -320 : 320, -220);
+                    });
+                    if (now >= pl.at) return false;
+                }
+                return true;
+            });
+            // Navbatdagi hujum: joni kamaygan sari tezroq
+            if (now >= b.nextAt) {
+                const inArena = alive.filter(p => p.x >= T.arenaX0 - 250 && p.x <= T.arenaX1 + 250);
+                if (!inArena.length) b.nextAt = now + 1000;
+                else {
+                    const ground = inArena.filter(p => p.y > 500);
+                    let kinds = ['roots', 'apples', 'pillars'].filter(k => k !== b.last);
+                    if (!ground.length) kinds = kinds.filter(k => k !== 'roots');
+                    const kind = kinds[Math.floor(Math.random() * kinds.length)];
+                    b.last = kind;
+                    const mx = T.mouth.x + T.mouth.w / 2, my = T.mouth.y + 20;
+                    if (kind === 'roots') ground.forEach(p => b.roots.push({ x: p.x, phase: 'warn', at: now + 800 }));
+                    else if (kind === 'apples') {
+                        const tg = inArena[Math.floor(Math.random() * inArena.length)];
+                        for (let i = 0; i < 5; i++) {
+                            const fly = 0.85 + i * 0.05, tx = tg.x + (i - 2) * 40, ty = tg.y;
+                            b.queue.push({ at: now + 400 + i * 260, x: mx, y: my, vx: (tx - mx) / fly, vy: (ty - my) / fly - 0.5 * G * fly });
+                        }
+                    } else {
+                        const xs = [inArena[Math.floor(Math.random() * inArena.length)].x];
+                        while (xs.length < 3) { const x = T.arenaX0 + 40 + Math.random() * (T.arenaX1 - T.arenaX0 - 80); if (xs.every(o => Math.abs(o - x) > 120)) xs.push(x); }
+                        xs.forEach(x => b.pillars.push({ x, phase: 'warn', at: now + 1000, hit: [] }));
+                    }
+                    b.nextAt = now + 2800 - Math.round(1000 * (1 - b.hp / b.maxHp));
+                    this.io.to(roomId).emit('treeAttack', { kind });
+                }
+            }
+        }
+        // Dunyo holati (faqat kerak bo'lganda): qo'ziqorinlar va boss
+        const on = mf.shrooms.length > 0 || !!b;
+        if ((on || mf.worldOn) && this.frame % this.BROADCAST_EVERY === 0) {
+            mf.worldOn = on;
+            this.io.to(roomId).emit('mfWorld', {
+                shrooms: mf.shrooms.map(sh => ({ id: sh.id, x: sh.x, k: sh.k, hp: Math.ceil(sh.hp), maxHp: sh.maxHp, f: sh.hitFlash > 0, eatIn: Math.max(0, Math.ceil((sh.born + SD.eatMs - now) / 1000)) })),
+                boss: b ? { hp: Math.ceil(b.hp), maxHp: b.maxHp, f: b.hitFlash > 0,
+                    apples: b.apples.map(a => ({ id: a.id, x: Math.round(a.x), y: Math.round(a.y) })),
+                    roots: b.roots.map(r => ({ x: Math.round(r.x), p: r.phase })),
+                    pillars: b.pillars.map(p => ({ x: Math.round(p.x), p: p.phase })) } : null
+            });
+        }
+    }
+
+    // ===== SKY BATTLE (Season 2, map-10): osmondagi jang =====
+    private skyEnemyDown(room: RoomState, index: number, killerId: string | null): void {
+        const sk = room.sky!;
+        const en = sk.enemies.splice(index, 1)[0];
+        this.io.to(room.id).emit('skyEnemyDown', { x: Math.round(en.x), y: Math.round(en.y) });
+        const killer = killerId ? room.players[killerId] : null;
+        if (killer && !room.isOver) {
+            killer.kills++;
+            this.roomManager.awardReward(room.id, killer.id, 0, GameEngine.KILL_XP, true).catch(err => console.error('awardReward xatosi:', err));
+        }
+    }
+    private skySpawnWave(room: RoomState, d: NonNullable<MapDef['sky']>, W: number): void {
+        const sk = room.sky!;
+        sk.wave++;
+        sk.state = 'wave';
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        const n = Math.max(1, Math.min(4, Object.keys(room.players).length));
+        const hp = d.enemyHp + (sk.wave - 1) * d.enemyHpPerWave;
+        for (let i = 0; i < n; i++) {
+            const tg = alive.length ? alive[i % alive.length] : null;
+            const side = (i % 2 === 0 ? 1 : -1);
+            const x = Math.max(40, Math.min(W - 40, (tg ? tg.x : 400) + side * (520 + Math.random() * 160)));
+            sk.enemies.push({ id: 'se' + (++sk.counter), x, y: d.top + 40 + Math.random() * (d.bottom - d.top - 80), hp, maxHp: hp, target: tg ? tg.id : null,
+                ox: Math.random() * 60, oy: -70 + Math.random() * 140, nextShot: sk.tick + Math.round((900 + Math.random() * 900) / 30), hitFlash: 0, facing: -side });
+        }
+        this.io.to(room.id).emit('skyWave', { wave: sk.wave, waves: d.waves });
+    }
+    // Kema nishonni OLDINDAN oladi: o'yinchi tezligi (playerMotion) bo'yicha o'q yetib boradigan paytdagi joyiga
+    private skyLead(p: PlayerState, sx: number, sy: number, speed: number, d: NonNullable<MapDef['sky']>, W: number): { x: number, y: number } {
+        const m = this.playerMotion.get(p.id);
+        let tx = p.x, ty = p.y;
+        for (let k = 0; k < 2; k++) {   // ikki marta aniqlashtiriladi (masofa o'zgaradi)
+            const tt = Math.min(1.4, Math.hypot(tx - sx, ty - sy) / Math.max(1, speed));
+            tx = Math.max(30, Math.min(W - 30, p.x + (m ? m.vx : 0) * tt));
+            ty = Math.max(d.top, Math.min(d.bottom, p.y + (m ? m.vy : 0) * tt));
+        }
+        return { x: tx, y: ty };
+    }
+    private skyShoot(sk: NonNullable<RoomState['sky']>, x: number, y: number, tx: number, ty: number, speed: number, dmg: number, spread = 0): void {
+        const a = Math.atan2(ty - y, tx - x) + spread;
+        sk.shots.push({ id: 'ss' + (++sk.counter), x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, t: 0, dmg });
+    }
+    // Qilich bilan uradigan qahramon (ritsar/samuray asosiy qurolda) - dushman unga yaqin keladi, aks holda
+    // qilich hech qachon yetmasdi; kamonchi/sehrgar/o'qotar qurol - uzoqroqda suzadi
+    private skyIsMelee(p: PlayerState): boolean {
+        return (p.characterType === 'knight' || p.characterType === 'samurai') && p.weaponMode !== 'alt';
+    }
+    private updateSky(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const d = map.sky, sk = room.sky;
+        if (!d || !sk || room.isOver) return;
+        const ms = (v: number) => Math.round(v / 30), dt = this.TICK_SECONDS, W = map.mapWidth;
+        sk.tick++;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        // O'yinchilar bulutlardan o'ta olmaydi (klient ham cheklaydi - bu ehtiyot uchun)
+        alive.forEach(p => { p.y = Math.max(d.top - 10, Math.min(d.bottom + 10, p.y)); });
+        if (sk.state === 'done') return;
+        if (sk.state === 'dying') {
+            if (--sk.timer <= 0) {
+                sk.state = 'done';
+                this.roomManager.declareWinner(roomId, this.topKillerId(room)).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        if (sk.state === 'intro') { if (--sk.timer <= 0) this.skySpawnWave(room, d, W); return; }
+        const pRect = (p: PlayerState) => ({ x: p.x - this.PLAYER_HALF_W, y: p.y - this.PLAYER_HALF_H, w: this.PLAYER_HALF_W * 2, h: this.PLAYER_HALF_H * 2 });
+        // UCHAR MASHINALAR: o'z o'yinchisining yonida suzadi, unga nishonlab o'q otadi
+        sk.enemies.forEach((en, i) => {
+            if (en.hitFlash > 0) en.hitFlash--;
+            let tg = en.target ? room.players[en.target] : null;
+            if (!tg || tg.isDead) { tg = alive.length ? alive[i % alive.length] : null; en.target = tg ? tg.id : null; }
+            if (!tg) return;
+            const side = en.x < tg.x ? -1 : 1;
+            const gx = tg.x + side * ((this.skyIsMelee(tg) ? 64 : 220) + en.ox), gy = Math.max(d.top + 20, Math.min(d.bottom - 20, tg.y + en.oy + Math.sin((sk.tick + i * 40) / 25) * 30));
+            const dx = gx - en.x, dy = gy - en.y, dist = Math.hypot(dx, dy);
+            const step = Math.min(dist, d.enemySpeed * dt);
+            if (dist > 1) { en.x += dx / dist * step; en.y += dy / dist * step; }
+            en.x = Math.max(30, Math.min(W - 30, en.x));
+            en.facing = tg.x < en.x ? -1 : 1;
+            if (sk.tick >= en.nextShot && Math.abs(tg.x - en.x) < 760) {
+                en.nextShot = sk.tick + ms(d.enemyShotEveryMs * (0.8 + Math.random() * 0.5));
+                this.skyShoot(sk, en.x + en.facing * 30, en.y + 6, tg.x, tg.y, d.enemyShotSpeed, d.enemyShotDamage, (Math.random() - 0.5) * 0.12);
+                this.io.to(roomId).emit('skyShot', {});
+            }
+        });
+        // O'QLAR
+        for (let i = sk.shots.length - 1; i >= 0; i--) {
+            const s = sk.shots[i];
+            s.x += s.vx * dt; s.y += s.vy * dt; s.t++;
+            const hit = alive.find(p => this.checkOverlap(pRect(p), { x: s.x - 6, y: s.y - 6, w: 12, h: 12 }));
+            if (hit) {
+                sk.shots.splice(i, 1);
+                this.hurtPlayer(hit, s.dmg);
+                this.knockback(hit, Math.sign(s.vx || 1) * 200, Math.sign(s.vy) * 80);
+                this.io.to(roomId).emit('skyShotHit', { id: hit.id, x: Math.round(s.x), y: Math.round(s.y) });
+                continue;
+            }
+            if (s.t > ms(3500) || s.x < -50 || s.x > W + 50 || s.y < 0 || s.y > 620) sk.shots.splice(i, 1);
+        }
+        // CHAQMOQ: avval belgi (1 s), so'ng ustun bo'ylab urib o'tadi
+        if (sk.tick >= sk.nextStrike && alive.length) {
+            sk.nextStrike = sk.tick + ms(d.strikeEveryMs * (0.7 + Math.random() * 0.6));
+            const tg = alive[Math.floor(Math.random() * alive.length)];
+            sk.strikes.push({ id: 'sl' + (++sk.counter), x: Math.max(30, Math.min(W - 30, tg.x + (Math.random() - 0.5) * 120)), t: 0, phase: 'warn', hit: [] });
+            this.io.to(roomId).emit('skyStrikeWarn', {});
+        }
+        for (let i = sk.strikes.length - 1; i >= 0; i--) {
+            const st = sk.strikes[i];
+            st.t++;
+            if (st.phase === 'warn' && st.t >= ms(d.strikeWarnMs)) { st.phase = 'hit'; st.t = 0; this.io.to(roomId).emit('skyStrike', { x: Math.round(st.x) }); }
+            if (st.phase === 'hit') {
+                alive.forEach(p => {
+                    if (st.hit.includes(p.id) || Math.abs(p.x - st.x) > d.strikeW / 2 + this.PLAYER_HALF_W) return;
+                    st.hit.push(p.id);
+                    this.hurtPlayer(p, d.strikeDamage);
+                    this.knockback(p, (p.x < st.x ? -1 : 1) * 320, 0);
+                });
+                if (st.t >= ms(d.strikeMs)) sk.strikes.splice(i, 1);
+            }
+        }
+        // TO'LQINLAR
+        if (sk.state === 'wave' && sk.enemies.length === 0) { sk.state = 'gap'; sk.timer = ms(d.waveGapMs); }
+        if (sk.state === 'gap' && --sk.timer <= 0) {
+            if (sk.wave < d.waves) this.skySpawnWave(room, d, W);
+            else {
+                // BOSS: uchar kema o'ng tomondan kirib keladi
+                const n = Math.max(1, Object.keys(room.players).length);
+                const ax = alive.length ? alive.reduce((a, p) => a + p.x, 0) / alive.length : 400;
+                const hp = d.bossHpPerPlayer * n;
+                sk.boss = { x: Math.min(W - d.bossW / 2, ax + 700), y: (d.top + d.bottom) / 2 - 60, hp, maxHp: hp, hitFlash: 0, facing: -1, act: null, actT: 0, actN: 0, nextAct: sk.tick + ms(2200), step: 0, phase: 0 };
+                sk.state = 'boss';
+                this.io.to(roomId).emit('skyBoss', {});
+            }
+        }
+        // BOSS
+        const b = sk.boss;
+        if (sk.state === 'boss' && b) {
+            if (b.hitFlash > 0) b.hitFlash--;
+            b.phase++;
+            const near = alive.slice().sort((p1, p2) => Math.abs(p1.x - b.x) - Math.abs(p2.x - b.x))[0];
+            if (near) {
+                // Eng yaqin o'yinchidan ~330 px narida, yuqoriroqda suzadi
+                const side = b.x >= near.x ? 1 : -1;
+                const gx = Math.max(d.bossW / 2, Math.min(W - d.bossW / 2, near.x + side * (this.skyIsMelee(near) ? d.bossW / 2 + 40 : 330)));
+                const gy = Math.max(d.top + d.bossH / 2 - 10, Math.min(d.bottom - d.bossH / 2, near.y - 40 + Math.sin(b.phase / 40) * 50));
+                const dx = gx - b.x, dy = gy - b.y, dist = Math.hypot(dx, dy), step = Math.min(dist, d.bossSpeed * dt);
+                if (dist > 1) { b.x += dx / dist * step; b.y += dy / dist * step; }
+                b.facing = near.x < b.x ? -1 : 1;
+            }
+            const gunX = b.x + b.facing * (d.bossW / 2 - 2), gunY = b.y + 26;   // rasmdagi old to'p uchi
+            if (!b.act && sk.tick >= b.nextAct && alive.length) {
+                const order: ('volley' | 'fan' | 'volley' | 'drop')[] = ['volley', 'fan', 'volley', 'drop'];
+                b.act = order[b.step++ % order.length]; b.actT = 0; b.actN = 0;
+                this.io.to(roomId).emit('skyBossAct', { act: b.act });
+            }
+            if (b.act) {
+                b.actT++;
+                if (b.act === 'volley') {
+                    // 3 ta nishonli o'q (har biri - tasodifiy o'yinchiga)
+                    if (b.actT % ms(240) === 0 && b.actN < 3) {
+                        const tg = alive[Math.floor(Math.random() * alive.length)];
+                        if (tg) { const a = this.skyLead(tg, gunX, gunY, d.bossShotSpeed, d, W); this.skyShoot(sk, gunX, gunY, a.x, a.y, d.bossShotSpeed, d.bossShotDamage); }
+                        b.actN++;
+                    }
+                    if (b.actN >= 3) { b.act = null; b.nextAct = sk.tick + ms(d.bossRestMs); }
+                } else if (b.act === 'fan') {
+                    // 7 ta o'q yelpig'ichi - eng yaqin o'yinchi tomonga
+                    if (b.actT === ms(450)) {
+                        const tg = near || alive[0];
+                        if (tg) { const a = this.skyLead(tg, gunX, gunY, d.bossShotSpeed * 0.85, d, W); for (let k = -3; k <= 3; k++) this.skyShoot(sk, gunX, gunY, a.x, a.y, d.bossShotSpeed * 0.85, d.bossShotDamage, k * 0.16); }
+                    }
+                    if (b.actT >= ms(800)) { b.act = null; b.nextAct = sk.tick + ms(d.bossRestMs); }
+                } else {
+                    // Yordamchi uchar mashina chiqaradi (o'yinchilar sonidan ko'p bo'lmaydi)
+                    if (b.actT === ms(400) && sk.enemies.length < Math.max(1, alive.length)) {
+                        const tg = alive[Math.floor(Math.random() * alive.length)];
+                        const hp = d.enemyHp;
+                        sk.enemies.push({ id: 'se' + (++sk.counter), x: b.x, y: b.y + d.bossH / 2, hp, maxHp: hp, target: tg ? tg.id : null, ox: Math.random() * 60, oy: -40 + Math.random() * 80,
+                            nextShot: sk.tick + ms(1500), hitFlash: 0, facing: b.facing, minion: true });
+                        this.io.to(roomId).emit('skyBossDrop', {});
+                    }
+                    if (b.actT >= ms(700)) { b.act = null; b.nextAct = sk.tick + ms(d.bossRestMs); }
+                }
+            }
+        }
+    }
+
+    // ===== ROAD TO SKYLAND (Season 2, map-9): ranets avtomati =====
+    // Tanasi (shkaf): jangda oyoqlari ko'taradi, sakraganda havoda
+    private vendRect(v: NonNullable<RoomState['vend']>, d: NonNullable<MapDef['vend']>) {
+        const lift = v.state === 'idle' ? 0 : d.legH;
+        return { x: v.x - d.w / 2, y: v.y - lift - d.h, w: d.w, h: d.h };
+    }
+    // Qalqonsiz payt: olov sochayotganda yoki sakrab tushgandan keyin
+    private vendVulnerable(v: NonNullable<RoomState['vend']>): boolean {
+        return v.state === 'fight' && (v.vuln > 0 || (!!v.act && v.act.kind === 'flame' && v.act.phase === 'fire'));
+    }
+    private vendProvoke(room: RoomState): void {
+        const v = room.vend, d = getMapById(room.selectedLevel).vend;
+        if (!v || !d || v.state !== 'idle') return;
+        v.state = 'transform';
+        v.timer = Math.round(d.transformMs / 30);
+        this.io.to(room.id).emit('vendAngry', {});
+    }
+    private vendDefeated(room: RoomState): void {
+        const v = room.vend, d = getMapById(room.selectedLevel).vend;
+        if (!v || !d || v.state === 'dying' || v.state === 'broken') return;
+        v.state = 'dying';
+        v.act = null; v.vuln = 0;
+        v.timer = Math.round(d.dyingMs / 30);
+        this.io.to(room.id).emit('vendDown', {});
+    }
+    private updateVend(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const d = map.vend, v = room.vend;
+        if (!d || !v || room.isOver) return;
+        const ms = (x: number) => Math.round(x / 30), dt = this.TICK_SECONDS;
+        const floorY = this.GROUND_Y + this.PLAYER_HALF_H - 4;   // oyoq tagi (yer, 570)
+        v.tick++;
+        if (v.hitFlash > 0) v.hitFlash--;
+        if (v.shieldFlash > 0) v.shieldFlash--;
+        if (v.vuln > 0) v.vuln--;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        // JARLIK: ranetsi bor qahramon chetiga yetsa - uchib ketadi (xarita o'tildi)
+        if (v.state === 'fly') {
+            if (--v.timer <= 0) {
+                v.state = 'done';
+                this.roomManager.declareWinner(roomId, v.flyId || this.topKillerId(room)).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        if (v.state === 'done') return;
+        const flyer = alive.find(p => p.jetpack && p.x >= d.edgeX - 45);
+        if (flyer) {
+            v.flyId = flyer.id;
+            v.state = 'fly';
+            v.act = null;
+            v.timer = ms(d.flyMs);
+            this.io.to(roomId).emit('vendFly', { id: flyer.id });
+            return;
+        }
+        if (v.state === 'idle' || v.state === 'broken') return;
+        if (v.state === 'transform') {
+            if (--v.timer <= 0) { v.state = 'fight'; v.nextAct = v.tick + ms(500); }
+            return;
+        }
+        if (v.state === 'dying') {
+            if (--v.timer <= 0) {
+                // Sindi: har o'yinchiga bittadan ranets tushadi
+                v.state = 'broken';
+                v.y = floorY;
+                const n = Math.max(1, Object.keys(room.players).length);
+                v.jets = [];
+                for (let k = 0; k < n; k++) v.jets.push({ id: 'jet' + k, x: Math.round(Math.max(d.x0, Math.min(d.x1, v.x + (k - (n - 1) / 2) * 46))), y: floorY - 2 });
+                this.io.to(roomId).emit('vendBroken', { jets: v.jets });
+            }
+            return;
+        }
+        // ===== JANG =====
+        const body = this.vendRect(v, d);
+        const near = (p: PlayerState) => Math.abs(p.x - v.x);
+        const target = alive.slice().sort((a, b) => near(a) - near(b))[0];
+        // Tanasiga tegsa - zarba va itarib yuboradi
+        alive.forEach(p => {
+            if ((v.contactCd[p.id] || 0) > v.tick) return;
+            if (!this.checkOverlap({ x: p.x - this.PLAYER_HALF_W, y: p.y - this.PLAYER_HALF_H, w: this.PLAYER_HALF_W * 2, h: this.PLAYER_HALF_H * 2 }, body)) return;
+            v.contactCd[p.id] = v.tick + ms(700);
+            this.hurtPlayer(p, d.contactDamage);
+            this.knockback(p, (p.x < v.x ? -1 : 1) * d.contactSpeed, -320);
+        });
+        const a = v.act;
+        if (!a) {
+            if (!target) return;
+            v.facing = target.x < v.x ? -1 : 1;
+            // Tanaffusda nishon tomon yuradi (juda yaqinlashmaydi)
+            if (Math.abs(target.x - v.x) > 170) v.x = Math.max(d.x0, Math.min(d.x1, v.x + v.facing * d.walkSpeed * dt));
+            if (v.tick < v.nextAct) return;
+            // Navbat: olov / sakrash. Nishon olov yetmaydigan joyda (uzoq yoki baland platformada) - sakraydi
+            // Olov qo'ldan pastga - yerda turganlar balandligida sochiladi (platformadagilarga - sakraydi)
+            const flameY = v.y - 45;
+            const canFlame = Math.abs(target.x - v.x) < d.w / 2 + d.flameLen - 30 && Math.abs(target.y - flameY) < d.flameH / 2 + 20;
+            const kind = v.step % 2 === 0 && canFlame ? 'flame' : 'jump';
+            v.step++;
+            v.act = { kind, t: 0, phase: kind === 'flame' ? 'warn' : 'air', x0: v.x, target: target.id, hit: [], nextHit: 0, landX: null };
+            this.io.to(roomId).emit(kind === 'flame' ? 'vendFlameWarn' : 'vendJump', { x: Math.round(v.x) });
+            return;
+        }
+        a.t++;
+        if (a.kind === 'flame') {
+            // Qo'lidan olov: avval uchqun (ogohlantirish), so'ng oldinga olov sochadi - shu payt QALQONSIZ
+            if (a.phase === 'warn' && a.t >= ms(d.flameWarnMs)) { a.phase = 'fire'; a.t = 0; this.io.to(roomId).emit('vendFlame', {}); }
+            if (a.phase === 'fire') {
+                if (a.t >= a.nextHit) {
+                    a.nextHit = a.t + ms(d.flameEveryMs);
+                    const zone = { x: v.facing > 0 ? v.x + d.w / 2 : v.x - d.w / 2 - d.flameLen, y: v.y - 45 - d.flameH / 2, w: d.flameLen, h: d.flameH };
+                    alive.forEach(p => {
+                        if (!this.checkOverlap({ x: p.x - this.PLAYER_HALF_W, y: p.y - this.PLAYER_HALF_H, w: this.PLAYER_HALF_W * 2, h: this.PLAYER_HALF_H * 2 }, zone)) return;
+                        this.hurtPlayer(p, d.flameDamage);
+                        this.knockback(p, v.facing * 90, -60);   // sekin itaradi - olov ichida qolsa yana kuyadi
+                    });
+                }
+                if (a.t >= ms(d.flameMs)) { v.act = null; v.nextAct = v.tick + ms(d.restMs); }
+            }
+        } else {
+            // SAKRASH: ko'tarilayotganda nishonni quvadi; jumpLockAt dan keyin tushadigan joy QOTADI
+            // (yerda qizil belgi) - shu paytda qochgan qahramonni endi quvmaydi
+            const T = ms(d.jumpMs), k = Math.min(1, a.t / T);
+            const tg = a.target ? room.players[a.target] : null;
+            if (a.landX === null && k >= d.jumpLockAt) a.landX = Math.max(d.x0, Math.min(d.x1, tg && !tg.isDead ? tg.x : v.x));
+            const aimX = a.landX !== null ? a.landX : (tg && !tg.isDead ? tg.x : v.x);
+            const dx = aimX - v.x;
+            if (Math.abs(dx) > 1) v.facing = dx < 0 ? -1 : 1;
+            v.x = Math.max(d.x0, Math.min(d.x1, v.x + Math.sign(dx) * Math.min(Math.abs(dx), d.jumpTrackSpeed * dt)));
+            v.y = floorY - d.jumpPeak * 4 * k * (1 - k);
+            // Tushayotganda tanasi ostida qolganlar - ezilib otilib ketadi
+            if (k > 0.5) {
+                const box = this.vendRect(v, d);
+                box.h += d.legH;   // oyoqlari ham
+                alive.forEach(p => {
+                    if (a.hit.includes(p.id)) return;
+                    if (!this.checkOverlap({ x: p.x - this.PLAYER_HALF_W, y: p.y - this.PLAYER_HALF_H, w: this.PLAYER_HALF_W * 2, h: this.PLAYER_HALF_H * 2 }, box)) return;
+                    a.hit.push(p.id);
+                    this.hurtPlayer(p, d.landDamage);
+                    this.knockback(p, (p.x < v.x ? -1 : 1) * d.landSpeed, -420);
+                });
+            }
+            if (k >= 1) {
+                v.y = floorY;
+                // Yerga qo'ndi: yonidagilar ham zarba oladi; so'ng bir oz QALQONSIZ turadi
+                alive.forEach(p => {
+                    if (a.hit.includes(p.id)) return;
+                    if (Math.abs(p.x - v.x) > d.w / 2 + 40 || p.y + this.PLAYER_HALF_H < floorY - 30) return;
+                    this.hurtPlayer(p, Math.round(d.landDamage / 2));
+                    this.knockback(p, (p.x < v.x ? -1 : 1) * d.landSpeed, -360);
+                });
+                this.io.to(roomId).emit('vendLand', { x: Math.round(v.x) });
+                v.vuln = ms(d.vulnMs);
+                v.act = null;
+                v.nextAct = v.tick + ms(d.vulnMs + d.restMs);
+            }
+        }
+    }
+
+    // ===== IRON GIANT (Season 2, map-8) =====
+    private robotDefeated(room: RoomState): void {
+        const r = room.robot, R = getMapById(room.selectedLevel).robot;
+        if (!r || !R || r.state === 'dying' || r.state === 'done') return;
+        r.state = 'dying';
+        r.timer = Math.round(R.dyingMs / 30);
+        r.act = null; r.laser = null; r.bolts = [];
+        r.fist.phase = 'back';
+        room.bots = [];
+        this.io.to(room.id).emit('robotDown', {});
+    }
+    // Zarba tushadigan joy: x dagi eng yuqori sirt (platforma yoki yer), nishon oyog'idan pastda
+    private robotLandY(map: MapDef, x: number, feet: number): number {
+        let y = this.GROUND_Y + this.PLAYER_HALF_H - 4;   // yer (570)
+        [0, 1, 2, 4].map(i => map.platforms[i]).forEach(pl => { if (x >= pl.x - 6 && x <= pl.x + pl.w + 6 && pl.y >= feet - 10 && pl.y < y) y = pl.y; });
+        return y;
+    }
+    // Ko'zdan nishon tomonga lazer chizig'i: maydon chetigacha (yoki yergacha) cho'ziladi
+    private robotLaserLine(R: NonNullable<MapDef['robot']>, tg: PlayerState) {
+        const x1 = R.head.x + 2, y1 = R.eyeY;   // chap ko'z (bosh chetidan chiqib turadi)
+        let dx = tg.x - x1, dy = tg.y - y1;
+        if (dx > -40) dx = -40;                      // doim chapga (maydon tomonga)
+        const d = Math.hypot(dx, dy); dx /= d; dy /= d;
+        let k = (R.arenaX - x1) / dx;                // chap chetgacha
+        if (dy > 0) k = Math.min(k, (this.GROUND_Y + this.PLAYER_HALF_H - y1) / dy);
+        if (dy < 0) k = Math.min(k, (0 - y1) / dy);
+        return { x1, y1, x2: x1 + dx * k, y2: y1 + dy * k, phase: 'warn' as const, t: 0, hit: [] as string[] };
+    }
+    private updateRobot(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const R = map.robot, r = room.robot;
+        if (!R || !r || room.isOver) return;
+        const ms = (v: number) => Math.round(v / 30), dt = this.TICK_SECONDS;
+        r.tick++;
+        if (r.hitFlash > 0) r.hitFlash--;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        if (r.state === 'walk') {
+            if (alive.some(p => p.x >= R.triggerX)) {
+                r.state = 'intro'; r.timer = ms(R.introMs);
+                this.io.to(roomId).emit('robotWake', { arenaX: R.arenaX });
+            }
+            return;
+        }
+        if (r.state === 'intro') { if (--r.timer <= 0) { r.state = 'on'; r.nextAct = r.tick + ms(600); } return; }
+        if (r.state === 'dying') {
+            if (--r.timer <= 0) {
+                r.state = 'done';
+                this.roomManager.declareWinner(roomId, this.topKillerId(room)).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        if (r.state === 'done') return;
+        const inArena = alive.filter(p => p.x >= R.arenaX);
+        const f = r.fist;
+        const feet = (p: PlayerState) => p.y + this.PLAYER_HALF_H;
+        // QO'L: nishon tepasiga boradi (qizil soya), tushib uradi, biroz turadi, joyiga qaytadi
+        const aimAt = (warnMs: number, dmg: number) => {
+            const tg = inArena[Math.floor(Math.random() * inArena.length)];
+            if (!tg) return false;
+            f.tx = Math.max(R.arenaX + 40, Math.min(R.head.x - 30, tg.x));
+            f.ty = this.robotLandY(map, f.tx, feet(tg));
+            f.phase = 'aim'; f.t = 0; f.warn = ms(warnMs); f.dmg = dmg; f.hit = [];
+            this.io.to(roomId).emit('robotAim', { x: Math.round(f.tx), y: Math.round(f.ty) });
+            return true;
+        };
+        if (f.phase === 'aim') {
+            // Nishon ustiga (tepadan) siljiydi
+            f.t++;
+            f.x += (f.tx - f.x) * 0.25; f.y += ((f.ty - 230) - f.y) * 0.25;
+            if (f.t >= f.warn) { f.phase = 'down'; f.t = 0; }
+        } else if (f.phase === 'down') {
+            f.x = f.tx;
+            f.y = Math.min(f.ty, f.y + 1700 * dt);
+            // Qo'l ostida qolganlar (tushish yo'lida) - uriladi va otib yuboriladi
+            alive.forEach(p => {
+                if (f.hit.includes(p.id)) return;
+                if (Math.abs(p.x - f.x) > R.smashW / 2 + this.PLAYER_HALF_W) return;
+                if (p.y - this.PLAYER_HALF_H > f.y || feet(p) < f.y - 60) return;
+                f.hit.push(p.id);
+                this.hurtPlayer(p, f.dmg);
+                this.knockback(p, (p.x < f.x ? -1 : 1) * 560, -380);
+            });
+            if (f.y >= f.ty) { f.phase = 'hold'; f.t = 0; this.io.to(roomId).emit('robotSmash', { x: Math.round(f.x), y: Math.round(f.ty) }); }
+        } else if (f.phase === 'hold') {
+            if (++f.t >= ms(320)) { f.phase = 'back'; f.t = 0; }
+        } else if (f.phase === 'back') {
+            f.x += (R.fistRest.x - f.x) * 0.2; f.y += (R.fistRest.y - f.y) * 0.2;
+            if (Math.hypot(f.x - R.fistRest.x, f.y - R.fistRest.y) < 6) { f.phase = 'rest'; f.x = R.fistRest.x; f.y = R.fistRest.y; }
+        }
+        // LAZER: ko'zlar qizarib yonadi (ingichka chiziq - qayerga otishi), so'ng KO'ZDAN shu chiziq bo'ylab otiladi
+        if (r.laser) {
+            const L = r.laser;
+            L.t++;
+            if (L.phase === 'warn' && L.t >= ms(R.laserWarnMs)) { L.phase = 'fire'; L.t = 0; this.io.to(roomId).emit('robotLaser', {}); }
+            if (L.phase === 'fire') {
+                const lx = L.x2 - L.x1, ly = L.y2 - L.y1, ll = Math.max(1, lx * lx + ly * ly);
+                alive.forEach(p => {
+                    if (L.hit.includes(p.id)) return;
+                    const k = Math.max(0, Math.min(1, ((p.x - L.x1) * lx + (p.y - L.y1) * ly) / ll));
+                    if (Math.hypot(p.x - (L.x1 + lx * k), p.y - (L.y1 + ly * k)) > this.PLAYER_HALF_W + 14) return;
+                    L.hit.push(p.id);
+                    this.hurtPlayer(p, R.laserDamage);
+                    this.knockback(p, -420, -260);
+                });
+                if (L.t >= ms(R.laserFireMs)) r.laser = null;
+            }
+        }
+        // CHAQMOQLAR: to'g'ri chiziqda tez uchadi; tekkan qahramon - zarar va LA'NAT (stamina sekin to'ladi)
+        for (let i = r.bolts.length - 1; i >= 0; i--) {
+            const b = r.bolts[i];
+            b.x += b.vx * dt; b.y += b.vy * dt; b.t++;
+            const hit = alive.find(p => Math.abs(p.x - b.x) <= this.PLAYER_HALF_W + 10 && Math.abs(p.y - b.y) <= this.PLAYER_HALF_H + 10);
+            if (hit) {
+                r.bolts.splice(i, 1);
+                this.hurtPlayer(hit, R.boltDamage);
+                this.knockback(hit, (b.vx < 0 ? -1 : 1) * 260, -200);
+                this.curse(hit, 'bolt');
+                this.io.to(roomId).emit('robotBoltHit', { id: hit.id, x: Math.round(b.x), y: Math.round(b.y) });
+                continue;
+            }
+            if (b.t > ms(1600) || b.x < R.arenaX - 40 || b.y > 600 || b.y < -40) r.bolts.splice(i, 1);
+        }
+        if (r.state === 'off') {
+            // Dam olmoqda: tashlangan bot(lar) yengilgach - yana yonadi
+            if (!room.bots.length && --r.timer <= 0) { r.state = 'on'; r.nextAct = r.tick + ms(900); this.io.to(roomId).emit('robotOn', {}); }
+            return;
+        }
+        // ON: hujumlar ketma-ketligi
+        const a = r.act;
+        if (!a) {
+            if (r.tick < r.nextAct || f.phase !== 'rest' || !inArena.length) return;
+            const order: ('smash' | 'combo' | 'bolts' | 'throw')[] = ['smash', 'bolts', 'combo', 'smash', 'bolts', 'throw'];
+            r.act = { kind: order[r.step++ % order.length], t: 0, n: 0 };
+            return;
+        }
+        a.t++;
+        if (a.kind === 'smash') {
+            // Avval qo'l bilan tepadan uradi; qo'l yerga tekkach - ko'zidan lazer (o'sha paytdagi nishonga)
+            if (a.n === 0) { aimAt(R.smashWarnMs, R.smashDamage); a.n = 1; }
+            else if (a.n === 1 && (f.phase === 'hold' || f.phase === 'back' || f.phase === 'rest')) {
+                const lt = inArena[Math.floor(Math.random() * inArena.length)];
+                if (lt) r.laser = this.robotLaserLine(R, lt);
+                a.n = 2;
+            }
+            if (a.n === 2 && f.phase === 'rest' && !r.laser) { r.act = null; r.nextAct = r.tick + ms(R.restMs); }
+        } else if (a.kind === 'combo') {
+            // Ketma-ket 4 marta tepadan
+            if (f.phase === 'rest' || (f.phase === 'back' && a.n > 0)) {
+                if (a.n < 4) { if (aimAt(R.comboWarnMs, R.comboDamage)) a.n++; else a.n = 4; }
+                else if (f.phase === 'rest') { r.act = null; r.nextAct = r.tick + ms(R.restMs); }
+            }
+        } else if (a.kind === 'bolts') {
+            // Qo'lidan qurol chiqaradi va ketma-ket 5 ta chaqmoq otadi (har biri - o'sha paytdagi nishonga)
+            if (a.t === 1) this.io.to(roomId).emit('robotGun', {});
+            const start = ms(450), every = ms(R.boltEveryMs);
+            if (a.t >= start && a.n < R.boltCount && (a.t - start) % every === 0) {
+                const tg = inArena[Math.floor(Math.random() * inArena.length)];
+                if (tg) {
+                    const sx = R.fistRest.x - 76, sy = R.fistRest.y + 6;   // qurol uchidan
+                    const d = Math.max(1, Math.hypot(tg.x - sx, tg.y - sy));
+                    r.bolts.push({ id: 'bt' + (++r.counter), x: sx, y: sy, vx: (tg.x - sx) / d * R.boltSpeed, vy: (tg.y - sy) / d * R.boltSpeed, t: 0 });
+                    this.io.to(roomId).emit('robotBolt', {});
+                }
+                a.n++;
+            }
+            if (a.n >= R.boltCount && a.t >= start + every * R.boltCount + ms(500)) { r.act = null; r.nextAct = r.tick + ms(R.restMs); }
+        } else if (a.kind === 'throw') {
+            // Tanasidagi lyuk ochiladi, ichidan robot bot chiqadi, so'ng gigant tutab o'chadi
+            if (a.t === 1) this.io.to(roomId).emit('robotHatch', {});
+            if (a.t === ms(800)) {
+                const hx = R.arenaX + 660, hy = 500;   // tana tagidagi lyuk oldida
+                const bot = GameEngine.createBots(room.id, [{ x: hx, y: hy }], 'robot', R.botHp * Math.max(1, Object.keys(room.players).length))[0];
+                bot.id += '_rb' + r.tick;
+                room.bots.push(bot);
+                this.io.to(roomId).emit('robotThrow', { x: hx, y: hy });
+            }
+            if (a.t >= ms(1300)) {
+                r.act = null; r.state = 'off'; r.timer = ms(800);
+                this.io.to(roomId).emit('robotOff', {});
+            }
+        }
+    }
+
+    // ===== INFINITY TNT (Season 2, map-7) =====
+    // Qahramon turgan (yoki ostidagi eng yaqin) gorilla yuzasi
+    private tntSurfaceUnder(map: MapDef, x: number, feet: number): number {
+        const T = map.tnt!;
+        let best = T.floor, bestY = Infinity;
+        T.surfaces.forEach(i => {
+            const s = map.platforms[i];
+            if (x >= s.x && x <= s.x + s.w && s.y >= feet - 8 && s.y < bestY) { best = i; bestY = s.y; }
+        });
+        return best;
+    }
+    private tntOnCliff(map: MapDef, p: PlayerState): boolean {
+        const T = map.tnt!;
+        return (p.x <= T.leftCliffX + 6 || p.x >= T.rightCliffX - 6) && p.y + this.PLAYER_HALF_H <= T.cliffY + 8;
+    }
+    private tntBlast(room: RoomState, x: number, y: number, radius: number, dmg: number, kind: string): void {
+        Object.values(room.players).filter(p => !p.isDead).forEach(p => {
+            const cx = Math.max(p.x - this.PLAYER_HALF_W, Math.min(x, p.x + this.PLAYER_HALF_W));
+            const cy = Math.max(p.y - this.PLAYER_HALF_H, Math.min(y, p.y + this.PLAYER_HALF_H));
+            if (Math.hypot(x - cx, y - cy) > radius) return;
+            this.hurtPlayer(p, dmg);
+            this.knockback(p, (p.x < x ? -1 : 1) * 200, -240);
+        });
+        this.io.to(room.id).emit('tntBlast', { x: Math.round(x), y: Math.round(y), kind });
+    }
+    // Bino ichida itarish: qahramon qoya devoriga qarab itarilsa va devorga yaqin bo'lsa - devorga emas, tepaga va
+    // teskari tomonga (gorilla ustidan) otiladi. Aks holda gorilla bilan devor orasida qisilib "yopishib" qolardi
+    private tntPush(map: MapDef, p: PlayerState, dir: number, speed: number, vy: number): void {
+        const T = map.tnt!;
+        const nearLeft = dir < 0 && p.x - T.leftCliffX < 150, nearRight = dir > 0 && T.rightCliffX - p.x < 150;
+        if (nearLeft || nearRight) this.knockback(p, -dir * Math.min(speed, 520), Math.min(vy, -560));
+        else this.knockback(p, dir * speed, vy);
+    }
+    // TNT 0 ga tushdi: hujumlar to'xtaydi, 3 soniya - qoyaga qochish
+    private tntFuse(room: RoomState): void {
+        const t = room.tnt, T = getMapById(room.selectedLevel).tnt;
+        if (!t || !T || t.state !== 'fight') return;
+        t.state = 'fuse';
+        t.timer = Math.round(T.fuseMs / 30);
+        t.bombs = []; t.warns = [];
+        t.gor.act = 'panic';
+        this.io.to(room.id).emit('tntFuse', { ms: T.fuseMs });
+    }
+    private updateTnt(room: RoomState, roomId: string): void {
+        const map = getMapById(room.selectedLevel);
+        const T = map.tnt, t = room.tnt;
+        if (!T || !t || room.isOver) return;
+        const dt = this.TICK_SECONDS, ms = (v: number) => Math.round(v / 30);
+        t.tick++;
+        if (t.hitFlash > 0) t.hitFlash--;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        // Jarlikka yiqilgan (bino qulagach) - halok
+        alive.forEach(p => { if (p.y > 640) this.killPlayer(p); });
+        if (t.state === 'intro') { if (--t.timer <= 0) { t.state = 'fight'; t.nextAct = t.tick + ms(800); } return; }
+        if (t.state === 'fuse') {
+            if (--t.timer <= 0) {
+                // BINO PORTLADI: qoyada turmaganlar jarlikka qulaydi
+                t.state = 'boom';
+                t.timer = ms(2600);
+                Object.values(room.players).forEach(p => { if (!p.isDead && !this.tntOnCliff(map, p)) this.killPlayer(p); });
+                this.io.to(roomId).emit('tntBoom', {});
+            }
+            return;
+        }
+        if (t.state === 'boom') {
+            if (--t.timer <= 0) {
+                t.state = 'done';
+                const survivors = Object.values(room.players).filter(p => !p.isDead);
+                if (survivors.length) this.roomManager.declareWinner(roomId, survivors[0].id).catch(err => console.error('declareWinner xatosi:', err));
+            }
+            return;
+        }
+        if (t.state !== 'fight') return;
+        const g = t.gor;
+        const fighters = alive.filter(p => !this.tntOnCliff(map, p));
+        const surf = (i: number) => map.platforms[i];
+        // Polda - butun tanasi bino ichida (qoyaga kirib, qahramonni devorga qisib qo'ymasin); tor qavatlarda - deyarli chetigacha
+        const margin = (i: number) => (i === T.floor ? T.gorHalfW + 6 : Math.min(T.gorHalfW * 0.6, surf(i).w / 2 - 8));
+        const clampOn = (i: number, x: number) => Math.max(surf(i).x + margin(i), Math.min(surf(i).x + surf(i).w - margin(i), x));
+        const boxCx = T.box.x + T.box.w / 2;
+        const startLeap = (toSurf: number, toX: number) => {
+            g.act = 'leap'; g.t = 0; g.x0 = g.x; g.y0 = g.y; g.x1 = clampOn(toSurf, toX); g.y1 = surf(toSurf).y; g.surf = toSurf;
+            g.dur = ms(950); g.peak = Math.max(120, g.y0 - g.y1 + 110); g.facing = g.x1 >= g.x0 ? 1 : -1;
+        };
+        // Bochkalar (qo'ldan otilgan va osmondan tushayotgan)
+        for (let i = t.bombs.length - 1; i >= 0; i--) {
+            const b = t.bombs[i];
+            const py = b.y;
+            b.vy += (b.kind === 'sky' ? 1100 : 900) * dt;
+            b.x += b.vx * dt; b.y += b.vy * dt;
+            let boom = false;
+            if (b.kind === 'sky') { if (b.y >= b.landY) { b.y = b.landY; boom = true; } }
+            else {
+                // Qahramonga tegdi yoki platformaga tushdi
+                if (alive.some(p => Math.abs(p.x - b.x) <= this.PLAYER_HALF_W + 20 && Math.abs(p.y - b.y) <= this.PLAYER_HALF_H + 20)) boom = true;
+                // Yo'ldagi platformalardan o'tib ketadi: faqat nishon turgan sirtga (landY) yetganda portlaydi
+                if (!boom && b.vy > 0 && py <= b.landY && b.y >= b.landY) { b.y = b.landY; boom = true; }
+                if (b.y > 660 || b.x < -50 || b.x > 850) { t.bombs.splice(i, 1); continue; }
+            }
+            if (boom) {
+                t.bombs.splice(i, 1);
+                if (b.kind === 'sky') { const w = t.warns.findIndex(w => w.id === b.id); if (w >= 0) t.warns.splice(w, 1); }
+                this.tntBlast(room, b.x, b.y - 10, b.kind === 'sky' ? T.skyRadius : T.bombRadius, b.kind === 'sky' ? T.skyDamage : T.bombDamage, b.kind);
+            }
+        }
+        // Gorillaga tegib ketgan qahramon - itarib yuboriladi
+        Object.keys(t.contactCd).forEach(id => { if (--t.contactCd[id] <= 0) delete t.contactCd[id]; });
+        if (g.act !== 'leap') alive.forEach(p => {
+            if (t.contactCd[p.id]) return;
+            if (Math.abs(p.x - g.x) <= T.gorHalfW + this.PLAYER_HALF_W - 6 && p.y + this.PLAYER_HALF_H > g.y - T.gorH && p.y - this.PLAYER_HALF_H < g.y) {
+                t.contactCd[p.id] = ms(1000);
+                this.hurtPlayer(p, T.contactDamage);
+                this.tntPush(map, p, p.x < g.x ? -1 : 1, T.contactSpeed, -380);
+                this.io.to(roomId).emit('tntPush', { id: p.id });
+            }
+        });
+        // Harakat
+        if (g.act === 'leap') {
+            g.t++;
+            const f = Math.min(1, g.t / g.dur);
+            g.x = g.x0 + (g.x1 - g.x0) * f;
+            g.y = g.y0 + (g.y1 - g.y0) * f - g.peak * 4 * f * (1 - f);
+            if (f >= 1) {
+                // Qo'ndi - zarba: shu yuzada yaqin turganlar uchib ketadi
+                g.act = 'idle'; g.y = g.y1;
+                const top = surf(g.surf).y;
+                alive.forEach(p => {
+                    if (Math.abs(p.x - g.x) > T.slamRange || Math.abs(p.y + this.PLAYER_HALF_H - top) > 16) return;
+                    this.hurtPlayer(p, T.slamDamage);
+                    this.tntPush(map, p, p.x < g.x ? -1 : 1, 320, -280);
+                });
+                this.io.to(roomId).emit('tntSlam', { x: Math.round(g.x), y: Math.round(top) });
+                if (g.plan === 'leap') { g.plan = null; t.nextAct = t.tick + ms(T.restMs); }
+                else if (g.plan === 'throw') { g.act = 'throw'; g.t = 0; g.thrown = 0; }
+            }
+            return;
+        }
+        if (g.act === 'grab') {
+            if (++g.t >= ms(700)) {
+                if (g.plan === 'throw') {
+                    // Bochkalar qo'lida - nishon o'yinchining ustiga sakraydi (qo'nishda zarba), so'ng yaqindan otadi
+                    const tg = fighters.length ? fighters[Math.floor(Math.random() * fighters.length)] : null;
+                    g.target = tg ? tg.id : null;
+                    if (tg) startLeap(this.tntSurfaceUnder(map, tg.x, tg.y + this.PLAYER_HALF_H), tg.x);
+                    else { g.act = 'throw'; g.t = 0; g.thrown = 0; }
+                }
+                else { g.act = 'sky'; g.t = 0; this.io.to(roomId).emit('tntSkyThrow', { x: Math.round(g.x), y: Math.round(g.y) }); }
+            }
+            return;
+        }
+        if (g.act === 'throw') {
+            g.t++;
+            // Ikki bochka ketma-ket: nishon - ustiga sakragan o'yinchi (tirik bo'lsa), aks holda tasodifiy jangchi
+            if ((g.thrown === 0 && g.t >= ms(250)) || (g.thrown === 1 && g.t >= ms(650))) {
+                const tg = fighters.find(p => p.id === g.target) || fighters[Math.floor(Math.random() * fighters.length)];
+                if (tg) {
+                    const sx = g.x + g.facing * 40, sy = g.y - T.gorH + 16;
+                    const ft = Math.max(0.45, Math.min(0.9, Math.hypot(tg.x - sx, tg.y - sy) / 650));
+                    // 1-bochka: qahramon yugurayotgan tomonga oldindan (yetib borgan paytdagi joyi); 2-bochka: hozirgi joyiga -
+                    // to'xtasa yoki orqaga burilsa ham qochib qutulish qiyin
+                    const m = this.playerMotion.get(tg.id);
+                    const lead = m && g.thrown === 0 ? Math.max(-150, Math.min(150, m.vx * ft * 0.85)) : 0;
+                    const tx = Math.max(T.leftCliffX, Math.min(T.rightCliffX, tg.x + lead)), ty = tg.y + 8;
+                    // Nishon turgan sirt (yoki undan pastdagi eng yaqini) - bochka shu yerga tushib portlaydi
+                    const feet = tg.y + this.PLAYER_HALF_H;
+                    let landY = 700;
+                    [...T.building, 1, 2].forEach(pi => { const s = surf(pi); if (tx >= s.x - 10 && tx <= s.x + s.w + 10 && s.y >= feet - 10 && s.y < landY) landY = s.y; });
+                    t.bombs.push({ id: 'tb' + (++t.counter), x: sx, y: sy, vx: (tx - sx) / ft, vy: (ty - sy - 0.5 * 900 * ft * ft) / ft, kind: 'throw', landY });
+                    g.facing = tx >= g.x ? 1 : -1;
+                }
+                g.thrown++;
+            }
+            if (g.thrown >= 2 && g.t >= ms(1100)) { g.act = 'idle'; g.plan = null; g.target = null; t.nextAct = t.tick + ms(T.restMs); }
+            return;
+        }
+        if (g.act === 'clap') {
+            // QARSAK: qo'llarini ko'taradi (ogohlantirish), so'ng qattiq urishadi - zarba to'lqini faqat shu
+            // balandlik bo'ylab: gorilla bilan bir xil yuzada turganlar uchib ketadi, tepada/pastdagilarga ta'sir yo'q
+            g.t++;
+            if (g.t === ms(T.clapWarnMs)) {
+                const top = surf(g.surf).y;
+                alive.forEach(p => {
+                    if (this.tntOnCliff(map, p) || Math.abs(p.y + this.PLAYER_HALF_H - top) > 16) return;
+                    this.hurtPlayer(p, T.clapDamage);
+                    this.tntPush(map, p, p.x < g.x ? -1 : 1, T.clapSpeed, -420);
+                });
+                this.io.to(roomId).emit('tntClap', { x: Math.round(g.x), y: Math.round(top) });
+            }
+            if (g.t >= ms(T.clapWarnMs + 500)) { g.act = 'idle'; g.plan = null; t.nextAct = t.tick + ms(T.restMs); }
+            return;
+        }
+        if (g.act === 'sky') {
+            g.t++;
+            if (g.t === ms(500)) {
+                // Osmonga otilgan 5 bochka qayerga tushishi - qizil belgi (jangchilar ustiga va tasodifiy joylarga)
+                const xs: number[] = fighters.map(p => p.x + (Math.random() - 0.5) * 40);
+                while (xs.length < T.skyBombs) xs.push(T.leftCliffX + 30 + Math.random() * (T.rightCliffX - T.leftCliffX - 60));
+                xs.slice(0, T.skyBombs).forEach((x0, k) => {
+                    const x = Math.max(T.leftCliffX + 14, Math.min(T.rightCliffX - 14, x0));
+                    // Eng birinchi (eng yuqoridagi) yuzaga tushadi - tom ostida turgan qahramon himoyalangan
+                    let landY = 700;
+                    [...T.building].forEach(pi => { const s = surf(pi); if (x >= s.x && x <= s.x + s.w && s.y < landY) landY = s.y; });
+                    const id = 'sk' + (++t.counter);
+                    t.warns.push({ id, x: Math.round(x), y: landY });
+                    // Ekran tepasidan ancha yuqoridan tushadi: belgi chiqqach ~1 s o'tib yetib keladi (har biri biroz kechikib)
+                    t.bombs.push({ id, x, y: -340 - k * 70, vx: 0, vy: 0, kind: 'sky', landY });
+                });
+            }
+            if (g.t >= ms(1500)) { g.act = 'idle'; g.plan = null; t.nextAct = t.tick + ms(T.restMs + 600); }
+            return;
+        }
+        // IDLE / WALK: rejadagi hujumga tayyorlanadi
+        const target = fighters.length ? fighters.reduce((a, b) => (Math.abs(a.x - g.x) < Math.abs(b.x - g.x) ? a : b)) : null;
+        if (!g.plan && t.tick >= t.nextAct && fighters.length) {
+            const order: ('throw' | 'leap' | 'sky' | 'clap')[] = ['throw', 'clap', 'leap', 'throw', 'sky', 'leap', 'clap'];
+            g.plan = order[t.step++ % order.length];
+        }
+        if (g.plan === 'clap') {
+            g.act = 'clap'; g.t = 0;
+            this.io.to(roomId).emit('tntClapWarn', { x: Math.round(g.x), y: Math.round(surf(g.surf).y) });
+            return;
+        }
+        if (g.plan === 'leap' && target) {
+            const ts = this.tntSurfaceUnder(map, target.x, target.y + this.PLAYER_HALF_H);
+            startLeap(ts, target.x);
+            return;
+        }
+        if (g.plan === 'throw' || g.plan === 'sky') {
+            // Bochka olish uchun - TNT yoniga (poldan); tepada bo'lsa - pastga sakraydi
+            if (g.surf !== T.floor) { startLeap(T.floor, boxCx + (g.x < boxCx ? -70 : 70)); return; }
+            const want = boxCx + (g.x < boxCx ? -62 : 62);
+            if (Math.abs(g.x - want) > 6) { g.act = 'walk'; g.facing = want > g.x ? 1 : -1; g.x += g.facing * T.gorSpeed * dt; return; }
+            g.act = 'grab'; g.t = 0; g.facing = boxCx > g.x ? 1 : -1;
+            return;
+        }
+        // Tanaffus: eng yaqin jangchi tomonga sekin yuradi (o'z yuzasida)
+        if (target && g.surf === T.floor && Math.abs(target.x - g.x) > 80) {
+            g.act = 'walk'; g.facing = target.x > g.x ? 1 : -1;
+            g.x = clampOn(g.surf, g.x + g.facing * T.gorSpeed * 0.6 * dt);
+        } else g.act = 'idle';
+    }
+
     // ===== HIS BACK (Season 2, map-6) =====
     // Qiyalik yuzasi (y) berilgan x da; x qiyalik oralig'idan tashqarida bo'lsa - null
     private rampSurfaceY(r: { lowX: number, lowY: number, highX: number, highY: number }, x: number): number | null {
@@ -3243,7 +4354,7 @@ export class GameEngine {
         (room.gPlats || []).forEach((pl, i) => { pl.state = 'idle'; pl.timer = 0; pl.riders = []; if (gd) pl.y = gd.platforms[i].y; });
         // Boss - jamoaviy g'alaba: xonadagi HAMMAGA (o'sha payt o'lik/arvoh bo'lganlarga ham) tanga va XP
         Object.values(room.players).forEach(p => {
-            this.roomManager.awardReward(room.id, p.id, ar.bossCoins, ar.bossXp).catch(err => console.error('awardReward xatosi:', err));
+            this.roomManager.awardReward(room.id, p.id, ar.bossCoins, ar.bossXp, true).catch(err => console.error('awardReward xatosi:', err));
         });
         this.io.to(room.id).emit('arenaBossDown', { boss, coins: ar.bossCoins, xp: ar.bossXp });
     }

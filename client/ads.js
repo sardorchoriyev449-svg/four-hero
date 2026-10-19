@@ -75,9 +75,9 @@ const Ads = (() => {
             if (data.success) {
                 setCoins(data.coins);
                 try { GameAudio.sfx('coin'); } catch (e) { }
-                alert(t('ad_reward_got').replace('{0}', data.reward) + (data.left !== undefined ? ' (' + t('ad_left').replace('{0}', data.left) + ')' : ''));
-            } else alert(tMsg(data.message));
-        } catch (e) { alert(t('server_unreachable')); }
+                pxAlert(t('ad_reward_got').replace('{0}', data.reward) + (data.left !== undefined ? ' (' + t('ad_left').replace('{0}', data.left) + ')' : ''));
+            } else pxAlert(tMsg(data.message));
+        } catch (e) { pxAlert(t('server_unreachable')); }
     }
 
     function watch() {
@@ -97,14 +97,14 @@ const Ads = (() => {
                 modalText.innerText = t('ad_offer').replace('{0}', cfg.rewardCoins);
                 modal.classList.remove('hidden');
             },
-            adDismissed: () => alert(t('ad_dismissed')),
+            adDismissed: () => pxAlert(t('ad_dismissed')),
             adViewed: () => { viewed = true; if (nonce) claim(nonce); },
             adBreakDone: (info) => {
                 answered = true;
                 done();
                 closeModal();
                 const st = info && info.breakStatus;
-                if (!viewed && st !== 'dismissed' && st !== 'viewed' && st !== 'ignored') alert(t('ad_not_ready'));
+                if (!viewed && st !== 'dismissed' && st !== 'viewed' && st !== 'ignored') pxAlert(t('ad_not_ready'));
             }
         });
         // Google javob bermasa (sayt hali tasdiqlanmagan / reklama yo'q / reklama bloklovchi) - tugma qotib
@@ -112,7 +112,7 @@ const Ads = (() => {
         setTimeout(() => {
             if (answered || !busy || !modal.classList.contains('hidden') || savedVol !== null) return;
             done();
-            alert(t('ad_not_ready'));
+            pxAlert(t('ad_not_ready'));
         }, 8000);
 
         watchBtn.onclick = async () => {

@@ -23,6 +23,11 @@ export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] 
     archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }]
 };
 
+// 20, 30, ... 100-darajalarda bittadan, navbat bilan: 20, 40, 60, 80, 100 - +5 stamina; 30, 50, 70, 90 - +5 zarar
+Object.keys(PERK_TABLE).forEach((c) => {
+    for (let L = 20; L <= 100; L += 10) PERK_TABLE[c].push({ level: L, id: (L / 10) % 2 === 0 ? 'stam5' : 'dmg5' });
+});
+
 // Q bilan almashadigan ikkinchi qurol (personaj bo'yicha)
 export const ALT_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'ice', knight: 'shotgun', samurai: 'kunai' };
 // R bilan ishlaydigan maxsus qobiliyat
