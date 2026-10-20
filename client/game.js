@@ -757,7 +757,7 @@ function launchGame(socket, roomId, mapData, continued) {
     }
     function weaponPoseKey(sprite, characterType) {
         if (sprite.weaponMode === 'alt' && characterType === 'knight') return 'shotgun';
-        if (sprite.weaponMode === 'alt' && characterType === 'samurai') return 'kunai';
+        if ((sprite.weaponMode === 'alt' || sprite.weaponMode === 'alt2') && characterType === 'samurai') return 'kunai';
         return characterType in Cosmetics.POSE ? characterType : 'knight';
     }
     // Bosh kiyimi / yuz buyumi: tana ustida, qarash tomoniga qarab ko'zgudek aylanadi
@@ -802,7 +802,9 @@ function launchGame(socket, roomId, mapData, continued) {
             w.angle = facingRight ? ang : -ang;
             w.setPosition(sprite.x + dir * (pose.hand[0] + sprite.atk.dx), sprite.y + pose.hand[1] + sprite.atk.dy);
             w.setAlpha(sprite.alpha);
-            if (characterType === 'mage' && sprite.weaponMode === 'alt') w.setTint(0x80d8ff); else w.clearTint();
+            if (characterType === 'mage' && sprite.weaponMode === 'alt') w.setTint(0x80d8ff);
+            else if (characterType === 'mage' && sprite.weaponMode === 'alt2') w.setTint(0xfff176);   // chaqmoq - sariq
+            else w.clearTint();
         }
         updateHeroOverlay(scene, sprite, 'faceSpr', 'face', 3.04, facingRight, hidden);
         updateHeroOverlay(scene, sprite, 'hatSpr', 'head', 3.05, facingRight, hidden);
@@ -839,6 +841,86 @@ function launchGame(socket, roomId, mapData, continued) {
         }
     }
 
+    // HUJUMNI OLDINDAN KO'RSATISH (client prediction): server o'qni yaratib, holatni qaytarib
+    // yuborguncha (internet kechikishi + broadcast oralig'i) kutmasdan - bosilgan zahoti o'z
+    // qahramonimizda zarba animatsiyasi, ovoz va o'q/zarba izi chiqadi. Server o'qi kelganda
+    // animatsiya/ovoz takrorlanmaydi, bashorat qilingan o'q esa haqiqiysi bilan almashtiriladi.
+    const ATK_PREDICT = { at: 0, last: 0, pending: false, batch: -1, sprites: [] };
+    const ATK_COST = { knight: 8, samurai: 8, archer: 12, mage: 25 };
+    function predictedAttackType(c) {
+        const m = c.weaponMode || 'main', t = c.characterType;
+        if (t === 'mage') return m === 'alt2' ? 'lightning' : m === 'alt' ? 'ice' : 'fireball';
+        if (t === 'knight') return m === 'alt2' ? ((c.shieldCd || 0) > 0 ? null : 'shield') : m === 'alt' ? 'pellet' : 'melee';
+        if (t === 'samurai') return m === 'alt2' ? 'shuriken' : m === 'alt' ? 'kunai' : 'melee';
+        return 'arrow';
+    }
+    function predictAttack(scene, angle) {
+        const c = currentCharacter, now = performance.now();
+        if (!c || !c.active || c.isDead || !scene || !scene.add) return;
+        if (now - ATK_PREDICT.last < 360) return;                       // server cooldown: 12 tik
+        if ((c.stamina || 0) < (ATK_COST[c.characterType] || 10) * 0.5) return;
+        const bt = predictedAttackType(c);
+        if (!bt) return;
+        ATK_PREDICT.last = now; ATK_PREDICT.at = now; ATK_PREDICT.pending = true;
+        ATK_PREDICT.sprites.forEach(p => p && p.active && p.destroy()); ATK_PREDICT.sprites = [];
+        const dir = Math.cos(angle) < 0 ? -1 : 1, facingLeft = dir < 0;
+        const me = c;   // weaponColor holatdan yoziladi
+        playHeroAttack(scene, c, bt);
+        const shotName = bt === 'melee' ? (c.characterType === 'samurai' ? 'katana' : 'sword')
+            : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' || bt === 'shuriken' ? 'kunai' : bt === 'fireball' ? 'fireball'
+            : bt === 'lightning' ? 'whip' : bt === 'shield' ? 'whoosh' : 'arrow';
+        sfxAt(shotName, c.x, 1);
+        if (bt === 'melee') {
+            const key = c.characterType === 'samurai' ? 'melee_samurai' : 'melee_knight';
+            const sl = scene.add.sprite(c.x + dir * 26, c.y - 2, key).setDepth(4).setFlipX(facingLeft)
+                .setOrigin(facingLeft ? 0.7 : 0.3, 0.5).setAlpha(0.95).setScale(0.6);
+            if (me && me.weaponColor) sl.setTint(me.weaponColor);
+            scene.tweens.add({ targets: sl, scale: 1.1, alpha: 0, duration: key === 'melee_knight' ? 220 : 160, ease: 'Quad.Out',
+                onUpdate: () => { if (c.active) { sl.x = c.x + dir * 26; sl.y = c.y - 2; } }, onComplete: () => sl.destroy() });
+            return;
+        }
+        if (bt === 'pellet') return;   // drobovik: og'izdan olov (playHeroAttack) yetarli, sochmalar serverdan
+        // Uchadigan o'qlar: server bilan bir xil tezlik va chiqish nuqtasi
+        const spec = {
+            arrow: [1000, 18, -8], fireball: [600, 20, -10], ice: [700, 20, -10], lightning: [1100, 20, -10],
+            kunai: [750, 18, -4], shuriken: [720, 20, -6], shield: [650, 20, -6]
+        }[bt];
+        if (!spec) return;
+        const fan = bt === 'shuriken' ? [-0.2, 0, 0.2] : (bt === 'arrow' && c.characterType === 'archer' && (c.weaponMode || 'main') === 'alt') ? [-0.12, 0, 0.12] : [0];
+        let tex = bt === 'arrow' ? 'projectile_arrow' : bt === 'ice' || bt === 'fireball' ? 'projectile_fireball' : bt === 'lightning' ? 'projectile_lightning'
+            : bt === 'shuriken' ? 'projectile_shuriken' : bt === 'kunai' ? 'projectile_kunai' : 'w_shield';
+        if (bt === 'shield') ensureWeaponTextures(scene);
+        if (bt === 'kunai' && c.look) { const ks = cosTexture(scene, 'kunai', c.look.kunai); if (ks) tex = ks.key; }
+        if (!scene.textures.exists(tex)) return;
+        const x0 = c.x + Math.cos(angle) * spec[1], y0 = c.y + spec[2];
+        fan.forEach(k => {
+            const a = angle + k;
+            const sp = scene.add.sprite(x0, y0, tex).setDepth(4);
+            if (Math.cos(a) < 0) sp.setFlipX(true);
+            if (bt === 'ice') sp.setTint(0x80d8ff);
+            else if (bt === 'arrow' && me && me.weaponColor && !tex.startsWith('cos_')) sp.setTint(me.weaponColor);
+            else if (bt === 'fireball' && me && me.weaponColor) sp.setTint(me.weaponColor);
+            if (bt === 'shield') sp.spin = 22; else if (bt === 'shuriken') sp.spin = 30;
+            sp.ex = { x: x0, y: y0, vx: Math.cos(a) * spec[0], vy: Math.sin(a) * spec[0], t: performance.now() };
+            sp.predicted = true;
+            ATK_PREDICT.sprites.push(sp);
+        });
+        // Server javob bermasa (masalan, stamina yetmadi) - bashorat o'qi o'zi so'nadi
+        scene.time.delayedCall(700, () => ATK_PREDICT.sprites.forEach(p => {
+            if (p && p.active && performance.now() - p.ex.t >= 650) scene.tweens.add({ targets: p, alpha: 0, duration: 120, onComplete: () => p.destroy() });
+        }));
+    }
+    // Bashorat o'qlarini harakatlantirish (update() da har kadrda)
+    function movePredictedShots() {
+        const now = performance.now();
+        ATK_PREDICT.sprites = ATK_PREDICT.sprites.filter(p => p && p.active);
+        ATK_PREDICT.sprites.forEach(p => {
+            const dt = (now - p.ex.t) / 1000;
+            p.x = p.ex.x + p.ex.vx * dt; p.y = p.ex.y + p.ex.vy * dt;
+            if (p.spin) p.angle += p.spin;
+        });
+    }
+
     // ZARBA ANIMATSIYASI (o'q/zarba paydo bo'lganda egasining qurolida):
     //   qilich - tepadan pastga keng silkinish; katana - orqadan oldinga tez kesish; kamon - orqaga
     //   tepish; hassa - oldinga niqtash + sharcha chaqnashi; drobovik - tepish + og'izdan olov; kunai - otish
@@ -865,7 +947,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     duration: 360, onComplete: () => smoke.destroy() });
             }
             if (sprite === currentCharacter) scene.cameras.main.shake(70, 0.004);
-        } else if (bulletType === 'kunai') {
+        } else if (bulletType === 'kunai' || bulletType === 'shuriken' || bulletType === 'shield') {
             swing({ angle: -60, dx: 6 }, 60, 170);
         } else if (sprite.characterType === 'knight') {
             swing({ angle: 105, dy: 2 }, 80, 190);
@@ -875,7 +957,7 @@ function launchGame(socket, roomId, mapData, continued) {
             swing({ dx: -5, angle: -4 }, 40, 140);
         } else if (sprite.characterType === 'mage') {
             swing({ dx: 7, angle: -6 }, 60, 160);
-            const glow = scene.add.circle(sprite.x + dir * 30, sprite.y - 14, 6, bulletType === 'ice' ? 0x80d8ff : 0xffea00, 0.9).setDepth(4);
+            const glow = scene.add.circle(sprite.x + dir * 30, sprite.y - 14, 6, bulletType === 'ice' ? 0x80d8ff : bulletType === 'lightning' ? 0xffffff : 0xffea00, 0.9).setDepth(4);
             scene.tweens.add({ targets: glow, scale: 2.2, alpha: 0, duration: 200, onComplete: () => glow.destroy() });
         }
     }
@@ -3554,6 +3636,7 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_mf_lantern', FarmArt.lanternGrid(), 3);
         mk('px_mf_dog0', FarmArt.dogGrid(0), 3);
         mk('px_mf_dog1', FarmArt.dogGrid(1), 3);
+        mk('px_coin_ic', FarmArt.coinGrid(), 3);
         map.myFarm.fruitTrees.forEach(tr => { mk('px_or_' + tr.id + '_0', orTreeGrid(tr.id, false), 3); mk('px_or_' + tr.id + '_1', orTreeGrid(tr.id, true), 3); mk('px_mf_' + tr.id + '_2', mfCropGrid(tr.id, 2), 3); });
         mk('px_mf_blueapple_2', mfCropGrid('blueapple', 2), 3);
         mk('px_mf_fert', FarmArt.fertGrid(), 3);
@@ -3706,7 +3789,12 @@ function launchGame(socket, roomId, mapData, continued) {
         const railImgs = bakeGraphics(scene, rail, F.riverX0, 520, F.dockX1 - F.riverX0 + 10, 50, 1.13);
         railImgs.forEach(pt => pt.setVisible(false));
         mfObj = { sun, zones, plots, dock, dockSign, dockLabel, fx, bobber, bite, hint, water, water2, rain1, rain2, gloom, rainA: 0, orchard, gt,
-            house, barn, board, orderElf, boardMark, decorObj, lanternGlow, railImgs, shownLevel: -1 };
+            house, barn, board, orderElf, boardMark, decorObj, lanternGlow, railImgs, shownLevel: -1,
+            // TANGALAR: ekran tepasida doim ko'rinadi (urug', daraxt, maydon sotib olishdan oldin)
+            coinPanel: scene.add.graphics().setScrollFactor(0).setDepth(998),
+            coinIcon: scene.add.image(0, 25, 'px_coin_ic').setScrollFactor(0).setDepth(1001),
+            coinText: scene.add.text(0, 25, '', { fontFamily: PIXEL_FONT, fontSize: '12px', color: '#ffca28', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(1001),
+            coinShown: null };
         scene.events.on('update', () => updateMyFarm(scene));
         socket.emit('myFarmSync', roomId);
     }
@@ -3802,6 +3890,21 @@ function launchGame(socket, roomId, mapData, continued) {
         if (!mfObj) return;
         const tNow = scene.time.now, F = map.myFarm, O = mfObj;
         O.water.tilePositionX = tNow / 60; O.water2.tilePositionX = -tNow / 45;
+        // Tangalar (hisobsiz o'yinchida - yashirin)
+        const me = typeof currentUser !== 'undefined' && currentUser ? currentUser : null;
+        const coins = me ? String(me.coins || 0) : null;
+        if (coins !== O.coinShown) {
+            O.coinShown = coins;
+            [O.coinPanel, O.coinIcon, O.coinText].forEach(o => o.setVisible(coins !== null));
+            if (coins !== null) {
+                O.coinText.setText(coins);
+                const w = 46 + O.coinText.width, x = 400 - w / 2;
+                drawHudPanel(O.coinPanel, x, 8, w, 34);
+                O.coinIcon.setPosition(x + 20, 25);
+                O.coinText.setPosition(x + 34, 25);
+                if (me) { O.coinIcon.setScale(1.25); scene.tweens.add({ targets: O.coinIcon, scale: 1, duration: 250 }); }
+            }
+        }
         // Yomg'ir (jadval bo'yicha - hamma bir vaqtda ko'radi)
         const raining = mfRaining(mfNow());
         O.rainA += ((raining ? 1 : 0) - O.rainA) * 0.03;
@@ -4029,7 +4132,9 @@ function launchGame(socket, roomId, mapData, continued) {
         if (!host) return null;
         const el = document.createElement('div');
         el.id = 'shop-panel';
-        el.innerHTML = `<div class="shop-box mf-box"><div class="shop-title">${title}</div><div class="shop-cards">${body}</div>
+        const me = typeof currentUser !== 'undefined' && currentUser ? currentUser : null;
+        const wallet = me ? `<div class="mf-wallet">${t('shop_have').replace('{n}', '')}<img class="px-coin" src="${window.FarmArt.icon('coin')}" alt=""> <b>${me.coins || 0}</b></div>` : '';
+        el.innerHTML = `<div class="shop-box mf-box"><div class="shop-title">${title}</div>${wallet}<div class="shop-cards">${body}</div>
             <div class="shop-msg" id="mf-msg"></div><button class="shop-close">${t('shop_close')}</button></div>`;
         el.onpointerdown = (e) => e.stopPropagation();
         el.querySelector('.shop-close').onclick = closeMfPanel;
@@ -4047,7 +4152,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 <img class="mf-icon" src="${tex.getBase64('px_mf_' + c.id + '_2')}" alt="">
                 <div class="shop-name">${t('crop_' + c.id)}</div>
                 <div class="shop-desc">${locked ? '<i class="fa-solid fa-lock"></i> ' + t('mf_need_level').replace('{l}', c.level) : '<i class="fa-regular fa-clock"></i> ' + fmt(c.growMs) + '<br>' + t('mf_sells_for') + ': ' + c.sell}</div>
-                <button class="shop-buy" data-crop="${c.id}" ${locked ? 'disabled' : ''}><i class="fa-solid fa-coins"></i> ${c.seed}</button>
+                <button class="shop-buy" data-crop="${c.id}" ${locked ? 'disabled' : ''}><img class="px-coin" src="${window.FarmArt.icon('coin')}" alt=""> ${c.seed}</button>
             </div>`;
         }).join('');
         const el = mfPanelEl('plot', k, t('mf_seeds_title'), cards);
@@ -4103,7 +4208,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 <div class="shop-name">${t('crop_' + d.id)}</div>
                 <div class="shop-desc">${locked ? '<i class="fa-solid fa-lock"></i> ' + t('mf_need_level').replace('{l}', d.level)
                     : t('mf_or_desc').replace('{m}', fmt(d.matureMs)).replace('{n}', d.yield).replace('{c}', fmt(d.cycleMs)) + '<br>' + t('mf_sells_for') + ': ' + d.sell}</div>
-                <button class="shop-buy" data-tree="${d.id}" ${locked ? 'disabled' : ''}><i class="fa-solid fa-coins"></i> ${d.price}</button></div>`;
+                <button class="shop-buy" data-tree="${d.id}" ${locked ? 'disabled' : ''}><img class="px-coin" src="${A.icon('coin')}" alt=""> ${d.price}</button></div>`;
         }).join('');
         const el = mfPanelEl('orchard', i, t('mf_or_title'), cards);
         if (!el) return;
@@ -7893,8 +7998,11 @@ function launchGame(socket, roomId, mapData, continued) {
         const parts = [];
         const alt = ALT_WEAPON_PERK[c.characterType];
         if (alt && hasPerkClient(c.characterType, c.level, alt)) {
-            const names = { ice: ['hud_q_fire', 'hud_q_ice'], shotgun: ['hud_q_sword', 'hud_q_shotgun'], kunai: ['hud_q_katana', 'hud_q_kunai'] }[alt];
-            let q = '[Q] ' + t(names[c.weaponMode === 'alt' ? 1 : 0]);
+            const names = { ice: ['hud_q_fire', 'hud_q_ice', 'hud_q_lightning'], shotgun: ['hud_q_sword', 'hud_q_shotgun', 'hud_q_shield'],
+                kunai: ['hud_q_katana', 'hud_q_kunai', 'hud_q_shuriken'], triple: ['hud_q_arrow', 'hud_q_triple'] }[alt];
+            let q = '[Q] ' + t(names[c.weaponMode === 'alt2' ? 2 : c.weaponMode === 'alt' ? 1 : 0]);
+            // Knight: qalqon otish qayta tiklanmoqda
+            if (c.characterType === 'knight' && hasPerkClient('knight', c.level, 'shieldthrow')) q += '  ' + t('hud_q_shield') + ' ' + (c.shieldCd > 0 ? c.shieldCd + 's' : t('hud_r_ready'));
             // Drobovik: magazindagi o'qlar yoki qayta o'qlanish
             if (alt === 'shotgun' && c.weaponMode === 'alt') q += ' ' + (c.reloading ? t('hud_reload') : c.ammo + '/' + c.maxAmmo);
             parts.push(q);
@@ -8268,6 +8376,23 @@ function launchGame(socket, roomId, mapData, continued) {
             g.fillStyle(0xffffff, 1); g.fillRect(12, 5, 10, 1);
             g.generateTexture('projectile_kunai', 26, 12); g.destroy();
         }
+        // 4c. 16-daraja: chaqmoq (siniq sariq chiziq), shuriken (to'rt qirrali yulduz)
+        if (!this.textures.exists('projectile_lightning')) {
+            const g = this.add.graphics();
+            const pts = [[0, 7], [8, 3], [14, 9], [22, 2], [30, 8], [36, 5]];
+            g.lineStyle(6, 0xfff59d, 0.5); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath();
+            g.lineStyle(3, 0xffeb3b, 1); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath();
+            g.lineStyle(1, 0xffffff, 1); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath();
+            g.generateTexture('projectile_lightning', 38, 12); g.destroy();
+        }
+        if (!this.textures.exists('projectile_shuriken')) {
+            const grid = gridNew(11, 11);
+            for (let k = 0; k < 11; k++) { grid[5][k] = 0x90a4ae; grid[k][5] = 0x90a4ae; }
+            [[4, 4], [6, 6], [4, 6], [6, 4]].forEach(([x, y]) => { grid[y][x] = 0xcfd8dc; });
+            [[5, 1], [9, 5], [5, 9], [1, 5]].forEach(([x, y]) => { grid[y][x] = 0xeceff1; });
+            grid[5][5] = 0x37474f;
+            gridToTexture(this, 'projectile_shuriken', gridOutline(grid, 0x0a0a0a), 2);
+        }
         // 5. Standart o'q (Agar kerak bo'lib qolsa)
         if (!this.textures.exists('projectile_normal')) {
             let g = this.add.graphics();
@@ -8616,6 +8741,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!currentCharacter || pauseMenuOpen) return;
             let angle = isSky ? skyAim(null) : (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
+            if (!isSky) predictAttack(this, angle);
         });
         this.input.keyboard.on('keyup-ENTER', () => {
             if (!currentCharacter) return;
@@ -8631,6 +8757,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
             let angle = isSky ? skyAim(pointer) : (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
+            if (!isSky) predictAttack(this, angle);
         });
         this.input.on('pointerup', () => {
             if (!currentCharacter) return;
@@ -8655,7 +8782,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 () => {
                     if (!currentCharacter || pauseMenuOpen) return;
                     if (interact(true)) { hitWasE = true; interact(); return; }
-                    socket.emit('startAttackInRoom', { roomId, angle: attackAngle() });
+                    const ang = attackAngle();
+                    socket.emit('startAttackInRoom', { roomId, angle: ang });
+                    if (!isSky) predictAttack(this, ang);
                     skyTouchAtk = true;
                 },
                 () => {
@@ -9087,6 +9216,21 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('shopResult');
         socket.on('shopResult', (d) => { if (d) shopResult(d); });
         // IRON GIANT: qurol va chaqmoqlar
+        // ZANJIRLI CHAQMOQ (mage 16-daraja): dushmanlar orasida siniq sariq chiziqlar chaqnaydi
+        socket.off('chainBolt');
+        socket.on('chainBolt', (d) => {
+            if (!d || !Array.isArray(d.points) || d.points.length < 1) return;
+            const g = this.add.graphics().setDepth(4.2);
+            const zig = (a, b, w, c, al) => {
+                g.lineStyle(w, c, al); g.beginPath(); g.moveTo(a[0], a[1]);
+                for (let k = 1; k < 6; k++) { const q = k / 6; g.lineTo(a[0] + (b[0] - a[0]) * q + Phaser.Math.Between(-8, 8), a[1] + (b[1] - a[1]) * q + Phaser.Math.Between(-8, 8)); }
+                g.lineTo(b[0], b[1]); g.strokePath();
+            };
+            for (let i = 1; i < d.points.length; i++) { zig(d.points[i - 1], d.points[i], 6, 0xfff59d, 0.5); zig(d.points[i - 1], d.points[i], 2, 0xffffff, 1); }
+            d.points.forEach(([x, y]) => { const f = this.add.circle(x, y, 10, 0xfff176, 0.8).setDepth(4.2); this.tweens.add({ targets: f, scale: 2, alpha: 0, duration: 220, onComplete: () => f.destroy() }); });
+            this.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
+            if (d.points.length > 1) sfxAt('whip', d.points[0][0], 0.8);
+        });
         socket.off('robotGun');
         socket.on('robotGun', () => { sfx('banner'); if (robotObj) robotObj.gunUntil = this.time.now + 2400; });
         socket.off('robotBolt');
@@ -9860,6 +10004,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.hp = myData.hp;
                 currentCharacter.maxHp = myData.maxHp || 100;
                 currentCharacter.stamina = myData.stamina;
+                currentCharacter.weaponColor = myData.weaponColor;
                 currentCharacter.kills = myData.kills;
                 currentCharacter.isDead = myData.isDead;
                 currentCharacter.respawnTimer = myData.respawnTimer;
@@ -9868,6 +10013,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.level = myData.level || 0;
                 currentCharacter.maxStamina = myData.maxStamina || 100;
                 currentCharacter.weaponMode = myData.weaponMode || 'main';
+                currentCharacter.shieldCd = myData.shieldCd || 0;
                 currentCharacter.special = !!myData.special;
                 currentCharacter.specialCd = myData.specialCd || 0;
                 currentCharacter.ammo = myData.ammo || 0;
@@ -10135,6 +10281,9 @@ function launchGame(socket, roomId, mapData, continued) {
 
                     if (bData.bulletType === 'ice') currentTexture = 'projectile_fireball';
                     else if (bData.bulletType === 'pellet') currentTexture = 'projectile_normal';
+                    else if (bData.bulletType === 'lightning') currentTexture = 'projectile_lightning';
+                    else if (bData.bulletType === 'shuriken') currentTexture = 'projectile_shuriken';
+                    else if (bData.bulletType === 'shield') { ensureWeaponTextures(this); currentTexture = 'w_shield'; }
                     else if (bData.bulletType === 'kunai') {
                         // Kunai ko'rinishi kiyilgan bo'lsa - uchadigani ham o'sha (kartalar, tish cho'tkasi, darts)
                         const kunaiSkin = ownerSprite && ownerSprite.look && cosTexture(this, 'kunai', ownerSprite.look.kunai);
@@ -10155,6 +10304,8 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (bData.fire) { bSprite.setTint(0xff7043); bSprite.fireArrow = true; }   // kamonchi 4-daraja: olovli o'q
                     else if (bData.bulletType === 'ice') bSprite.setTint(0x80d8ff);          // muz shari - ko'kish
                     else if (bData.bulletType === 'pellet') bSprite.setTint(0xffe082).setScale(0.7); // sochma o'q
+                    else if (bData.bulletType === 'lightning' || bData.bulletType === 'shuriken') { /* o'z rangida */ }
+                    else if (bData.bulletType === 'shield') bSprite.spin = 22;   // otilgan qalqon aylanib uchadi
                     else if (shooter && shooter.weaponColor && !currentTexture.startsWith('cos_')) {
                         bSprite.setTint(shooter.weaponColor);
                     }
@@ -10164,11 +10315,26 @@ function launchGame(socket, roomId, mapData, continued) {
                         bSprite.setOrigin(facingLeft ? 0.7 : 0.3, 0.5).setAlpha(0.95).setScale(0.6);
                         this.tweens.add({ targets: bSprite, scale: 1.1, alpha: 0, duration: currentTexture === 'melee_knight' ? 220 : 160, ease: 'Quad.Out' });
                     }
+                    // O'Z HUJUMIMIZ oldindan ko'rsatilgan bo'lsa (predictAttack) - animatsiya, ovoz takrorlanmaydi
+                    let predicted = false;
+                    if (bData.playerId === socket.id) {
+                        const nowP = performance.now();
+                        if (ATK_PREDICT.batch === this.game.loop.frame) predicted = true;
+                        else if (ATK_PREDICT.pending && nowP - ATK_PREDICT.at < 800) {
+                            predicted = true; ATK_PREDICT.pending = false; ATK_PREDICT.batch = this.game.loop.frame;
+                            ATK_PREDICT.sprites.forEach(p => p && p.active && p.destroy()); ATK_PREDICT.sprites = [];
+                        }
+                    }
+                    if (predicted && isMeleeType) bSprite.setVisible(false);   // zarba izi allaqachon chizilgan
+                    const bt = bData.bulletType;
+                    if (bt === 'shuriken') bSprite.spin = 30;
+                    bulletSprites[bData.id] = bSprite;
+                    if (predicted) return;
                     // Egasining qurolida zarba animatsiyasi
                     playHeroAttack(this, ownerSprite, bData.bulletType);
-                    const bt = bData.bulletType;
                     const shotName = bt === 'melee' ? (shooter && shooter.characterType === 'samurai' ? 'katana' : 'sword')
-                        : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' ? 'kunai' : bt === 'fireball' ? 'fireball' : 'arrow';
+                        : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' || bt === 'shuriken' ? 'kunai' : bt === 'fireball' ? 'fireball'
+                        : bt === 'lightning' ? 'whip' : bt === 'shield' ? 'whoosh' : 'arrow';
                     sfxAt(shotName, bData.x, bData.playerId === socket.id ? 1 : 0.6);
 
                     bulletSprites[bData.id] = bSprite;
@@ -10256,8 +10422,10 @@ function launchGame(socket, roomId, mapData, continued) {
             GameAudio.setMode(mm, map.id || 0);
         }
         // O'qlar: server holati ~17 marta/s keladi - oraliqda tezligi bo'yicha silliq uchadi
+        movePredictedShots();
         const nowB = performance.now();
         Object.values(bulletSprites).forEach((bs) => {
+            if (bs && bs.active && bs.spin) bs.angle += bs.spin;
             if (!bs || !bs.ex || !bs.active) return;
             const dt = Math.min(0.12, (nowB - bs.ex.t) / 1000);
             bs.x = bs.ex.x + bs.ex.vx * dt;

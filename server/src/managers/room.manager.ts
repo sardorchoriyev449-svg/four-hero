@@ -8,7 +8,7 @@ import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrow
 import { GameEngine } from './game.engine';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
-import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE } from '../perks';
+import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -216,7 +216,7 @@ export class RoomManager {
         p.maxHp = maxHpOf(p);
         if (p.hp > p.maxHp) p.hp = p.maxHp;
         else if (p.maxHp > oldMaxHp && !p.isDead) p.hp += p.maxHp - oldMaxHp;
-        if (p.weaponMode === 'alt' && !(ALT_WEAPON_PERK[p.characterType] && hasPerk(p, ALT_WEAPON_PERK[p.characterType]))) p.weaponMode = 'main';
+        if (!weaponModesOf(p).includes(p.weaponMode || 'main')) p.weaponMode = 'main';
         // Magazin hajmi kuchaytirilgan bo'lishi mumkin
         if (p.ammo === undefined || p.ammo > shotgunMagOf(p)) p.ammo = shotgunMagOf(p);
     }
@@ -225,9 +225,10 @@ export class RoomManager {
     public toggleWeapon(socket: Socket, roomId: string): void {
         const p = this.activeRooms[roomId]?.players[socket.id];
         if (!p || p.isDead) return;
-        const perk = ALT_WEAPON_PERK[p.characterType];
-        if (!perk || !hasPerk(p, perk)) return;
-        p.weaponMode = p.weaponMode === 'alt' ? 'main' : 'alt';
+        // Q: asosiy -> 2-qurol -> 3-qurol (16-daraja) -> asosiy ...
+        const modes = weaponModesOf(p);
+        if (modes.length < 2) return;
+        p.weaponMode = modes[(modes.indexOf(p.weaponMode || 'main') + 1) % modes.length];
     }
 
     // R: maxsus qobiliyat (mage - jamoaviy davolash, knight - uchuvchi etik), 2 soniya, keyin kutish
@@ -570,6 +571,7 @@ export class RoomManager {
         player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
 
         charLogic.handleAttack(player, room, player.lastAttackAngle);
+        room.flushNow = true;   // yangi o'q keyingi tikdayoq klientga ketsin (2 tik kutmasdan)
     }
 
     // SHIFT BOSIB TURILGANDA: barcha personajlar uchun umumiy - qobiliyat faollashadi

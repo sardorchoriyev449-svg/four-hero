@@ -48,7 +48,8 @@ export interface PlayerState {
     charXp: { [characterType: string]: number }; // HAR PERSONAJ tajribasi - daraja va imkoniyatlar shundan
     level: number;                 // joriy personajning darajasi (charXp dan)
     maxStamina: number;            // 100 + daraja "stamina +5" lari
-    weaponMode: 'main' | 'alt';    // Q: ikkinchi qurol (mage muz, knight drobovik, samurai kunai)
+    weaponMode: 'main' | 'alt' | 'alt2';   // alt2 - 16-darajadagi uchinchi qurol
+    shieldCd?: number;            // knight: qalqon otishdan keyingi kutish (tik)    // Q: ikkinchi qurol (mage muz, knight drobovik, samurai kunai)
     specialTicks: number;          // R qobiliyati (mage davolash / knight uchish) qolgan vaqti
     specialCooldown: number;       // R qayta tayyor bo'lguncha
     invisLinger: number;           // archer: SHIFT qo'yib yuborilgach yana ko'rinmas qoladigan vaqt
@@ -192,7 +193,7 @@ export interface BulletState {
     vy: number;
     color: number;
     lifetime: number;
-    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai';
+    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'lightning' | 'shield' | 'shuriken';
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
     sy?: number;
@@ -283,6 +284,7 @@ export interface RoomState {
     bulletIdCounter: number;
     isStarted: boolean;
     isOver: boolean;              // O'yin g'olib chiqqach true bo'ladi (yangi round kutiladi)
+    flushNow?: boolean;           // hujumdan keyin holat keyingi tikdayoq yuboriladi
     killsToWin: number;           // Xaritadagi botlarning UMUMIY soni - hammasi o'lsa xarita o'tiladi
     botsSpawned: number;          // Shu raundda jami nechta bot chiqarildi (to'lqinlar bo'yicha)
     botsKilled: number;           // Shu raundda jami nechta bot o'ldirildi (butun jamoa bo'yicha)

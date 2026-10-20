@@ -12,7 +12,14 @@ Object.keys(PERK_TABLE).forEach((c) => {
     for (let L = 20; L <= 100; L += 10) PERK_TABLE[c].push({ level: L, id: (L / 10) % 2 === 0 ? 'stam5' : 'dmg5' });
 });
 const MAX_HERO_LEVEL = 100;
-const ALT_WEAPON_PERK = { mage: 'ice', knight: 'shotgun', samurai: 'kunai' };
+// 16-DARAJA: har personajga yangi qurol (serverdagi bilan bir xil)
+PERK_TABLE.mage.push({ level: 16, id: 'lightning' });
+PERK_TABLE.knight.push({ level: 16, id: 'shieldthrow' });
+PERK_TABLE.samurai.push({ level: 16, id: 'shuriken' });
+PERK_TABLE.archer.push({ level: 16, id: 'triple' });
+const ALT_WEAPON_PERK = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple' };
+// Q bilan uchinchi qurol: mage - chaqmoq, knight - qalqon otish, samurai - shuriken
+const THIRD_WEAPON_PERK = { mage: 'lightning', knight: 'shieldthrow', samurai: 'shuriken' };
 const SPECIAL_PERK = { mage: 'heal', knight: 'fly' };
 
 function hasPerkClient(characterType, level, id) {

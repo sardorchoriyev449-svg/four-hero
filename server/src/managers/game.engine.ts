@@ -318,7 +318,8 @@ export class GameEngine {
             }
 
             // 5. HOLATNI LOBBIGA BROADCAST QILISh (har BROADCAST_EVERY tikda)
-            if (this.frame % this.BROADCAST_EVERY !== 0) return;
+            if (this.frame % this.BROADCAST_EVERY !== 0 && !room.flushNow) return;
+            room.flushNow = false;
             const players: { [id: string]: object } = {};
             Object.values(room.players).forEach(p => {
                 players[p.id] = {
@@ -326,7 +327,7 @@ export class GameEngine {
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
                     weaponColor: p.weaponColor, look: p.look || '', nickname: p.nickname, apples: p.apples,
-                    level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main',
+                    level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0,
                     acid: (p.acidTicks || 0) > 0,
@@ -1000,6 +1001,9 @@ export class GameEngine {
             if (bullet.bulletType === 'ice') baseDamage = 40;            // Mage muz shari: olovlidan +10 kuchli va muzlatadi
             else if (bullet.bulletType === 'pellet') baseDamage = 9 + (owner ? weaponUpgradeLevel(owner, 'shotgunDamage') * SHOTGUN_DMG_PER_LEVEL : 0);   // drobovik (+kuchaytirish)
             else if (bullet.bulletType === 'kunai') baseDamage = 22 + (owner ? weaponUpgradeLevel(owner, 'kunaiDamage') * KUNAI_DMG_PER_LEVEL : 0);      // kunai (+kuchaytirish)
+            else if (bullet.bulletType === 'lightning') baseDamage = 26;   // 16-daraja: zanjirli chaqmoq (sakragani - 60%)
+            else if (bullet.bulletType === 'shield') baseDamage = 45;      // 16-daraja: otilgan qalqon (10 s da bir)
+            else if (bullet.bulletType === 'shuriken') baseDamage = 14;    // 16-daraja: har bir shuriken
             // + daraja imkoniyati "DAMAGE +5"
             const damage = baseDamage * damageMultiplier + (owner ? bonusDamageOf(owner) : 0);
 
@@ -1236,6 +1240,25 @@ export class GameEngine {
 
                     bot.hp -= damage;
                     if (bullet.bulletType === 'ice') bot.freezeDuration = Math.max(bot.freezeDuration, 45); // ~1.3s muzlaydi
+                    // ZANJIRLI CHAQMOQ: tekkan botdan yana 2 ta eng yaqin botga sakraydi (har biri - 60% zarar)
+                    if (bullet.bulletType === 'lightning') {
+                        const chain: BotState[] = [bot];
+                        const points = [[Math.round(bot.x), Math.round(bot.y)]];
+                        for (let hop = 0; hop < 2; hop++) {
+                            const from = chain[chain.length - 1];
+                            const next = room.bots.filter(b => !chain.includes(b) && b.hp > 0 && Math.hypot(b.x - from.x, b.y - from.y) <= 230)
+                                .sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y))[0];
+                            if (!next) break;
+                            chain.push(next);
+                            points.push([Math.round(next.x), Math.round(next.y)]);
+                            if (!next.isBlocking) next.hp -= damage * 0.6;
+                        }
+                        this.io.to(room.id).emit('chainBolt', { points });
+                        // O'lganlar - indeksi kattasidan boshlab olib tashlanadi
+                        chain.map(b => room.bots.indexOf(b)).filter(i => i >= 0 && room.bots[i].hp <= 0).sort((a, b) => b - a)
+                            .forEach(i => this.killBot(room, i, bullet.playerId));
+                        break;
+                    }
                     if (bot.hp <= 0) this.killBot(room, j, bullet.playerId);
                     break;
                 }
@@ -2976,7 +2999,7 @@ export class GameEngine {
     // Qilich bilan uradigan qahramon (ritsar/samuray asosiy qurolda) - dushman unga yaqin keladi, aks holda
     // qilich hech qachon yetmasdi; kamonchi/sehrgar/o'qotar qurol - uzoqroqda suzadi
     private skyIsMelee(p: PlayerState): boolean {
-        return (p.characterType === 'knight' || p.characterType === 'samurai') && p.weaponMode !== 'alt';
+        return (p.characterType === 'knight' || p.characterType === 'samurai') && (p.weaponMode || 'main') === 'main';
     }
     private updateSky(room: RoomState, roomId: string): void {
         const map = getMapById(room.selectedLevel);

@@ -1,6 +1,6 @@
 import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
-import { shotgunMagOf, SHOTGUN_RELOAD_TICKS } from '../perks';
+import { shotgunMagOf, SHOTGUN_RELOAD_TICKS, SHIELD_THROW_COOLDOWN_TICKS } from '../perks';
 
 export class KnightCharacter extends BaseCharacter {
     // Ritsar: zarba 20 ta HP oladi, lekin stamina sekin ketadi
@@ -8,11 +8,21 @@ export class KnightCharacter extends BaseCharacter {
 
     // Drobovik: magazin bo'sh yoki qayta o'qlanayotgan bo'lsa - otmaydi
     canAttack(player: PlayerState): boolean {
+        if (player.weaponMode === 'alt2') return (player.shieldCd || 0) <= 0;
         if (player.weaponMode !== 'alt') return true;
         return (player.reloadTicks || 0) <= 0 && (player.ammo ?? shotgunMagOf(player)) > 0;
     }
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
+        // 16-daraja: QALQON OTISH - kuchli zarba; keyin 10 s qayta tiklanadi va qurol o'zi drobovikka o'tadi
+        if (player.weaponMode === 'alt2') {
+            room.bulletIdCounter++;
+            room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + Math.cos(angle) * 20, y: player.y - 2,
+                vx: Math.cos(angle) * 650, vy: Math.sin(angle) * 650, color: player.color, lifetime: 40, bulletType: 'shield', justSpawned: true });
+            player.shieldCd = SHIELD_THROW_COOLDOWN_TICKS;
+            player.weaponMode = 'alt';
+            return;
+        }
         // 3-daraja: Q bilan DROBOVIK - yaqin masofaga 5 ta sochma o'q (yelpig'ich); har otish -1 o'q,
         // magazin bo'shasa qayta o'qlanadi
         if (player.weaponMode === 'alt') {

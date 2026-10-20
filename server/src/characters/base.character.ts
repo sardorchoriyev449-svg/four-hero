@@ -15,6 +15,7 @@ export abstract class BaseCharacter {
     // Har bir kadrda taymerlarni yangilash: cooldown va stamina tiklanish kechikishi
     public static updateTimers(player: PlayerState): void {
         if (player.attackCooldown > 0) player.attackCooldown--;
+        if ((player.shieldCd || 0) > 0) player.shieldCd!--;   // knight: qalqon otish qayta tiklanmoqda
 
         // SHIFT (qobiliyat) ushlab turilsa - BARCHA personajlar uchun stamina ketadi
         if (player.isHoldingAbility) {

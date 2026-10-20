@@ -6,6 +6,13 @@ export class MageCharacter extends BaseCharacter {
     public attackStaminaCost = 25;
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
+        // 16-daraja: ZANJIRLI CHAQMOQ - juda tez, birinchi dushmandan yana 2 ta yaqin dushmanga sakraydi
+        if (player.weaponMode === 'alt2') {
+            room.bulletIdCounter++;
+            room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + Math.cos(angle) * 20, y: player.y - 10,
+                vx: Math.cos(angle) * 1100, vy: Math.sin(angle) * 1100, color: player.color, lifetime: 30, bulletType: 'lightning', justSpawned: true });
+            return;
+        }
         room.bulletIdCounter++;
         room.bullets.push({
             id: 'bullet_' + room.bulletIdCounter,

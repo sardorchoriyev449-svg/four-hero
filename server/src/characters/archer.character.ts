@@ -7,6 +7,17 @@ export class ArcherCharacter extends BaseCharacter {
     public attackStaminaCost = 12;
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
+        // 16-daraja: Q bilan UCHTALIK O'Q - yelpig'ich shaklida 3 ta
+        if (player.weaponMode === 'alt') {
+            for (let k = -1; k <= 1; k++) {
+                const a = angle + k * 0.12;
+                room.bulletIdCounter++;
+                room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + Math.cos(angle) * 18, y: player.y - 8,
+                    vx: Math.cos(a) * 1000, vy: Math.sin(a) * 1000, color: player.color, lifetime: 80, bulletType: 'arrow',
+                    fire: hasPerk(player, 'firearrow'), justSpawned: true });
+            }
+            return;
+        }
         room.bulletIdCounter++;
         room.bullets.push({
             id: 'bullet_' + room.bulletIdCounter,

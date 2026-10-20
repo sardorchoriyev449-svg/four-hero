@@ -6,6 +6,16 @@ export class SamuraiCharacter extends BaseCharacter {
     public attackStaminaCost = 8;
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
+        // 16-daraja: SHURIKEN YELPIG'ICHI - bir yo'la 3 ta
+        if (player.weaponMode === 'alt2') {
+            for (let k = -1; k <= 1; k++) {
+                const a = angle + k * 0.2;
+                room.bulletIdCounter++;
+                room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + Math.cos(angle) * 18, y: player.y - 4,
+                    vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, color: player.color, lifetime: 28, bulletType: 'shuriken', justSpawned: true });
+            }
+            return;
+        }
         // 3-daraja: Q bilan KUNAI - uzoqqa otiladigan pichoq
         if (player.weaponMode === 'alt') {
             room.bulletIdCounter++;

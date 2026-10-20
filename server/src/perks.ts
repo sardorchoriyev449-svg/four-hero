@@ -14,7 +14,11 @@ export type PerkId =
     | 'djump'   // samurai: havoda ikkinchi sakrash
     | 'kunai'   // samurai: Q - katana/kunai (otiladigan pichoq) almashtirish
     | 'invis2'  // archer: SHIFT qo'yib yuborilgach yana 2 soniya ko'rinmas
-    | 'firearrow'; // archer: olovli o'qlar
+    | 'firearrow' // archer: olovli o'qlar
+    | 'lightning'   // mage 16: Q - zanjirli chaqmoq (3-qurol)
+    | 'shieldthrow' // knight 16: Q - qalqon otish (3-qurol, 10 s qayta tiklanadi)
+    | 'shuriken'    // samurai 16: Q - 3 ta shuriken yelpig'ichi (3-qurol)
+    | 'triple';     // archer 16: Q - uchtalik o'q
 
 export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] } = {
     mage: [{ level: 1, id: 'shift' }, { level: 2, id: 'ice' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'heal' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
@@ -23,13 +27,29 @@ export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] 
     archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }]
 };
 
+// 16-DARAJA: har personajga yangi qurol (Q bilan almashtiriladi)
+PERK_TABLE.mage.push({ level: 16, id: 'lightning' });
+PERK_TABLE.knight.push({ level: 16, id: 'shieldthrow' });
+PERK_TABLE.samurai.push({ level: 16, id: 'shuriken' });
+PERK_TABLE.archer.push({ level: 16, id: 'triple' });
 // 20, 30, ... 100-darajalarda bittadan, navbat bilan: 20, 40, 60, 80, 100 - +5 stamina; 30, 50, 70, 90 - +5 zarar
 Object.keys(PERK_TABLE).forEach((c) => {
     for (let L = 20; L <= 100; L += 10) PERK_TABLE[c].push({ level: L, id: (L / 10) % 2 === 0 ? 'stam5' : 'dmg5' });
 });
 
 // Q bilan almashadigan ikkinchi qurol (personaj bo'yicha)
-export const ALT_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'ice', knight: 'shotgun', samurai: 'kunai' };
+export const ALT_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple' };
+// Q bilan uchinchi qurol (16-daraja): mage - chaqmoq, knight - qalqon otish, samurai - shuriken
+export const THIRD_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'lightning', knight: 'shieldthrow', samurai: 'shuriken' };
+export const SHIELD_THROW_COOLDOWN_TICKS = 333;   // ~10 s
+// Q tartibi: shu o'yinchida hozir mavjud qurol rejimlari (knight qalqoni qayta tiklanayotganda - yo'q)
+export function weaponModesOf(p: PlayerState): ('main' | 'alt' | 'alt2')[] {
+    const modes: ('main' | 'alt' | 'alt2')[] = ['main'];
+    const a = ALT_WEAPON_PERK[p.characterType], b = THIRD_WEAPON_PERK[p.characterType];
+    if (a && hasPerk(p, a)) modes.push('alt');
+    if (b && hasPerk(p, b) && !(p.characterType === 'knight' && (p.shieldCd || 0) > 0)) modes.push('alt2');
+    return modes;
+}
 // R bilan ishlaydigan maxsus qobiliyat
 export const SPECIAL_PERK: { [character: string]: PerkId } = { mage: 'heal', knight: 'fly' };
 export const SPECIAL_TICKS = 67;          // ~2s
