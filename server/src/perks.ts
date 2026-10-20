@@ -82,7 +82,7 @@ export const SHOTGUN_BASE_MAG = 7;
 export const SHOTGUN_MAG_PER_LEVEL = 2;
 export const SHOTGUN_DMG_PER_LEVEL = 2;
 export const KUNAI_DMG_PER_LEVEL = 4;
-export const SHOTGUN_RELOAD_TICKS = 50; // ~1.5s - magazin bo'shasa qayta o'qlanadi
+export const SHOTGUN_RELOAD_TICKS = 500; // 15 s - magazin bo'shasa qayta o'qlanadi
 export function shotgunMagOf(p: PlayerState): number {
     const up = (p.accountUpgrades && p.accountUpgrades.knight) as any || {};
     return SHOTGUN_BASE_MAG + SHOTGUN_MAG_PER_LEVEL * Math.min(5, up.shotgunMag || 0);

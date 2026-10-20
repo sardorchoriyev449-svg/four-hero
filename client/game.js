@@ -472,6 +472,7 @@ function launchGame(socket, roomId, mapData, continued) {
     let forestTriggered = false; // daraxt yoniga yetildi - itlar chiqdi
     let heroVisRight = null;   // o'z qahramonim: qurol/bosh/yuz detallari fizikadan KEYIN joylashadi (orqada qolmasin)
     let levelFreezeUntil = 0, levelFrozen = false;   // LEVEL UP: o'yin hamma uchun to'xtab turadi
+    let stoneGroundAt = -1e9;  // qahramon oxirgi marta toshga qo'yilgan vaqt (sakrash uchun "yerda")
     let stoneClock = null;     // server toshlar vaqti - mahalliy vaqt farqi (silliq tebranish uchun)
     let stoneGroup = null;     // yuruvchi toshlar (qattiq, bir tomonlama, server boshqaradi)
     let stoneSprites = {};
@@ -850,7 +851,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function predictedAttackType(c) {
         const m = c.weaponMode || 'main', t = c.characterType;
         if (t === 'mage') return m === 'alt2' ? 'lightning' : m === 'alt' ? 'ice' : 'fireball';
-        if (t === 'knight') return m === 'alt2' ? ((c.shieldCd || 0) > 0 ? null : 'shield') : m === 'alt' ? 'pellet' : 'melee';
+        if (t === 'knight') return m === 'alt2' ? ((c.shieldCd || 0) > 0 ? null : 'shield') : m === 'alt' ? ((c.reloading || (c.ammo || 0) <= 0) ? null : 'pellet') : 'melee';
         if (t === 'samurai') return m === 'alt2' ? 'shuriken' : m === 'alt' ? 'kunai' : 'melee';
         return 'arrow';
     }
@@ -1465,7 +1466,24 @@ function launchGame(socket, roomId, mapData, continued) {
     // keyingi gap. Qator oddiy matn (elf gapiradi) yoki { who, text, fx } bo'lishi mumkin:
     //   who: 'elf' | 'player' | 'narrator';  fx: 'shake' | 'scream'
     // opts.remote bo'lsa (umumiy sahna) - E serverdan keyingi qatorni so'raydi
+    // Raund hali boshlanmagan ("xarita o'tildi" sahnasi yoki yuklanish ekrani turibdi) - dialog shu sahna
+    // ostida ochilib ketmasin: raund boshlanguncha kutadi (bir nechta so'rov kelsa - oxirgisi ochiladi)
+    let pendingDialog = null;
     function startDialog(scene, lines, onDone, opts = {}) {
+        if (!roundGo || document.getElementById('level-complete')) {
+            const first = !pendingDialog;
+            pendingDialog = { scene, lines, onDone, opts };
+            if (first) {
+                const poll = () => {
+                    if (!pendingDialog || !scene.sys || !scene.sys.isActive()) { pendingDialog = null; return; }
+                    if (!roundGo || document.getElementById('level-complete')) { scene.time.delayedCall(150, poll); return; }
+                    const p = pendingDialog; pendingDialog = null;
+                    scene.time.delayedCall(400, () => startDialog(p.scene, p.lines, p.onDone, p.opts));
+                };
+                scene.time.delayedCall(150, poll);
+            }
+            return;
+        }
         closeDialog();
         const box = scene.add.graphics().setScrollFactor(0).setDepth(2000);
         box.fillStyle(0x000000, 1); box.fillRect(30, 420, 740, 160);
@@ -8004,7 +8022,7 @@ function launchGame(socket, roomId, mapData, continued) {
             // Knight: qalqon otish qayta tiklanmoqda
             if (c.characterType === 'knight' && hasPerkClient('knight', c.level, 'shieldthrow')) q += '  ' + t('hud_q_shield') + ' ' + (c.shieldCd > 0 ? c.shieldCd + 's' : t('hud_r_ready'));
             // Drobovik: magazindagi o'qlar yoki qayta o'qlanish
-            if (alt === 'shotgun' && c.weaponMode === 'alt') q += ' ' + (c.reloading ? t('hud_reload') : c.ammo + '/' + c.maxAmmo);
+            if (alt === 'shotgun' && c.weaponMode === 'alt') q += ' ' + (c.reloading ? t('hud_reload') + ' ' + (c.reloadSec || 0) + 's' : c.ammo + '/' + c.maxAmmo);
             parts.push(q);
         }
         const sp = SPECIAL_PERK[c.characterType];
@@ -8269,13 +8287,19 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             });
 
-            // ELF BILAN TANISHUV (Undertale uslubidagi dialog, E - keyingi gap).
-            // Hamma o'qib bo'lgach, server olma otishni boshlaydi
-            this.time.delayedCall(900, () => {
+            // ELF BILAN TANISHUV (Undertale uslubidagi dialog, E - keyingi gap): qahramon o'ngdagi
+            // QASR ESHIGI oldiga borganda boshlanadi (xarita ochilishi bilan emas). Hamma o'qib bo'lgach,
+            // server olma otishni boshlaydi
+            const elfWatch = () => {
+                if (!roundGo || dialog || !currentCharacter || currentCharacter.isDead) return;
+                if (currentCharacter.x < A.bigWall.x - 150) return;
+                this.events.off('update', elfWatch);
                 startDialog(this, [t('elf_d0'), t('elf_d1'), t('elf_d2'), t('elf_d3'), t('elf_d4')], () => {
                     socket.emit('dialogDone', roomId);
                 });
-            });
+            };
+            this.events.on('update', elfWatch);
+            this.events.once('shutdown', () => this.events.off('update', elfWatch));
         }
 
         // ELFLAR BOZORI (piksel): quyosh botishi, shahar silueti, bayroqchalar, uchta rasta
@@ -8588,6 +8612,8 @@ function launchGame(socket, roomId, mapData, continued) {
         const warm = { at: performance.now(), frames: 0, good: 0, sent: false };
         const warmTick = () => {
             if (warm.sent) return;
+            // "Xarita o'tildi" sahnasi hali ekranda - raund (dialog, boss, olmalar) uning ostida boshlanib ketmasin
+            if (document.getElementById('level-complete')) { warm.at = performance.now(); return; }
             if (currentCharacter) {
                 warm.frames++;
                 warm.good = this.game.loop.rawDelta < 40 ? warm.good + 1 : 0;
@@ -10019,6 +10045,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.ammo = myData.ammo || 0;
                 currentCharacter.maxAmmo = myData.maxAmmo || 7;
                 currentCharacter.reloading = !!myData.reloading;
+                currentCharacter.reloadSec = myData.reloadSec || 0;
                 currentCharacter.acid = !!myData.acid;
                 currentCharacter.curseA = !!myData.curseA;
                 currentCharacter.curseB = !!myData.curseB;
@@ -10673,7 +10700,33 @@ function launchGame(socket, roomId, mapData, continued) {
                 sp.x = sp.baseX;
                 sp.clearTint();
             }
+            // Fizika tanasi shu kadrdayoq yangi joyda bo'lsin (aks holda bir kadr orqada qolib, tushayotgan qahramon o'tib ketardi)
+            if (sp.body) { if (sp.body.updateFromGameObject) sp.body.updateFromGameObject(); else sp.body.reset(sp.x, sp.y); }
         });
+        // TOSHGA QO'NISH (qo'lda): tosh tebranadi, kadr tezligi past bo'lsa (telefon, kuchsiz kompyuter) Phaser
+        // to'qnashuvi tez tushayotgan qahramonni o'tkazib yuborardi - u chuqurga tushib halok bo'lardi. Oldingi
+        // kadrda tosh ustida (yoki tepasida) edi va endi oyog'i tosh ichiga kirdi - tosh ustiga qo'yamiz
+        if (isStones && currentCharacter && currentCharacter.body && !currentCharacter.isDead) {
+            const hb = currentCharacter.body;
+            Object.values(stoneSprites).forEach((sp) => {
+                if (!sp.body || !sp.body.enable || (sp.state !== 'idle' && sp.state !== 'shake')) { sp.prevTop = null; return; }
+                const top = sp.body.top, prevTop = sp.prevTop == null ? top : sp.prevTop;
+                sp.prevTop = top;
+                if (hb.velocity.y < 0 || hb.right <= sp.body.left + 4 || hb.left >= sp.body.right - 4) return;
+                const prevBottom = currentCharacter.prevStoneBottom == null ? hb.bottom : currentCharacter.prevStoneBottom;
+                if (prevBottom <= prevTop + 6 && hb.bottom >= top - 1 && hb.bottom <= top + 40) {
+                    const dy = top - hb.bottom;
+                    currentCharacter.y += dy; hb.y += dy;
+                    hb.velocity.y = 0;
+                    stoneGroundAt = this.time.now;
+                    if (sp.state === 'idle' && !(sp.stepAt && this.time.now - sp.stepAt < 500)) {
+                        sp.stepAt = this.time.now;
+                        socket.emit('stoneStep', { roomId, i: Number(String(sp.stoneId).replace('stone_', '')) });
+                    }
+                }
+            });
+            currentCharacter.prevStoneBottom = hb.bottom;
+        }
         // Qizil qutilar: silliq tushadi, yerga qo'nganlari lipillab turadi
         const rbBlink = Math.floor(this.time.now / 350) % 2 === 0;
         Object.values(redBoxSprites).forEach((s) => {
@@ -11037,7 +11090,7 @@ function launchGame(socket, roomId, mapData, continued) {
         }
 
         if (isBack) backRampStep(currentCharacter);
-        let isGrounded = currentCharacter.body.touching.down || currentCharacter.body.blocked.down || (isBack && backOnRamp);
+        let isGrounded = currentCharacter.body.touching.down || currentCharacter.body.blocked.down || (isBack && backOnRamp) || (isStones && this.time.now - stoneGroundAt < 120);
         if (isStones) {
             if (isGrounded) lastGroundedAt = this.time.now;
             else if (this.time.now - lastGroundedAt < 120 && currentCharacter.body.velocity.y >= 0) isGrounded = true;

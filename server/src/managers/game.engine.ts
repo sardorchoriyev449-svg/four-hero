@@ -329,7 +329,7 @@ export class GameEngine {
                     weaponColor: p.weaponColor, look: p.look || '', nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
-                    ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0,
+                    ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0, reloadSec: Math.ceil((p.reloadTicks || 0) * this.TICK_SECONDS),
                     acid: (p.acidTicks || 0) > 0,
                     curseA: !!p.acidCurse, curseB: !!p.boltCurse, jet: !!p.jetpack,
                     isAdmin: !!p.isAdmin

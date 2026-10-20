@@ -1079,11 +1079,14 @@ io.on('connection', (socket) => {
             roomManager.sendCutsceneState(socket, roomId);
             // Raund hali boshlanmaydi: brauzer birinchi og'ir kadrlarni (grafikka rasm yuklash) o'tkazib,
             // "playerWarmInRoom" yuborgach - markLoaded (aks holda "GO" paytida o'yin bir necha soniya sekin yurardi).
-            // Himoya: eski klient (signal yubormaydi) yoki u yo'qolsa - 4 s dan keyin baribir tayyor hisoblanadi
+            // Himoya: eski klient (signal yubormaydi) yoki u yo'qolsa - 8 s dan keyin baribir tayyor hisoblanadi
+            // ("xarita o'tildi" sahnasi ~3.5 s turadi - klient u yopilgach signal yuboradi)
+            // (faqat SHU raund uchun: oldingi xaritadagi taymer keyingi xaritani "xarita o'tildi" sahnasi ostida boshlab yubormasin)
+            const round = room.round;
             setTimeout(() => {
                 const r = activeRooms[roomId];
-                if (r && r.players[socket.id] && r.loadingIds && r.loadingIds.includes(socket.id)) roomManager.markLoaded(socket, roomId);
-            }, 4000);
+                if (r && r.round === round && r.players[socket.id] && r.loadingIds && r.loadingIds.includes(socket.id)) roomManager.markLoaded(socket, roomId);
+            }, 8000);
         }
     });
     socket.on('playerWarmInRoom', (roomId: string) => {
