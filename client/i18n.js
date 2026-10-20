@@ -4,6 +4,7 @@ const TRANSLATIONS = {
     en: {
         // Auth
         auth_title: 'SIGN IN',
+        reg_title: 'CREATE ACCOUNT',
         nickname_ph: 'Nickname',
         password_ph: 'Password',
         login_btn: 'Sign In',
@@ -833,6 +834,7 @@ const TRANSLATIONS = {
     },
     ru: {
         auth_title: 'ВХОД',
+        reg_title: 'РЕГИСТРАЦИЯ',
         nickname_ph: 'Никнейм',
         password_ph: 'Пароль',
         login_btn: 'Войти',

@@ -1168,15 +1168,15 @@
 
     <div id="auth-panel" class="panel">
         <div class="pixel-logo"><span class="logo-main">4 HEROES</span><span class="logo-sub">CO-OP ACTION</span></div>
-        <h2 data-i18n="auth_title">SIGN IN</h2>
-        <div id="login-form">
+        <h2 id="auth-title" data-i18n="reg_title">CREATE ACCOUNT</h2>
+        <div id="login-form" class="hidden">
             <input type="text" id="login-nickname" maxlength="20" data-i18n-ph="nickname_ph" placeholder="Nickname">
             <input type="password" id="login-password" data-i18n-ph="password_ph" placeholder="Password">
             <button id="login-btn" data-i18n="login_btn">Sign In</button>
             <p id="login-error" class="error-text"></p>
             <p class="link-text" id="show-register-link" data-i18n="no_account">Don't have an account? Register</p>
         </div>
-        <div id="register-form" class="hidden">
+        <div id="register-form">
             <input type="text" id="register-fullname" minlength="4" maxlength="40" data-i18n-ph="reg_fullname_ph" placeholder="Full name (4+ characters)">
             <input type="text" id="register-nickname" minlength="4" maxlength="20" data-i18n-ph="reg_nickname_ph" placeholder="Nickname (4-20 characters)">
             <input type="password" id="register-password" minlength="8" maxlength="72" data-i18n-ph="reg_password_ph" placeholder="Password (8+ characters)">

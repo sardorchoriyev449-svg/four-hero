@@ -296,14 +296,19 @@ function onLanguageChanged() {
 
 // --- 0. HISOB QAYDNOMASI (LOGIN / RO'YXATDAN O'TISH) ---
 
-showRegisterLink.onclick = () => {
-    loginForm.classList.add('hidden');
-    registerForm.classList.remove('hidden');
-};
-showLoginLink.onclick = () => {
-    registerForm.classList.add('hidden');
-    loginForm.classList.remove('hidden');
-};
+// Yangi kelgan o'yinchini RO'YXATDAN O'TISH kutib oladi (ko'pchilik "qanday kiraman?" deb so'rardi).
+// Shu qurilmada avval hisobga kirgan bo'lsa - KIRISH oynasi ochiladi.
+function setAuthMode(mode) {
+    const reg = mode === 'register';
+    registerForm.classList.toggle('hidden', !reg);
+    loginForm.classList.toggle('hidden', reg);
+    const title = document.getElementById('auth-title');
+    if (title) { title.setAttribute('data-i18n', reg ? 'reg_title' : 'auth_title'); title.innerText = t(reg ? 'reg_title' : 'auth_title'); }
+}
+try { if (localStorage.getItem('gameUser')) localStorage.setItem('hadAccount', '1'); } catch (e) { }
+setAuthMode((() => { try { return localStorage.getItem('hadAccount') ? 'login' : 'register'; } catch (e) { return 'register'; } })());
+showRegisterLink.onclick = () => setAuthMode('register');
+showLoginLink.onclick = () => setAuthMode('login');
 
 loginBtn.onclick = () => withBusy(loginBtn, async () => {
     loginError.innerText = '';
@@ -368,6 +373,7 @@ function onAuthSuccess(user) {
     currentUser = user;
     sessionExpiredShown = false;
     localStorage.setItem('gameUser', JSON.stringify(user));
+    try { localStorage.setItem('hadAccount', '1'); } catch (e) { }
     enterMainMenu();
     // Admin paneldan xonaga kirmoqchi edi - hisobga kirgach, o'sha xonaga kiradi
     if (typeof joinPendingAdminRoom === 'function') joinPendingAdminRoom();
@@ -380,6 +386,7 @@ logoutLink.onclick = () => {
     currentUser = null;
     loginNickname.value = '';
     loginPassword.value = '';
+    setAuthMode('login');
     showPanel(authPanel);
 };
 
