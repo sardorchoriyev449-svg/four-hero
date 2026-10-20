@@ -1077,8 +1077,18 @@ io.on('connection', (socket) => {
         if (room && room.players[socket.id]) {
             socket.emit('initPlayer', { ...room.players[socket.id], killsToWin: room.killsToWin });
             roomManager.sendCutsceneState(socket, roomId);
-            roomManager.markLoaded(socket, roomId); // xarita yuklandi - hamma tayyor bo'lsa raund boshlanadi
+            // Raund hali boshlanmaydi: brauzer birinchi og'ir kadrlarni (grafikka rasm yuklash) o'tkazib,
+            // "playerWarmInRoom" yuborgach - markLoaded (aks holda "GO" paytida o'yin bir necha soniya sekin yurardi).
+            // Himoya: eski klient (signal yubormaydi) yoki u yo'qolsa - 4 s dan keyin baribir tayyor hisoblanadi
+            setTimeout(() => {
+                const r = activeRooms[roomId];
+                if (r && r.players[socket.id] && r.loadingIds && r.loadingIds.includes(socket.id)) roomManager.markLoaded(socket, roomId);
+            }, 4000);
         }
+    });
+    socket.on('playerWarmInRoom', (roomId: string) => {
+        const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
+        if (room && room.players[socket.id]) roomManager.markLoaded(socket, roomId); // hamma tayyor bo'lsa raund boshlanadi
     });
 
     // 6. HARAKAT KOORDINATALARINI SERVER BILAN SINXRONLASH

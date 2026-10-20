@@ -559,6 +559,9 @@ function launchGame(socket, roomId, mapData, continued) {
             width: 800,
             height: 600
         },
+        // panicMax: 0 - Phaser standartda boshidagi 120 kadr davomida har kadrni 16.7 ms bilan cheklaydi: qurilma 60 fps
+        // bermasa (masalan 50 fps) o'yin boshida ~3 s "sekin harakat" bo'lib qolardi. O'chirildi
+        fps: { panicMax: 0 },
         physics: {
             default: 'arcade',
             arcade: {
@@ -8455,6 +8458,22 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // DIQQAT: Phaser to'liq yuklanib bo'ldi, endi serverdan o'yinchimizni so'raymiz!
         socket.emit('playerReadyInRoom', roomId);
+        // ISINISH: birinchi kadrlar og'ir (grafikka rasmlar yuklanadi, shaderlar tayyorlanadi) - ular yuklanish oynasi
+        // ostida o'tsin. Qahramon yaratilgach 3 ta ketma-ket tez kadr (yoki ko'pi bilan 2.5 s) - keyin serverga "tayyorman"
+        const warm = { at: performance.now(), frames: 0, good: 0, sent: false };
+        const warmTick = () => {
+            if (warm.sent) return;
+            if (currentCharacter) {
+                warm.frames++;
+                warm.good = this.game.loop.rawDelta < 40 ? warm.good + 1 : 0;
+            }
+            if ((warm.frames >= 4 && warm.good >= 3) || performance.now() - warm.at > 2500) {
+                warm.sent = true;
+                this.events.off('postupdate', warmTick);
+                socket.emit('playerWarmInRoom', roomId);
+            }
+        };
+        this.events.on('postupdate', warmTick);
 
         // PAUZA MENYUSI (Esc yoki o'ng yuqoridagi tugma): yolg'iz o'yinchida o'yin TO'XTAYDI,
         // bir necha o'yinchida to'xtamaydi - faqat menyu ochiladi. Ichida: davom etish,
