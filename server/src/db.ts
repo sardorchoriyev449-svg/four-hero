@@ -95,6 +95,11 @@ const userSchema = new mongoose.Schema({
     farmXp: { type: Number, default: 0 },                // FERMA DARAJASI tajribasi
     farmDecor: { type: Object, default: () => ({}) },    // sotib olingan bezaklar: { flowers: true, ... }
     farmDecorOff: { type: Object, default: () => ({}) }, // yashikka olingan (tashqarida ko'rinmaydigan) bezaklar
+    farmHive: { type: Boolean, default: false },         // NOTA UYASI (o'sishni tezlatadi)
+    farmMill: { type: Number, default: 0 },              // BAHAYBAT TEGIRMON bosqichi (0..4)
+    farmSprinklers: { type: Number, default: 0 },        // avtomatik sug'orgichlar (har biri bitta maydonga)
+    farmScarecrows: { type: Number, default: 0 },        // qo'rqinchoqlar (robot qarg'alar qo'nmaydi)
+    farmGreenhouse: { type: Boolean, default: false },   // issiqxona (1-maydon)
     farmHome: { type: Object, default: () => ({}) },     // fermer uyi: { owned: { bed: true }, place: { f0: 'bed' } }
     farmChest: { type: Object, default: () => ({}) },    // uydagi yashik: { bag: { tomato: 5 }, fish: [{ u, f, kg, v }] }
     farmOrders: { type: Array, default: () => [] },      // elflarning buyurtmalari: [{ id, items: { tomato: 5, 'fish:pike': 2 }, coins, xp, until }]
@@ -846,6 +851,7 @@ export interface FarmData {
     tree: { state: string, apples: number, spots: { [i: string]: number } }; lastVisit: number; shroomsLeft: number;
     xp: number; decor: { [id: string]: boolean }; orders: FarmOrder[]; ordersNextAt: number; fishKinds: { [kind: string]: number };
     decorOff: { [id: string]: boolean };
+    hive: boolean; mill: number; sprinklers: number; scarecrows: number; greenhouse: boolean;
     home: { owned: { [id: string]: boolean }, place: { [slot: string]: string } };
     chest: { bag: { [c: string]: number }, fishKinds: { [kind: string]: number }, fishN: number, fishV: number, n: number };
 }
@@ -882,6 +888,8 @@ const farmOf = (doc: any): FarmData => ({
     xp: Math.max(0, doc.farmXp || 0), decor: doc.farmDecor || {}, orders: Array.isArray(doc.farmOrders) ? doc.farmOrders : [], ordersNextAt: doc.ordersNextAt || 0,
     fishKinds: fishOf(doc).reduce((m: { [k: string]: number }, f) => { m[f.f] = (m[f.f] || 0) + 1; return m; }, {}),
     decorOff: doc.farmDecorOff || {},
+    hive: !!doc.farmHive, mill: Math.max(0, Math.min(4, doc.farmMill || 0)),
+    sprinklers: Math.max(0, Math.min(6, doc.farmSprinklers || 0)), scarecrows: Math.max(0, Math.min(6, doc.farmScarecrows || 0)), greenhouse: !!doc.farmGreenhouse,
     home: homeOf(doc),
     chest: chestOf(doc)
 });
@@ -904,7 +912,7 @@ const chestOf = (doc: any) => {
 };
 const FARM_FIELDS = { farmPlots: 1, farmBag: 1, farmZones: 1, farmDock: 1, fishRod: 1, fishNet: 1, netAt: 1, fishBag: 1, coins: 1,
     rodUses: 1, netUses: 1, fertN: 1, waterN: 1, farmOrchard: 1, treeState: 1, treeApples: 1, treeSpots: 1, lastVisit: 1, shroomsLeft: 1,
-    farmXp: 1, farmDecor: 1, farmOrders: 1, ordersNextAt: 1, farmDecorOff: 1, farmHome: 1, farmChest: 1 };
+    farmXp: 1, farmDecor: 1, farmOrders: 1, ordersNextAt: 1, farmDecorOff: 1, farmHome: 1, farmChest: 1, farmHive: 1, farmMill: 1, farmSprinklers: 1, farmScarecrows: 1, farmGreenhouse: 1 };
 export async function getFarm(userId: string): Promise<FarmData | null> {
     const doc: any = await UserModel.findById(userId, FARM_FIELDS).lean();
     return doc ? farmOf(doc) : null;
@@ -1037,6 +1045,15 @@ export async function treeBossDone(userId: string): Promise<FarmResult> {
 }
 export async function farmTouch(userId: string): Promise<void> {
     try { await UserModel.updateOne({ _id: userId }, { $set: { lastVisit: Date.now() } }); } catch (err) { console.error('farmTouch xatosi:', err); }
+}
+// Ferma egasi halok bo'ldi - grядkalardagi barcha ekinlarni maxluqlar yeb ketdi (bog' daraxtlari qoladi)
+export async function farmWipeCrops(userId: string): Promise<FarmResult & { n?: number }> {
+    const cur = await getFarm(userId);
+    if (!cur) return { success: false };
+    const n = cur.plots.filter(Boolean).length;
+    if (!n) return { success: true, n: 0, farm: cur };
+    const r = await farmUpdate(userId, {}, { $set: { farmPlots: {} } });
+    return r ? { success: true, n, ...r } : { success: false };
 }
 export async function farmSetShrooms(userId: string, n: number): Promise<void> {
     try { await UserModel.updateOne({ _id: userId }, { $set: { shroomsLeft: Math.max(0, n) } }); } catch (err) { console.error('farmSetShrooms xatosi:', err); }
@@ -1221,6 +1238,19 @@ export async function decorStore(userId: string, id: string, stored: boolean): P
     const r = await farmUpdate(userId, { ['farmDecor.' + id]: true },
         stored ? { $set: { ['farmDecorOff.' + id]: true } } : { $unset: { ['farmDecorOff.' + id]: 1 } });
     return r ? { success: true, ...r } : { success: false, message: 'home_not_owned' };
+}
+// O'SISH TEZLATGICHLARI: nota uyasi (bir marta) va tegirmon (keyingi bosqich, ketma-ket)
+export async function buyFarmBooster(userId: string, what: 'hive' | 'mill' | 'greenhouse' | 'sprinkler' | 'scarecrow', price: number, curMill: number): Promise<FarmResult> {
+    // Bir martalik (uya, issiqxona) yoki sanaladigan (tegirmon bosqichi, sug'orgich, qo'rqinchoq - joriy son o'zgarmagan bo'lsa +1)
+    const flag: any = { hive: 'farmHive', greenhouse: 'farmGreenhouse' }, cnt: any = { mill: 'farmMill', sprinkler: 'farmSprinklers', scarecrow: 'farmScarecrows' };
+    const filter: any = flag[what] ? { [flag[what]]: { $ne: true } } : { [cnt[what]]: curMill ? curMill : { $in: [0, null] } };
+    const set: any = flag[what] ? { [flag[what]]: true } : { [cnt[what]]: curMill + 1 };
+    const r = await farmUpdate(userId, { coins: { $gte: price }, ...filter }, { $inc: { coins: -price }, $set: set });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    if (cur && ((what === 'hive' && cur.hive) || (what === 'greenhouse' && cur.greenhouse) || (what === 'mill' && cur.mill !== curMill)
+        || (what === 'sprinkler' && cur.sprinklers !== curMill) || (what === 'scarecrow' && cur.scarecrows !== curMill))) return { success: false, message: 'shop_not_needed' };
+    return { success: false, message: await noMoney(userId) };
 }
 // BEZAK sotib olish (bir marta)
 export async function buyDecor(userId: string, id: string, price: number): Promise<FarmResult> {

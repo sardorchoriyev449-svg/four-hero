@@ -1147,8 +1147,8 @@ io.on('connection', (socket) => {
     });
 
     // 8. MAXSUS QOBILIYAT (SHIFT) - barcha personajlar uchun bosib turish tizimi
-    socket.on('startAbilityInRoom', (roomId: string) => {
-        roomManager.startAbility(socket, roomId);
+    socket.on('startAbilityInRoom', (roomId: string, dir?: number) => {
+        roomManager.startAbility(socket, roomId, dir === -1 ? -1 : dir === 1 ? 1 : 0);   // dir - qahramon qaragan tomon (sehrgar tornadosi)
     });
     socket.on('stopAbilityInRoom', (roomId: string) => {
         roomManager.stopAbility(socket, roomId);

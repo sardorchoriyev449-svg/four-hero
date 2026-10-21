@@ -33,17 +33,8 @@ export class MageCharacter extends BaseCharacter {
         });
     }
 
-    // Sehrgar uchun SHIFT = atrofdagi botlarni muzlatish. Bosib turilgancha
-    // radiusdagi botlar muzlab turadi (har tikda yangilanadi), qo'yib
-    // yuborilsa muzlash tabiiy ravishda tugab boradi.
-    applyHeldAbility(player: PlayerState, room: RoomState): void {
-        room.bots.forEach(bot => {
-            const dist = Math.hypot(bot.x - player.x, bot.y - player.y);
-            if (dist < 250) {
-                bot.freezeDuration = Math.max(bot.freezeDuration, 10);
-            }
-        });
-    }
+    // Sehrgar uchun SHIFT - bir martalik TORNADO (RoomManager.startAbility): bosib turish effekti yo'q
+    applyHeldAbility(_player: PlayerState, _room: RoomState): void { }
 
     releaseHeldAbility(player: PlayerState, room: RoomState): void {
         // Bo'sh - muzlash effekti o'zi asta-sekin tugaydi (freezeDuration kamayadi)

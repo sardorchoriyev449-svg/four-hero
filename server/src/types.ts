@@ -50,6 +50,7 @@ export interface PlayerState {
     maxStamina: number;            // 100 + daraja "stamina +5" lari
     weaponMode: 'main' | 'alt' | 'alt2';   // alt2 - 16-darajadagi uchinchi qurol
     shieldCd?: number;            // knight: qalqon otishdan keyingi kutish (tik)    // Q: ikkinchi qurol (mage muz, knight drobovik, samurai kunai)
+    tornadoCd?: number;            // sehrgar: tornado qayta tiklanmoqda (tik)
     specialTicks: number;          // R qobiliyati (mage davolash / knight uchish) qolgan vaqti
     specialCooldown: number;       // R qayta tayyor bo'lguncha
     invisLinger: number;           // archer: SHIFT qo'yib yuborilgach yana ko'rinmas qoladigan vaqt
@@ -124,7 +125,9 @@ export interface FatElfState {
     maxHp: number;
     x: number;
     facingLeft: boolean;
-    state: 'eating' | 'talk' | 'idle' | 'charge' | 'spit' | 'down';
+    state: 'eating' | 'talk' | 'idle' | 'charge' | 'spit' | 'fcharge' | 'flame' | 'down';
+    flameHit?: number;          // yashil olov: keyingi zarar tiki
+    step?: number;              // hujumlar navbati (kislota / olov)
     timer: number;
     targetId: string | null;    // kislota kimga qarab sepiladi
     grace?: number;             // suhbatdan keyin jang boshlanishidagi tanaffus (tik) - darhol urmasin
@@ -193,7 +196,7 @@ export interface BulletState {
     vy: number;
     color: number;
     lifetime: number;
-    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'lightning' | 'shield' | 'shuriken';
+    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'lightning' | 'shield' | 'shuriken' | 'tornado';
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
     sy?: number;
@@ -274,6 +277,7 @@ export interface SnakeState {
 }
 
 export interface RoomState {
+    tornadoes?: { id: string, owner: string, x: number, y: number, dir: number, t: number, pulse: number }[];   // sehrgar tornadolari
     id: string;
     name: string;
     hostId: string;
@@ -317,10 +321,15 @@ export interface RoomState {
         fishing: { state: 'wait' | 'bite', biteAt: number, until: number, fish: { id: string, kg: number, value: number } } | null,
         respawnAt: { [pid: string]: number }, worldOn: boolean, seq: number, loadedFor?: string,
         // Qo'ziqorinlar (zararkunanda): k - qaysi grядkada, born - chiqqan vaqti (shundan eatMs o'tsa - ekinni yeydi)
-        shrooms: { id: string, x: number, k: number, hp: number, maxHp: number, born: number, nextPuff: number, ate: boolean, hitFlash: number }[],
+        shrooms: { id: string, x: number, k: number, hp: number, maxHp: number, born: number, nextPuff: number, ate: boolean, hitFlash: number, nextShot?: number }[],
+        spores?: { id: number, x: number, y: number, vx: number, vy: number }[],   // qo'ziqorinlar otgan spora sharlari
         // MAXLUQLAR HUJUMI (har ~5 daqiqada): shilimshiq (sakrab yuradi, o'lsa - kichiklarga bo'linadi), zombi sabzavotlar
-        mobs: { id: string, kind: 'slime' | 'slimelet' | 'zveg', x: number, y: number, hp: number, maxHp: number, hitFlash: number,
-            face: number, v: number, hopFrom: number, hopTo: number, hopAt: number, hopEnd: number, hitCd: number }[],
+        mobs: { id: string, kind: 'slime' | 'slimelet' | 'zveg' | 'crow', x: number, y: number, hp: number, maxHp: number, hitFlash: number,
+            face: number, v: number, hopFrom: number, hopTo: number, hopAt: number, hopEnd: number, hitCd: number,
+            tongue?: { phase: 'aim' | 'stab', t: number, tx: number, ty: number } | null, tongueCd?: number,
+            plot?: number, phase?: 'in' | 'eat' | 'out', eatAt?: number,
+            air?: boolean, vx?: number, vy?: number, jumpCd?: number, hopFromY?: number, hopToY?: number, hopH?: number }[],
+        nextCrowAt?: number,
         nextRaidAt: number, raidKind: string | null, safeUntil: { [pid: string]: number },
         // Baxaybat daraxt BOSS jangi
         boss: { hp: number, maxHp: number, hitFlash: number, nextAt: number, last: string,
@@ -338,8 +347,9 @@ export interface RoomState {
     // Season 2 map-9 "ROAD TO SKYLAND": ranets avtomati (tinch -> jahli chiqsa jang) va jarlik
     vend?: { state: 'idle' | 'transform' | 'fight' | 'dying' | 'broken' | 'fly' | 'done', hp: number, maxHp: number, tick: number, timer: number,
         x: number, y: number, facing: number, hitFlash: number, shieldFlash: number, vuln: number, step: number, nextAct: number,
-        act: { kind: 'flame' | 'jump', t: number, phase: 'warn' | 'fire' | 'air', x0: number, target: string | null, hit: string[], nextHit: number, landX: number | null } | null,
-        contactCd: { [id: string]: number }, jets: { id: string, x: number, y: number }[], flyId: string | null } | null;
+        act: { kind: 'flame' | 'jump' | 'sit', t: number, phase: 'warn' | 'fire' | 'air' | 'down' | 'hold', x0: number, target: string | null, hit: string[], nextHit: number, landX: number | null } | null,
+        contactCd: { [id: string]: number }, jets: { id: string, x: number, y: number }[], flyId: string | null,
+        legK?: number, under?: { [id: string]: number } } | null;
     // Season 2 map-8 "IRON GIANT": robot boss
     robot?: { state: 'walk' | 'intro' | 'on' | 'off' | 'dying' | 'done', hp: number, maxHp: number, tick: number, timer: number, step: number,
         hitFlash: number, nextAct: number,

@@ -53,6 +53,8 @@ export function weaponModesOf(p: PlayerState): ('main' | 'alt' | 'alt2')[] {
 // R bilan ishlaydigan maxsus qobiliyat
 export const SPECIAL_PERK: { [character: string]: PerkId } = { mage: 'heal', knight: 'fly' };
 export const SPECIAL_TICKS = 67;          // ~2s
+// SEHRGAR SHIFT - TORNADO: qaragan tomonga 3 s yuradi, yo'lidagi dushmanlarga zarar; 20 s qayta tiklanadi
+export const TORNADO = { cdTicks: 667, lifeTicks: 100, speed: 200, halfW: 60, height: 180, pulseTicks: 13, damage: 22, stamina: 20, pull: 2.5 };
 export const SPECIAL_COOLDOWN_TICKS = 500; // ~15s
 export const INVIS_LINGER_TICKS = 67;     // ~2s
 

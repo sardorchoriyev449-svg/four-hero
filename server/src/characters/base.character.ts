@@ -16,6 +16,7 @@ export abstract class BaseCharacter {
     public static updateTimers(player: PlayerState): void {
         if (player.attackCooldown > 0) player.attackCooldown--;
         if ((player.shieldCd || 0) > 0) player.shieldCd!--;   // knight: qalqon otish qayta tiklanmoqda
+        if ((player.tornadoCd || 0) > 0) player.tornadoCd!--;   // mage: tornado qayta tiklanmoqda
 
         // SHIFT (qobiliyat) ushlab turilsa - BARCHA personajlar uchun stamina ketadi
         if (player.isHoldingAbility) {

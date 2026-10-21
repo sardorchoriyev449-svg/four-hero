@@ -4,11 +4,11 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getWeaponSkinColor } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
-import { hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE } from '../perks';
+import { TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -590,7 +590,7 @@ export class RoomManager {
     // SHIFT BOSIB TURILGANDA: barcha personajlar uchun umumiy - qobiliyat faollashadi
     // LEVEL UP: o'yin to'xtab turibdi - hujum/qobiliyat qabul qilinmaydi
     public static frozen(room: RoomState): boolean { return !!room.freezeUntil && Date.now() < room.freezeUntil; }
-    public startAbility(socket: Socket, roomId: string): void {
+    public startAbility(socket: Socket, roomId: string, faceDir = 0): void {
         const room = this.activeRooms[roomId];
         if (!room || !room.isStarted || this.isLoading(room) || RoomManager.frozen(room)) return;
 
@@ -599,6 +599,19 @@ export class RoomManager {
         if (player.stamina <= 0) return; // Stamina tugagan bo'lsa yoqilmaydi
         if (!hasPerk(player, 'shift')) return; // SHIFT qobiliyati 1-darajada ochiladi
 
+        // SEHRGAR: Shift - TORNADO (bir martalik, bosib turilmaydi): qaragan tomonga yuradi, 20 s qayta tiklanadi
+        if (player.characterType === 'mage') {
+            if ((player.tornadoCd || 0) > 0) return;
+            if (player.stamina < BaseCharacter.staminaCost(player, TORNADO.stamina)) { this.io.to(player.id).emit('noStamina'); return; }
+            BaseCharacter.spendStamina(player, TORNADO.stamina);
+            player.tornadoCd = TORNADO.cdTicks;
+            const dir = faceDir || (Math.cos(player.lastAttackAngle || 0) < 0 ? -1 : 1);
+            room.tornadoes = room.tornadoes || [];
+            room.bulletIdCounter++;
+            room.tornadoes.push({ id: 'tor' + room.bulletIdCounter, owner: player.id, x: player.x + dir * 50, y: player.y + 24, dir, t: TORNADO.lifeTicks, pulse: 0 });
+            this.io.to(roomId).emit('tornadoCast', { x: Math.round(player.x + dir * 50), y: Math.round(player.y + 24) });
+            return;
+        }
         player.isHoldingAbility = true;
     }
 
@@ -1212,9 +1225,26 @@ export class RoomManager {
         const p = room?.players[socket.id];
         const map = room ? getMapById(room.selectedLevel) : null;
         const reply = (d: object) => socket.emit('shopResult', d);
-        if (!room || !p || !map || !map.shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item) || HOME_ITEMS.some(h => 'home_' + h.id === item))) return;
+        if (!room || !p || !map || !map.shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item) || HOME_ITEMS.some(h => 'home_' + h.id === item) || ['hive', 'mill', 'sprinkler', 'scarecrow', 'greenhouse'].includes(item as string))) return;
         if (Math.abs(p.x - map.shop.counterX) > map.shop.range + 40) { reply({ success: false, item, message: 'shop_too_far' }); return; }
         if (p.userId === null) { reply({ success: false, item, message: 'shop_need_account' }); return; }
+        // O'SISH TEZLATGICHLARI: nota uyasi va bahaybat tegirmon (ferma darajasi bilan ochiladi)
+        if (item === 'hive' || item === 'mill' || item === 'sprinkler' || item === 'scarecrow' || item === 'greenhouse') {
+            const f = await db.getFarm(p.userId);
+            if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
+            const lv = farmLevel(f.xp);
+            const cur = item === 'mill' ? f.mill : item === 'sprinkler' ? f.sprinklers : item === 'scarecrow' ? f.scarecrows : 0;
+            const def = item === 'hive' ? FARM_HIVE : item === 'greenhouse' ? FARM_GREENHOUSE : item === 'mill' ? FARM_MILL[f.mill]
+                : item === 'sprinkler' ? (f.sprinklers < FARM_SPRINKLER.max ? FARM_SPRINKLER : null) : (f.scarecrows < FARM_SCARECROW.max ? FARM_SCARECROW : null);
+            if (!def) { reply({ success: false, item, message: 'shop_not_needed' }); return; }
+            if (lv < def.level) { reply({ success: false, item, message: 'mf_zone_level|' + def.level }); return; }
+            const t = await db.buyFarmBooster(p.userId, item, def.price, cur);
+            if (!t.success) { reply({ success: false, item, message: t.message }); return; }
+            reply({ success: true, item, coins: t.coins, mill: t.farm!.mill, hive: t.farm!.hive, sprinklers: t.farm!.sprinklers, scarecrows: t.farm!.scarecrows, greenhouse: t.farm!.greenhouse });
+            socket.emit('coinsUpdated', { amount: -def.price, totalCoins: t.coins });
+            this.farmChanged(p.userId);
+            return;
+        }
         // Fermer uyi jihozlari (bir marta): uyga kirib joylashtiriladi
         if (typeof item === 'string' && item.startsWith('home_')) {
             const h = HOME_ITEMS.find(x => 'home_' + x.id === item);
@@ -1292,7 +1322,10 @@ export class RoomManager {
         this.io.to(roomId).emit('myFarmState', {
             now: Date.now(), hostPid: room.hostId, hostNick: host ? host.nickname : '', hostGuest: !owner, hostLevel: RoomManager.hostLevel(host),
             farm: mf.farm, rain: farmIsRaining(F, Date.now()), boss: !!mf.boss, offer: dailyOffer(Date.now()),
-            season: currentFarmSeason(), growth: SEASON_GROWTH[currentFarmSeason()],
+            season: currentFarmSeason(), growth: mf.farm ? RoomManager.cropSpeed(mf.farm) : SEASON_GROWTH[currentFarmSeason()],
+            fruitSpeed: mf.farm ? RoomManager.fruitSpeed(mf.farm) : 1,
+            growthGH: mf.farm ? RoomManager.cropSpeed(mf.farm, FARM_GREENHOUSE.zone * FARM_PLOTS) : 1,   // issiqxonadagi tezlik
+            raidAt: mf.nextRaidAt || 0,   // keyingi maxluqlar hujumi (HUD'da qolgan vaqt)
             level: mf.farm ? farmLevel(mf.farm.xp) : 0, cap: mf.farm ? farmCapacity(farmLevel(mf.farm.xp)) : 0,
             fishing: fi ? { state: fi.state, until: fi.until, fish: fi.state === 'bite' ? fi.fish : null } : null
         });
@@ -1330,7 +1363,7 @@ export class RoomManager {
                     if (r.success) socket.emit('coinsUpdated', { amount: -crop.seed, totalCoins: r.coins });
                     if (r.success) { reply({ success: true, crop: crop.id, k }); this.farmHeroXp(roomId, p.id, RoomManager.FARM_XP_PLANT); }
                 } else {
-                    r = await db.farmHarvest(uid, k as number, (pl) => { const c = CROPS.find(x => x.id === pl.c); return !!c && farmGrown(F, pl.t, Date.now(), c.growMs, pl.w); }, F.goldenChance);
+                    r = await db.farmHarvest(uid, k as number, (pl) => { const c = CROPS.find(x => x.id === pl.c); return !!c && farmGrown(F, pl.t, Date.now(), c.growMs, RoomManager.plotWatered(fd, k as number, pl), RoomManager.cropSpeed(fd, k as number)); }, F.goldenChance);
                     if (r.success) { reply({ success: true, crop: r.crop, k, n: r.n, golden: r.golden }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); }
                 }
             } else if (action === 'water' || action === 'fert') {
@@ -1376,7 +1409,7 @@ export class RoomManager {
                     r = await db.orchardPlant(uid, k as number, tr.id, tr.price);
                     if (r.success) { socket.emit('coinsUpdated', { amount: -tr.price, totalCoins: r.coins }); reply({ success: true, k, planted: tr.id }); }
                 } else {
-                    r = await db.orchardHarvest(uid, k as number, (t) => RoomManager.orchardReady(t, Date.now()), (c) => (FRUIT_TREES.find(x => x.id === c) || { yield: 0 }).yield);
+                    r = await db.orchardHarvest(uid, k as number, (t) => RoomManager.orchardReady(t, Date.now(), RoomManager.fruitSpeed(fd)), (c) => (FRUIT_TREES.find(x => x.id === c) || { yield: 0 }).yield);
                     if (r.success) { reply({ success: true, k, crop: r.crop, n: r.n }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); }
                 }
             } else if (action === 'tree') {
@@ -1537,11 +1570,25 @@ export class RoomManager {
         return prices;
     }
     // Mevali daraxt: ulg'aygan (matureMs) va oxirgi terimdan cycleMs o'tgan bo'lsa - mevasi bor
-    public static orchardReady(t: { c: string, t: number, h: number }, now: number): boolean {
+    public static orchardReady(t: { c: string, t: number, h: number }, now: number, speed = 1): boolean {
         const d = FRUIT_TREES.find(x => x.id === t.c);
-        if (!d || now - t.t < d.matureMs) return false;
-        return now - Math.max(t.h, t.t + d.matureMs - d.cycleMs) >= d.cycleMs;
+        if (!d) return false;
+        const mature = t.t + d.matureMs / speed, cycle = d.cycleMs / speed;
+        if (now < mature) return false;
+        return now - Math.max(t.h, mature - cycle) >= cycle;
     }
+    // O'sish tezligi: ekinlar - fasl ham; daraxtlar - faqat ferma darajasi va tezlatgichlar
+    public static cropSpeed(f: db.FarmData, k?: number): number {
+        // Issiqxona ichida (1-maydon) - fasl sekinlatmaydi: doim bahordagidek (yozda - yozdagidek)
+        const se = SEASON_GROWTH[currentFarmSeason()];
+        const inGH = f.greenhouse && k !== undefined && Math.floor(k / FARM_PLOTS) === FARM_GREENHOUSE.zone;
+        return farmSpeed(farmLevel(f.xp), f.hive, f.mill, inGH ? Math.max(se, FARM_GREENHOUSE.season) : se);
+    }
+    // Avtomatik sug'orgichli maydondagi ekin - ekilgan paytdan sug'orilgan hisoblanadi
+    public static plotWatered(f: db.FarmData, k: number, p: { t: number, w?: number }): number | undefined {
+        return p.w || (Math.floor(k / FARM_PLOTS) < f.sprinklers ? p.t : undefined);
+    }
+    public static fruitSpeed(f: db.FarmData): number { return farmSpeed(farmLevel(f.xp), f.hive, f.mill, 1); }
     // BUYURTMALAR: muddati o'tganlar chiqadi, 3 tagacha yangisi qo'shiladi (topshirilgandan keyin - 1 daqiqada)
     private async refreshOrders(roomId: string, uid: string, host: PlayerState | undefined): Promise<{ success: boolean, farm?: db.FarmData } | null> {
         const f = await db.getFarm(uid);
@@ -1591,7 +1638,12 @@ export class RoomManager {
         if (n > 0) { this.spawnShrooms(room, n); this.io.to(roomId).emit('mfShroomsCame', { n }); }
         db.farmTouch(mf.owner);
         mf.mobs = []; mf.raidKind = null;
-        mf.nextRaidAt = Date.now() + getMapById(room.selectedLevel).myFarm!.raids.firstMs;
+        mf.nextCrowAt = Date.now() + (Number(process.env.FARM_RAID_MS) || 60000 + Math.random() * 60000);   // birinchi qarg'alar - 1-2 daqiqada
+        const RD0 = getMapById(room.selectedLevel).myFarm!.raids;
+        // 30 daqiqadan ko'p kirilmagan bo'lsa - fermada maxluqlar kutib turibdi (kirgan zahoti hujum)
+        const longAway = !!f.lastVisit && Date.now() - f.lastVisit >= RD0.absentMs && !n;
+        mf.nextRaidAt = Date.now() + (longAway ? RD0.welcomeMs : RD0.firstMs);
+        if (longAway) this.io.to(roomId).emit('mfWelcomeRaid', {});
         if (f.tree.state === 'boss') this.treeBossStart(roomId);
         this.refreshOrders(roomId, mf.owner, room.players[room.hostId]).then(() => this.sendMyFarm(roomId)).catch(err => console.error('refreshOrders xatosi:', err));
     }
@@ -1658,13 +1710,28 @@ export class RoomManager {
                     hopFrom: x, hopTo: x, hopAt: now + 500 + k * 150, hopEnd: 0, hitCd: 15 });
             }
         }
-        const coins = m.kind === 'slime' ? RD.slime.coins : m.kind === 'slimelet' ? RD.slimelet.coins : RD.zveg.coins;
+        const coins = m.kind === 'slime' ? RD.slime.coins : m.kind === 'slimelet' ? RD.slimelet.coins : m.kind === 'crow' ? RD.crows.coins : RD.zveg.coins;
         this.io.to(roomId).emit('mfMobDown', { x: Math.round(m.x), kind: m.kind, split: m.kind === 'slime' });
         if (killerId && room.players[killerId]) this.awardCrateCoins(roomId, killerId, coins).catch(err => console.error('mob coins xatosi:', err));
-        if (!mf.mobs.length && !mf.shrooms.length) this.io.to(roomId).emit('mfRaidCleared', {});
+        if (m.kind !== 'crow' && !mf.mobs.some(x => x.kind !== 'crow') && !mf.shrooms.length) this.io.to(roomId).emit('mfRaidCleared', {});
     }
+    // Ferma egasi halok bo'ldi - maxluqlar grядkalardagi hamma ekinni yeb ketdi
+    public farmOwnerDied(roomId: string): void {
+        const room = this.activeRooms[roomId], mf = room?.myFarm;
+        if (!room || !mf || !mf.owner || !mf.farm) return;
+        const owner = mf.owner;
+        db.farmWipeCrops(owner).then((r) => {
+            const cur = this.activeRooms[roomId]?.myFarm;
+            if (!r.success || !cur || cur.owner !== owner) return;
+            if (r.farm) cur.farm = r.farm;
+            this.io.to(roomId).emit('mfCropsLost', { n: r.n || 0 });
+            this.sendMyFarm(roomId);
+        }).catch(err => console.error('farmWipeCrops xatosi:', err));
+    }
+    // Robot qarg'a pishgan ekinni yeb ketdi
+    public crowEat(roomId: string, k: number): void { this.shroomEat(roomId, k, 'mfCrowAte'); }
     // Qo'ziqorin grядkadagi ekinni yedi
-    public shroomEat(roomId: string, k: number): void {
+    public shroomEat(roomId: string, k: number, ev = 'mfAte'): void {
         const mf = this.activeRooms[roomId]?.myFarm;
         const p = mf && mf.farm && mf.farm.plots[k];
         if (!mf || !p || !mf.owner) return;
@@ -1673,7 +1740,7 @@ export class RoomManager {
             const cur = this.activeRooms[roomId]?.myFarm;
             if (!r.success || !cur || cur.owner !== owner) return;
             cur.farm = r.farm!;
-            this.io.to(roomId).emit('mfAte', { k, crop: p.c });
+            this.io.to(roomId).emit(ev, { k, crop: p.c });
             this.sendMyFarm(roomId);
         }).catch(err => console.error('farmSpoil xatosi:', err));
     }
@@ -1719,7 +1786,7 @@ export class RoomManager {
         if (!p || p.userId === null) { socket.emit('farmBag', { crops: 0, fish: 0, rod: false, net: false }); return; }
         const f = await db.getFarm(p.userId).catch(() => null);
         if (!f) return;
-        socket.emit('farmBag', { crops: Object.values(f.bag).reduce((a, n) => a + n, 0), fish: f.fishN, fishV: f.fishV, rod: f.rod, net: f.net, fert: f.fert, water: f.water, decor: f.decor, home: f.home.owned });
+        socket.emit('farmBag', { crops: Object.values(f.bag).reduce((a, n) => a + n, 0), fish: f.fishN, fishV: f.fishV, rod: f.rod, net: f.net, fert: f.fert, water: f.water, decor: f.decor, home: f.home.owned, hive: f.hive, mill: f.mill, sprinklers: f.sprinklers, scarecrows: f.scarecrows, greenhouse: f.greenhouse, farmLevel: farmLevel(f.xp) });
     }
 
     // XP KUCHAYTIRISH bonusi (hozirgi personajniki): har jang mukofotiga +50 x daraja
