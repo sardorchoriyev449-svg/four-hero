@@ -230,6 +230,20 @@
                 <div class="row" style="display:flex; gap:10px; flex-wrap:wrap;"><button class="danger" id="mt-on">Yoqish</button><button class="ok" id="mt-off">O'chirish</button></div>
                 <div class="msg" id="mt-res"></div>
             </div>
+            <div class="pane pxpanel">
+                <h3><i class="fa-solid fa-leaf"></i> Ferma fasli (My Farm)</h3>
+                <p class="note">Fermaning ko'rinishi va ekinlarning o'sish tezligi: bahor 1.25x, yoz 1.5x, kuz 1x, qish 0.6x (qishda yomg'ir o'rniga qor yog'adi). "Avtomatik" - kalendar bo'yicha.</p>
+                <div class="maint-state off" id="se-state">...</div>
+                <select id="se-sel" style="width:100%; margin-bottom:10px;">
+                    <option value="auto">Avtomatik (kalendar bo'yicha)</option>
+                    <option value="spring">Bahor</option>
+                    <option value="summer">Yoz</option>
+                    <option value="autumn">Kuz</option>
+                    <option value="winter">Qish</option>
+                </select>
+                <button class="primary" id="se-save"><i class="fa-solid fa-floppy-disk"></i> Saqlash</button>
+                <div class="msg" id="se-res"></div>
+            </div>
         </div>
     </section>
 
@@ -332,7 +346,7 @@
     };
     const ACTIONS = { ban: 'Blokladi', unban: 'Blokdan chiqardi', coins: 'Tanga', maps: 'Xaritalar', level: 'Daraja', password: 'Parol almashtirdi',
         rename: 'Nickname', curses: "La'nat olib tashladi", gift: "Sovg'a", mute: 'Chat taqig\'i', unmute: 'Taqiq olib tashlandi',
-        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi" };
+        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi", season: 'Ferma fasli' };
     let logPage = 0, catalogLoaded = false;
     const msgOf = (m) => MSG[m] || m || 'Xato';
     // Matnni xavfsiz qo'shish (nickname'dagi HTML bajarilmasin)
@@ -565,6 +579,20 @@
     }
     $('mt-on').onclick = () => pxConfirm('Texnik ishlar rejimi yoqilsinmi? Yangi o\'yinlar yopiladi', () => setMaint(true));
     $('mt-off').onclick = () => setMaint(false);
+    // ===== Ferma fasli =====
+    const SEASON_UZ = { spring: 'BAHOR', summer: 'YOZ', autumn: 'KUZ', winter: 'QISH' };
+    function showSeason(d) {
+        $('se-sel').value = d.setting;
+        $('se-state').className = 'maint-state on';
+        $('se-state').textContent = 'Hozir: ' + (SEASON_UZ[d.current] || d.current) + (d.setting === 'auto' ? ' (avtomatik)' : '');
+    }
+    async function loadSeason() { const d = await api('/season').catch(() => null); if (d && d.success) showSeason(d); }
+    $('se-save').onclick = async () => {
+        const d = await api('/season', { method: 'POST', body: JSON.stringify({ season: $('se-sel').value }) }).catch(() => null);
+        if (!d) return;
+        $('se-res').className = 'msg' + (d.success ? ' good' : ''); $('se-res').textContent = d.success ? 'Saqlandi - fermadagilarda darhol almashadi' : msgOf(d.message);
+        if (d.success) showSeason(d);
+    };
     // ===== Jurnal =====
     async function loadLog() {
         const d = await api('/log?page=' + logPage);
@@ -597,7 +625,7 @@
         clearInterval(roomsTimer);
         if (tab === 'rooms') { loadRooms(); roomsTimer = setInterval(loadRooms, 5000); }
         if (tab === 'stats2') loadStats2();
-        if (tab === 'control') loadMaint();
+        if (tab === 'control') { loadMaint(); loadSeason(); }
         if (tab === 'log') { logPage = 0; loadLog(); }
     });
     $('search-btn').onclick = () => { query = $('search').value.trim(); page = 0; loadUsers(); };
@@ -608,7 +636,7 @@
         loadStats(); loadUsers();
         if (!$('tab-rooms').classList.contains('hidden')) loadRooms();
         if (!$('tab-stats2').classList.contains('hidden')) loadStats2();
-        if (!$('tab-control').classList.contains('hidden')) loadMaint();
+        if (!$('tab-control').classList.contains('hidden')) { loadMaint(); loadSeason(); }
         if (!$('tab-log').classList.contains('hidden')) loadLog();
     };
     $('logout-btn').onclick = () => logout('');

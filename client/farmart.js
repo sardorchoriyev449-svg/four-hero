@@ -214,15 +214,27 @@
         for (let y = 1; y < 7; y++) { set(2, y, 0x263238); set(9, y, 0x263238); for (let x = 3; x < 9; x++) set(x, y, y < 3 ? 0xfff59d : 0xffca28); }
         for (let x = 3; x < 9; x++) { set(x, 32, 0x37474f); set(x, 33, 0x263238); }
     });
-    // Qo'riqchi it (o'tirgan): frame 1 - dumi boshqa tomonda
-    const dogGrid = (frame) => mk(18, 14, (set) => {
-        const B = [0x6d4c41, 0x8d6e63, 0xa1887f, 0xd7ccc8];
-        for (let y = 5; y < 13; y++) for (let x = 3; x < 12; x++) if (((x - 7.5) / 4.8) ** 2 + ((y - 9) / 4) ** 2 <= 1) set(x, y, shade(0.9 - y / 20, x, y, B));
-        for (let y = 1; y < 7; y++) for (let x = 10; x < 16; x++) if (((x - 12.8) / 3) ** 2 + ((y - 4) / 3) ** 2 <= 1) set(x, y, shade(0.95 - y / 16, x, y, B));
-        set(16, 4, 0x8d6e63); set(17, 5, 0x3e2723); set(13, 3, 0x000000); set(11, 1, 0x4e342e); set(11, 2, 0x4e342e); set(15, 6, 0xe57373);
-        for (let y = 11; y < 14; y++) { set(5, y, 0x8d6e63); set(10, y, 0x8d6e63); }
-        if (frame) { set(2, 6, 0x8d6e63); set(1, 5, 0x8d6e63); set(1, 4, 0x8d6e63); } else { set(2, 9, 0x8d6e63); set(1, 9, 0x8d6e63); set(0, 8, 0x8d6e63); }
-        for (let x = 10; x < 15; x++) set(x, 7, 0xe53935);   // bo'yinbog'
+    // ROBOT KUCHUK (o'tirgan): temir tana, ko'k ko'zoynak-ko'z, antenna (uchi miltillaydi), prujina dum (frame - dum va chiroq)
+    const dogGrid = (frame) => mk(20, 17, (set) => {
+        const M = [0x455a64, 0x607d8b, 0x90a4ae, 0xcfd8dc];
+        // tana
+        for (let y = 8; y < 14; y++) for (let x = 3; x < 13; x++) set(x, y, shade(0.95 - (y - 8) / 10 - x / 40, x, y, M));
+        for (let x = 4; x < 12; x += 3) set(x, 10, 0x37474f);   // panel choklari
+        set(6, 11, 0xffca28); set(9, 11, 0x00e5ff);              // chiroqchalar
+        // bosh
+        for (let y = 3; y < 9; y++) for (let x = 11; x < 18; x++) set(x, y, shade(0.98 - (y - 3) / 10, x, y, M));
+        for (let x = 13; x < 18; x++) { set(x, 5, 0x0a2a33); set(x, 6, 0x0a2a33); }        // ko'zoynak
+        set(15, 5, 0x00e5ff); set(16, 5, 0x84ffff); set(15, 6, 0x00b8d4);               // yonib turgan ko'z
+        set(18, 7, 0x607d8b); set(18, 8, 0x37474f);                                     // tumshuq
+        set(11, 2, 0x90a4ae); set(12, 2, 0x607d8b); set(11, 1, 0x607d8b);               // quloq
+        // antenna
+        for (let y = 0; y < 3; y++) set(15, y, 0x37474f);
+        set(15, 0, frame ? 0xff1744 : 0xff8a80);
+        // oyoqlar (g'ildirakli tovon)
+        [4, 6, 10, 12].forEach(x => { for (let y = 14; y < 16; y++) set(x, y, 0x37474f); set(x, 16, 0x263238); });
+        // prujina dum
+        if (frame) { set(2, 7, 0x90a4ae); set(1, 6, 0x607d8b); set(1, 5, 0x90a4ae); set(0, 4, 0x00e5ff); }
+        else { set(2, 9, 0x90a4ae); set(1, 9, 0x607d8b); set(0, 8, 0x90a4ae); set(0, 7, 0x00e5ff); }
     });
     // Bo'yoq chelagi (uyni bo'yash)
     const paintGrid = () => mk(14, 14, (set) => {
@@ -231,7 +243,92 @@
         set(3, 5, 0x1e88e5); set(3, 6, 0x1e88e5); set(8, 5, 0x1e88e5);
         for (let k = 0; k < 6; k++) set(1 + Math.round(k * 0.2), 3 - Math.round(Math.sin(k / 5 * Math.PI) * 3), 0x37474f);
     });
+    // ===== FERMER UYI JIHOZLARI (piksel, 3 px katak) =====
+    const WOOD = [0x4e342e, 0x6d4c41, 0x8d6e63, 0xa1887f];
+    const homeGrids = {
+        // Yashik: yog'och taxtalar, temir burchaklar, qulf
+        chest: () => mk(18, 14, (set) => {
+            for (let y = 0; y < 14; y++) for (let x = 0; x < 18; x++) set(x, y, y < 5 ? shade(0.85 - y / 14, x, y, WOOD) : shade(0.7 - (y % 4 === 0 ? 0.25 : 0) - x / 60, x, y, WOOD));
+            for (let x = 0; x < 18; x++) { set(x, 5, 0x3e2723); }
+            [0, 17].forEach(x => { for (let y = 0; y < 14; y++) set(x, y, 0x78909c); });
+            for (let x = 0; x < 18; x++) { set(x, 0, 0x78909c); set(x, 13, 0x546e7a); }
+            set(8, 5, 0xffca28); set(9, 5, 0xffca28); set(8, 6, 0xffca28); set(9, 6, 0xf9a825); set(8, 7, 0x3e2723);
+        }),
+        // Stol: qopqoq va to'rt oyoq
+        table: () => mk(24, 14, (set) => {
+            for (let x = 0; x < 24; x++) { set(x, 0, 0xa1887f); set(x, 1, 0x8d6e63); set(x, 2, 0x6d4c41); }
+            [2, 3, 20, 21].forEach(x => { for (let y = 3; y < 14; y++) set(x, y, x % 2 ? 0x5d4037 : 0x6d4c41); });
+            for (let x = 4; x < 20; x++) set(x, 5, 0x5d4037);
+            // ustida - piyola va non
+            set(6, -1, 0xeceff1);
+        }),
+        // Stul: suyanchiq, o'rindiq, oyoqlar
+        chair: () => mk(10, 18, (set) => {
+            for (let y = 0; y < 9; y++) { set(1, y, 0x6d4c41); set(2, y, 0x8d6e63); }
+            for (let y = 1; y < 8; y += 3) for (let x = 3; x < 9; x++) set(x, y, 0x8d6e63);
+            for (let x = 1; x < 10; x++) { set(x, 9, 0xa1887f); set(x, 10, 0x6d4c41); }
+            for (let y = 11; y < 18; y++) { set(1, y, 0x5d4037); set(8, y, 0x5d4037); }
+        }),
+        // Karavot: bosh taxtasi, qizil adyol, oq yostiq
+        bed: () => mk(30, 14, (set) => {
+            for (let y = 0; y < 14; y++) { set(0, y, 0x6d4c41); set(1, y, 0x8d6e63); }
+            for (let y = 6; y < 14; y++) { set(28, y, 0x6d4c41); set(29, y, 0x8d6e63); }
+            for (let y = 4; y < 8; y++) for (let x = 2; x < 9; x++) set(x, y, y === 4 ? 0xffffff : 0xeceff1);
+            for (let y = 5; y < 11; y++) for (let x = 8; x < 28; x++) set(x, y, shade(0.9 - y / 16, x, y, [0x8e1b1b, 0xc62828, 0xe53935, 0xef9a9a]));
+            for (let x = 8; x < 28; x += 4) set(x, 7, 0xffcdd2);
+            for (let x = 2; x < 28; x++) { set(x, 11, 0x5d4037); set(x, 12, 0x4e342e); }
+            set(2, 13, 0x4e342e); set(27, 13, 0x4e342e);
+        }),
+        // Kitob javoni: 3 tokcha, rang-barang kitoblar
+        shelf: () => mk(18, 28, (set) => {
+            for (let y = 0; y < 28; y++) for (let x = 0; x < 18; x++) set(x, y, (x === 0 || x === 17 || y === 0 || y === 27 || y === 9 || y === 18) ? 0x6d4c41 : 0x3e2723);
+            const C = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0x8e24aa, 0xff7043, 0x00897b];
+            [1, 10, 19].forEach((y0, r) => { let x = 1; let i = r * 2; while (x < 17) { const w = 1 + (i % 2), h = 6 + (i % 3); for (let xx = x; xx < Math.min(17, x + w); xx++) for (let y = y0 + 8 - h; y < y0 + 8; y++) set(xx, y, C[i % C.length]); x += w + (i % 4 === 3 ? 1 : 0); i++; } });
+        }),
+        // Kamin: tosh, ichida olov (frame - alangalar)
+        fireplace: () => mk(24, 26, (set) => {
+            for (let y = 0; y < 26; y++) for (let x = 0; x < 24; x++) set(x, y, shade(0.75 - ((x + (y % 2) * 2) % 4 === 0 ? 0.2 : 0) - y / 80, x, y, [0x424242, 0x616161, 0x757575, 0x9e9e9e]));
+            for (let x = 0; x < 24; x++) { set(x, 0, 0x8d6e63); set(x, 1, 0x6d4c41); set(x, 2, 0x5d4037); }
+            for (let y = 10; y < 26; y++) for (let x = 5; x < 19; x++) set(x, y, 0x1a1a1a);
+            for (let y = 15; y < 25; y++) for (let x = 6; x < 18; x++) { const d = Math.abs(x - 11.5) / 6 + (25 - y) / 12; if (d < 0.7) set(x, y, 0xffeb3b); else if (d < 1.0) set(x, y, 0xff9800); else if (d < 1.25 && (x + y) % 2) set(x, y, 0xe64a19); }
+            for (let x = 6; x < 18; x++) set(x, 25, 0x6d4c41);
+        }),
+        // Tuvakdagi gul
+        pot: () => mk(10, 14, (set) => {
+            for (let y = 8; y < 14; y++) for (let x = 1 + (y > 11 ? 1 : 0); x < 9 - (y > 11 ? 1 : 0); x++) set(x, y, shade(0.9 - x / 14, x, y, [0x8d3a1a, 0xbf5a2a, 0xe07b45]));
+            for (let x = 0; x < 10; x++) set(x, 8, 0xd2691e);
+            for (let y = 3; y < 8; y++) set(4, y, 0x558b2f);
+            set(3, 5, 0x7cb342); set(5, 6, 0x7cb342);
+            [[4, 1], [3, 2], [5, 2], [4, 3]].forEach(([x, y]) => set(x, y, 0xec407a)); set(4, 2, 0xfff59d);
+            [[6, 2], [7, 3], [6, 4]].forEach(([x, y]) => set(x, y, 0xab47bc));
+        }),
+        // Katta o'simlik (palma)
+        plant: () => mk(14, 24, (set) => {
+            for (let y = 16; y < 24; y++) for (let x = 3; x < 11; x++) set(x, y, shade(0.9 - x / 16, x, y, [0x37474f, 0x546e7a, 0x78909c]));
+            for (let y = 6; y < 16; y++) set(7, y, 0x5d4037);
+            [[-1, 0], [1, 0], [-1, 1], [1, 1], [0, -1]].forEach(([dx, dy], i) => { for (let k = 0; k < 6; k++) set(7 + dx * k, 6 + dy * 3 + Math.round(k * k / 8) - (dy < 0 ? k : 0), i % 2 ? 0x43a047 : 0x66bb6a); });
+        }),
+        // Gilam (polga yotadi)
+        rug: () => mk(50, 5, (set) => {
+            for (let y = 0; y < 5; y++) for (let x = 0; x < 50; x++) set(x, y, (y === 0 || y === 4) ? 0x8e1b1b : ((x + y * 2) % 6 < 3 ? 0xc62828 : 0xffb300));
+            for (let x = 0; x < 50; x += 3) set(x, 2, 0x283593);
+        }),
+        // Devordagi rasm: oltin rom, ichida tog' va quyosh
+        painting: () => mk(18, 14, (set) => {
+            for (let y = 0; y < 14; y++) for (let x = 0; x < 18; x++) set(x, y, (x < 1 || x > 16 || y < 1 || y > 12) ? 0xc79100 : y < 8 ? 0x81d4fa : 0x7cb342);
+            for (let y = 4; y < 9; y++) for (let x = 3; x < 15; x++) if (Math.abs(x - 8) < (y - 3) * 1.4) set(x, y, y < 6 ? 0xeceff1 : 0x607d8b);
+            set(13, 3, 0xffeb3b); set(14, 3, 0xffeb3b); set(13, 4, 0xffeb3b); set(14, 4, 0xfdd835);
+        }),
+        // Osma chiroq: zanjir va sariq abajur
+        lamp: () => mk(12, 20, (set) => {
+            for (let y = 0; y < 10; y++) set(6, y, y % 2 ? 0x616161 : 0x9e9e9e);
+            for (let y = 10; y < 16; y++) for (let x = 6 - (y - 9); x <= 5 + (y - 9); x++) set(x, y, y === 15 ? 0xf57f17 : 0xffca28);
+            for (let x = 4; x < 8; x++) { set(x, 16, 0xfff59d); set(x, 17, 0xfffde7); }
+        })
+    };
     window.FarmArt = {
+        homeGrid: (id) => homeGrids[id](),
+        homeIcon: (id) => iconURL('home_' + id, homeGrids[id](), id === 'rug' ? 2 : 3),
         cropGrid: mfCropGrid, fishGrid: mfFishGrid, netGrid: mfNetGrid,
         cropIcon: (id) => iconURL('crop_' + id, mfCropGrid(id, 2), 3),
         fishIcon: (id) => iconURL('fish_' + id, mfFishGrid(id), 3),

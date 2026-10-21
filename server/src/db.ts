@@ -25,6 +25,7 @@ const DEFAULT_UPGRADES = { knight: { damage: 0, stamina: 0 }, archer: { damage: 
 const DEFAULT_SKILL_POINTS = { knight: 0, archer: 0, mage: 0, samurai: 0 };
 const DEFAULT_CREDITED_LEVELS = { knight: [], archer: [], mage: [], samurai: [] };
 const MAX_UPGRADE_LEVEL = 5;
+export function upgradeCapFor(heroLevel: number): number { return Math.min(MAX_UPGRADE_LEVEL, Math.max(0, heroLevel - 1)); }
 
 // MONGOOSE SXEMASI (jadval strukturasi o'rniga)
 const userSchema = new mongoose.Schema({
@@ -67,7 +68,7 @@ const userSchema = new mongoose.Schema({
     // MY FARM: grядkalar ({ "0": { c: 'carrot', t: ms } | null, ... }) va yig'ilgan hosil ({ carrot: 3, ... })
     farmPlots: { type: Object, default: () => ({}) },
     farmBag: { type: Object, default: () => ({}) },
-    farmZones: { type: Number, default: 0 },     // sotib olingan qo'shimcha maydonlar (0..3)
+    farmZones: { type: Number, default: 0 },     // sotib olingan qo'shimcha maydonlar (0..5)
     farmDock: { type: Boolean, default: false }, // daryodagi baliq tutish platformasi
     fishRod: { type: Boolean, default: false },  // do'kondan: udochka
     fishNet: { type: Boolean, default: false },  // do'kondan: katta setka
@@ -83,6 +84,9 @@ const userSchema = new mongoose.Schema({
     lastVisit: { type: Number, default: 0 },             // host fermaga oxirgi kirgan vaqt (qo'ziqorinlar uchun)
     farmXp: { type: Number, default: 0 },                // FERMA DARAJASI tajribasi
     farmDecor: { type: Object, default: () => ({}) },    // sotib olingan bezaklar: { flowers: true, ... }
+    farmDecorOff: { type: Object, default: () => ({}) }, // yashikka olingan (tashqarida ko'rinmaydigan) bezaklar
+    farmHome: { type: Object, default: () => ({}) },     // fermer uyi: { owned: { bed: true }, place: { f0: 'bed' } }
+    farmChest: { type: Object, default: () => ({}) },    // uydagi yashik: { bag: { tomato: 5 }, fish: [{ u, f, kg, v }] }
     farmOrders: { type: Array, default: () => [] },      // elflarning buyurtmalari: [{ id, items: { tomato: 5, 'fish:pike': 2 }, coins, xp, until }]
     ordersNextAt: { type: Number, default: 0 },          // yangi buyurtma qachon paydo bo'ladi
     shroomsLeft: { type: Number, default: 0 },           // o'ldirilmagan qo'ziqorinlar
@@ -487,6 +491,10 @@ export async function upgradeStat(userId: string, characterType: string, stat: s
     if (currentLevel >= MAX_UPGRADE_LEVEL) {
         return { success: false, message: 'err_skill_max' };
     }
+    // Kuchaytirish chegarasi qahramon DARAJASIGA bog'liq: daraja - 1 (3-darajada - 2 tagacha, 6-darajadan - 5)
+    if (currentLevel >= upgradeCapFor(xpLevel(docToUser(doc).charXp[characterType] || 0))) {
+        return { success: false, message: 'err_upgrade_locked|' + (currentLevel + 2) };
+    }
     // Narx: YO ball, YO tanga - o'yinchi tanlaydi (daraja oshgan sari qimmatlashadi)
     const cost = UPGRADE_COSTS[currentLevel];
     const levelPath = `upgrades.${characterType}.${stat}`;
@@ -776,9 +784,12 @@ export interface FarmData {
     rodUses: number; netUses: number; fert: number; water: number; orchard: OrchardTree[];
     tree: { state: string, apples: number, spots: { [i: string]: number } }; lastVisit: number; shroomsLeft: number;
     xp: number; decor: { [id: string]: boolean }; orders: FarmOrder[]; ordersNextAt: number; fishKinds: { [kind: string]: number };
+    decorOff: { [id: string]: boolean };
+    home: { owned: { [id: string]: boolean }, place: { [slot: string]: string } };
+    chest: { bag: { [c: string]: number }, fishKinds: { [kind: string]: number }, fishN: number, fishV: number, n: number };
 }
 export type FarmOrder = { id: string, items: { [key: string]: number }, coins: number, xp: number, until: number };
-const FARM_N = 24;
+const FARM_N = 36;   // 6 maydon x 6 grядka
 const plotsOf = (doc: any): FarmPlot[] => {
     const raw = (doc && doc.farmPlots) || {};
     const out: FarmPlot[] = [];
@@ -790,7 +801,7 @@ const plotsOf = (doc: any): FarmPlot[] => {
 };
 const orchardOf = (doc: any): OrchardTree[] => {
     const raw = (doc && doc.farmOrchard) || {};
-    return [0, 1, 2].map(i => { const p = raw[i]; return p && typeof p.c === 'string' && Number.isFinite(p.t) ? { c: p.c, t: p.t, h: p.h || 0 } : null; });
+    return [0, 1, 2, 3, 4, 5].map(i => { const p = raw[i]; return p && typeof p.c === 'string' && Number.isFinite(p.t) ? { c: p.c, t: p.t, h: p.h || 0 } : null; });
 };
 const bagOf = (doc: any): { [c: string]: number } => {
     const raw = (doc && doc.farmBag) || {}, out: { [c: string]: number } = {};
@@ -802,17 +813,37 @@ const fishOf = (doc: any): FishItem[] => (Array.isArray(doc && doc.fishBag) ? do
     .filter((x: any) => x && typeof x.u === 'string' && typeof x.f === 'string' && x.v > 0)
     .map((x: any) => ({ u: x.u, f: x.f, kg: Number(x.kg) || 0, v: Math.floor(x.v) }));
 const farmOf = (doc: any): FarmData => ({
-    plots: plotsOf(doc), zones: Math.max(0, Math.min(3, doc.farmZones || 0)), dock: !!doc.farmDock, rod: !!doc.fishRod, net: !!doc.fishNet,
+    plots: plotsOf(doc), zones: Math.max(0, Math.min(5, doc.farmZones || 0)), dock: !!doc.farmDock, rod: !!doc.fishRod, net: !!doc.fishNet,
     netAt: doc.netAt || 0, bag: bagOf(doc), fishN: fishOf(doc).length, fishV: fishOf(doc).reduce((a, f) => a + f.v, 0),
     rodUses: doc.rodUses || 0, netUses: doc.netUses || 0, fert: Math.max(0, doc.fertN || 0), water: Math.max(0, doc.waterN || 0),
     orchard: orchardOf(doc), tree: { state: doc.treeState || 'none', apples: doc.treeApples || 0, spots: doc.treeSpots || {} },
     lastVisit: doc.lastVisit || 0, shroomsLeft: Math.max(0, doc.shroomsLeft || 0),
     xp: Math.max(0, doc.farmXp || 0), decor: doc.farmDecor || {}, orders: Array.isArray(doc.farmOrders) ? doc.farmOrders : [], ordersNextAt: doc.ordersNextAt || 0,
-    fishKinds: fishOf(doc).reduce((m: { [k: string]: number }, f) => { m[f.f] = (m[f.f] || 0) + 1; return m; }, {})
+    fishKinds: fishOf(doc).reduce((m: { [k: string]: number }, f) => { m[f.f] = (m[f.f] || 0) + 1; return m; }, {}),
+    decorOff: doc.farmDecorOff || {},
+    home: homeOf(doc),
+    chest: chestOf(doc)
 });
+const homeOf = (doc: any) => {
+    const h = (doc && doc.farmHome) || {}, owned: { [id: string]: boolean } = {}, place: { [slot: string]: string } = {};
+    Object.keys(h.owned || {}).forEach(k => { if (h.owned[k] === true) owned[k] = true; });
+    Object.keys(h.place || {}).forEach(k => { if (typeof h.place[k] === 'string' && owned[h.place[k]]) place[k] = h.place[k]; });
+    return { owned, place };
+};
+const chestFishOf = (doc: any): FishItem[] => (Array.isArray(doc && doc.farmChest && doc.farmChest.fish) ? doc.farmChest.fish : [])
+    .filter((x: any) => x && typeof x.u === 'string' && typeof x.f === 'string' && x.v > 0)
+    .map((x: any) => ({ u: x.u, f: x.f, kg: Number(x.kg) || 0, v: Math.floor(x.v) }));
+const chestOf = (doc: any) => {
+    const raw = (doc && doc.farmChest && doc.farmChest.bag) || {}, bag: { [c: string]: number } = {};
+    Object.keys(raw).forEach(k => { const n = Number(raw[k]); if (n > 0) bag[k] = Math.floor(n); });
+    const fish = chestFishOf(doc);
+    const fishKinds = fish.reduce((m: { [k: string]: number }, f) => { m[f.f] = (m[f.f] || 0) + 1; return m; }, {});
+    const nBag = Object.values(bag).reduce((a, n) => a + n, 0);
+    return { bag, fishKinds, fishN: fish.length, fishV: fish.reduce((a, f) => a + f.v, 0), n: nBag + fish.length };
+};
 const FARM_FIELDS = { farmPlots: 1, farmBag: 1, farmZones: 1, farmDock: 1, fishRod: 1, fishNet: 1, netAt: 1, fishBag: 1, coins: 1,
     rodUses: 1, netUses: 1, fertN: 1, waterN: 1, farmOrchard: 1, treeState: 1, treeApples: 1, treeSpots: 1, lastVisit: 1, shroomsLeft: 1,
-    farmXp: 1, farmDecor: 1, farmOrders: 1, ordersNextAt: 1 };
+    farmXp: 1, farmDecor: 1, farmOrders: 1, ordersNextAt: 1, farmDecorOff: 1, farmHome: 1, farmChest: 1 };
 export async function getFarm(userId: string): Promise<FarmData | null> {
     const doc: any = await UserModel.findById(userId, FARM_FIELDS).lean();
     return doc ? farmOf(doc) : null;
@@ -1056,6 +1087,76 @@ export async function farmDeliver(userId: string, orderId: string, nextAt: numbe
         if (r) return { success: true, order, ...r };
     }
     return { success: false, message: 'err_server' };
+}
+// BOG': daraxtni kesish - joy bo'shaydi (yangi ko'chat ekish mumkin), eski daraxt yo'qoladi
+export async function orchardCut(userId: string, slot: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { ['farmOrchard.' + slot + '.c']: { $type: 'string' } }, { $set: { ['farmOrchard.' + slot]: null } });
+    return r ? { success: true, ...r } : { success: false, message: 'farm_plot_empty' };
+}
+// FERMER UYI: jihoz sotib olish (bir marta) va joylashtirish / olib qo'yish
+export async function buyHomeItem(userId: string, id: string, price: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { coins: { $gte: price }, ['farmHome.owned.' + id]: { $ne: true } },
+        { $inc: { coins: -price }, $set: { ['farmHome.owned.' + id]: true } });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    if (cur && cur.home.owned[id]) return { success: false, message: 'shop_not_needed' };
+    return { success: false, message: await noMoney(userId) };
+}
+// item = null - joyni bo'shatish. Jihoz bitta joyda turadi (boshqa joyda bo'lsa - ko'chiriladi)
+export async function homePlace(userId: string, slot: string, item: string | null, fits: (item: string) => boolean): Promise<FarmResult> {
+    const cur = await getFarm(userId);
+    if (!cur) return { success: false, message: 'err_server' };
+    const now = cur.home.place[slot] || null;
+    if (item === null) {
+        if (!now) return { success: false, message: 'farm_plot_empty' };
+        if (now === 'chest' && cur.chest.n > 0) return { success: false, message: 'home_chest_not_empty' };
+        const r = await farmUpdate(userId, { ['farmHome.place.' + slot]: now }, { $unset: { ['farmHome.place.' + slot]: 1 } });
+        return r ? { success: true, ...r } : { success: false, message: 'err_server' };
+    }
+    if (!cur.home.owned[item]) return { success: false, message: 'home_not_owned' };
+    if (!fits(item)) return { success: false, message: 'home_wrong_slot' };
+    if (now) return { success: false, message: 'farm_plot_busy' };
+    const set: any = { ['farmHome.place.' + slot]: item }, unset: any = {};
+    const old = Object.keys(cur.home.place).find(k => cur.home.place[k] === item);
+    if (old) unset['farmHome.place.' + old] = 1;   // boshqa joydan ko'chiriladi
+    const filter: any = { ['farmHome.place.' + slot]: { $exists: false } };
+    if (old) filter['farmHome.place.' + old] = item;
+    const r = await farmUpdate(userId, filter, Object.keys(unset).length ? { $set: set, $unset: unset } : { $set: set });
+    return r ? { success: true, ...r } : { success: false, message: 'err_server' };
+}
+// YASHIK: inventardan solish (dir = 'put') yoki inventarga olish ('take'). key - ekin nomi yoki 'fish:<turi>'
+export async function chestMove(userId: string, dir: 'put' | 'take', key: string, n: number, invCap: number, chestCap: number): Promise<FarmResult & { moved?: number }> {
+    const doc: any = await UserModel.findById(userId, FARM_FIELDS).lean();
+    if (!doc) return { success: false, message: 'err_server' };
+    const f = farmOf(doc);
+    if (!Object.values(f.home.place).includes('chest')) return { success: false, message: 'home_no_chest' };
+    const invUsed = Object.values(f.bag).reduce((a, x) => a + x, 0) + f.fishN;
+    const room = dir === 'put' ? chestCap - f.chest.n : invCap - invUsed;
+    if (room <= 0) return { success: false, message: dir === 'put' ? 'home_chest_full' : 'inv_full' };
+    if (key.startsWith('fish:')) {
+        const kind = key.slice(5);
+        const from = dir === 'put' ? fishOf(doc) : chestFishOf(doc);
+        const pick = from.filter(x => x.f === kind).slice(0, Math.min(n, room));
+        if (!pick.length) return { success: false, message: 'farm_plot_empty' };
+        const us = pick.map(x => x.u);
+        const srcPath = dir === 'put' ? 'fishBag' : 'farmChest.fish', dstPath = dir === 'put' ? 'farmChest.fish' : 'fishBag';
+        const r = await farmUpdate(userId, { [srcPath + '.u']: { $all: us } },
+            { $pull: { [srcPath]: { u: { $in: us } } }, $push: { [dstPath]: { $each: pick } } });
+        return r ? { success: true, moved: pick.length, ...r } : { success: false, message: 'err_server' };
+    }
+    if (!/^[a-z]{2,20}$/.test(key)) return { success: false, message: 'err_bad_item' };
+    const have = dir === 'put' ? (f.bag[key] || 0) : (f.chest.bag[key] || 0);
+    const k = Math.min(n, have, room);
+    if (k <= 0) return { success: false, message: 'farm_plot_empty' };
+    const src = dir === 'put' ? 'farmBag.' + key : 'farmChest.bag.' + key, dst = dir === 'put' ? 'farmChest.bag.' + key : 'farmBag.' + key;
+    const r = await farmUpdate(userId, { [src]: { $gte: k } }, { $inc: { [src]: -k, [dst]: k } });
+    return r ? { success: true, moved: k, ...r } : { success: false, message: 'err_server' };
+}
+// Tashqi bezakni yashikka olish (ko'rinmaydi) yoki qaytarib qo'yish
+export async function decorStore(userId: string, id: string, stored: boolean): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { ['farmDecor.' + id]: true },
+        stored ? { $set: { ['farmDecorOff.' + id]: true } } : { $unset: { ['farmDecorOff.' + id]: 1 } });
+    return r ? { success: true, ...r } : { success: false, message: 'home_not_owned' };
 }
 // BEZAK sotib olish (bir marta)
 export async function buyDecor(userId: string, id: string, price: number): Promise<FarmResult> {

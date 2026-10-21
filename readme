@@ -1,10 +1,3 @@
 ```text
     
 ```
-
-```
-domen help
-```
-```
-Hello. My domain 4heroes.xyz was registered on Oct 2, 2026 (18:48 UTC). RDAP shows nameservers launch1/launch2.spaceship.net and my DNS records are set in Advanced DNS, but the .xyz TLD servers still don't return a delegation (NODATA), so the domain doesn't resolve anywhere. Could you please check if the domain is on hold or the delegation was not published? Thank you.
-```

@@ -115,6 +115,14 @@
         #shop-panel .mf-box .mf-card:not(:only-child) { flex: 1 1 16%; min-width: 112px; padding: 6px 4px; }
         #shop-panel .mf-box .mf-card .shop-name { font-size: 9px; }
         #shop-panel .mf-box .mf-card .shop-desc { font-size: 7px; }
+        /* FERMER UYI: yashik oynasi - inventar | yashik | bezaklar */
+        #shop-panel.chest-panel .shop-cards { align-items: flex-start; max-height: 52vh; overflow-y: auto; }
+        #shop-panel .chest-col { flex: 1 1 45%; min-width: 220px; display: flex; flex-direction: column; gap: 5px; box-sizing: border-box; padding: 6px; background: rgba(0,0,0,0.25); }
+        #shop-panel .chest-col.chest-wide { flex-basis: 100%; }
+        #shop-panel .chest-row { padding: 3px 0; border-bottom: 1px dashed rgba(255,255,255,0.12); }
+        #shop-panel .chest-row b { min-width: 28px; text-align: right; color: #ffe082; }
+        #shop-panel .chest-row .shop-buy { padding: 4px 6px; font-size: 7px; width: auto; margin: 0; }
+        #shop-panel .chest-remove { background: #6d4c41; margin-bottom: 6px; }
         #shop-panel .mf-box .mf-icon { width: 34px; height: 44px; }
         #shop-panel .mf-card .shop-name { margin-bottom: 2px; }
         #shop-panel .mf-card .shop-buy { padding: 6px; }
@@ -321,6 +329,9 @@
             cursor: pointer;
         }
         .room-item:hover { color: #00ffcc; }
+        .room-item.started { opacity: 0.55; cursor: not-allowed; }
+        .room-item.started:hover { color: inherit; }
+        .room-playing { font-style: normal; color: #ff8a65; margin-right: 6px; }
 
         /* Xona kodi orqali qo'shilish */
         .join-code-row { display: flex; gap: 6px; }

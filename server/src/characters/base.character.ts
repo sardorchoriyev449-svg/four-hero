@@ -65,6 +65,8 @@ export abstract class BaseCharacter {
 
     // Hujum qilish mumkinmi (masalan, drobovik qayta o'qlanayotganda - yo'q). Standart - ha
     public canAttack(_player: PlayerState): boolean { return true; }
+    // Zarbalar orasidagi kutish (tik) - qurolga qarab (masalan, samuray kunai/shurikeni sekinroq)
+    public attackCooldownTicks(_player: PlayerState): number { return BaseCharacter.ATTACK_COOLDOWN_TICKS; }
 
     // Har bir personaj o'zicha hujum qiladi (Abstract funksiyalar)
     abstract handleAttack(player: PlayerState, room: RoomState, angle: number): void;

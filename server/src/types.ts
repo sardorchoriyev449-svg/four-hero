@@ -284,7 +284,8 @@ export interface RoomState {
     bulletIdCounter: number;
     isStarted: boolean;
     isOver: boolean;              // O'yin g'olib chiqqach true bo'ladi (yangi round kutiladi)
-    flushNow?: boolean;           // hujumdan keyin holat keyingi tikdayoq yuboriladi
+    flushNow?: boolean;
+    advancing?: boolean;          // xarita o'tildi, keyingisi boshlanmoqda (kirish yopiq)           // hujumdan keyin holat keyingi tikdayoq yuboriladi
     killsToWin: number;           // Xaritadagi botlarning UMUMIY soni - hammasi o'lsa xarita o'tiladi
     botsSpawned: number;          // Shu raundda jami nechta bot chiqarildi (to'lqinlar bo'yicha)
     botsKilled: number;           // Shu raundda jami nechta bot o'ldirildi (butun jamoa bo'yicha)
@@ -317,6 +318,10 @@ export interface RoomState {
         respawnAt: { [pid: string]: number }, worldOn: boolean, seq: number, loadedFor?: string,
         // Qo'ziqorinlar (zararkunanda): k - qaysi grядkada, born - chiqqan vaqti (shundan eatMs o'tsa - ekinni yeydi)
         shrooms: { id: string, x: number, k: number, hp: number, maxHp: number, born: number, nextPuff: number, ate: boolean, hitFlash: number }[],
+        // MAXLUQLAR HUJUMI (har ~5 daqiqada): shilimshiq (sakrab yuradi, o'lsa - kichiklarga bo'linadi), zombi sabzavotlar
+        mobs: { id: string, kind: 'slime' | 'slimelet' | 'zveg', x: number, y: number, hp: number, maxHp: number, hitFlash: number,
+            face: number, v: number, hopFrom: number, hopTo: number, hopAt: number, hopEnd: number, hitCd: number }[],
+        nextRaidAt: number, raidKind: string | null, safeUntil: { [pid: string]: number },
         // Baxaybat daraxt BOSS jangi
         boss: { hp: number, maxHp: number, hitFlash: number, nextAt: number, last: string,
             apples: { id: number, x: number, y: number, vx: number, vy: number }[],

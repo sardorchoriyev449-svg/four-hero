@@ -830,9 +830,12 @@ socket.on('updateRoomList', (rooms) => {
     rooms.forEach(room => {
         const item = document.createElement('div');
         item.className = 'room-item';
-        item.innerHTML = `<span><i class="fa-solid fa-door-open icon"></i>${escapeHtml(room.name)}</span> <span><i class="fa-solid fa-users icon"></i>${room.playerCount}/${room.maxPlayers || 4}</span>`;
+        item.innerHTML = `<span><i class="fa-solid fa-door-open icon"></i>${escapeHtml(room.name)}</span> <span>${room.isStarted ? `<em class="room-playing">${t('room_playing')}</em> ` : ''}<i class="fa-solid fa-users icon"></i>${room.playerCount}/${room.maxPlayers || 4}</span>`;
+        // O'yin boshlangan xona - kirib bo'lmaydi (server ham rad etadi)
+        if (room.isStarted) item.classList.add('started');
         item.onclick = () => {
             if (!currentUser) return;
+            if (room.isStarted) { pxAlert(t('err_game_in_progress')); return; }
             socket.emit('joinRoom', { roomId: room.id, userId: currentUser.id, token: currentUser.token, nickname: currentUser.nickname, clientId: CLIENT_ID });
         };
         roomListDiv.appendChild(item);
@@ -1657,8 +1660,11 @@ function renderUpgrades() {
 
     const charUpgrades = (currentUser.upgrades && currentUser.upgrades[selectedCharTab]) || { damage: 0, stamina: 0 };
 
+    // Kuchaytirish chegarasi qahramon darajasiga bog'liq: daraja - 1 (serverdagi upgradeCapFor bilan bir xil)
+    const upCap = Math.min(5, Math.max(0, charLevel - 1));
     stats.forEach((stat) => {
         const level = charUpgrades[stat.key] || 0;
+        if (!stat.locked && level < 5 && level >= upCap) { stat.locked = true; stat.needLevel = level + 2; }
         const row = document.createElement('div');
         row.className = 'upgrade-row';
 

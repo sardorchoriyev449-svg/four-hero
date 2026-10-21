@@ -4,7 +4,7 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getWeaponSkinColor } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
@@ -81,6 +81,13 @@ export class RoomManager {
             if (!this.activeRooms[roomId] || room.players[socket.id]) return;
         }
 
+        // O'YIN BOSHLANIB BO'LGAN - yangi o'yinchi kira olmaydi (aks holda xaritada to'satdan paydo bo'lardi).
+        // Sahifani yangilagan / uzilib qolgan o'z o'yinchisi yuqorida (reclaimPlayer) o'rnini qaytarib oladi; admin - kuzatish uchun kiradi
+        const isAdminSock = !!(socket.data && (socket.data as any).isAdmin);
+        if ((room.isStarted || room.advancing) && !isAdminSock) {
+            socket.emit('joinError', 'err_game_in_progress');
+            return;
+        }
         // XONA TO'LGANMI? Maksimal 4 kishi
         if (Object.keys(room.players).length >= RoomManager.MAX_PLAYERS) {
             socket.emit('joinError', 'err_room_full|' + RoomManager.MAX_PLAYERS);
@@ -142,6 +149,12 @@ export class RoomManager {
         this.pendingJoins.delete(socket.id);
         // Bazani kutayotganda sahifa yana yangilangan / xona yopilgan bo'lishi mumkin
         if (!this.activeRooms[roomId] || !this.io.sockets.sockets.get(socket.id)) return;
+        // Bazani kutayotganda xo'jayin o'yinni boshlab yuborgan bo'lishi mumkin
+        if ((room.isStarted || room.advancing) && !isAdminSock) {
+            if (userId !== null && this.activeUserSockets.get(userId) === socket.id) this.activeUserSockets.delete(userId);
+            socket.emit('joinError', 'err_game_in_progress');
+            return;
+        }
 
         room.players[socket.id] = {
             id: socket.id,
@@ -568,7 +581,7 @@ export class RoomManager {
         }
 
         BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
-        player.attackCooldown = BaseCharacter.ATTACK_COOLDOWN_TICKS;
+        player.attackCooldown = charLogic.attackCooldownTicks(player);
 
         charLogic.handleAttack(player, room, player.lastAttackAngle);
         room.flushNow = true;   // yangi o'q keyingi tikdayoq klientga ketsin (2 tik kutmasdan)
@@ -833,6 +846,7 @@ export class RoomManager {
         const map = getMapById(room.selectedLevel);
         room.isStarted = true;
         room.isOver = false;
+        room.advancing = false;
         db.bumpStat({ ['plays.' + room.selectedLevel]: 1 });   // admin statistikasi: qaysi xarita ko'p o'ynaladi
 
         Object.values(room.players).forEach((p, i) => {
@@ -990,6 +1004,8 @@ export class RoomManager {
         db.bumpStat({ ['wins.' + room.selectedLevel]: 1 });
         room.isOver = true;
         room.isStarted = false;
+        // Keyingi xaritaga o'tilyapti (bazaga yozish kutilmoqda) - shu oraliqda begona o'yinchi kirib olmasin
+        room.advancing = true;
 
         // Season 2 boss xaritalari (maps.ts: bossCoins): bossni yengishda QATNASHGAN HAR BIR o'yinchiga
         // shuncha tanga. Oddiy xaritalarda - faqat g'olibga odatdagi g'alaba tangasi
@@ -1070,6 +1086,7 @@ export class RoomManager {
             levelCleared: levelCleared,
             unlockedLevel: room.unlockedLevel
         });
+        room.advancing = false;   // mavsum tugadi - lobbiga qaytildi, yana kirish mumkin
 
         // Barcha o'yinchilarni yangi raund uchun tozalab qo'yamiz
         Object.values(room.players).forEach((p) => {
@@ -1195,9 +1212,20 @@ export class RoomManager {
         const p = room?.players[socket.id];
         const map = room ? getMapById(room.selectedLevel) : null;
         const reply = (d: object) => socket.emit('shopResult', d);
-        if (!room || !p || !map || !map.shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item))) return;
+        if (!room || !p || !map || !map.shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item) || HOME_ITEMS.some(h => 'home_' + h.id === item))) return;
         if (Math.abs(p.x - map.shop.counterX) > map.shop.range + 40) { reply({ success: false, item, message: 'shop_too_far' }); return; }
         if (p.userId === null) { reply({ success: false, item, message: 'shop_need_account' }); return; }
+        // Fermer uyi jihozlari (bir marta): uyga kirib joylashtiriladi
+        if (typeof item === 'string' && item.startsWith('home_')) {
+            const h = HOME_ITEMS.find(x => 'home_' + x.id === item);
+            if (!h) return;
+            const t = await db.buyHomeItem(p.userId, h.id, h.price);
+            if (!t.success) { reply({ success: false, item, message: t.message }); return; }
+            reply({ success: true, item, coins: t.coins });
+            socket.emit('coinsUpdated', { amount: -h.price, totalCoins: t.coins });
+            this.farmChanged(p.userId);
+            return;
+        }
         if (typeof item === 'string' && item.startsWith('decor_')) {
             const d = FARM_DECOR.find(x => 'decor_' + x.id === item);
             if (!d) return;
@@ -1233,6 +1261,10 @@ export class RoomManager {
         socket.emit('coinsUpdated', { amount: -curePrice, totalCoins: r.user.coins });
     }
 
+    // Admin faslni almashtirdi - ochiq fermalarga darhol yangi holat
+    public farmSeasonChanged(): void {
+        Object.keys(this.activeRooms).forEach((id) => { const r = this.activeRooms[id]; if (r && r.myFarm && r.isStarted) this.sendMyFarm(id); });
+    }
     // ===== MY FARM: HOSTning fermasi; faqat host ishlaydi, qolganlar kuzatadi =====
     private static hostLevel(p: PlayerState | undefined): number {
         if (!p) return 0;
@@ -1244,7 +1276,7 @@ export class RoomManager {
         const mf = room.myFarm;
         const host = room.players[room.hostId];
         const owner = host && host.userId !== null ? host.userId : null;
-        if (owner !== mf.owner) { mf.owner = owner; mf.farm = null; mf.fishing = null; mf.shrooms = []; mf.boss = null; mf.loadedFor = undefined; }
+        if (owner !== mf.owner) { mf.owner = owner; mf.farm = null; mf.fishing = null; mf.shrooms = []; mf.mobs = []; mf.nextRaidAt = 0; mf.boss = null; mf.loadedFor = undefined; }
         if (owner && !mf.farm && !mf.loading) {
             mf.loading = true;
             db.getFarm(owner).then((f) => {
@@ -1260,6 +1292,7 @@ export class RoomManager {
         this.io.to(roomId).emit('myFarmState', {
             now: Date.now(), hostPid: room.hostId, hostNick: host ? host.nickname : '', hostGuest: !owner, hostLevel: RoomManager.hostLevel(host),
             farm: mf.farm, rain: farmIsRaining(F, Date.now()), boss: !!mf.boss, offer: dailyOffer(Date.now()),
+            season: currentFarmSeason(), growth: SEASON_GROWTH[currentFarmSeason()],
             level: mf.farm ? farmLevel(mf.farm.xp) : 0, cap: mf.farm ? farmCapacity(farmLevel(mf.farm.xp)) : 0,
             fishing: fi ? { state: fi.state, until: fi.until, fish: fi.state === 'bite' ? fi.fish : null } : null
         });
@@ -1272,7 +1305,7 @@ export class RoomManager {
         const map = room ? getMapById(room.selectedLevel) : null;
         const reply = (d: object) => socket.emit('myFarmResult', { action, ...d });
         if (!room || !p || !map || !map.myFarm || !room.isStarted || !room.myFarm) return;
-        if (!['plant', 'harvest', 'zone', 'dock', 'cast', 'reel', 'water', 'fert', 'orchard', 'tree', 'pick', 'orders', 'deliver'].includes(action as string)) return;
+        if (!['plant', 'harvest', 'zone', 'dock', 'cast', 'reel', 'water', 'fert', 'orchard', 'orchardCut', 'tree', 'pick', 'orders', 'deliver', 'home', 'chest', 'decorStore'].includes(action as string)) return;
         if (room.hostId !== socket.id) { reply({ success: false, message: 'mf_host_only' }); return; }
         if (p.userId === null) { reply({ success: false, message: 'farm_need_account' }); return; }
         const mf = room.myFarm, F = map.myFarm, uid = p.userId;
@@ -1304,8 +1337,34 @@ export class RoomManager {
                 if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= FARM_PLOTS * FARM_ZONES || !near(farmPlotX(F, k as number), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
                 r = action === 'water' ? await db.farmWater(uid, k as number) : await db.farmFertilize(uid, k as number);
                 if (r.success) { reply({ success: true, k }); this.io.to(roomId).emit('mfPlotFx', { k, kind: action }); }
+            } else if (action === 'orchardCut') {
+                // Daraxtni kesish: joy bo'shaydi, eski daraxt yo'qoladi (yangisini ekish mumkin)
+                if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= orchardSlotsFor(farmLevel(fd.xp)) || !near(F.orchardX[k as number], 50)) { reply({ success: false, message: 'farm_too_far' }); return; }
+                r = await db.orchardCut(uid, k as number);
+                if (r.success) { reply({ success: true, k, cut: true }); this.io.to(roomId).emit('mfPlotFx', { k, kind: 'cut' }); }
+            } else if (action === 'home' || action === 'chest' || action === 'decorStore') {
+                // FERMER UYI (ichida): jihoz qo'yish / olish, yashik bilan almashish, tashqi bezakni yashikka olish
+                if (Math.abs(p.x - F.houseX) > 120) { reply({ success: false, message: 'farm_too_far' }); return; }
+                const a: any = arg && typeof arg === 'object' ? arg : {};
+                if (action === 'home') {
+                    const slot = HOME_SLOTS.find(s => s.id === a.slot);
+                    const item = a.item === null ? null : HOME_ITEMS.find(h => h.id === a.item);
+                    if (!slot || item === undefined) { reply({ success: false, message: 'err_bad_item' }); return; }
+                    r = await db.homePlace(uid, slot.id, item ? item.id : null, (id) => (HOME_ITEMS.find(h => h.id === id) || { slot: '' }).slot === slot.type);
+                    if (r.success) reply({ success: true, slot: slot.id, item: item ? item.id : null });
+                } else if (action === 'chest') {
+                    const key = typeof a.key === 'string' ? a.key.slice(0, 30) : '', n = Number(a.n);
+                    if ((a.dir !== 'put' && a.dir !== 'take') || !key || !Number.isInteger(n) || n < 1 || n > 10000) { reply({ success: false, message: 'err_bad_item' }); return; }
+                    r = await db.chestMove(uid, a.dir, key, n, farmCapacity(farmLevel(fd.xp)), CHEST_CAP);
+                    if (r.success) reply({ success: true, dir: a.dir, key, n: r.moved });
+                } else {
+                    const d = FARM_DECOR.find(x => x.id === a.id);
+                    if (!d) { reply({ success: false, message: 'err_bad_item' }); return; }
+                    r = await db.decorStore(uid, d.id, !!a.stored);
+                    if (r.success) reply({ success: true, id: d.id, stored: !!a.stored });
+                }
             } else if (action === 'orchard') {
-                if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= ORCHARD_SLOTS || !near(F.orchardX[k as number], 50)) { reply({ success: false, message: 'farm_too_far' }); return; }
+                if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= orchardSlotsFor(farmLevel(fd.xp)) || !near(F.orchardX[k as number], 50)) { reply({ success: false, message: Number.isInteger(k) && (k as number) >= 0 && (k as number) < ORCHARD_SLOTS && (k as number) >= orchardSlotsFor(farmLevel(fd.xp)) ? 'mf_or_locked' : 'farm_too_far' }); return; }
                 const cur = mf.farm.orchard[k as number];
                 if (!cur) {
                     const tr = F.fruitTrees.find(x => x.id === arg);
@@ -1351,8 +1410,10 @@ export class RoomManager {
                 }
             } else if (action === 'zone') {
                 if (!Number.isInteger(k) || (k as number) < 1 || (k as number) >= FARM_ZONES || !near(farmZoneCenter(F, k as number), F.zoneW / 2)) { reply({ success: false, message: 'farm_too_far' }); return; }
-                r = await db.farmBuyZone(uid, k as number, F.zonePrice);
-                if (r.success) { socket.emit('coinsUpdated', { amount: -F.zonePrice, totalCoins: r.coins }); reply({ success: true, k }); }
+                const zPrice = F.zonePrices[k as number], zLevel = F.zoneLevels[k as number] || 0;
+                if (farmLevel(fd.xp) < zLevel) { reply({ success: false, message: 'mf_zone_level|' + zLevel }); return; }
+                r = await db.farmBuyZone(uid, k as number, zPrice);
+                if (r.success) { socket.emit('coinsUpdated', { amount: -zPrice, totalCoins: r.coins }); reply({ success: true, k }); }
             } else if (action === 'dock') {
                 if (!near(F.riverX0, 60)) { reply({ success: false, message: 'farm_too_far' }); return; }
                 r = await db.farmBuyDock(uid, F.dockPrice);
@@ -1526,6 +1587,8 @@ export class RoomManager {
         mf.shrooms = [];
         if (n > 0) { this.spawnShrooms(room, n); this.io.to(roomId).emit('mfShroomsCame', { n }); }
         db.farmTouch(mf.owner);
+        mf.mobs = []; mf.raidKind = null;
+        mf.nextRaidAt = Date.now() + getMapById(room.selectedLevel).myFarm!.raids.firstMs;
         if (f.tree.state === 'boss') this.treeBossStart(roomId);
         this.refreshOrders(roomId, mf.owner, room.players[room.hostId]).then(() => this.sendMyFarm(roomId)).catch(err => console.error('refreshOrders xatosi:', err));
     }
@@ -1550,6 +1613,52 @@ export class RoomManager {
         this.io.to(roomId).emit('mfShroomDown', { x: sh.x, left: mf.shrooms.length });
         if (mf.owner) db.farmSetShrooms(mf.owner, mf.shrooms.length);
         if (killerId && room.players[killerId]) this.awardCrateCoins(roomId, killerId, F.shrooms.killCoins).catch(err => console.error('shroom coins xatosi:', err));
+    }
+    // MAXLUQLAR HUJUMI boshlanadi (o'yin siklidan): tasodifiy tur, hostning yonidan (ekrandan tashqaridan) keladi
+    public startRaid(roomId: string): void {
+        const room = this.activeRooms[roomId], mf = room?.myFarm;
+        if (!room || !mf || !mf.farm || mf.boss) return;
+        const F = getMapById(room.selectedLevel).myFarm!, RD = F.raids, now = Date.now();
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        const host = room.players[room.hostId] || alive[0];
+        if (!host) return;
+        const kinds = ['slime', 'shrooms', 'zveg'].filter(k => k !== mf.raidKind);   // ketma-ket bir xil bo'lmasin
+        const kind = kinds[Math.floor(Math.random() * kinds.length)];
+        mf.raidKind = kind;
+        const clampX = (x: number) => Math.max(120, Math.min(F.riverX0 - 60, x));
+        const side = () => { const s = Math.random() < 0.5 ? -1 : 1; const x = host.x + s * 480; return x < 120 || x > F.riverX0 - 60 ? -s : s; };
+        const mob = (k: 'slime' | 'slimelet' | 'zveg', x: number, hp: number, v = 0) => ({ id: 'mb' + (++mf.seq), kind: k, x, y: 570, hp, maxHp: hp, hitFlash: 0,
+            face: -1, v, hopFrom: x, hopTo: x, hopAt: now + 600 + Math.random() * 500, hopEnd: 0, hitCd: 0 });
+        if (kind === 'slime') {
+            const hp = RD.slime.hp + RD.slime.hpPerPlayer * Math.max(0, alive.length - 1);
+            mf.mobs.push(mob('slime', clampX(host.x + side() * 480), hp));
+        } else if (kind === 'zveg') {
+            const s = side();
+            for (let i = 0; i < RD.zveg.n; i++) mf.mobs.push(mob('zveg', clampX(host.x + s * (440 + i * 55)), RD.zveg.hp, i % 3));
+        } else {
+            this.spawnShrooms(room, RD.shrooms);
+        }
+        this.io.to(roomId).emit('mfRaid', { kind });
+    }
+    // Maxluq o'ldirildi: tanga; katta shilimshiq kichiklarga bo'linadi; hammasi tugasa - hujum qaytarildi
+    public mobKilled(roomId: string, id: string, killerId: string | null): void {
+        const room = this.activeRooms[roomId], mf = room?.myFarm;
+        if (!room || !mf) return;
+        const i = mf.mobs.findIndex(m => m.id === id);
+        if (i < 0) return;
+        const m = mf.mobs.splice(i, 1)[0];
+        const RD = getMapById(room.selectedLevel).myFarm!.raids, now = Date.now();
+        if (m.kind === 'slime') {
+            for (let k = 0; k < RD.slime.splits; k++) {
+                const x = m.x + (k - (RD.slime.splits - 1) / 2) * 50;
+                mf.mobs.push({ id: 'mb' + (++mf.seq), kind: 'slimelet', x, y: 570, hp: RD.slimelet.hp, maxHp: RD.slimelet.hp, hitFlash: 0, face: k % 2 ? 1 : -1, v: k % 3,
+                    hopFrom: x, hopTo: x, hopAt: now + 500 + k * 150, hopEnd: 0, hitCd: 15 });
+            }
+        }
+        const coins = m.kind === 'slime' ? RD.slime.coins : m.kind === 'slimelet' ? RD.slimelet.coins : RD.zveg.coins;
+        this.io.to(roomId).emit('mfMobDown', { x: Math.round(m.x), kind: m.kind, split: m.kind === 'slime' });
+        if (killerId && room.players[killerId]) this.awardCrateCoins(roomId, killerId, coins).catch(err => console.error('mob coins xatosi:', err));
+        if (!mf.mobs.length && !mf.shrooms.length) this.io.to(roomId).emit('mfRaidCleared', {});
     }
     // Qo'ziqorin grядkadagi ekinni yedi
     public shroomEat(roomId: string, k: number): void {
@@ -1607,7 +1716,7 @@ export class RoomManager {
         if (!p || p.userId === null) { socket.emit('farmBag', { crops: 0, fish: 0, rod: false, net: false }); return; }
         const f = await db.getFarm(p.userId).catch(() => null);
         if (!f) return;
-        socket.emit('farmBag', { crops: Object.values(f.bag).reduce((a, n) => a + n, 0), fish: f.fishN, fishV: f.fishV, rod: f.rod, net: f.net, fert: f.fert, water: f.water, decor: f.decor });
+        socket.emit('farmBag', { crops: Object.values(f.bag).reduce((a, n) => a + n, 0), fish: f.fishN, fishV: f.fishV, rod: f.rod, net: f.net, fert: f.fert, water: f.water, decor: f.decor, home: f.home.owned });
     }
 
     // XP KUCHAYTIRISH bonusi (hozirgi personajniki): har jang mukofotiga +50 x daraja

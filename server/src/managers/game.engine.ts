@@ -1095,6 +1095,15 @@ export class GameEngine {
                     if (sh.hp <= 0) this.roomManager.shroomKilled(room.id, sh.id, bullet.playerId);
                     break;
                 }
+                if (!bulletDestroyed) for (const m of mfw.mobs) {
+                    const hw = m.kind === 'slime' ? 54 : m.kind === 'slimelet' ? 22 : 20, h = m.kind === 'slime' ? 96 : 50;
+                    if (!this.checkOverlap(hitRect, { x: m.x - hw, y: m.y - h, w: hw * 2, h })) continue;
+                    bulletDestroyed = true;
+                    m.hp = Math.max(0, m.hp - damage);
+                    m.hitFlash = 4;
+                    if (m.hp <= 0) this.roomManager.mobKilled(room.id, m.id, bullet.playerId);
+                    break;
+                }
                 const tb = mfw.boss;
                 if (!bulletDestroyed && tb && this.checkOverlap(hitRect, mfd.tree.mouth)) {
                     bulletDestroyed = true;
@@ -1815,7 +1824,7 @@ export class GameEngine {
         room.robot = rbd ? { state: 'walk', hp: rbHp, maxHp: rbHp, tick: 0, timer: 0, step: 0, hitFlash: 0, nextAct: 0, act: null,
             fist: { x: rbd.fistRest.x, y: rbd.fistRest.y, phase: 'rest', t: 0, tx: 0, ty: 0, warn: 0, dmg: 0, hit: [] }, laser: null, bolts: [], counter: 0 } : null;
         room.pvp = map.pvp ? { respawnAt: {}, shieldUntil: {}, tick: 0, done: false } : null;
-        room.myFarm = map.myFarm ? { owner: null, farm: null, loading: false, sig: '', tick: 0, fishing: null, respawnAt: {}, worldOn: false, seq: 0, shrooms: [], boss: null } : null;
+        room.myFarm = map.myFarm ? { owner: null, farm: null, loading: false, sig: '', tick: 0, fishing: null, respawnAt: {}, worldOn: false, seq: 0, shrooms: [], mobs: [], safeUntil: {}, nextRaidAt: 0, raidKind: null, boss: null } : null;
         if (map.pvp) Object.values(room.players).forEach(p => { p.kills = 0; });
         const skd0 = map.sky;
         room.sky = skd0 ? { state: 'intro', tick: 0, timer: Math.round(skd0.introMs / 30), wave: 0, counter: 0, nextStrike: Math.round((skd0.introMs + 4000) / 30),
@@ -2859,6 +2868,7 @@ export class GameEngine {
             if (mf.respawnAt[p.id] === undefined) { mf.respawnAt[p.id] = now + 5000; return; }
             if (now < mf.respawnAt[p.id]) return;
             delete mf.respawnAt[p.id];
+            mf.safeUntil[p.id] = now + 2500;   // qayta tug'ilgach 2.5 s maxluqlar tegmaydi (uy oldida poylab turmasin)
             const sp = map.playerSpawns[0];
             p.isDead = false; p.hp = p.maxHp || 100; p.stamina = p.maxStamina || 100; p.x = sp.x; p.y = sp.y;
             this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
@@ -2876,6 +2886,50 @@ export class GameEngine {
                 }
             }
             if (!sh.ate && now - sh.born >= SD.eatMs) { sh.ate = true; this.roomManager.shroomEat(roomId, sh.k); }
+        });
+        // MAXLUQLAR HUJUMI: vaqti kelsa (boss jangi va boshqa hujum bo'lmasa) - yangisi; yo'qsa keyingi navbat
+        const RD = F.raids;
+        if (mf.farm && mf.nextRaidAt && now >= mf.nextRaidAt) {
+            if (!mf.boss && !mf.mobs.length && !mf.shrooms.length && alive.length) this.roomManager.startRaid(roomId);
+            mf.nextRaidAt = now + RD.everyMs + Math.round((Math.random() * 2 - 1) * RD.jitterMs);
+        }
+        mf.mobs.forEach((m) => {
+            if (m.hitFlash > 0) m.hitFlash--;
+            if (m.hitCd > 0) m.hitCd--;
+            const tg = alive.filter(p => p.y > 380).sort((a, c) => Math.abs(a.x - m.x) - Math.abs(c.x - m.x))[0];
+            if (m.kind === 'zveg') {
+                // Zombi sabzavot: eng yaqin qahramon tomon sekin yuradi
+                if (tg && Math.abs(tg.x - m.x) > 18) { m.face = tg.x > m.x ? 1 : -1; m.x += m.face * RD.zveg.speed * (1 + m.v * 0.12) * dt; }
+                m.y = 570;
+            } else {
+                // Shilimshiq: sakrab yuradi (yoy bo'ylab), qo'nganda yer silkinadi
+                const S = m.kind === 'slime' ? RD.slime : RD.slimelet;
+                if (m.hopEnd && now < m.hopEnd) {
+                    const q = 1 - (m.hopEnd - now) / S.hopMs;
+                    m.x = m.hopFrom + (m.hopTo - m.hopFrom) * q;
+                    m.y = 570 - Math.sin(q * Math.PI) * S.hopH;
+                } else {
+                    if (m.hopEnd) { m.hopEnd = 0; m.y = 570; m.x = m.hopTo; if (m.kind === 'slime') this.io.to(roomId).emit('mfSlimeLand', { x: Math.round(m.x) }); }
+                    if (tg && now >= m.hopAt) {
+                        m.face = tg.x > m.x ? 1 : -1;
+                        m.hopFrom = m.x;
+                        m.hopTo = Math.max(100, Math.min(F.riverX0 - 40, m.x + m.face * Math.min(S.hopDist, Math.abs(tg.x - m.x) + 20)));
+                        m.hopEnd = now + S.hopMs;
+                        m.hopAt = m.hopEnd + (m.kind === 'slime' ? 500 : 250) + Math.random() * 300;
+                    }
+                }
+            }
+            // Tegib ketsa - zarar va itarib yuborish
+            const halfW = m.kind === 'slime' ? 52 : m.kind === 'slimelet' ? 22 : 20, h = m.kind === 'slime' ? 90 : 46;
+            if (m.hitCd <= 0) {
+                const hit = alive.find(p => now >= (mf.safeUntil[p.id] || 0) && Math.abs(p.x - m.x) <= halfW + 12 && p.y + 24 > m.y - h && p.y - 24 < m.y);
+                if (hit) {
+                    const dmg = m.kind === 'slime' ? RD.slime.dmg : m.kind === 'slimelet' ? RD.slimelet.dmg : RD.zveg.dmg;
+                    this.hurtPlayer(hit, dmg);
+                    this.knockback(hit, hit.x < m.x ? -380 : 380, -260);
+                    m.hitCd = m.kind === 'zveg' ? 40 : 30;
+                }
+            }
         });
         const b = mf.boss, T = F.tree;
         if (b) {
@@ -2941,11 +2995,12 @@ export class GameEngine {
             }
         }
         // Dunyo holati (faqat kerak bo'lganda): qo'ziqorinlar va boss
-        const on = mf.shrooms.length > 0 || !!b;
+        const on = mf.shrooms.length > 0 || mf.mobs.length > 0 || !!b;
         if ((on || mf.worldOn) && this.frame % this.BROADCAST_EVERY === 0) {
             mf.worldOn = on;
             this.io.to(roomId).emit('mfWorld', {
                 shrooms: mf.shrooms.map(sh => ({ id: sh.id, x: sh.x, k: sh.k, hp: Math.ceil(sh.hp), maxHp: sh.maxHp, f: sh.hitFlash > 0, eatIn: Math.max(0, Math.ceil((sh.born + SD.eatMs - now) / 1000)) })),
+                mobs: mf.mobs.map(m => ({ id: m.id, k: m.kind, x: Math.round(m.x), y: Math.round(m.y), hp: Math.ceil(m.hp), maxHp: m.maxHp, f: m.hitFlash > 0, face: m.face, v: m.v, air: !!m.hopEnd })),
                 boss: b ? { hp: Math.ceil(b.hp), maxHp: b.maxHp, f: b.hitFlash > 0,
                     apples: b.apples.map(a => ({ id: a.id, x: Math.round(a.x), y: Math.round(a.y) })),
                     roots: b.roots.map(r => ({ x: Math.round(r.x), p: r.phase })),

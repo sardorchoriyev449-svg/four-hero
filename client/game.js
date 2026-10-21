@@ -330,7 +330,8 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     // Do'kon / ferma oynasi ochiq bo'lsa - Esc avval uni yopadi (pauza ochilmaydi)
     const panel = document.getElementById('shop-panel');
-    if (panel) { const x = panel.querySelector('.shop-close'); if (x) x.click(); else panel.remove(); return; }
+    if (panel) { const x = panel.querySelector('.shop-close:not(.chest-remove)'); if (x) x.click(); else panel.remove(); return; }
+    if (window.mfHouseExit && window.mfHouseExit()) return;   // fermer uyidan chiqish
     window.togglePauseMenu();
 });
 
@@ -416,7 +417,7 @@ function launchGame(socket, roomId, mapData, continued) {
         window.__game = {
             get map() { return map; }, get hero() { return currentCharacter; }, get dialog() { return dialog; },
             get backState() { return backState; }, get backBarrels() { return backBarrels; }, get backOnRamp() { return backOnRamp; },
-            get tntState() { return tntState; }, get tntObj() { return tntObj; }, get robotState() { return robotState; }, get robotObj() { return robotObj; }, get vendState() { return vendState; }, get vendObj() { return vendObj; }, get skyState() { return skyState; }, get skyObj() { return skyObj; }, get pvpState() { return pvpState; }, get mfState() { return mfState; }, get mfReel() { return mfReel; }, get mfOffset() { return mfOffset; }, set mfOffset(v) { mfOffset = v; }, get stoneSprites() { return stoneSprites; }
+            get tntState() { return tntState; }, get tntObj() { return tntObj; }, get robotState() { return robotState; }, get robotObj() { return robotObj; }, get vendState() { return vendState; }, get vendObj() { return vendObj; }, get skyState() { return skyState; }, get skyObj() { return skyObj; }, get pvpState() { return pvpState; }, get mfState() { return mfState; }, get liftState() { return liftState; }, get mfHouse() { return mfHouse; }, get mfReel() { return mfReel; }, get mfOffset() { return mfOffset; }, set mfOffset(v) { mfOffset = v; }, get stoneSprites() { return stoneSprites; }
         };
     }
     // O'YIN OVOZLARI: sfx - har doim bir xil balandlikda; sfxAt - qahramondan uzoqlashgan sari pasayadi
@@ -858,7 +859,8 @@ function launchGame(socket, roomId, mapData, continued) {
     function predictAttack(scene, angle) {
         const c = currentCharacter, now = performance.now();
         if (!c || !c.active || c.isDead || !scene || !scene.add) return;
-        if (now - ATK_PREDICT.last < 360) return;                       // server cooldown: 12 tik
+        const cdMs = c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 990 : c.characterType === 'samurai' && c.weaponMode === 'alt' ? 750 : 360;
+        if (now - ATK_PREDICT.last < cdMs) return;                      // server cooldown (attackCooldownTicks)
         if ((c.stamina || 0) < (ATK_COST[c.characterType] || 10) * 0.5) return;
         const bt = predictedAttackType(c);
         if (!bt) return;
@@ -3333,6 +3335,15 @@ function launchGame(socket, roomId, mapData, continued) {
                 <div class="shop-status ${decor[id] ? '' : 'need'}">${decor[id] ? t('shop_owned') : t('shop_for_farm')}</div>
                 <button class="shop-buy" data-item="decor_${id}" ${decor[id] ? 'disabled' : ''}>${coin} ${S.prices['decor_' + id]}</button>
             </div>`;
+        const home = (mfBag && mfBag.home) || {};
+        const homeCard = (id) => `
+            <div class="shop-card shop-tool">
+                <div class="shop-icon"><img class="shop-pxicon" src="${A.homeIcon(id)}" alt="" style="max-width:64px"></div>
+                <div class="shop-name">${t('home_' + id)}</div>
+                <div class="shop-desc">${t('home_' + id + '_desc')}</div>
+                <div class="shop-status ${home[id] ? '' : 'need'}">${home[id] ? t('shop_owned') : t('shop_for_house')}</div>
+                <button class="shop-buy" data-item="home_${id}" ${home[id] ? 'disabled' : ''}>${coin} ${S.prices['home_' + id]}</button>
+            </div>`;
         const card = (item, icon, name, desc, need) => `
             <div class="shop-card">
                 <div class="shop-icon">${icon}</div>
@@ -3374,6 +3385,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 ${S.prices.water ? useCard('water', px('water'), t('item_water'), t('item_water_desc'), mfBag ? mfBag.water || 0 : 0) : ''}
                 ${S.prices.decor_flowers ? sec('shop_sec_decor') : ''}
                 ${['flowers', 'lantern', 'paint', 'dog'].filter(id => S.prices['decor_' + id]).map(decorCard).join('')}
+                ${S.prices.home_chest ? sec('shop_sec_home') : ''}
+                ${['chest', 'table', 'chair', 'bed', 'shelf', 'fireplace', 'pot', 'plant', 'rug', 'painting', 'lamp'].filter(id => S.prices['home_' + id]).map(homeCard).join('')}
             </div>
             <div class="shop-msg" id="shop-msg"></div>
             <button class="shop-close">${t('shop_close')}</button>
@@ -3388,6 +3401,14 @@ function launchGame(socket, roomId, mapData, continued) {
         if (d.success) {
             sfx('coin');
             if (d.item === 'rod' || d.item === 'net') { mfBag = Object.assign(mfBag || {}, { [d.item]: true }); }
+            if (typeof d.item === 'string' && d.item.startsWith('home_')) {
+                const id = d.item.slice(5);
+                mfBag = Object.assign(mfBag || {}, { home: Object.assign((mfBag && mfBag.home) || {}, { [id]: true }) });
+                if (typeof showTopToast === 'function') showTopToast(t('shop_bought_home').replace('{d}', t('home_' + id)));
+                const st = shopPanel && shopPanel.querySelector(`.shop-buy[data-item="${d.item}"]`);
+                if (st) { st.disabled = true; st.parentElement.querySelector('.shop-status').textContent = t('shop_owned'); st.parentElement.querySelector('.shop-status').classList.remove('need'); }
+                return;
+            }
             if (typeof d.item === 'string' && d.item.startsWith('decor_')) {
                 const id = d.item.slice(6);
                 mfBag = Object.assign(mfBag || {}, { decor: Object.assign((mfBag && mfBag.decor) || {}, { [id]: true }) });
@@ -3416,6 +3437,9 @@ function launchGame(socket, roomId, mapData, continued) {
     // ===== MY FARM (BONUS): HOSTning fermasi - piksel 2D (qora kontur, dither soyalar, o'yindagi boshqa xaritalar kabi).
     // 4 maydon (1-si ochiq, qolganlari "Free plot" - 250), oxirida daryo: platforma, udochka (chiziqli o'yin), setka; yomg'ir - 2x o'sish
     let mfState = null, mfObj = null, mfPanel = null, mfOffset = 0, mfReel = null, mfBag = null, mfLastRain = null;
+    let mfHouse = null;   // FERMER UYI ichida: { objs, puppet, x, sel, ... } (null - tashqarida)
+    // Bog' joylari ferma darajasiga qarab (serverdagi orchardSlotsFor bilan bir xil): 3, 3-darajada 4, 6-da 5, 9-da 6
+    const mfOrchardSlots = (lv) => Math.min(6, 3 + Math.floor(Math.max(0, lv || 0) / 3));
     let mfWorldState = null;          // qo'ziqorinlar va daraxt bossi (serverdan har ~60ms)
     const mfPickAt = {};              // ko'k olma terish so'rovi qayta-qayta ketmasin
     // Ekin, baliq va setka rasmlari - farmart.js da (inventar oynasi ham o'yinsiz ishlatadi)
@@ -3571,6 +3595,28 @@ function launchGame(socket, roomId, mapData, continued) {
         return g;
     }
     // Qo'ziqorin-zararkunanda: qizil qalpoq, oq dog'lar, yovuz yuz
+    function mfSlimeGrid(frame) {
+        const W = 30, H = 24, g = gridNew(W, H);
+        const P = [0x1b5e20, 0x2e7d32, 0x43a047, 0x66bb6a, 0xa5d6a7];
+        const top = frame ? 6 : 3;
+        for (let y = top; y < H; y++) for (let x = 0; x < W; x++) {
+            const nx = (x - 14.5) / 14.5, ny = (y - H) / (H - top);
+            if (nx * nx + ny * ny * (y < H - 3 ? 1 : 0.6) > 1) continue;
+            g[y][x] = shade(0.95 - (y - top) / (H - top) * 0.7 - Math.abs(nx) * 0.2, x, y, P);
+        }
+        // yaltirash
+        for (let y = top + 3; y < top + 6; y++) for (let x = 6; x < 9; x++) if (g[y][x] !== null) g[y][x] = 0xe8f5e9;
+        // jahldor ko'zlar (qiya qoshlar) va og'iz
+        const ey = top + 8;
+        [[9, 1], [19, -1]].forEach(([ex, d]) => {
+            for (let y = ey; y < ey + 4; y++) for (let x = ex; x < ex + 3; x++) g[y][x] = 0xffffff;
+            g[ey + 1][ex + 1] = 0x0a0a0a; g[ey + 2][ex + 1] = 0x0a0a0a; g[ey + 2][ex + (d > 0 ? 2 : 0)] = 0xd50000;
+            for (let k = 0; k < 4; k++) g[ey - 2 + (d > 0 ? Math.floor(k / 2) : 1 - Math.floor(k / 2))][ex - 1 + k] = 0x0a0a0a;
+        });
+        for (let x = 11; x < 20; x++) { g[ey + 6][x] = 0x0a0a0a; if (x > 11 && x < 19) g[ey + 7][x] = 0x3e0d0d; }
+        for (let x = 12; x < 19; x += 2) g[ey + 6][x] = 0xffffff;   // tishlar
+        return gridOutline(g, 0x0a0a0a);
+    }
     function mfShroomGrid(frame) {
         const W = 22, H = 24, g = gridNew(W, H);
         const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
@@ -3643,6 +3689,9 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_gt_root', gtRootGrid(), 2);
         mk('px_gt_pillar', gtPillarGrid(), 2);
         mk('px_mf_shroom0', mfShroomGrid(0), 2);
+        mk('px_mf_slime0', mfSlimeGrid(0), 4);
+        mk('px_mf_slime1', mfSlimeGrid(1), 4);
+        [0, 1, 2].forEach(k => [0, 1, 2].forEach(f => mk('px_zveg_' + k + '_' + f, zombieVegGrid(k, f), 3)));
         mk('px_mf_shroom1', mfShroomGrid(1), 2);
         mk('px_or_sapling', orSaplingGrid(), 3);
         mk('px_farmhouse_p', farmhouseGrid(true), 4);
@@ -3658,6 +3707,27 @@ function launchGame(socket, roomId, mapData, continued) {
         map.myFarm.fruitTrees.forEach(tr => { mk('px_or_' + tr.id + '_0', orTreeGrid(tr.id, false), 3); mk('px_or_' + tr.id + '_1', orTreeGrid(tr.id, true), 3); mk('px_mf_' + tr.id + '_2', mfCropGrid(tr.id, 2), 3); });
         mk('px_mf_blueapple_2', mfCropGrid('blueapple', 2), 3);
         mk('px_mf_fert', FarmArt.fertGrid(), 3);
+        (map.myFarm.homeItems || []).forEach(h => mk('px_home_' + h.id, FarmArt.homeGrid(h.id), 3));
+        const fallTex = (key, colors, n, sz) => {
+            if (scene.textures.exists(key)) return;
+            const g = scene.add.graphics();
+            for (let k = 0; k < n; k++) {
+                const x = (k * 67 + (k % 7) * 13) % 200, y = (k * 113 + (k % 5) * 29) % 200, c = colors[k % colors.length], w = sz[0] + (k % 2), h = sz[1];
+                g.fillStyle(c, 1); g.fillRect(x, y, w, h);
+                if (key !== 'px_fall_snow') { g.fillStyle(c, 0.7); g.fillRect(x + w, y + h - 1, 2, 2); }
+            }
+            g.generateTexture(key, 200, 200); g.destroy();
+        };
+        fallTex('px_fall_snow', [0xffffff, 0xeef6fb, 0xffffff], 38, [3, 3]);
+        fallTex('px_fall_leaf', [0xe65100, 0xffa000, 0xc62828, 0xf9a825], 16, [5, 3]);
+        fallTex('px_fall_petal', [0xf8bbd0, 0xf48fb1, 0xffffff], 16, [4, 3]);
+        if (!scene.textures.exists('px_mf_snowground')) {
+            const g = scene.add.graphics();
+            g.fillStyle(0xffffff, 1); g.fillRect(0, 2, 64, 8);
+            for (let x = 0; x < 64; x += 4) { g.fillStyle(x % 8 ? 0xffffff : 0xe3f2fd, 1); g.fillRect(x, (x * 7) % 3, 4, 3); }
+            g.fillStyle(0xcfe3ef, 1); for (let x = 2; x < 64; x += 10) g.fillRect(x, 8, 4, 2);
+            g.generateTexture('px_mf_snowground', 64, 10); g.destroy();
+        }
         mk('px_mf_water_can', FarmArt.waterGrid(), 3);
         if (!scene.textures.exists('px_rain')) {
             const g = scene.add.graphics();
@@ -3669,7 +3739,7 @@ function launchGame(socket, roomId, mapData, continued) {
             g.generateTexture('px_rain', 160, 160); g.destroy();
         }
     }
-    const MF_ZONES = 4, MF_PLOTS = 6;
+    const MF_ZONES = 6, MF_PLOTS = 6;
     const mfPlotX = (k) => { const F = map.myFarm, z = Math.floor(k / MF_PLOTS), i = k % MF_PLOTS; return F.zoneX0 + z * F.zoneW + F.plotX0 + i * (F.plotW + F.plotGap) + F.plotW / 2; };
     const mfZoneCenter = (z) => map.myFarm.zoneX0 + z * map.myFarm.zoneW + map.myFarm.zoneW / 2;
     const mfCrop = (id) => map.myFarm.crops.find(c => c.id === id);
@@ -3686,22 +3756,16 @@ function launchGame(socket, roomId, mapData, continued) {
         sunG.fillStyle(0xffca28, 1); sunG.fillRect(4, 4, 64, 64); sunG.fillStyle(0xffee58, 1); sunG.fillRect(12, 12, 48, 48); sunG.fillStyle(0xfff9c4, 1); sunG.fillRect(16, 16, 12, 12);
         const sun = bakeGraphics(scene, sunG, 0, 0, 72, 72, -3.6);
         sun.forEach(pt => pt.setPosition(pt.x + 556, pt.y + 66));
-        const far = scene.add.graphics();
-        [[60, 60], [300, 110], [820, 50], [1080, 120], [1360, 70], [1700, 100], [1980, 56]].forEach(([cx, cy]) => {
-            far.fillStyle(0xffffff, 1); [[0, 2, 14, 3], [2, 0, 6, 2], [7, 1, 5, 1], [-2, 3, 18, 2]].forEach(([x, y, w, h]) => far.fillRect(cx + x * 6, cy + y * 6, w * 6, h * 6));
-            far.fillStyle(0xd6ecfa, 1); far.fillRect(cx - 12, cy + 30, 108, 6);
-        });
-        for (let x = 0; x < W; x += 8) {
-            const t1 = 430 - Math.round((Math.abs(Math.sin(x * 0.005)) * 80 + Math.abs(Math.sin(x * 0.013)) * 24) / 8) * 8;
-            far.fillStyle(0x7cb342, 1); far.fillRect(x, t1, 8, 570 - t1);
-            far.fillStyle(0x9ccc65, 1); far.fillRect(x, t1, 8, 4);
-            const t2 = 480 - Math.round((Math.abs(Math.sin(x * 0.009 + 2)) * 46) / 8) * 8;
-            far.fillStyle(0x558b2f, 1); far.fillRect(x, t2, 8, 570 - t2);
-            far.fillStyle(0x689f38, 1); far.fillRect(x, t2, 8, 4);
-        }
-        bakeGraphics(scene, far, 0, 40, W + 8, 532, -3.5);
+        // Bulutlar va tepaliklar (faslga qarab rangi: bahor - och yashil, yoz - yashil, kuz - sariq-qo'ng'ir, qish - qor)
+        const hills = mfDrawHills(scene, 'summer');
         // Yer (o't) - daryo qirg'og'igacha; undan keyin suv
-        scene.add.tileSprite(0, 570, F.riverX0, 30, 'px_mf_grass').setOrigin(0, 0).setDepth(1);
+        const grass = scene.add.tileSprite(0, 570, F.riverX0, 30, 'px_mf_grass').setOrigin(0, 0).setDepth(1);
+        // Qishda yer ustida qor qatlami
+        const snowGround = scene.add.tileSprite(0, 564, F.riverX0, 10, 'px_mf_snowground').setOrigin(0, 0).setDepth(1.01).setVisible(false);
+        // Fasl: osmon/tepaliklar ustida rang pardasi va yog'ayotgan narsalar (gulbarg / barg / qor)
+        const seasonTint = scene.add.rectangle(0, 0, 800, 600, 0xffffff, 0).setOrigin(0, 0).setScrollFactor(0).setDepth(-3.05);
+        const fall1 = scene.add.tileSprite(0, 0, 800, 600, 'px_fall_snow').setOrigin(0, 0).setScrollFactor(0).setDepth(4.35).setAlpha(0);
+        const fall2 = scene.add.tileSprite(0, 0, 800, 600, 'px_fall_snow').setOrigin(0, 0).setScrollFactor(0).setDepth(-2.95).setAlpha(0).setScale(0.75);
         const water = scene.add.tileSprite(F.riverX0, 566, W - F.riverX0, 34, 'px_mf_water').setOrigin(0, 0).setDepth(1.05);
         const water2 = scene.add.tileSprite(F.riverX0, 586, W - F.riverX0, 14, 'px_mf_water').setOrigin(0, 0).setDepth(1.06).setAlpha(0.6);
         scene.add.image(F.riverX0 - 4, 568, 'px_mf_bank').setOrigin(0, 0).setDepth(1.1);
@@ -3722,11 +3786,14 @@ function launchGame(socket, roomId, mapData, continued) {
         };
         const lanternGlow = scene.add.circle(310, 470, 40, 0xffe082, 0.25).setDepth(-0.44).setBlendMode(Phaser.BlendModes.ADD);
         // BOG': 3 ta mevali daraxt joyi (tuproq do'ngchasi, nihol / daraxt)
-        const orchard = F.orchardX.map((ox) => {
-            scene.add.image(ox, 573, 'px_mf_plot').setOrigin(0.5, 1).setDepth(1.2);
-            return { img: scene.add.image(ox, 566, 'px_or_sapling').setOrigin(0.5, 1).setDepth(-0.45).setVisible(false), key: '' };
+        const orchard = F.orchardX.map((ox, i) => {
+            const bed = scene.add.image(ox, 573, 'px_mf_plot').setOrigin(0.5, 1).setDepth(1.2);
+            // Yopiq joy: qulfli taxtacha "Lv N" (ferma darajasi oshganda ochiladi)
+            const lockSign = scene.add.image(ox, 500, 'px_mf_sign_lock').setOrigin(0.5, 0).setDepth(-0.46).setScale(0.62).setVisible(false);
+            const lockLabel = scene.add.text(ox, 511, '', { fontFamily: PIXEL_FONT, fontSize: '7px', color: '#ffe082', align: 'center' }).setOrigin(0.5).setDepth(-0.45).setVisible(false);
+            return { img: scene.add.image(ox, 566, 'px_or_sapling').setOrigin(0.5, 1).setDepth(-0.45).setVisible(false), key: '', bed, lockSign, lockLabel };
         });
-        const orSign = scene.add.image(F.orchardX[0] - 90, 476, 'px_mf_sign').setOrigin(0.5, 0).setDepth(-0.55);
+        const orSign = scene.add.image(F.orchardX[0] - 62, 476, 'px_mf_sign').setOrigin(0.5, 0).setDepth(-0.55);
         scene.add.text(orSign.x, 494, t('mf_orchard'), { fontFamily: PIXEL_FONT, fontSize: '9px', color: '#2b1a10' }).setOrigin(0.5).setDepth(-0.54);
         // BAXAYBAT DARAXT: barg toji (3 holat - qurigan, kuzgi, yashil), tana, yuz, shoxlar (platformalar)
         const T = F.tree;
@@ -3807,6 +3874,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const railImgs = bakeGraphics(scene, rail, F.riverX0, 520, F.dockX1 - F.riverX0 + 10, 50, 1.13);
         railImgs.forEach(pt => pt.setVisible(false));
         mfObj = { sun, zones, plots, dock, dockSign, dockLabel, fx, bobber, bite, hint, water, water2, rain1, rain2, gloom, rainA: 0, orchard, gt,
+            hills, grass, snowGround, seasonTint, fall1, fall2, season: null, seasonFirst: true,
             house, barn, board, orderElf, boardMark, decorObj, lanternGlow, railImgs, shownLevel: -1,
             // TANGALAR: ekran tepasida doim ko'rinadi (urug', daraxt, maydon sotib olishdan oldin)
             coinPanel: scene.add.graphics().setScrollFactor(0).setDepth(998),
@@ -3816,6 +3884,50 @@ function launchGame(socket, roomId, mapData, continued) {
         scene.events.on('update', () => updateMyFarm(scene));
         socket.emit('myFarmSync', roomId);
     }
+    const MF_HILLS = {
+        spring: [0x8bc34a, 0xc5e1a5, 0x689f38, 0x9ccc65, 0xf48fb1],
+        summer: [0x7cb342, 0x9ccc65, 0x558b2f, 0x689f38, 0],
+        autumn: [0xc68a2c, 0xe0b04a, 0x9a5b1e, 0xb8742a, 0xe64a19],
+        winter: [0xdfe9f0, 0xffffff, 0xc3d3de, 0xf2f7fa, 0]
+    };
+    function mfDrawHills(scene, season) {
+        const W = mapWidth, far = scene.add.graphics(), [c1, c1t, c2, c2t, dot] = MF_HILLS[season] || MF_HILLS.summer;
+        [[60, 60], [300, 110], [820, 50], [1080, 120], [1360, 70], [1700, 100], [1980, 56], [2500, 90], [3100, 64], [3700, 110], [4300, 70], [4900, 96]].forEach(([cx, cy]) => {
+            far.fillStyle(season === 'winter' ? 0xeceff1 : 0xffffff, 1); [[0, 2, 14, 3], [2, 0, 6, 2], [7, 1, 5, 1], [-2, 3, 18, 2]].forEach(([x, y, w, h]) => far.fillRect(cx + x * 6, cy + y * 6, w * 6, h * 6));
+            far.fillStyle(season === 'winter' ? 0xcfd8dc : 0xd6ecfa, 1); far.fillRect(cx - 12, cy + 30, 108, 6);
+        });
+        for (let x = 0; x < W; x += 8) {
+            const t1 = 430 - Math.round((Math.abs(Math.sin(x * 0.005)) * 80 + Math.abs(Math.sin(x * 0.013)) * 24) / 8) * 8;
+            far.fillStyle(c1, 1); far.fillRect(x, t1, 8, 570 - t1);
+            far.fillStyle(c1t, 1); far.fillRect(x, t1, 8, season === 'winter' ? 12 : 4);
+            const t2 = 480 - Math.round((Math.abs(Math.sin(x * 0.009 + 2)) * 46) / 8) * 8;
+            far.fillStyle(c2, 1); far.fillRect(x, t2, 8, 570 - t2);
+            far.fillStyle(c2t, 1); far.fillRect(x, t2, 8, season === 'winter' ? 10 : 4);
+            // bahorda gullar, kuzda qizil barglar - tepaliklarda nuqtalar
+            if (dot && (x / 8) % 5 === 2) { far.fillStyle(dot, 1); far.fillRect(x + 2, t1 + 12 + ((x / 8) % 3) * 10, 4, 4); far.fillRect(x + 4, t2 + 14, 4, 4); }
+        }
+        return bakeGraphics(scene, far, 0, 40, W + 8, 532, -3.5);
+    }
+    const SEASON_LOOK = {
+        spring: { tint: 0xff80ab, tintA: 0.06, grass: 0xd4ffb0, fall: 'px_fall_petal', fallA: 0.75, tree: null, water: null },
+        summer: { tint: 0xffffff, tintA: 0, grass: null, fall: null, fallA: 0, tree: null, water: null },
+        autumn: { tint: 0xff8f00, tintA: 0.1, grass: 0xffcc80, fall: 'px_fall_leaf', fallA: 0.85, tree: 0xff9e40, water: null },
+        winter: { tint: 0xe3f2fd, tintA: 0.28, grass: 0xcfd8dc, fall: 'px_fall_snow', fallA: 0.9, tree: 0xd6eaf8, water: 0xb3e5fc }
+    };
+    function mfApplySeason(scene, season) {
+        const O = mfObj, L = SEASON_LOOK[season] || SEASON_LOOK.summer;
+        O.hills.forEach(pt => pt.destroy());
+        O.hills = mfDrawHills(scene, season);
+        O.seasonTint.setFillStyle(L.tint, L.tintA);
+        if (L.grass) O.grass.setTint(L.grass); else O.grass.clearTint();
+        O.zones.forEach(z => z.weeds.forEach(w => (L.grass ? w.setTint(L.grass) : w.clearTint())));   // yopiq maydonlardagi o'tlar
+        O.snowGround.setVisible(season === 'winter');
+        if (L.fall) { O.fall1.setTexture(L.fall); O.fall2.setTexture(L.fall); }
+        O.fallA = L.fallA;
+        [O.water, O.water2].forEach(w => (L.water ? w.setTint(L.water) : w.clearTint()));
+        O.treeTint = L.tree;
+        O.season = season;
+    }
     function mfNow() { return Date.now() + mfOffset; }
     // Yomg'ir jadvali (serverdagi bilan bir xil formula): yomg'irli vaqt ikki marta hisoblanadi
     const mfRainSlot = (n, every) => ((Math.imul(n ^ 0x5bd1e995, 0x27d4eb2d) >>> 7) % every) === 0;
@@ -3823,10 +3935,14 @@ function launchGame(socket, roomId, mapData, continued) {
         const R = map.myFarm.rain, n = Math.floor(now / R.slotMs), off = now - n * R.slotMs;
         return mfRainSlot(n, R.every) && off >= R.offsetMs && off < R.offsetMs + R.durMs;
     }
+    const mfGrowth = () => (mfState && mfState.growth) || 1;
+    const mfWinter = () => !!mfState && mfState.season === 'winter';
     function mfGrowFrac(t, now, growMs, w) {
-        const el = now - t + (w ? map.myFarm.waterBoost * Math.max(0, now - w) : 0);   // sug'orilgan - 1.5x tez
+        const mult = mfGrowth();
+        const el = (now - t + (w ? map.myFarm.waterBoost * Math.max(0, now - w) : 0)) * mult;   // sug'orilgan - 1.5x tez; fasl tezligi
         if (el >= growMs) return 1;
         if (el <= 0) return 0;
+        if (mfWinter()) return Math.min(1, el / growMs);   // qishda qor - tezlatmaydi
         const R = map.myFarm.rain;
         let extra = 0;
         for (let n = Math.floor(t / R.slotMs); n <= Math.floor(now / R.slotMs); n++) {
@@ -3834,14 +3950,14 @@ function launchGame(socket, roomId, mapData, continued) {
             const a = Math.max(t, n * R.slotMs + R.offsetMs), b = Math.min(now, n * R.slotMs + R.offsetMs + R.durMs);
             if (b > a) extra += b - a;
         }
-        return Math.min(1, (el + extra) / growMs);
+        return Math.min(1, (el + extra * mult) / growMs);
     }
     function mfPlotInfo(p) {
         if (!p) return { stage: -1 };
         const c = mfCrop(p.c);
         if (!c) return { stage: -1 };
         const now = mfNow(), frac = mfGrowFrac(p.t, now, c.growMs, p.w);
-        const rate = (mfRaining(now) ? 2 : 1) + (p.w ? map.myFarm.waterBoost : 0);
+        const rate = ((mfRaining(now) && !mfWinter() ? 2 : 1) + (p.w ? map.myFarm.waterBoost : 0)) * mfGrowth();
         return { stage: frac >= 1 ? 2 : frac >= 0.45 ? 1 : 0, frac, left: Math.max(0, Math.ceil((1 - frac) * c.growMs / 1000 / rate)), crop: c };
     }
     // Bog' daraxti: 0 - nihol (ulg'aymoqda), 1 - daraxt (meva kutmoqda), 2 - mevasi bor
@@ -3860,7 +3976,9 @@ function launchGame(socket, roomId, mapData, continued) {
     function mfNearThing() {
         const f = mfFarm(), c = currentCharacter, F = map.myFarm;
         if (!f || !c) return null;
+        if (mfHouse) return { kind: 'house' };
         const x = c.x;
+        if (F.houseX !== undefined && Math.abs(x - F.houseX) <= 45 && c.y > 480) return { kind: 'house' };
         for (let k = 0; k < MF_ZONES * MF_PLOTS; k++) {
             if (Math.abs(x - mfPlotX(k)) > F.range) continue;
             const z = Math.floor(k / MF_PLOTS);
@@ -3868,7 +3986,10 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         for (let z = 1; z < MF_ZONES; z++) if (z > f.zones && Math.abs(x - mfZoneCenter(z)) <= F.zoneW / 2 - 10) return { kind: 'zone', z };
         if (Math.abs(x - F.boardX) <= 50) return { kind: 'board' };
-        for (let i = 0; i < F.orchardX.length; i++) if (Math.abs(x - F.orchardX[i]) <= 50) return { kind: 'orchard', i, tree: f.orchard[i] };
+        // Bog': eng yaqin joy (joylar bir-biriga yaqin)
+        let orI = -1;
+        for (let i = 0; i < F.orchardX.length; i++) if (Math.abs(x - F.orchardX[i]) <= 46 && (orI < 0 || Math.abs(x - F.orchardX[i]) < Math.abs(x - F.orchardX[orI]))) orI = i;
+        if (orI >= 0) return { kind: 'orchard', i: orI, tree: f.orchard[orI], locked: orI >= mfOrchardSlots(mfState && mfState.level) };
         if (Math.abs(x - F.tree.x) <= 120 && c.y > 480 && (f.tree.state === 'none' || f.tree.state === 'dry')) return { kind: 'tree' };
         if (!f.dock && Math.abs(x - F.riverX0) <= 70) return { kind: 'dock' };
         if (f.dock && Math.abs(x - (F.dockX1 - 30)) <= 50) return { kind: 'fish' };
@@ -3924,9 +4045,24 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         }
         // Yomg'ir (jadval bo'yicha - hamma bir vaqtda ko'radi)
+        const se = (mfState && mfState.season) || 'summer';
+        if (O.season !== se) {
+            mfApplySeason(scene, se);
+            if (!O.seasonFirst && typeof showTopToast === 'function') showTopToast(t('mf_season_changed').replace('{s}', t('mf_season_' + se)).replace('{g}', t('mf_growth_' + se)));
+            O.seasonFirst = false;
+        }
         const raining = mfRaining(mfNow());
         O.rainA += ((raining ? 1 : 0) - O.rainA) * 0.03;
-        O.rain1.setAlpha(O.rainA * 0.6); O.rain2.setAlpha(O.rainA * 0.35); O.gloom.setAlpha(O.rainA * 0.45);
+        const winter = se === 'winter';
+        // Qishda yog'in - qor: yomg'ir tomchilari o'rniga qalinroq qor
+        O.rain1.setAlpha(winter ? 0 : O.rainA * 0.6); O.rain2.setAlpha(winter ? 0 : O.rainA * 0.35); O.gloom.setAlpha(O.rainA * (winter ? 0.2 : 0.45));
+        const fa = (O.fallA || 0) + (winter ? O.rainA * 0.1 : 0);
+        O.fall1.setAlpha(fa); O.fall2.setAlpha(fa * (winter ? 0.55 + O.rainA * 0.4 : 0.45));
+        if (fa > 0.01) {
+            const sp = winter ? 1 + O.rainA * 1.5 : 1;
+            O.fall1.tilePositionY = -tNow / (se === 'winter' ? 26 : 34) * sp; O.fall1.tilePositionX = Math.sin(tNow / 1400) * 30 + tNow / 90;
+            O.fall2.tilePositionY = -tNow / 44 * sp; O.fall2.tilePositionX = -Math.sin(tNow / 1700) * 24 + tNow / 140;
+        }
         O.sun.forEach(pt => pt.setAlpha(1 - O.rainA));
         if (O.rainA > 0.01) { O.rain1.tilePositionY = -tNow / 2.2; O.rain1.tilePositionX = tNow / 9; O.rain2.tilePositionY = -tNow / 3.4; O.rain2.tilePositionX = tNow / 14; }
         if (mfLastRain !== null && raining !== mfLastRain && typeof showTopToast === 'function') showTopToast(t(raining ? 'mf_rain_start' : 'mf_rain_end'));
@@ -3943,7 +4079,8 @@ function launchGame(socket, roomId, mapData, continued) {
             const open = !!f && z <= zonesOpen;
             zo.sign.setTexture(open ? 'px_mf_sign' : 'px_mf_sign_lock');
             zo.label.setColor(open ? '#2b1a10' : '#ffe082');
-            zo.label.setText(!f ? (mfState.hostGuest ? t('mf_guest') : '...') : open ? (z === 0 ? mfState.hostNick : t('mf_field') + ' ' + (z + 1)) : t('mf_free') + '\n' + F.zonePrice);
+            zo.label.setText(!f ? (mfState.hostGuest ? t('mf_guest') : '...') : open ? (z === 0 ? mfState.hostNick : t('mf_field') + ' ' + (z + 1))
+                : ((mfState.level || 0) < ((F.zoneLevels || [])[z] || 0) ? t('mf_or_lock_sign').replace('{l}', F.zoneLevels[z]) : t('mf_free')) + '\n' + ((F.zonePrices || [])[z] || F.zonePrice));
             zo.weeds.forEach(w => w.setVisible(!open));
             zo.beds.forEach(b => b.setVisible(open));
         });
@@ -3978,7 +4115,8 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         updateOrchardAndTree(scene, f, tNow);
         if (f) {
-            const D = f.decor || {}, lv = mfState.level || 0;
+            const Off = f.decorOff || {}, D = {}, lv = mfState.level || 0;
+            Object.keys(f.decor || {}).forEach(k => { if (f.decor[k] && !Off[k]) D[k] = true; });   // yashikdagilari - tashqarida yo'q
             Object.keys(O.decorObj).forEach(k => O.decorObj[k].forEach(o => o.setVisible(!!D[k])));
             O.lanternGlow.setVisible(!!D.lantern).setAlpha(0.15 + 0.12 * Math.sin(tNow / 300) + O.rainA * 0.2);
             if (D.dog) O.decorObj.dog[1].setTexture(Math.floor(tNow / 260) % 2 ? 'px_mf_dog1' : 'px_mf_dog0');
@@ -4017,25 +4155,31 @@ function launchGame(socket, roomId, mapData, continued) {
             r.marker.x = r.X + r.pos * r.BW;
         }
         const near = currentCharacter && !currentCharacter.isDead ? mfNearThing() : null;
-        O.hint.setVisible(!!near && mfIsHost() && !mfPanel && !mfReel);
+        O.hint.setVisible(!!near && !mfHouse && (mfIsHost() || near.kind === 'house') && !mfPanel && !mfReel);
         if (near) O.hint.setPosition(near.kind === 'plot' ? mfPlotX(near.k) : near.kind === 'orchard' ? F.orchardX[near.i] : currentCharacter.x, (near.kind === 'orchard' ? 410 : 470) + Math.sin(tNow / 200) * 3);
-        if (mfPanel && (!near || near.kind !== mfPanel.kind || (near.kind === 'plot' && (near.k !== mfPanel.k || (mfPanel.care ? !near.plot : !!near.plot))) ||
-            (near.kind === 'orchard' && (near.i !== mfPanel.k || !!near.tree)))) closeMfPanel();
+        if (!mfHouse && mfPanel && (!near || near.kind !== mfPanel.kind || (near.kind === 'plot' && (near.k !== mfPanel.k || (mfPanel.care ? !near.plot : !!near.plot))) ||
+            (near.kind === 'orchard' && (near.i !== mfPanel.k || (mfPanel.cut ? !near.tree : !!near.tree))))) closeMfPanel();
+        if (mfHouse) updateMfHouse(scene, tNow);
     }
     function updateOrchardAndTree(scene, f, tNow) {
         const O = mfObj, F = map.myFarm, T = F.tree, G = O.gt;
-        // Bog'
+        // Bog' (ferma darajasi yetmagan joylar - qulfli)
+        const orOpen = mfOrchardSlots(mfState && mfState.level);
         O.orchard.forEach((o, i) => {
-            const inf = f ? mfOrchardInfo(f.orchard[i]) : null;
+            const locked = i >= orOpen;
+            o.lockSign.setVisible(locked); o.lockLabel.setVisible(locked); o.bed.setAlpha(locked ? 0.45 : 1);
+            if (locked) o.lockLabel.setText(t('mf_or_lock_sign').replace('{l}', i * 3 - 6));
+            const inf = f && !locked ? mfOrchardInfo(f.orchard[i]) : null;
             if (!inf) { o.img.setVisible(false); o.key = ''; return; }
             const key = inf.stage === 0 ? 'px_or_sapling' : 'px_or_' + inf.d.id + '_' + (inf.stage === 2 ? 1 : 0);
             if (o.key !== key) { o.img.setTexture(key); o.key = key; }
             o.img.setVisible(true).setScale(inf.stage === 0 ? 0.8 + 0.2 * (1 - inf.left * 1000 / inf.d.matureMs) : 1);
+            if (O.treeTint) o.img.setTint(O.treeTint); else o.img.clearTint();
             if (inf.stage === 2 && Math.floor(tNow / 400 + i) % 2) { O.fx.fillStyle(0xfff176, 1); O.fx.fillRect(F.orchardX[i] + 30, 440, 2, 10); O.fx.fillRect(F.orchardX[i] + 26, 444, 10, 2); }
         });
         // Baxaybat daraxt
         const st = f ? f.tree.state : 'none', boss = st === 'boss';
-        Object.keys(G.canopies).forEach(k => G.canopies[k].forEach(pt => pt.setVisible(k === (st === 'boss' ? 'grow' : st))));
+        Object.keys(G.canopies).forEach(k => G.canopies[k].forEach(pt => { pt.setVisible(k === (st === 'boss' ? 'grow' : st)); if (O.treeTint && k === 'grow') pt.setTint(O.treeTint); else pt.clearTint(); }));
         G.face0.setVisible(!boss); G.face1.setVisible(boss);
         const bw = mfWorldState && mfWorldState.boss;
         if (boss) { G.face1.setTint(bw && bw.f ? 0xff8a80 : 0xffffff); G.trunk.setTint(bw && bw.f ? 0xff8a80 : 0xffffff); G.face1.y = 340 + Math.sin(tNow / 120) * 2; }
@@ -4067,6 +4211,34 @@ function launchGame(socket, roomId, mapData, continued) {
             fx.fillStyle(0xe53935, 1); fx.fillRect(sh.x - 19, 519, Math.round(38 * sh.hp / sh.maxHp), 4);
         });
         Object.keys(G.shrooms).forEach((id) => { if (!seen.has(id)) { G.shrooms[id].destroy(); delete G.shrooms[id]; } });
+        // MAXLUQLAR HUJUMI: shilimshiqlar (sakraydi) va zombi sabzavotlar (yuradi)
+        if (!G.mobs) G.mobs = {};
+        const seenM = new Set();
+        ((W && W.mobs) || []).forEach((m) => {
+            seenM.add(m.id);
+            let o = G.mobs[m.id];
+            const big = m.k === 'slime';
+            if (!o) {
+                o = G.mobs[m.id] = scene.add.image(m.x, m.y, m.k === 'zveg' ? 'px_zveg_' + m.v + '_0' : 'px_mf_slime0').setOrigin(0.5, 1).setDepth(1.46);
+                if (m.k === 'slimelet') o.setScale(0.45).setTint([0x9ccc65, 0x4dd0e1, 0xba68c8][m.v % 3]);
+                o.mk = m.k;
+            }
+            o.x += (m.x - o.x) * 0.5; o.y += (m.y - o.y) * 0.5;
+            if (m.k === 'zveg') {
+                o.setTexture('px_zveg_' + m.v + '_' + (Math.floor(tNow / 180 + m.v) % 2 ? 1 : 2 * 0));
+                o.setFlipX(m.face < 0);
+            } else {
+                // Shilimshiq: havoda - cho'zilgan, yerda - "nafas oladi" (yassilanib-cho'ziladi)
+                o.setTexture(m.air ? 'px_mf_slime0' : (Math.floor(tNow / 300 + m.v) % 2 ? 'px_mf_slime1' : 'px_mf_slime0'));
+                const base = big ? 1 : 0.45, wob = m.air ? 0.1 : Math.sin(tNow / 160 + m.v) * 0.05;
+                o.setScale(base * (1 - wob), base * (1 + wob)).setFlipX(m.face > 0);
+            }
+            if (m.f) o.setTintFill(0xffffff); else if (m.k === 'slimelet') o.setTint([0x9ccc65, 0x4dd0e1, 0xba68c8][m.v % 3]); else o.clearTint();
+            const bw = big ? 90 : 34, top = o.y - o.displayHeight - 12;
+            fx.fillStyle(0x0a0a0a, 1); fx.fillRect(o.x - bw / 2 - 1, top - 1, bw + 2, 6);
+            fx.fillStyle(big ? 0x76ff03 : 0xe53935, 1); fx.fillRect(o.x - bw / 2, top, Math.round(bw * m.hp / m.maxHp), 4);
+        });
+        Object.keys(G.mobs).forEach((id) => { if (!seenM.has(id)) { G.mobs[id].destroy(); delete G.mobs[id]; } });
         const B = W && W.boss;
         const seenA = new Set();
         ((B && B.apples) || []).forEach((a) => {
@@ -4108,6 +4280,8 @@ function launchGame(socket, roomId, mapData, continued) {
     function mfToast(key, rep) { if (typeof showTopToast === 'function') { let s = t(key); Object.keys(rep || {}).forEach(k => { s = s.split('{' + k + '}').join(rep[k]); }); showTopToast(s); } }
     function mfInteract(near) {
         if (mfReel) { mfStopReel(true); return; }
+        // FERMER UYI: hamma kira oladi (tomosha), jihozlarni faqat host o'zgartiradi
+        if (near.kind === 'house') { if (mfHouse) mfHouseInteract(); else mfEnterHouse(); return; }
         if (!mfIsHost()) { mfToast('mf_host_only'); return; }
         if (mfState.hostGuest) { mfToast('farm_need_account'); return; }
         const f = mfFarm(), F = map.myFarm;
@@ -4119,10 +4293,11 @@ function launchGame(socket, roomId, mapData, continued) {
         } else if (near.kind === 'board') {
             socket.emit('farmAct', { roomId, action: 'orders' });
         } else if (near.kind === 'orchard') {
+            if (near.locked) { mfToast('mf_or_locked_n', { l: near.i * 3 - 6 }); return; }
             const inf = mfOrchardInfo(near.tree);
             if (!inf) { openOrchardPanel(near.i); return; }
             if (inf.stage === 2) { socket.emit('farmAct', { roomId, action: 'orchard', k: near.i }); return; }
-            mfToast(inf.stage === 0 ? 'mf_or_growing' : 'mf_or_fruit_in', { c: t('crop_' + inf.d.id), s: inf.left });
+            openOrchardTreePanel(near.i, inf);   // o'sayotgan daraxt: holati va kesish
         } else if (near.kind === 'tree') {
             if (document.getElementById('px-dialog')) return;
             if (f.tree.state === 'none') pxConfirm(t('mf_tree_buy_q').replace('{p}', F.tree.price), () => socket.emit('farmAct', { roomId, action: 'tree' }));
@@ -4132,8 +4307,10 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         } else if (near.kind === 'zone') {
             if (near.z > f.zones + 1) { mfToast('mf_zone_order'); return; }
+            const zl = (F.zoneLevels || [])[near.z] || 0, zp = (F.zonePrices || [])[near.z] || F.zonePrice;
+            if ((mfState.level || 0) < zl) { mfToast('mf_zone_level_n', { l: zl }); return; }
             if (document.getElementById('px-dialog')) return;
-            pxConfirm(t('mf_buy_zone_q').replace('{p}', F.zonePrice), () => socket.emit('farmAct', { roomId, action: 'zone', k: near.z }));
+            pxConfirm(t('mf_buy_zone_q').replace('{p}', zp), () => socket.emit('farmAct', { roomId, action: 'zone', k: near.z }));
         } else if (near.kind === 'dock') {
             if (document.getElementById('px-dialog')) return;
             pxConfirm(t('mf_buy_dock_q').replace('{p}', F.dockPrice), () => socket.emit('farmAct', { roomId, action: 'dock' }));
@@ -4232,6 +4409,197 @@ function launchGame(socket, roomId, mapData, continued) {
         if (!el) return;
         el.querySelectorAll('.shop-buy').forEach((b) => { b.onclick = () => { el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; }); socket.emit('farmAct', { roomId, action: 'orchard', k: i, arg: b.dataset.tree }); }; });
     }
+    // O'sayotgan / meva kutayotgan daraxt: holati va KESISH (joy bo'shaydi, yangi ko'chat ekish mumkin)
+    function openOrchardTreePanel(i, inf) {
+        const A = window.FarmArt;
+        const desc = t(inf.stage === 0 ? 'mf_or_growing' : 'mf_or_fruit_in').replace('{c}', t('crop_' + inf.d.id)).replace('{s}', inf.left);
+        const el = mfPanelEl('orchard', i, t('crop_' + inf.d.id), `<div class="shop-card mf-card"><img class="mf-icon" src="${A.cropIcon(inf.d.id)}" alt="">
+            <div class="shop-name">${t('crop_' + inf.d.id)}</div><div class="shop-desc">${desc}<br><br>${t('mf_or_cut_desc')}</div>
+            <button class="shop-buy" data-act="cut"><i class="fa-solid fa-tree"></i> ${t('mf_or_cut')}</button></div>`);
+        if (!el) return;
+        mfPanel.cut = true;
+        el.querySelector('.shop-buy').onclick = () => {
+            if (document.getElementById('px-dialog')) return;
+            pxConfirm(t('mf_or_cut_q').replace('{c}', t('crop_' + inf.d.id)), () => socket.emit('farmAct', { roomId, action: 'orchardCut', k: i }));
+        };
+    }
+
+    // ===== FERMER UYI: ichkari (ekran ustida), qahramon yuradi, jihozlar joylariga qo'yiladi; yashik - ombor =====
+    const HOME_FLOOR_Y = 478;
+    const homeSlotY = (s) => s.type === 'wall' ? 250 : s.type === 'ceil' ? 50 : s.type === 'rug' ? HOME_FLOOR_Y + 2 : HOME_FLOOR_Y;
+    function mfEnterHouse() {
+        const scene = currentCharacter && currentCharacter.scene;
+        if (!scene || mfHouse || !mfFarm()) return;
+        closeMfPanel();
+        const D = 1700, objs = [];
+        const add = (o) => { objs.push(o); return o.setScrollFactor(0); };
+        // Devor (gulqog'oz), shift to'sini, pol taxtalari, chapda eshik, deraza
+        const g = add(scene.add.graphics().setDepth(D));
+        g.fillStyle(0x0a0a0a, 1); g.fillRect(0, 0, 800, 600);
+        for (let x = 0; x < 800; x += 16) { g.fillStyle((x / 16) % 2 ? 0xd7b98e : 0xcfae80, 1); g.fillRect(x, 48, 16, HOME_FLOOR_Y - 48); }
+        for (let y = 90; y < HOME_FLOOR_Y; y += 48) for (let x = 8; x < 800; x += 32) { g.fillStyle(0xb8935f, 1); g.fillRect(x + ((y / 48) % 2) * 16, y, 4, 4); }
+        g.fillStyle(0x5d4037, 1); g.fillRect(0, 36, 800, 16); g.fillStyle(0x795548, 1); g.fillRect(0, 36, 800, 4);
+        g.fillStyle(0x6d4c41, 1); g.fillRect(0, HOME_FLOOR_Y - 14, 800, 14); g.fillStyle(0x8d6e63, 1); g.fillRect(0, HOME_FLOOR_Y - 14, 800, 3);
+        for (let y = HOME_FLOOR_Y; y < 600; y += 14) for (let x = -((y / 14) % 3) * 40; x < 800; x += 120) {
+            g.fillStyle(((x + y) / 14) % 2 ? 0x8d6e63 : 0x7b5b4f, 1); g.fillRect(x, y, 118, 12); g.fillStyle(0x4e342e, 1); g.fillRect(x + 118, y, 2, 14); g.fillRect(x, y + 12, 120, 2);
+        }
+        // eshik
+        g.fillStyle(0x0a0a0a, 1); g.fillRect(24, HOME_FLOOR_Y - 150, 76, 150);
+        g.fillStyle(0x6d4c41, 1); g.fillRect(28, HOME_FLOOR_Y - 146, 68, 146);
+        g.fillStyle(0x8d6e63, 1); for (let y = HOME_FLOOR_Y - 140; y < HOME_FLOOR_Y; y += 20) g.fillRect(32, y, 60, 14);
+        g.fillStyle(0xffca28, 1); g.fillRect(84, HOME_FLOOR_Y - 76, 6, 6);
+        const title = add(scene.add.text(400, 18, t('house_title'), { fontFamily: PIXEL_FONT, fontSize: '12px', color: '#ffe082', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(D + 5));
+        const doorTxt = add(scene.add.text(62, HOME_FLOOR_Y - 166, t('house_exit'), { fontFamily: PIXEL_FONT, fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(D + 5));
+        // Joylar: belgisi (bo'sh - punktir ramka) va jihoz rasmi
+        const slots = (map.myFarm.homeSlots || []).map((sl) => {
+            const y = homeSlotY(sl);
+            const mark = add(scene.add.graphics().setDepth(D + 1));
+            const img = add(scene.add.image(sl.x, y, 'px_home_chest').setDepth(sl.type === 'rug' ? D + 0.5 : D + 2).setVisible(false));
+            if (sl.type === 'floor') img.setOrigin(0.5, 1); else if (sl.type === 'ceil') img.setOrigin(0.5, 0); else if (sl.type === 'rug') img.setOrigin(0.5, 0.5); else img.setOrigin(0.5);
+            return { sl, y, mark, img, item: null };
+        });
+        const glow = add(scene.add.circle(0, 0, 70, 0xffe082, 0.18).setDepth(D + 1.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
+        const fireGlow = add(scene.add.circle(0, 0, 80, 0xff9800, 0.16).setDepth(D + 1.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
+        const puppet = add(scene.add.image(120, HOME_FLOOR_Y, currentCharacter.texture.key).setOrigin(0.5, 1).setDepth(D + 3));
+        const sel = add(scene.add.graphics().setDepth(D + 4));
+        const hint = add(scene.add.text(0, 0, '[E]', { fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(D + 6));
+        const help = add(scene.add.text(400, 584, t('house_help'), { fontFamily: PIXEL_FONT, fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(D + 6));
+        mfHouse = { objs, slots, puppet, sel, hint, glow, fireGlow, title, doorTxt, help, x: 120, cand: [], pick: 0, upWas: false, downWas: false };
+        if (currentCharacter.body) currentCharacter.setVelocity(0, 0);
+        sfx('thud', 0.6);
+    }
+    function mfExitHouse() {
+        if (!mfHouse) return;
+        closeMfPanel();
+        mfHouse.objs.forEach(o => o && o.destroy());
+        mfHouse = null;
+        sfx('thud', 0.6);
+    }
+    window.mfHouseExit = () => { if (!mfHouse) return false; mfExitHouse(); return true; };
+    // Har kadr: qahramon (qo'g'irchoq) yuradi, eng yaqin joy tanlanadi (yuqori/past - yonma-yon joylar orasida)
+    function updateMfHouse(scene, tNow) {
+        const H = mfHouse, f = mfFarm();
+        if (!f || !currentCharacter || currentCharacter.isDead || (mfState && mfState.boss)) { mfExitHouse(); return; }
+        const kb = scene.input.keyboard;
+        const left = cursors.left.isDown || kb.addKey('A').isDown || touchState.left, right = cursors.right.isDown || kb.addKey('D').isDown || touchState.right;
+        const dt = Math.min(0.05, scene.game.loop.delta / 1000);
+        if (!mfPanel && !document.getElementById('px-dialog')) {
+            if (left) { H.x -= 230 * dt; H.puppet.setFlipX(true); } else if (right) { H.x += 230 * dt; H.puppet.setFlipX(false); }
+        }
+        H.x = Math.max(70, Math.min(770, H.x));
+        H.puppet.x = Math.round(H.x);
+        H.puppet.y = HOME_FLOOR_Y + ((left || right) && !mfPanel ? -Math.abs(Math.sin(tNow / 90)) * 3 : 0);
+        // Jihozlar
+        const place = (f.home && f.home.place) || {}, host = mfIsHost();
+        let lampOn = null, fireOn = null;
+        H.slots.forEach((s) => {
+            const it = place[s.sl.id] || null;
+            if (it !== s.item) { s.item = it; if (it) s.img.setTexture('px_home_' + it); }
+            s.img.setVisible(!!it);
+            s.mark.clear();
+            if (!it && host) {
+                const w = s.sl.type === 'rug' ? 120 : s.sl.type === 'floor' ? 56 : 46, h = s.sl.type === 'rug' ? 10 : s.sl.type === 'floor' ? 56 : 40;
+                const x0 = s.sl.x - w / 2, y0 = s.sl.type === 'floor' ? s.y - h : s.sl.type === 'ceil' ? s.y : s.y - h / 2;
+                s.mark.fillStyle(0xffffff, 0.35);
+                for (let x = x0; x < x0 + w; x += 8) { s.mark.fillRect(x, y0, 4, 2); s.mark.fillRect(x, y0 + h - 2, 4, 2); }
+                for (let y = y0; y < y0 + h; y += 8) { s.mark.fillRect(x0, y, 2, 4); s.mark.fillRect(x0 + w - 2, y, 2, 4); }
+            }
+            if (it === 'lamp') lampOn = s; if (it === 'fireplace') fireOn = s;
+        });
+        H.glow.setVisible(!!lampOn); if (lampOn) H.glow.setPosition(lampOn.sl.x, 150).setAlpha(0.14 + 0.05 * Math.sin(tNow / 400));
+        H.fireGlow.setVisible(!!fireOn); if (fireOn) H.fireGlow.setPosition(fireOn.sl.x, HOME_FLOOR_Y - 30).setAlpha(0.12 + 0.08 * Math.abs(Math.sin(tNow / 130)));
+        // Tanlash: eshik yonida - chiqish; aks holda yaqin joylar (yuqori/past bilan almashtiriladi)
+        const up = cursors.up.isDown || kb.addKey('W').isDown, down = cursors.down.isDown || kb.addKey('S').isDown;
+        H.cand = H.x < 110 ? [] : H.slots.filter(s => Math.abs(s.sl.x - H.x) <= 64 && (host || s.item)).sort((a, b) => Math.abs(a.sl.x - H.x) - Math.abs(b.sl.x - H.x));
+        if (up && !H.upWas && H.cand.length) H.pick = (H.pick + 1) % H.cand.length;
+        if (down && !H.downWas && H.cand.length) H.pick = (H.pick - 1 + H.cand.length) % H.cand.length;
+        H.upWas = up; H.downWas = down;
+        if (H.pick >= H.cand.length) H.pick = 0;
+        H.sel.clear();
+        const cur = H.cand[H.pick];
+        if (H.x < 110) { H.hint.setPosition(62, HOME_FLOOR_Y - 186 + Math.sin(tNow / 200) * 3).setVisible(!mfPanel); }
+        else if (cur) {
+            const b = cur.item ? cur.img.getBounds() : null;
+            const w = b ? b.width + 8 : (cur.sl.type === 'rug' ? 128 : 64), h = b ? b.height + 8 : (cur.sl.type === 'rug' ? 18 : cur.sl.type === 'floor' ? 64 : 48);
+            const x0 = b ? b.x - 4 : cur.sl.x - w / 2, y0 = b ? b.y - 4 : (cur.sl.type === 'floor' ? cur.y - h + 4 : cur.sl.type === 'ceil' ? cur.y - 4 : cur.y - h / 2);
+            H.sel.lineStyle(2, 0xffeb3b, 0.6 + 0.4 * Math.abs(Math.sin(tNow / 250))); H.sel.strokeRect(x0, y0, w, h);
+            H.hint.setPosition(cur.sl.x, Math.max(16, y0 - 14) + Math.sin(tNow / 200) * 3).setVisible(!mfPanel);
+        } else H.hint.setVisible(false);
+    }
+    function mfHouseInteract() {
+        const H = mfHouse, f = mfFarm();
+        if (!H || !f || mfPanel) return;
+        if (H.x < 110) { mfExitHouse(); return; }
+        const cur = H.cand[H.pick];
+        if (!cur) return;
+        if (cur.item === 'chest') { openChestPanel(); return; }
+        if (!mfIsHost()) return;
+        openHomeSlotPanel(cur);
+    }
+    function homeItemCard(id, btn, act, extra) {
+        const A = window.FarmArt;
+        return `<div class="shop-card mf-card"><img class="mf-icon" src="${A.homeIcon(id)}" alt="" style="height:auto;max-width:96px">
+            <div class="shop-name">${t('home_' + id)}</div><div class="shop-desc">${extra || t('home_' + id + '_desc')}</div>
+            <button class="shop-buy" data-act="${act}" data-item="${id}">${btn}</button></div>`;
+    }
+    // Joy: bo'sh bo'lsa - shu joyga mos (sotib olingan) jihozlar; band bo'lsa - olib qo'yish
+    function openHomeSlotPanel(cur) {
+        const f = mfFarm(), place = f.home.place || {}, owned = f.home.owned || {};
+        const items = (map.myFarm.homeItems || []).filter(h => h.slot === cur.sl.type && owned[h.id]);
+        let body;
+        if (cur.item) body = homeItemCard(cur.item, t('home_remove'), 'remove');
+        else body = items.length ? items.map(h => {
+            const where = Object.keys(place).find(k => place[k] === h.id);
+            return homeItemCard(h.id, where ? t('home_move_here') : t('home_place'), 'place', where ? t('home_placed_elsewhere') : '');
+        }).join('') : `<div class="shop-desc" style="flex:1 1 100%">${t('home_none_owned').replace('{s}', t('home_slot_' + cur.sl.type))}</div>`;
+        const el = mfPanelEl('home', 0, t(cur.item ? 'home_' + cur.item : 'home_slot_' + cur.sl.type), body);
+        if (!el) return;
+        el.querySelectorAll('.shop-buy').forEach((b) => { b.onclick = () => {
+            el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; });
+            socket.emit('farmAct', { roomId, action: 'home', arg: { slot: cur.sl.id, item: b.dataset.act === 'remove' ? null : b.dataset.item } });
+        }; });
+    }
+    // YASHIK: inventar <-> yashik, tashqi bezaklarni yashikka olish / qaytarish
+    function openChestPanel() {
+        const f = mfFarm(), host = mfIsHost(), A = window.FarmArt;
+        if (!f) return;
+        const ch = f.chest || { bag: {}, fishKinds: {}, n: 0 };
+        const row = (key, n, dir) => `<div class="mf-ord-row chest-row"><img class="mf-chip-ic" src="${mfItemIcon(key)}" alt=""><span>${mfItemName(key)}</span><b>${n}</b>
+            ${host ? `<button class="shop-buy chest-btn" data-dir="${dir}" data-key="${key}" data-n="1">${t(dir === 'put' ? 'chest_put1' : 'chest_take1')}</button>
+            <button class="shop-buy chest-btn" data-dir="${dir}" data-key="${key}" data-n="${n}">${t(dir === 'put' ? 'chest_put_all' : 'chest_take_all')}</button>` : ''}</div>`;
+        const list = (bag, kinds, dir) => {
+            const rows = Object.keys(bag || {}).filter(k => bag[k] > 0).map(k => row(k, bag[k], dir))
+                .concat(Object.keys(kinds || {}).filter(k => kinds[k] > 0).map(k => row('fish:' + k, kinds[k], dir)));
+            return rows.length ? rows.join('') : `<div class="shop-desc">${t(dir === 'put' ? 'chest_bag_empty' : 'chest_empty')}</div>`;
+        };
+        const decor = Object.keys(f.decor || {}).filter(k => f.decor[k]).map(id => {
+            const stored = !!(f.decorOff || {})[id];
+            return `<div class="mf-ord-row chest-row"><img class="mf-chip-ic" src="${A.icon(id)}" alt=""><span>${t('decor_' + id)}</span><b>${t(stored ? 'decor_in_chest' : 'decor_outside')}</b>
+                ${host ? `<button class="shop-buy chest-dec" data-id="${id}" data-stored="${stored ? 0 : 1}">${t(stored ? 'decor_put_out' : 'decor_store')}</button>` : ''}</div>`;
+        }).join('') || `<div class="shop-desc">${t('chest_no_decor')}</div>`;
+        const body = `<div class="chest-col"><div class="shop-sec">${t('chest_bag')}</div>${list(f.bag, f.fishKinds, 'put')}</div>
+            <div class="chest-col"><div class="shop-sec">${t('chest_inside').replace('{n}', ch.n || 0).replace('{c}', map.myFarm.chestCap || 300)}</div>${list(ch.bag, ch.fishKinds, 'take')}</div>
+            <div class="chest-col chest-wide"><div class="shop-sec">${t('chest_decor')}</div>${decor}</div>`;
+        const el = mfPanelEl('chest', 0, t('home_chest'), body);
+        if (!el) return;
+        el.classList.add('chest-panel');
+        el.querySelectorAll('.chest-btn').forEach((b) => { b.onclick = () => {
+            el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; });
+            socket.emit('farmAct', { roomId, action: 'chest', arg: { dir: b.dataset.dir, key: b.dataset.key, n: Number(b.dataset.n) } });
+        }; });
+        el.querySelectorAll('.chest-dec').forEach((b) => { b.onclick = () => {
+            el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; });
+            socket.emit('farmAct', { roomId, action: 'decorStore', arg: { id: b.dataset.id, stored: b.dataset.stored === '1' } });
+        }; });
+        // Yashikni olib qo'yish (bo'sh bo'lsa) - joy menyusi orqali
+        if (host) {
+            const box = el.querySelector('.shop-box');
+            const rm = document.createElement('button');
+            rm.className = 'shop-close chest-remove'; rm.textContent = t('home_remove_chest');
+            rm.onclick = () => { const cur = mfHouse && mfHouse.cand[mfHouse.pick]; if (cur && cur.item === 'chest') socket.emit('farmAct', { roomId, action: 'home', arg: { slot: cur.sl.id, item: null } }); };
+            box.insertBefore(rm, box.querySelector('.shop-close'));
+        }
+    }
     function openToolPanel() {
         if (!phaserGame) return;
         const tex = phaserGame.textures;
@@ -4256,6 +4624,9 @@ function launchGame(socket, roomId, mapData, continued) {
             if (d.action === 'plant') { closeMfPanel(); sfx('coin'); return; }
             if (d.action === 'harvest') { sfx(d.golden ? 'win' : 'pop'); mfToast(d.golden ? 'mf_harvest_golden' : d.n > 1 ? 'mf_harvested_n' : 'mf_harvested', { c: t('crop_' + d.crop), n: d.n }); return; }
             if (d.action === 'water' || d.action === 'fert') { closeMfPanel(); sfx(d.action === 'water' ? 'drip' : 'pop'); return; }
+            if (d.action === 'orchardCut') { closeMfPanel(); sfx('thud'); mfToast('mf_or_cut_done'); return; }
+            if (d.action === 'home') { closeMfPanel(); sfx(d.item ? 'pop' : 'whoosh'); return; }
+            if (d.action === 'chest' || d.action === 'decorStore') { sfx('pop'); if (mfPanel) mfPanel.reopenChest = true; return; }
             if (d.action === 'orchard') { closeMfPanel(); if (d.planted) { sfx('coin'); mfToast('mf_or_planted', { c: t('crop_' + d.planted) }); } else { sfx('pop'); mfToast('mf_harvested_n', { c: t('crop_' + d.crop), n: d.n }); } return; }
             if (d.action === 'tree') { sfx('win'); mfToast(d.tree === 'bought' ? 'mf_tree_bought' : 'mf_tree_watered'); return; }
             if (d.action === 'pick') { sfx('coin', 0.6); return; }
@@ -4276,8 +4647,8 @@ function launchGame(socket, roomId, mapData, continued) {
         if (d.action === 'pick' && d.message !== 'inv_full') return;   // olma allaqachon terilgan - jim
         if (d.message === 'inv_full') { mfToast('inv_full', { c: d.cap }); return; }
         const msg = mfPanel && mfPanel.el.querySelector('#mf-msg');
-        if (msg) { msg.textContent = t(d.message || 'err_server'); mfPanel.el.querySelectorAll('.shop-buy').forEach(x => { if (!x.closest('.mf-locked')) x.disabled = false; }); }
-        else mfToast(d.message || 'err_server');
+        if (msg) { msg.textContent = tMsg(d.message || 'err_server'); mfPanel.el.querySelectorAll('.shop-buy').forEach(x => { if (!x.closest('.mf-locked')) x.disabled = false; }); }
+        else if (typeof showTopToast === 'function') showTopToast(tMsg(d.message || 'err_server'));
     }
     // Setka: hostdan suvga uchib boradi va baliqlar bilan qaytadi (hammaga ko'rinadi)
     function mfNetFx(scene, fish) {
@@ -4297,13 +4668,17 @@ function launchGame(socket, roomId, mapData, continued) {
     // HUD: yonidagi narsa holati, aks holda savat
     function mfHudText() {
         if (!mfState) return t('hud_mf');
-        const rainTag = mfRaining(mfNow()) ? ' ' + t('mf_rain_tag') : '';
+        const rainTag = mfRaining(mfNow()) ? ' ' + t(mfWinter() ? 'mf_snow_tag' : 'mf_rain_tag') : '';
         if (mfReel) return t('hud_mf_reel');
+        if (mfHouse) return t('hud_house_in');
         if (!mfIsHost()) return t('hud_mf_watch').replace('{h}', mfState.hostNick) + rainTag;
         if (mfState.hostGuest) return t('farm_need_account');
         const f = mfFarm(), F = map.myFarm;
         if (!f) return '...';
         const near = currentCharacter && !currentCharacter.isDead ? mfNearThing() : null;
+        if (mfHouse) return t('hud_house_in');
+        if (near && near.kind === 'house') return t('hud_mf_house');
+        if (near && near.kind === 'orchard' && near.locked) return t('mf_or_locked_n').replace('{l}', near.i * 3 - 6);
         if (near && near.kind === 'plot') {
             const inf = mfPlotInfo(near.plot);
             if (inf.stage < 0) return t('hud_mf_plant') + rainTag;
@@ -4311,8 +4686,10 @@ function launchGame(socket, roomId, mapData, continued) {
             return t('hud_mf_grow').replace('{c}', t('crop_' + inf.crop.id)).replace('{s}', inf.left) + rainTag;
         }
         if (mfState.boss) return t('hud_mf_boss');
+        if (mfWorldState && mfWorldState.mobs && mfWorldState.mobs.length) return t('hud_mf_raid').replace('{n}', mfWorldState.mobs.length);
         if (mfWorldState && mfWorldState.shrooms && mfWorldState.shrooms.length) return t('hud_mf_shrooms').replace('{n}', mfWorldState.shrooms.length);
-        if (near && near.kind === 'zone') return t('hud_mf_zone').replace('{p}', F.zonePrice);
+        if (near && near.kind === 'zone') return (mfState.level || 0) < ((F.zoneLevels || [])[near.z] || 0) ? t('mf_zone_level_n').replace('{l}', F.zoneLevels[near.z])
+            : t('hud_mf_zone').replace('{p}', (F.zonePrices || [])[near.z] || F.zonePrice);
         if (near && near.kind === 'orchard') {
             const inf = mfOrchardInfo(near.tree);
             return !inf ? t('hud_mf_or_plant') : inf.stage === 2 ? t('hud_mf_ripe').replace('{c}', t('crop_' + inf.d.id)) : t(inf.stage === 0 ? 'mf_or_growing' : 'mf_or_fruit_in').replace('{c}', t('crop_' + inf.d.id)).replace('{s}', inf.left);
@@ -4323,7 +4700,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (near && near.kind === 'dock') return t('hud_mf_dock').replace('{p}', F.dockPrice);
         if (near && near.kind === 'fish') return mfState.fishing ? t('hud_mf_wait_fish') : (f.rod || f.net) ? t('hud_mf_cast') : t('mf_need_tools');
         const n = Object.values(f.bag || {}).reduce((a, x) => a + x, 0);
-        const lvTag = t('mf_level_tag').replace('{l}', mfState.level || 0).replace('{u}', n + f.fishN).replace('{c}', mfState.cap || 0) + ' ';
+        const lvTag = '[' + t('mf_season_' + (mfState.season || 'summer')) + '] ' + t('mf_level_tag').replace('{l}', mfState.level || 0).replace('{u}', n + f.fishN).replace('{c}', mfState.cap || 0) + ' ';
         return lvTag + (n || f.fishN ? t('hud_mf_bag2').replace('{n}', n).replace('{f}', f.fishN) : t('hud_mf')) + rainTag;
     }
 
@@ -6831,6 +7208,22 @@ function launchGame(socket, roomId, mapData, continued) {
         const cy = o.disp + 24;
         o.sprite.setPosition(L.x + L.w / 2, cy);
         o.sprite.body.reset(L.x + L.w / 2, cy);
+        // PLATFORMADA TURISH (qo'lda): platforma ko'tarilganda (yoki kadr tezligi past bo'lsa) Phaser to'qnashuvi
+        // tanani "sakrab" o'tkazib yuborardi - o'yinchilar platformadan o'tib, jarlikka tushib ketardi
+        if (shown && currentCharacter && currentCharacter.body && !currentCharacter.isDead) {
+            const hb = currentCharacter.body, pb = o.sprite.body, top = pb.top;
+            const prevTop = o.prevTop == null ? top : o.prevTop;
+            const prevBottom = currentCharacter.prevLiftBottom == null ? hb.bottom : currentCharacter.prevLiftBottom;
+            if (hb.velocity.y >= 0 && hb.right > pb.left + 4 && hb.left < pb.right - 4
+                && prevBottom <= prevTop + 8 && hb.bottom >= top - 1 && hb.bottom <= top + 60) {
+                const dy = top - hb.bottom;
+                currentCharacter.y += dy; hb.y += dy;
+                hb.velocity.y = 0;
+                stoneGroundAt = scene.time.now;
+            }
+            o.prevTop = top;
+            currentCharacter.prevLiftBottom = hb.bottom;
+        }
         // Ko'taruvchi ustunlar (yerdan platforma tagigacha)
         o.piston.clear();
         if (shown && !o.groundOff) {
@@ -8764,7 +9157,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // ENTER: bosib turilgancha avtomatik hujum qiladi, stamina ketaveradi
         this.input.keyboard.on('keydown-ENTER', () => {
-            if (!currentCharacter || pauseMenuOpen) return;
+            if (!currentCharacter || pauseMenuOpen || mfHouse) return;
             let angle = isSky ? skyAim(null) : (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
             if (!isSky) predictAttack(this, angle);
@@ -8778,7 +9171,7 @@ function launchGame(socket, roomId, mapData, continued) {
         this.input.on('pointerdown', (pointer) => {
             // Dialog ochiq bo'lsa - ekranga teginish keyingi gapga o'tkazadi (telefonda E tugmasini qidirmasdan)
             if (dialog) { advanceDialog(); return; }
-            if (!currentCharacter || pauseMenuOpen) return;
+            if (!currentCharacter || pauseMenuOpen || mfHouse) return;
             // PHONE boshqaruvi: ekranga (yoki joystick yoniga) teginish o'q otmasin - faqat "zarba" tugmasi
             if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
             let angle = isSky ? skyAim(pointer) : (lastDirection === 'right') ? 0 : Math.PI;
@@ -9208,7 +9601,11 @@ function launchGame(socket, roomId, mapData, continued) {
             this.cameras.main.flash(250, d.kind === 'acid' ? 120 : 255, d.kind === 'acid' ? 255 : 235, d.kind === 'acid' ? 60 : 60);
         });
         socket.off('myFarmState');
-        socket.on('myFarmState', (d) => { if (!d || !isMyFarm) return; mfOffset = d.now - Date.now(); mfState = d; });
+        socket.on('myFarmState', (d) => {
+            if (!d || !isMyFarm) return;
+            mfOffset = d.now - Date.now(); mfState = d;
+            if (mfPanel && mfPanel.kind === 'chest' && mfPanel.reopenChest) openChestPanel();
+        });
         socket.off('myFarmResult');
         socket.on('myFarmResult', (d) => { if (d) myFarmResult(this, d); });
         // MY FARM dunyosi: qo'ziqorinlar, baxaybat daraxt bossi
@@ -9220,13 +9617,29 @@ function launchGame(socket, roomId, mapData, continued) {
         const puff = (x, y, color, n) => { for (let i = 0; i < n; i++) { const r = this.add.rectangle(x + (Math.random() - 0.5) * 30, y, 6, 6, color).setDepth(3.5); this.tweens.add({ targets: r, x: r.x + (Math.random() - 0.5) * 120, y: y - 30 - Math.random() * 60, alpha: 0, duration: 700 + Math.random() * 400, onComplete: () => r.destroy() }); } };
         socket.on('mfSpore', (d) => { if (!d) return; sfxAt('spit', d.x, 0.7); puff(d.x, 530, 0x9ccc65, 12); });
         socket.on('mfShroomDown', (d) => { if (!d) return; sfxAt('squish', d.x, 1); puff(d.x, 545, 0xe53935, 14); if (d.left === 0 && typeof showTopToast === 'function') showTopToast(t('mf_shrooms_gone')); });
+        ['mfRaid', 'mfMobDown', 'mfSlimeLand', 'mfRaidCleared'].forEach(e => socket.off(e));
+        socket.on('mfRaid', (d) => {
+            if (!d || !isMyFarm) return;
+            if (mfHouse) mfExitHouse();   // hujum boshlandi - uydan chiqib, jangga
+            sfx(d.kind === 'slime' ? 'roar' : 'scream', 0.7);
+            this.cameras.main.shake(500, 0.008);
+            if (typeof showTopToast === 'function') showTopToast(t('mf_raid_' + d.kind));
+        });
+        socket.on('mfSlimeLand', (d) => { if (!d) return; sfxAt('thud', d.x, 0.8); puff(d.x, 568, 0x66bb6a, 8); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) this.cameras.main.shake(120, 0.004); });
+        socket.on('mfMobDown', (d) => {
+            if (!d) return;
+            sfxAt('squish', d.x, 1);
+            puff(d.x, 540, d.kind === 'zveg' ? 0x8d6e63 : 0x76ff03, d.split ? 26 : 12);
+            if (d.split && typeof showTopToast === 'function') showTopToast(t('mf_slime_split'));
+        });
+        socket.on('mfRaidCleared', () => { sfx('win'); if (typeof showTopToast === 'function') showTopToast(t('mf_raid_cleared')); });
         socket.on('mfShroomsCame', (d) => { if (typeof showTopToast === 'function') showTopToast(t('mf_shrooms_came').replace('{n}', (d && d.n) || 5)); });
         socket.on('mfAte', (d) => { if (d && typeof showTopToast === 'function') showTopToast(t('mf_shroom_ate').replace('{c}', t('crop_' + d.crop))); });
         socket.on('treeBossStart', () => { sfx('roar'); this.cameras.main.shake(900, 0.01); if (typeof showTopToast === 'function') showTopToast(t('mf_tree_awake')); });
         socket.on('treeBossDown', (d) => { sfx('bossDown'); mfWorldState = null; this.cameras.main.flash(400, 200, 255, 200); if (typeof showTopToast === 'function') showTopToast(t('mf_tree_beaten').replace('{c}', d ? d.coins : 0)); });
         socket.on('treeAttack', (d) => { if (d && d.kind === 'pillars') sfx('rumble', 0.8); else if (d && d.kind === 'roots') sfx('roots', 0.8); else sfx('whoosh', 0.7); });
         socket.on('mfTreeWatered', () => { sfx('drip'); puff(map.myFarm.tree.x, 300, 0x4fc3f7, 24); });
-        socket.on('mfPlotFx', (d) => { if (!d) return; const x = mfPlotX(d.k); if (d.kind === 'water') { for (let i = 0; i < 8; i++) { const r = this.add.rectangle(x - 16 + i * 4, 500, 2, 6, 0x4fc3f7).setDepth(3.5); this.tweens.add({ targets: r, y: 560, alpha: 0.2, delay: i * 50, duration: 420, onComplete: () => r.destroy() }); } } else puff(x, 555, 0x8d6e63, 10); });
+        socket.on('mfPlotFx', (d) => { if (!d) return; if (d.kind === 'cut') { const ox = map.myFarm.orchardX[d.k]; if (ox !== undefined) { puff(ox, 520, 0x6d4c41, 14); puff(ox, 470, 0x43a047, 10); this.cameras.main.shake(150, 0.004); } return; } const x = mfPlotX(d.k); if (d.kind === 'water') { for (let i = 0; i < 8; i++) { const r = this.add.rectangle(x - 16 + i * 4, 500, 2, 6, 0x4fc3f7).setDepth(3.5); this.tweens.add({ targets: r, y: 560, alpha: 0.2, delay: i * 50, duration: 420, onComplete: () => r.destroy() }); } } else puff(x, 555, 0x8d6e63, 10); });
         socket.off('myFarmNet');
         socket.on('myFarmNet', (d) => { if (d && Array.isArray(d.fish)) mfNetFx(this, d.fish); });
         socket.off('farmBag');
@@ -11033,7 +11446,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
         if (!currentCharacter || !currentCharacter.body) return;
         // Boshqa o'yinchilar hali yuklanmoqda - raund boshlanguncha joyida turadi
-        if (!roundGo || pauseMenuOpen || (isDoors && drState && drState.state === 'choose')) { currentCharacter.setVelocityX(0); return; }
+        if (!roundGo || pauseMenuOpen || mfHouse || (isDoors && drState && drState.state === 'choose')) { currentCharacter.setVelocityX(0); return; }
         // LEVEL UP: hamma joyida qotib turadi (nur tushgan qahramon ko'tarilgan holatda)
         if (this.time.now < levelFreezeUntil) {
             if (!levelFrozen) { levelFrozen = true; currentCharacter.body.setAllowGravity(false); }
@@ -11090,7 +11503,7 @@ function launchGame(socket, roomId, mapData, continued) {
         }
 
         if (isBack) backRampStep(currentCharacter);
-        let isGrounded = currentCharacter.body.touching.down || currentCharacter.body.blocked.down || (isBack && backOnRamp) || (isStones && this.time.now - stoneGroundAt < 120);
+        let isGrounded = currentCharacter.body.touching.down || currentCharacter.body.blocked.down || (isBack && backOnRamp) || ((isStones || isLift) && this.time.now - stoneGroundAt < 120);
         if (isStones) {
             if (isGrounded) lastGroundedAt = this.time.now;
             else if (this.time.now - lastGroundedAt < 120 && currentCharacter.body.velocity.y >= 0) isGrounded = true;

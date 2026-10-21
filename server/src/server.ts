@@ -11,7 +11,7 @@ import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
-import { MAPS, SEASON_MAP_COUNT, dailyOffer, farmLevel, farmCapacity, farmLevelXp } from './maps';
+import { MAPS, SEASON_MAP_COUNT, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
@@ -339,6 +339,17 @@ app.post('/api/admin/announce', requireAdmin, adminRoute(async (req, res) => {
     res.json({ success: true, sent: io.engine.clientsCount });
 }));
 // 8. Texnik ishlar rejimi
+// FERMA FASLI (admin): auto | spring | summer | autumn | winter
+db.getSetting('farmSeason').then(v => { if (v) setFarmSeasonSetting(v); }).catch(() => { });
+app.get('/api/admin/season', requireAdmin, (_req, res) => { res.json({ success: true, setting: getFarmSeasonSetting(), current: currentFarmSeason() }); });
+app.post('/api/admin/season', requireAdmin, adminRoute(async (req, res) => {
+    const v = req.body && req.body.season;
+    if (!setFarmSeasonSetting(v)) { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
+    await db.setSetting('farmSeason', v);
+    roomManager.farmSeasonChanged();
+    logAdmin(req, 'season', '', String(v));
+    res.json({ success: true, setting: getFarmSeasonSetting(), current: currentFarmSeason() });
+}));
 app.get('/api/admin/maintenance', requireAdmin, (_req, res) => { res.json({ success: true, ...maintenance }); });
 app.post('/api/admin/maintenance', requireAdmin, adminRoute(async (req, res) => {
     maintenance.on = !!(req.body && req.body.on);

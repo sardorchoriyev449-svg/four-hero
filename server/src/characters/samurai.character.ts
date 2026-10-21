@@ -2,6 +2,10 @@ import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
 
 export class SamuraiCharacter extends BaseCharacter {
+    // Kunai va shuriken juda tez yog'ilardi (har 0.36 s) - endi kunai ~0.75 s, shuriken yelpig'ichi ~1 s da bir
+    public attackCooldownTicks(player: PlayerState): number {
+        return player.weaponMode === 'alt2' ? 33 : player.weaponMode === 'alt' ? 25 : BaseCharacter.ATTACK_COOLDOWN_TICKS;
+    }
     // Samuray: zarba 20 ta HP oladi, ritsar kabi stamina sekin ketadi
     public attackStaminaCost = 8;
 

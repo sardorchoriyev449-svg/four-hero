@@ -136,7 +136,28 @@ export const FRUIT_TREES: FruitTreeDef[] = [
     { id: 'pear', level: 3, price: 220, matureMs: 240000, cycleMs: 140000, yield: 3, sell: 36 },
     { id: 'cherry', level: 5, price: 300, matureMs: 300000, cycleMs: 160000, yield: 4, sell: 40 }
 ];
-export const ORCHARD_SLOTS = 3;
+export const ORCHARD_SLOTS = 6;   // eng ko'p bog' joyi (ferma darajasi bilan ochiladi)
+// Bog' joylari ferma darajasiga qarab: 0-darajada 3 ta, 3-, 6-, 9-darajalarda +1 (eng ko'pi 6)
+export function orchardSlotsFor(level: number): number { return Math.min(ORCHARD_SLOTS, 3 + Math.floor(Math.max(0, level) / 3)); }
+// FERMER UYI ichi: jihozlar (do'kondan, bir marta) va ularning joylari. Yashik - ombor (inventardagi narsalar)
+export type HomeSlotType = 'floor' | 'wall' | 'ceil' | 'rug';
+export const HOME_ITEMS: { id: string, slot: HomeSlotType, price: number }[] = [
+    { id: 'chest', slot: 'floor', price: 150 },
+    { id: 'table', slot: 'floor', price: 120 }, { id: 'chair', slot: 'floor', price: 60 },
+    { id: 'bed', slot: 'floor', price: 200 }, { id: 'shelf', slot: 'floor', price: 150 },
+    { id: 'fireplace', slot: 'floor', price: 250 },
+    { id: 'pot', slot: 'floor', price: 50 }, { id: 'plant', slot: 'floor', price: 70 },
+    { id: 'rug', slot: 'rug', price: 80 }, { id: 'painting', slot: 'wall', price: 100 }, { id: 'lamp', slot: 'ceil', price: 90 }
+];
+// Uy ichidagi joylar (ekran koordinatasi, 800 kenglik): pol - 6 ta, devor - 3, ship - 2, gilam - 1
+export const HOME_SLOTS: { id: string, type: HomeSlotType, x: number }[] = [
+    { id: 'f0', type: 'floor', x: 170 }, { id: 'f1', type: 'floor', x: 290 }, { id: 'f2', type: 'floor', x: 410 },
+    { id: 'f3', type: 'floor', x: 530 }, { id: 'f4', type: 'floor', x: 650 }, { id: 'f5', type: 'floor', x: 745 },
+    { id: 'w0', type: 'wall', x: 230 }, { id: 'w1', type: 'wall', x: 470 }, { id: 'w2', type: 'wall', x: 700 },
+    { id: 'c0', type: 'ceil', x: 350 }, { id: 'c1', type: 'ceil', x: 590 },
+    { id: 'r0', type: 'rug', x: 440 }
+];
+export const CHEST_CAP = 300;     // yashikka shuncha narsa sig'adi (hosil + baliq)
 // BAXAYBAT DARAXT: 400 tangaga ochiladi, "moviy suv" quyilgach ko'k olmalar o'sadi (shoxlarda - platformalardan
 // sakrab teriladi). 100 ta terilganda daraxt og'zini ochadi - BOSS jangi. Yengilgach yana quriydi (yana moviy suv kerak)
 export interface GiantTreeDef {
@@ -170,17 +191,43 @@ export function dailyOffer(now: number): string[] {
     if (b === a) b = (b + 1) % pool.length;
     return [pool[a], pool[b]];
 }
+export interface RaidDef {
+    everyMs: number; jitterMs: number; firstMs: number;
+    slime: { hp: number, hpPerPlayer: number, dmg: number, coins: number, hopMs: number, hopDist: number, hopH: number, splits: number };
+    slimelet: { hp: number, dmg: number, coins: number, hopMs: number, hopDist: number, hopH: number };
+    zveg: { n: number, hp: number, speed: number, dmg: number, coins: number };
+    shrooms: number;
+}
 // BEZAKLAR (do'kondan, bir marta): fermada hammaga ko'rinadi
 export const FARM_DECOR: { id: string, price: number }[] = [
     { id: 'flowers', price: 80 }, { id: 'lantern', price: 120 }, { id: 'paint', price: 150 }, { id: 'dog', price: 250 }
 ];
 export const FARM_PLOTS = 6;       // bitta maydondagi grядkalar
-export const FARM_ZONES = 4;       // 1-maydon ochiq, qolgan 3 tasi - "Free plot" (sotib olinadi)
+export const FARM_ZONES = 6;       // 1-maydon ochiq, qolganlari - "Free plot" (sotib olinadi; oxirgi 2 tasi ferma darajasi bilan)
+// FASLLAR (faqat My Farm): ko'rinish va ekinlarning o'sish tezligi. Admin paneldan tanlanadi ('auto' - kalendar bo'yicha)
+export type FarmSeason = 'spring' | 'summer' | 'autumn' | 'winter';
+export const FARM_SEASONS: FarmSeason[] = ['spring', 'summer', 'autumn', 'winter'];
+export const SEASON_GROWTH: { [s in FarmSeason]: number } = { spring: 1.25, summer: 1.5, autumn: 1, winter: 0.6 };
+let farmSeasonSetting: FarmSeason | 'auto' = 'auto';
+export function setFarmSeasonSetting(v: unknown): boolean {
+    if (v !== 'auto' && !FARM_SEASONS.includes(v as FarmSeason)) return false;
+    farmSeasonSetting = v as FarmSeason | 'auto';
+    return true;
+}
+export function getFarmSeasonSetting(): FarmSeason | 'auto' { return farmSeasonSetting; }
+// 'auto': shimoliy yarimshar kalendari - mart-may bahor, iyun-avgust yoz, sentabr-noyabr kuz, dekabr-fevral qish
+export function currentFarmSeason(now: number = Date.now()): FarmSeason {
+    if (farmSeasonSetting !== 'auto') return farmSeasonSetting;
+    const m = new Date(now).getUTCMonth();
+    return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter';
+}
 export interface MyFarmDef {
     zoneX0: number; zoneW: number;  // maydonlar: chap cheti va kengligi
     plotX0: number; plotW: number; plotGap: number;
     range: number;                  // grядka markazidan shu masofada E ishlaydi
-    zonePrice: number;              // "Free plot" maydoni narxi
+    zonePrice: number;              // "Free plot" maydoni narxi (eski - zonePrices[1])
+    zonePrices: number[];           // har maydon narxi (0 - bepul)
+    zoneLevels: number[];           // maydonni ochish uchun kerakli ferma darajasi
     riverX0: number;                // daryo qirg'og'i
     dockX1: number;                 // platforma (ko'prikcha) uchi
     dockPrice: number;
@@ -191,7 +238,13 @@ export interface MyFarmDef {
     toolUses: number;               // udochka / setka shuncha marta ishlatilgach sinadi
     waterBoost: number;             // sug'orilgan grядka shuncha ulush tezroq o'sadi (0.5 = 1.5x)
     goldenChance: number;           // o'g'itli hosil - ba'zan "oltin" (5 ta)
-    orchardX: number[];             // mevali daraxt joylari
+    orchardX: number[];             // mevali daraxt joylari (ferma darajasi bilan ochiladi - orchardSlotsFor)
+    houseX: number;                 // fermer uyi (eshigi) - ichiga kiriladi
+    // MAXLUQLAR HUJUMI: har everyMs (+- jitterMs) da tasodifiy biri - bahaybat shilimshiq, yovuz qo'ziqorinlar yoki zombi sabzavotlar
+    raids: RaidDef;
+    homeItems: { id: string, slot: HomeSlotType, price: number }[];
+    homeSlots: { id: string, type: HomeSlotType, x: number }[];
+    chestCap: number;
     fruitTrees: FruitTreeDef[];
     tree: GiantTreeDef;
     shrooms: ShroomDef;
@@ -214,9 +267,11 @@ export function farmIsRaining(F: MyFarmDef, now: number): boolean {
 }
 // Ekilgandan beri "samarali" o'sish vaqti: yomg'irli daqiqalar ikki marta hisoblanadi
 export function farmGrown(F: MyFarmDef, t: number, now: number, growMs: number, w?: number): boolean {
-    const el = now - t + (w ? F.waterBoost * Math.max(0, now - w) : 0);   // sug'orilgandan beri - tezroq
+    const season = currentFarmSeason(now), mult = SEASON_GROWTH[season];
+    const el = (now - t + (w ? F.waterBoost * Math.max(0, now - w) : 0)) * mult;   // sug'orilgandan beri - tezroq; fasl tezligi
     if (el >= growMs) return true;
     if (el <= 0) return false;
+    if (season === 'winter') return false;   // qishda qor yog'adi - yomg'ir kabi tezlatmaydi
     const R = F.rain;
     let extra = 0;
     for (let n = Math.floor(t / R.slotMs); n <= Math.floor(now / R.slotMs); n++) {
@@ -224,7 +279,7 @@ export function farmGrown(F: MyFarmDef, t: number, now: number, growMs: number, 
         const a = Math.max(t, n * R.slotMs + R.offsetMs), b = Math.min(now, n * R.slotMs + R.offsetMs + R.durMs);
         if (b > a) extra += b - a;
     }
-    return el + extra >= growMs;
+    return el + extra * mult >= growMs;
 }
 
 // ELF QISHLOG'I: elf bahaybat daraxt tepasida turib olma otadi, qahramonlar
@@ -1107,7 +1162,7 @@ export const MAPS: MapDef[] = [
         mapWidth: 800,
         platforms: [],            // platformalar - gorilla.platforms (harakatlanadi, server boshqaradi)
         gorilla: {
-            baseHp: 1400,             // Har o'yinchiga 1400 jon: 1 kishi - 1400, 2 kishi - 2800, 4 kishi - 5600
+            baseHp: 2400,             // 1 kishi - 2400, keyin har o'yinchiga +1400: 2 kishi - 3800, 4 kishi - 6600
             hpPerExtraPlayer: 1400,
             startX: 400,
             halfW: 70,
@@ -1596,7 +1651,8 @@ MAPS.push({
     mapWidth: 800,
     platforms: [],
     shop: { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, rod: 100, net: 300, fert: 25, water: 150,
-        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250 } },
+        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250,
+        ...Object.fromEntries(HOME_ITEMS.map(h => ['home_' + h.id, h.price])) } },
     playerSpawns: [
         { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }, { x: 210, y: 500 }
     ],
@@ -1630,7 +1686,7 @@ MAPS.push({
 
 // Baxaybat daraxt shoxlari (x - chap cheti): chapdan va o'ngdan zinapoyadek, tepada - toj. Sakrash ~130px
 const GIANT_TREE_PLATS: PlatformDef[] = (() => {
-    const T = 3460, left = [[3090, 470, 130], [3260, 390, 120], [3100, 310, 120], [3260, 230, 120], [3120, 150, 120]];
+    const T = 4380, left = [[4010, 470, 130], [4180, 390, 120], [4020, 310, 120], [4180, 230, 120], [4040, 150, 120]];
     const out: PlatformDef[] = [];
     left.forEach(([x, y, w]) => { out.push({ x, y, w, h: 12 }); out.push({ x: T + (T - (x + w)), y, w, h: 12 }); });
     out.push({ x: T - 70, y: 100, w: 140, h: 12 });
@@ -1647,15 +1703,20 @@ MAPS.push({
     killsToWin: 0,
     accentColor: 0x8bc34a,
     groundColor: 0x6d4c41,
-    mapWidth: 4540,
+    mapWidth: 5460,
     platforms: GIANT_TREE_PLATS,
     myFarm: { zoneX0: 630, zoneW: 460, plotX0: 30, plotW: 48, plotGap: 24, range: 32, zonePrice: 250,
-        riverX0: 3940, dockX1: 4200, dockPrice: 200, netCooldownMs: 30000, toolUses: 20, waterBoost: 0.5, goldenChance: 0.15,
-        orchardX: [2600, 2750, 2900], fruitTrees: FRUIT_TREES,
+        zonePrices: [0, 250, 250, 250, 400, 600], zoneLevels: [0, 0, 0, 0, 3, 6],
+        riverX0: 4860, dockX1: 5120, dockPrice: 200, netCooldownMs: 30000, toolUses: 20, waterBoost: 0.5, goldenChance: 0.15,
+        orchardX: [3450, 3545, 3640, 3735, 3830, 3925], fruitTrees: FRUIT_TREES, houseX: 150, homeItems: HOME_ITEMS, homeSlots: HOME_SLOTS, chestCap: CHEST_CAP,
+        raids: { everyMs: Number(process.env.FARM_RAID_MS) || 5 * 60000, jitterMs: process.env.FARM_RAID_MS ? 0 : 40000, firstMs: Number(process.env.FARM_RAID_MS) || 5 * 60000,
+            slime: { hp: 420, hpPerPlayer: 160, dmg: 18, coins: 40, hopMs: 1150, hopDist: 140, hopH: 70, splits: 3 },
+            slimelet: { hp: 55, dmg: 8, coins: 8, hopMs: 700, hopDist: 90, hopH: 40 },
+            zveg: { n: 5, hp: 75, speed: 60, dmg: 8, coins: 10 }, shrooms: 4 },
         boardX: 575, decor: FARM_DECOR, maxLevel: FARM_MAX_LEVEL,
-        tree: { x: 3460, price: 400, needApples: 100, regrowMs: 20000, appleSell: 20,
+        tree: { x: 4380, price: 400, needApples: 100, regrowMs: 20000, appleSell: 20,
             spots: GIANT_TREE_PLATS.map(p => ({ x: p.x + p.w / 2, y: p.y - 22 })),
-            mouth: { x: 3410, y: 405, w: 100, h: 90 }, arenaX0: 3060, arenaX1: 3860,
+            mouth: { x: 4330, y: 405, w: 100, h: 90 }, arenaX0: 3980, arenaX1: 4780,
             bossHp: 2400, bossHpPerPlayer: 1200, rootDamage: 25, appleDamage: 15, pillarDamage: 30, rewardCoins: 250, rewardXp: 100 },
         shrooms: { absentMs: 15 * 3600000, count: 5, hp: 80, eatMs: 90000, sporeRange: 90, sporeDamage: 12, sporeEveryMs: 2500, killCoins: 15 },
         crops: CROPS, fish: FISH,

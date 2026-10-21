@@ -220,7 +220,7 @@ export function startAdminBot(roomManager: RoomManager): void {
         { command: 'unban', description: 'Blokdan chiqarish' },
         { command: 'coins', description: 'Tanga berish' },
         { command: 'maps', description: 'Xaritalarni ochish: /maps login all' },
-        { command: 'level', description: 'Daraja: /level login all 15 (eng yuqori 15)' }
+        { command: 'level', description: `Daraja: /level login all ${db.MAX_LEVEL} (eng yuqori ${db.MAX_LEVEL})` }
     ] }).catch(() => {});
     console.log('Admin Telegram bot ishga tushdi');
     poll();
