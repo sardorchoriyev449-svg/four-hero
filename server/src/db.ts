@@ -25,7 +25,17 @@ const DEFAULT_UPGRADES = { knight: { damage: 0, stamina: 0 }, archer: { damage: 
 const DEFAULT_SKILL_POINTS = { knight: 0, archer: 0, mage: 0, samurai: 0 };
 const DEFAULT_CREDITED_LEVELS = { knight: [], archer: [], mage: [], samurai: [] };
 const MAX_UPGRADE_LEVEL = 5;
-export function upgradeCapFor(heroLevel: number): number { return Math.min(MAX_UPGRADE_LEVEL, Math.max(0, heroLevel - 1)); }
+// Kuchaytirish chegarasi qahramon darajasiga qarab: 3-darajada 1 ta, 6-da 3 ta, 9-da 4 ta, 12-da 5 ta (max); undan pastda - yopiq
+const UPGRADE_CAP_STEPS: [number, number][] = [[12, 5], [9, 4], [6, 3], [3, 1]];
+export function upgradeCapFor(heroLevel: number): number {
+    const st = UPGRADE_CAP_STEPS.find(([lv]) => heroLevel >= lv);
+    return Math.min(MAX_UPGRADE_LEVEL, st ? st[1] : 0);
+}
+// Shu kuchaytirish darajasidan yana oshirish uchun kerakli qahramon darajasi
+export function levelForUpgrade(current: number): number {
+    const st = UPGRADE_CAP_STEPS.slice().reverse().find(([, cap]) => cap > current);
+    return st ? st[0] : UPGRADE_CAP_STEPS[0][0];
+}
 
 // MONGOOSE SXEMASI (jadval strukturasi o'rniga)
 const userSchema = new mongoose.Schema({
@@ -491,9 +501,9 @@ export async function upgradeStat(userId: string, characterType: string, stat: s
     if (currentLevel >= MAX_UPGRADE_LEVEL) {
         return { success: false, message: 'err_skill_max' };
     }
-    // Kuchaytirish chegarasi qahramon DARAJASIGA bog'liq: daraja - 1 (3-darajada - 2 tagacha, 6-darajadan - 5)
+    // Kuchaytirish chegarasi qahramon DARAJASIGA bog'liq (upgradeCapFor): 3 -> 1, 6 -> 3, 9 -> 4, 12 -> 5
     if (currentLevel >= upgradeCapFor(xpLevel(docToUser(doc).charXp[characterType] || 0))) {
-        return { success: false, message: 'err_upgrade_locked|' + (currentLevel + 2) };
+        return { success: false, message: 'err_upgrade_locked|' + levelForUpgrade(currentLevel) };
     }
     // Narx: YO ball, YO tanga - o'yinchi tanlaydi (daraja oshgan sari qimmatlashadi)
     const cost = UPGRADE_COSTS[currentLevel];
@@ -799,14 +809,18 @@ export async function adjustCoins(userId: string, amount: number): Promise<UserR
 }
 
 // XP KUCHAYTIRISH sotib olish: hozirgi daraja o'qilgan bo'lsa va tanga yetsa - bitta atomik yozuv
+export const XP_BOOST_STEP = 3;
+export function xpBoostCapFor(heroLevel: number): number { return Math.min(XP_BOOST_MAX, Math.floor(Math.max(0, heroLevel) / XP_BOOST_STEP)); }
 export async function buyXpBoost(userId: string, characterType: string, payWith: 'coins' | 'points' = 'coins'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     if (!CHARACTER_TYPES.includes(characterType)) return { success: false, message: 'err_bad_skill' };
     const pts = 'skillPoints.' + characterType;
     for (let attempt = 0; attempt < 3; attempt++) {
-        const cur: any = await UserModel.findById(userId, { xpBoost: 1, coins: 1, skillPoints: 1 }).lean();
+        const cur: any = await UserModel.findById(userId, { xpBoost: 1, coins: 1, skillPoints: 1, charXp: 1 }).lean();
         if (!cur) return { success: false, message: 'err_user_not_found' };
         const lvl = Math.max(0, (cur.xpBoost || {})[characterType] || 0), cost = xpBoostCost(lvl);
         if (lvl >= XP_BOOST_MAX) return { success: false, message: 'err_boost_max' };
+        // Qahramon darajasiga qarab: har 3 darajada +1 (3 -> 1, 6 -> 2, ... 21 -> 7, 30 -> 10)
+        if (lvl >= xpBoostCapFor(xpLevel(((cur.charXp || {})[characterType]) || 0))) return { success: false, message: 'err_upgrade_locked|' + XP_BOOST_STEP * (lvl + 1) };
         const field = 'xpBoost.' + characterType;
         const filter: any = { _id: userId, [field]: lvl ? lvl : { $in: [0, null] } }, inc: any = {};
         if (payWith === 'points') {
@@ -934,10 +948,13 @@ export async function farmHarvest(userId: string, i: number, ripe: (p: { c: stri
     return r ? { success: true, crop: p.c, n, golden, ...r } : { success: false, message: 'farm_plot_empty' };
 }
 // SUG'ORISH (bepul, har ekishga bir marta): shundan keyin grядka 1.5x tez o'sadi
-export async function farmWater(userId: string, i: number): Promise<FarmResult> {
-    const r = await farmUpdate(userId, { ['farmPlots.' + i + '.c']: { $type: 'string' }, ['farmPlots.' + i + '.w']: { $exists: false } },
-        { $set: { ['farmPlots.' + i + '.w']: Date.now() } });
-    return r ? { success: true, ...r } : { success: false, message: 'mf_already_watered' };
+export async function farmWater(userId: string, i: number, price: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { coins: { $gte: price }, ['farmPlots.' + i + '.c']: { $type: 'string' }, ['farmPlots.' + i + '.w']: { $exists: false } },
+        { $inc: { coins: -price }, $set: { ['farmPlots.' + i + '.w']: Date.now() } });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    if (cur && cur.plots[i] && cur.plots[i]!.w) return { success: false, message: 'mf_already_watered' };
+    return { success: false, message: await noMoney(userId) };
 }
 // O'G'IT: hosil 2 barobar (ba'zan oltin)
 export async function farmFertilize(userId: string, i: number): Promise<FarmResult> {

@@ -3610,6 +3610,9 @@ export class GameEngine {
         if (t.state !== 'fight') return;
         const g = t.gor;
         const fighters = alive.filter(p => !this.tntOnCliff(map, p));
+        // Qoyada turganlar ham jangda: gorilla ularga sakramaydi (qoya - oxirgi portlashdan qochish joyi), lekin
+        // bochka otadi va osmondan bomba yog'diradi (avval qoyaga chiqib olgan o'yinchiga hech narsa qilmasdi)
+        const W = map.mapWidth, campers = alive.filter(p => this.tntOnCliff(map, p));
         const surf = (i: number) => map.platforms[i];
         // Polda - butun tanasi bino ichida (qoyaga kirib, qahramonni devorga qisib qo'ymasin); tor qavatlarda - deyarli chetigacha
         const margin = (i: number) => (i === T.floor ? T.gorHalfW + 6 : Math.min(T.gorHalfW * 0.6, surf(i).w / 2 - 8));
@@ -3632,7 +3635,7 @@ export class GameEngine {
                 if (alive.some(p => Math.abs(p.x - b.x) <= this.PLAYER_HALF_W + 20 && Math.abs(p.y - b.y) <= this.PLAYER_HALF_H + 20)) boom = true;
                 // Yo'ldagi platformalardan o'tib ketadi: faqat nishon turgan sirtga (landY) yetganda portlaydi
                 if (!boom && b.vy > 0 && py <= b.landY && b.y >= b.landY) { b.y = b.landY; boom = true; }
-                if (b.y > 660 || b.x < -50 || b.x > 850) { t.bombs.splice(i, 1); continue; }
+                if (b.y > 660 || b.x < -50 || b.x > W + 50) { t.bombs.splice(i, 1); continue; }
             }
             if (boom) {
                 t.bombs.splice(i, 1);
@@ -3676,9 +3679,11 @@ export class GameEngine {
             if (++g.t >= ms(700)) {
                 if (g.plan === 'throw') {
                     // Bochkalar qo'lida - nishon o'yinchining ustiga sakraydi (qo'nishda zarba), so'ng yaqindan otadi
-                    const tg = fighters.length ? fighters[Math.floor(Math.random() * fighters.length)] : null;
+                    // Qoyadagini birinchi navbatda nishonga oladi (u yerga sakramaydi - poldan otadi)
+                    const pool = campers.length && (Math.random() < 0.6 || !fighters.length) ? campers : fighters;
+                    const tg = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
                     g.target = tg ? tg.id : null;
-                    if (tg) startLeap(this.tntSurfaceUnder(map, tg.x, tg.y + this.PLAYER_HALF_H), tg.x);
+                    if (tg && !this.tntOnCliff(map, tg)) startLeap(this.tntSurfaceUnder(map, tg.x, tg.y + this.PLAYER_HALF_H), tg.x);
                     else { g.act = 'throw'; g.t = 0; g.thrown = 0; }
                 }
                 else { g.act = 'sky'; g.t = 0; this.io.to(roomId).emit('tntSkyThrow', { x: Math.round(g.x), y: Math.round(g.y) }); }
@@ -3689,7 +3694,7 @@ export class GameEngine {
             g.t++;
             // Ikki bochka ketma-ket: nishon - ustiga sakragan o'yinchi (tirik bo'lsa), aks holda tasodifiy jangchi
             if ((g.thrown === 0 && g.t >= ms(250)) || (g.thrown === 1 && g.t >= ms(650))) {
-                const tg = fighters.find(p => p.id === g.target) || fighters[Math.floor(Math.random() * fighters.length)];
+                const tg = alive.find(p => p.id === g.target) || alive[Math.floor(Math.random() * alive.length)];
                 if (tg) {
                     const sx = g.x + g.facing * 40, sy = g.y - T.gorH + 16;
                     const ft = Math.max(0.45, Math.min(0.9, Math.hypot(tg.x - sx, tg.y - sy) / 650));
@@ -3697,7 +3702,7 @@ export class GameEngine {
                     // to'xtasa yoki orqaga burilsa ham qochib qutulish qiyin
                     const m = this.playerMotion.get(tg.id);
                     const lead = m && g.thrown === 0 ? Math.max(-150, Math.min(150, m.vx * ft * 0.85)) : 0;
-                    const tx = Math.max(T.leftCliffX, Math.min(T.rightCliffX, tg.x + lead)), ty = tg.y + 8;
+                    const tx = Math.max(16, Math.min(W - 16, tg.x + lead)), ty = tg.y + 8;
                     // Nishon turgan sirt (yoki undan pastdagi eng yaqini) - bochka shu yerga tushib portlaydi
                     const feet = tg.y + this.PLAYER_HALF_H;
                     let landY = 700;
@@ -3730,13 +3735,15 @@ export class GameEngine {
             g.t++;
             if (g.t === ms(500)) {
                 // Osmonga otilgan 5 bochka qayerga tushishi - qizil belgi (jangchilar ustiga va tasodifiy joylarga)
-                const xs: number[] = fighters.map(p => p.x + (Math.random() - 0.5) * 40);
+                // Qoyadagilar ustiga ham (bitta qahramonga bir nechta - qochish uchun joy qoladi)
+                const xs: number[] = alive.map(p => p.x + (Math.random() - 0.5) * 40);
+                campers.forEach(p => xs.push(p.x + (p.x < W / 2 ? 45 : -45)));
                 while (xs.length < T.skyBombs) xs.push(T.leftCliffX + 30 + Math.random() * (T.rightCliffX - T.leftCliffX - 60));
-                xs.slice(0, T.skyBombs).forEach((x0, k) => {
-                    const x = Math.max(T.leftCliffX + 14, Math.min(T.rightCliffX - 14, x0));
+                xs.slice(0, Math.max(T.skyBombs, Math.min(8, xs.length))).forEach((x0, k) => {
+                    const x = Math.max(14, Math.min(W - 14, x0));
                     // Eng birinchi (eng yuqoridagi) yuzaga tushadi - tom ostida turgan qahramon himoyalangan
                     let landY = 700;
-                    [...T.building].forEach(pi => { const s = surf(pi); if (x >= s.x && x <= s.x + s.w && s.y < landY) landY = s.y; });
+                    [...T.building, 1, 2].forEach(pi => { const s = surf(pi); if (x >= s.x && x <= s.x + s.w && s.y < landY) landY = s.y; });
                     const id = 'sk' + (++t.counter);
                     t.warns.push({ id, x: Math.round(x), y: landY });
                     // Ekran tepasidan ancha yuqoridan tushadi: belgi chiqqach ~1 s o'tib yetib keladi (har biri biroz kechikib)
@@ -3748,9 +3755,11 @@ export class GameEngine {
         }
         // IDLE / WALK: rejadagi hujumga tayyorlanadi
         const target = fighters.length ? fighters.reduce((a, b) => (Math.abs(a.x - g.x) < Math.abs(b.x - g.x) ? a : b)) : null;
-        if (!g.plan && t.tick >= t.nextAct && fighters.length) {
+        if (!g.plan && t.tick >= t.nextAct && alive.length) {
             const order: ('throw' | 'leap' | 'sky' | 'clap')[] = ['throw', 'clap', 'leap', 'throw', 'sky', 'leap', 'clap'];
             g.plan = order[t.step++ % order.length];
+            // Hamma qoyada - yaqin hujumlar (sakrash, qarsak) o'rniga bochka / osmon bombalari
+            if (!fighters.length && (g.plan === 'leap' || g.plan === 'clap')) g.plan = t.step % 2 ? 'sky' : 'throw';
         }
         if (g.plan === 'clap') {
             g.act = 'clap'; g.t = 0;

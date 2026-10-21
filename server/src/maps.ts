@@ -227,6 +227,7 @@ export interface MyFarmDef {
     range: number;                  // grядka markazidan shu masofada E ishlaydi
     zonePrice: number;              // "Free plot" maydoni narxi (eski - zonePrices[1])
     zonePrices: number[];           // har maydon narxi (0 - bepul)
+    waterPrice: number;             // grядkani sug'orish narxi
     zoneLevels: number[];           // maydonni ochish uchun kerakli ferma darajasi
     riverX0: number;                // daryo qirg'og'i
     dockX1: number;                 // platforma (ko'prikcha) uchi
@@ -1475,33 +1476,35 @@ export const MAPS: MapDef[] = [
         bossCoins: 250,
         accentColor: 0xff7043,
         groundColor: 0x3b3046,
-        mapWidth: 800,
+        mapWidth: 1400,    // ekranga sig'maydi - kamera qahramon ortidan yuradi
         // Pastda yer yo'q - bino jarlik ustida osilib turibdi
-        pits: [{ x: 0, w: 800 }],
+        pits: [{ x: 0, w: 1400 }],
         platforms: [
-            { x: 70, y: 530, w: 660, h: 14 },    // 0: pol
-            { x: 0, y: 330, w: 70, h: 270 },     // 1: chap qoya (xavfsiz)
-            { x: 730, y: 330, w: 70, h: 270 },   // 2: o'ng qoya (xavfsiz)
-            { x: 74, y: 476, w: 40, h: 12 },     // 3: chap kursi
-            { x: 686, y: 476, w: 40, h: 12 },    // 4: o'ng kursi
-            { x: 120, y: 430, w: 170, h: 12 },   // 5: chap minora - o'rta qavat (qoya tomonga keng - tez qochish)
-            { x: 510, y: 430, w: 170, h: 12 },   // 6: o'ng minora - o'rta qavat
-            { x: 330, y: 340, w: 140, h: 12 },   // 7: markaziy ark
-            { x: 150, y: 250, w: 140, h: 12 },   // 8: chap minora tomi
-            { x: 510, y: 250, w: 140, h: 12 },   // 9: o'ng minora tomi
-            { x: 364, y: 458, w: 72, h: 72 }     // 10: INFINITY TNT (ustiga chiqish mumkin)
+            { x: 100, y: 530, w: 1200, h: 14 },  // 0: pol
+            { x: 0, y: 330, w: 100, h: 270 },    // 1: chap qoya (xavfsiz)
+            { x: 1300, y: 330, w: 100, h: 270 }, // 2: o'ng qoya (xavfsiz)
+            { x: 104, y: 476, w: 40, h: 12 },    // 3: chap kursi
+            { x: 1256, y: 476, w: 40, h: 12 },   // 4: o'ng kursi
+            { x: 150, y: 430, w: 200, h: 12 },   // 5: chap minora - o'rta qavat (qoya tomonga keng - tez qochish)
+            { x: 1050, y: 430, w: 200, h: 12 },  // 6: o'ng minora - o'rta qavat
+            { x: 630, y: 340, w: 140, h: 12 },   // 7: markaziy ark
+            { x: 180, y: 250, w: 140, h: 12 },   // 8: chap minora tomi
+            { x: 1080, y: 250, w: 140, h: 12 },  // 9: o'ng minora tomi
+            { x: 664, y: 458, w: 72, h: 72 },    // 10: INFINITY TNT (ustiga chiqish mumkin)
+            { x: 430, y: 440, w: 150, h: 12 },   // 11: chap ayvon (o'rta qavat)
+            { x: 820, y: 440, w: 150, h: 12 }    // 12: o'ng ayvon
         ],
         tnt: {
-            floor: 0, building: [0, 3, 4, 5, 6, 7, 8, 9, 10], surfaces: [0, 5, 6, 7, 8, 9],
-            cliffY: 330, leftCliffX: 70, rightCliffX: 730, box: { x: 364, y: 458, w: 72, h: 72 },
-            hp: 1600, hpPerExtraPlayer: 800, fuseMs: 3000, introMs: 2500,
-            gorHalfW: 62, gorH: 130, gorSpeed: 130, gorStartX: 600,
+            floor: 0, building: [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], surfaces: [0, 5, 6, 7, 8, 9, 11, 12],
+            cliffY: 330, leftCliffX: 100, rightCliffX: 1300, box: { x: 664, y: 458, w: 72, h: 72 },
+            hp: 1600, hpPerExtraPlayer: 800, fuseMs: 5500, introMs: 2500,   // bino keng - qoyaga qochishga 5.5 s
+            gorHalfW: 62, gorH: 130, gorSpeed: 150, gorStartX: 1000,
             bombDamage: 22, bombRadius: 70, skyBombs: 5, skyDamage: 25, skyRadius: 60, skyWarnMs: 1100,
             slamDamage: 25, slamRange: 110, contactDamage: 25, contactSpeed: 1150,
             clapDamage: 30, clapWarnMs: 650, clapSpeed: 650, restMs: 1200
         },
         playerSpawns: [
-            { x: 100, y: 500 }, { x: 140, y: 500 }, { x: 180, y: 500 }, { x: 220, y: 500 }
+            { x: 170, y: 500 }, { x: 210, y: 500 }, { x: 250, y: 500 }, { x: 290, y: 500 }
         ],
         botSpawnZone: { xStart: 0, xEnd: 0, y: 90 } // bu xaritada bot yo'q
     },
@@ -1706,7 +1709,7 @@ MAPS.push({
     mapWidth: 5460,
     platforms: GIANT_TREE_PLATS,
     myFarm: { zoneX0: 630, zoneW: 460, plotX0: 30, plotW: 48, plotGap: 24, range: 32, zonePrice: 250,
-        zonePrices: [0, 250, 250, 250, 400, 600], zoneLevels: [0, 0, 0, 0, 3, 6],
+        zonePrices: [0, 250, 250, 250, 400, 600], zoneLevels: [0, 0, 0, 0, 3, 6], waterPrice: 10,
         riverX0: 4860, dockX1: 5120, dockPrice: 200, netCooldownMs: 30000, toolUses: 20, waterBoost: 0.5, goldenChance: 0.15,
         orchardX: [3450, 3545, 3640, 3735, 3830, 3925], fruitTrees: FRUIT_TREES, houseX: 150, homeItems: HOME_ITEMS, homeSlots: HOME_SLOTS, chestCap: CHEST_CAP,
         raids: { everyMs: Number(process.env.FARM_RAID_MS) || 5 * 60000, jitterMs: process.env.FARM_RAID_MS ? 0 : 40000, firstMs: Number(process.env.FARM_RAID_MS) || 5 * 60000,

@@ -4339,7 +4339,7 @@ function launchGame(socket, roomId, mapData, continued) {
     }
     function openSeedPanel(k) {
         if (!phaserGame) return;
-        const tex = phaserGame.textures, lvl = mfState.hostLevel || 0;
+        const tex = phaserGame.textures, lvl = mfState.level || 0;   // FERMA darajasi
         const fmt = (ms) => ms >= 60000 ? Math.floor(ms / 60000) + 'm' + (ms % 60000 ? ' ' + Math.round((ms % 60000) / 1000) + 's' : '') : Math.round(ms / 1000) + 's';
         const cards = map.myFarm.crops.map((c) => {
             const locked = c.level > lvl;
@@ -4387,7 +4387,8 @@ function launchGame(socket, roomId, mapData, continued) {
             <button class="shop-buy" data-act="${act}" ${enabled ? '' : 'disabled'}>${btn}</button></div>`;
         const title = t('crop_' + inf.crop.id) + ' - ' + t('mf_left_s').replace('{s}', inf.left);
         const el = mfPanelEl('plot', k, title,
-            card('water', A.waterIcon(), t('mf_water'), plot.w ? t('mf_watered') : t('mf_water_desc'), !plot.w, plot.w ? '✓' : t('mf_do_water')) +
+            card('water', A.waterIcon(), t('mf_water'), plot.w ? t('mf_watered') : t('mf_water_desc').replace('{p}', map.myFarm.waterPrice || 10), !plot.w,
+                plot.w ? '✓' : `<img class="px-coin" src="${A.icon('coin')}" alt=""> ${map.myFarm.waterPrice || 10}`) +
             card('fert', A.fertIcon(), t('item_fert'), plot.f ? t('mf_fertilized') : t('mf_fert_desc').replace('{n}', f.fert), !plot.f && f.fert > 0, plot.f ? '✓' : t('mf_do_fert')));
         if (!el) return;
         mfPanel.care = true;
@@ -4395,7 +4396,7 @@ function launchGame(socket, roomId, mapData, continued) {
     }
     // Bo'sh bog' joyi: mevali daraxt ko'chati (host leveliga qarab ochiladi)
     function openOrchardPanel(i) {
-        const lvl = mfState.hostLevel || 0, A = window.FarmArt;
+        const lvl = mfState.level || 0, A = window.FarmArt;   // FERMA darajasi
         const fmt = (ms) => Math.round(ms / 60000 * 10) / 10 + 'm';
         const cards = map.myFarm.fruitTrees.map((d) => {
             const locked = d.level > lvl;
@@ -5754,17 +5755,17 @@ function launchGame(socket, roomId, mapData, continued) {
     let tntState = null, tntObj = null;
     const tntBombs = {};
     function buildTntScene(scene) {
-        const T = map.tnt, P = map.platforms;
+        const T = map.tnt, P = map.platforms, W = mapWidth;
         ensureBarrelTexture(scene);
         const mk = (key, grid, Px) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, Px); };
         ['idle', 'roar', 'slam', 'rest'].forEach(pose => mk('px_gor_' + pose, gorillaGrid(pose), 4));
         // FON (bir marta teksturaga): kechki osmon, uzoq tog'lar, bulutlar, ikki qoya
         const bg = scene.add.graphics();
-        [0x1b1433, 0x2a1b45, 0x3d2352, 0x5a2d5c, 0x83405f, 0xb15d5b].forEach((c, i) => { bg.fillStyle(c, 1); bg.fillRect(0, i * 100, 800, 100); });
-        for (let i = 0; i < 70; i++) { bg.fillStyle(0xffffff, 0.35 + (i % 3) * 0.2); bg.fillRect((i * 97) % 800, (i * 53) % 260, 2, 2); }
+        [0x1b1433, 0x2a1b45, 0x3d2352, 0x5a2d5c, 0x83405f, 0xb15d5b].forEach((c, i) => { bg.fillStyle(c, 1); bg.fillRect(0, i * 100, W, 100); });
+        for (let i = 0; i < 120; i++) { bg.fillStyle(0xffffff, 0.35 + (i % 3) * 0.2); bg.fillRect((i * 97) % W, (i * 53) % 260, 2, 2); }
         bg.fillStyle(0x2c2140, 1);
-        for (let x = 0; x < 800; x += 8) { const top = 470 - Math.round((Math.abs(Math.sin(x * 0.011)) * 80 + Math.abs(Math.sin(x * 0.027)) * 30) / 8) * 8; bg.fillRect(x, top, 8, 600 - top); }
-        bg.fillStyle(0xf8bbd0, 0.16); [[60, 120], [430, 90], [600, 180]].forEach(([x, y]) => { bg.fillRect(x, y, 150, 16); bg.fillRect(x + 22, y - 10, 90, 10); });
+        for (let x = 0; x < W; x += 8) { const top = 470 - Math.round((Math.abs(Math.sin(x * 0.011)) * 80 + Math.abs(Math.sin(x * 0.027)) * 30) / 8) * 8; bg.fillRect(x, top, 8, 600 - top); }
+        bg.fillStyle(0xf8bbd0, 0.16); [[60, 120], [430, 90], [600, 180], [900, 110], [1180, 160]].forEach(([x, y]) => { bg.fillRect(x, y, 150, 16); bg.fillRect(x + 22, y - 10, 90, 10); });
         const cliff = (x0, w) => {
             for (let y = T.cliffY; y < 600; y += 6) for (let x = x0; x < x0 + w; x += 6) {
                 const v = 0.7 - (y - T.cliffY) / 500 + (((x * 7 + y * 3) / 6) % 5) / 25;
@@ -5774,8 +5775,8 @@ function launchGame(socket, roomId, mapData, continued) {
             bg.fillStyle(0x66bb6a, 1); bg.fillRect(x0, T.cliffY, w, 4);
             for (let x = x0; x < x0 + w; x += 8) { bg.fillStyle(0x43a047, 1); bg.fillRect(x + 2, T.cliffY - 4, 3, 4); }
         };
-        cliff(0, T.leftCliffX); cliff(T.rightCliffX, 800 - T.rightCliffX);
-        bakeGraphics(scene, bg, 0, 0, 800, 600, -4);
+        cliff(0, T.leftCliffX); cliff(T.rightCliffX, W - T.rightCliffX);
+        bakeGraphics(scene, bg, 0, 0, W, 600, -4);
         // BINO (alohida rasm - portlaganda butunligicha qulab tushadi): ustunlar, taxtalar, arqonlar, kirish taxtasi
         const b = scene.add.graphics();
         const WOOD = 0x8d5a32, WOOD_L = 0xb57a45, WOOD_D = 0x4e3020, INK = 0x1a0f08;
@@ -5800,8 +5801,10 @@ function launchGame(socket, roomId, mapData, continued) {
         post(P[7].x + 12, P[7].y, P[0].y, 14); post(P[7].x + P[7].w - 12, P[7].y, P[0].y, 14);
         [3, 4].forEach(i => post(P[i].x + P[i].w / 2, P[i].y, P[0].y, 8));
         post(P[0].x + 4, T.cliffY - 20, P[0].y, 8); post(P[0].x + P[0].w - 4, T.cliffY - 20, P[0].y, 8);
-        [0, 3, 4, 5, 6, 7, 8, 9].forEach(i => plank(P[i]));
-        const house = bakeGraphics(scene, b, 0, 200, 800, 440, 1.2);
+        // O'rtadagi ayvonlar (keng bino): ikki ustunda
+        [11, 12].forEach(i => { if (P[i]) { post(P[i].x + 10, P[i].y, P[0].y, 8); post(P[i].x + P[i].w - 10, P[i].y, P[0].y, 8); } });
+        [0, 3, 4, 5, 6, 7, 8, 9, 11, 12].forEach(i => { if (P[i]) plank(P[i]); });
+        const house = bakeGraphics(scene, b, 0, 200, W, 440, 1.2);
         // INFINITY TNT: qizil quti, ustida bochkalar uyumi, yozuv
         const bx = T.box;
         const tg = scene.add.graphics();
@@ -5822,7 +5825,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const warnG = scene.add.graphics().setDepth(2.9);
         const fuseTxt = scene.add.text(400, 230, '', { fontFamily: PIXEL_FONT, fontSize: '54px', color: '#ff1744', stroke: '#000000', strokeThickness: 8 }).setOrigin(0.5).setScrollFactor(0).setDepth(1500).setVisible(false);
         tntObj = { house, box, pile, label, gor, warnG, fuseTxt, collapsed: false, bannerShown: false, nextPose: 0 };
-        scene.cameras.main.setBounds(0, 0, 800, 600);
+        scene.cameras.main.setBounds(0, 0, W, 600);
     }
     function tntBanner(scene) {
         const t1 = scene.add.text(400, 250, t('tnt_banner'), { fontFamily: PIXEL_FONT, fontSize: '22px', color: '#ff5252', stroke: '#000000', strokeThickness: 6 }).setOrigin(0.5).setScrollFactor(0).setDepth(1400);

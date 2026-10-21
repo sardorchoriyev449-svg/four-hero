@@ -1325,7 +1325,7 @@ export class RoomManager {
                 if (action === 'plant') {
                     const crop = F.crops.find(c => c.id === arg);
                     if (!crop) { reply({ success: false, message: 'err_bad_item' }); return; }
-                    if (crop.level > RoomManager.hostLevel(p)) { reply({ success: false, message: 'mf_seed_locked' }); return; }
+                    if (crop.level > farmLevel(fd.xp)) { reply({ success: false, message: 'mf_seed_locked' }); return; }   // FERMA darajasi bilan ochiladi
                     r = await db.farmPlant(uid, k as number, crop.id, crop.seed);
                     if (r.success) socket.emit('coinsUpdated', { amount: -crop.seed, totalCoins: r.coins });
                     if (r.success) { reply({ success: true, crop: crop.id, k }); this.farmHeroXp(roomId, p.id, RoomManager.FARM_XP_PLANT); }
@@ -1335,8 +1335,11 @@ export class RoomManager {
                 }
             } else if (action === 'water' || action === 'fert') {
                 if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= FARM_PLOTS * FARM_ZONES || !near(farmPlotX(F, k as number), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
-                r = action === 'water' ? await db.farmWater(uid, k as number) : await db.farmFertilize(uid, k as number);
-                if (r.success) { reply({ success: true, k }); this.io.to(roomId).emit('mfPlotFx', { k, kind: action }); }
+                r = action === 'water' ? await db.farmWater(uid, k as number, F.waterPrice) : await db.farmFertilize(uid, k as number);
+                if (r.success) {
+                    if (action === 'water') socket.emit('coinsUpdated', { amount: -F.waterPrice, totalCoins: r.coins });
+                    reply({ success: true, k }); this.io.to(roomId).emit('mfPlotFx', { k, kind: action });
+                }
             } else if (action === 'orchardCut') {
                 // Daraxtni kesish: joy bo'shaydi, eski daraxt yo'qoladi (yangisini ekish mumkin)
                 if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= orchardSlotsFor(farmLevel(fd.xp)) || !near(F.orchardX[k as number], 50)) { reply({ success: false, message: 'farm_too_far' }); return; }
@@ -1369,7 +1372,7 @@ export class RoomManager {
                 if (!cur) {
                     const tr = F.fruitTrees.find(x => x.id === arg);
                     if (!tr) { reply({ success: false, message: 'err_bad_item' }); return; }
-                    if (tr.level > RoomManager.hostLevel(p)) { reply({ success: false, message: 'mf_seed_locked' }); return; }
+                    if (tr.level > farmLevel(fd.xp)) { reply({ success: false, message: 'mf_seed_locked' }); return; }
                     r = await db.orchardPlant(uid, k as number, tr.id, tr.price);
                     if (r.success) { socket.emit('coinsUpdated', { amount: -tr.price, totalCoins: r.coins }); reply({ success: true, k, planted: tr.id }); }
                 } else {
@@ -1549,7 +1552,7 @@ export class RoomManager {
         const changed = orders.length !== f.orders.length;
         let added = false;
         while (orders.length < 3 && now >= nextAt) {
-            orders.push(this.makeOrder(f, RoomManager.hostLevel(host)));
+            orders.push(this.makeOrder(f, farmLevel(f.xp)));
             added = true;
             if (orders.length >= 3) break;
         }

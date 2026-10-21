@@ -1660,11 +1660,14 @@ function renderUpgrades() {
 
     const charUpgrades = (currentUser.upgrades && currentUser.upgrades[selectedCharTab]) || { damage: 0, stamina: 0 };
 
-    // Kuchaytirish chegarasi qahramon darajasiga bog'liq: daraja - 1 (serverdagi upgradeCapFor bilan bir xil)
-    const upCap = Math.min(5, Math.max(0, charLevel - 1));
+    // Kuchaytirish chegarasi qahramon darajasiga bog'liq (serverdagi upgradeCapFor bilan bir xil):
+    // 3-darajada 1 ta, 6-da 3 ta, 9-da 4 ta, 12-da 5 ta (max)
+    const CAP_STEPS = [[12, 5], [9, 4], [6, 3], [3, 1]];
+    const upCap = (CAP_STEPS.find(([lv]) => charLevel >= lv) || [0, 0])[1];
+    const needFor = (cur) => (CAP_STEPS.slice().reverse().find(([, cap]) => cap > cur) || [12])[0];
     stats.forEach((stat) => {
         const level = charUpgrades[stat.key] || 0;
-        if (!stat.locked && level < 5 && level >= upCap) { stat.locked = true; stat.needLevel = level + 2; }
+        if (!stat.locked && level < 5 && level >= upCap) { stat.locked = true; stat.needLevel = needFor(level); }
         const row = document.createElement('div');
         row.className = 'upgrade-row';
 
@@ -1728,10 +1731,13 @@ function renderUpgrades() {
             <span class="upgrade-desc">${t('char_xpboost_desc').replace('{n}', boost * 15)}</span>
             <div class="upgrade-dots">${Array.from({ length: BOOST_MAX }, (_, i) => `<span class="upgrade-dot ${i < boost ? 'filled' : ''}"></span>`).join('')}</div>
         </div>`;
-    // Boshqa kuchaytirishlar kabi: YO 2 ta ochko (har safar 2), YO tanga (300, 500, 700 ...)
-    if (boost >= BOOST_MAX) {
+    // Boshqa kuchaytirishlar kabi: YO 2 ta ochko (har safar 2), YO tanga (300, 500, 700 ...).
+    // Qahramon darajasiga qarab ochiladi: har 3 darajada +1 (serverdagi xpBoostCapFor bilan bir xil)
+    const boostCap = Math.min(BOOST_MAX, Math.floor(charLevel / 3));
+    if (boost >= BOOST_MAX || boost >= boostCap) {
         const mx = document.createElement('button');
-        mx.innerText = t('char_maxed');
+        if (boost >= BOOST_MAX) mx.innerText = t('char_maxed');
+        else { brow.classList.add('locked-upgrade'); mx.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('perk_level')} ${3 * (boost + 1)}`; }
         mx.disabled = true;
         brow.appendChild(mx);
         upgradesContent.appendChild(brow);
