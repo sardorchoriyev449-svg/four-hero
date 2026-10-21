@@ -485,6 +485,23 @@ app.post('/api/ads/:userId/reward', async (req, res) => {
     }
 });
 
+// REYTING: hamma ko'ra oladi; hisobi bilan so'ralsa - o'zining o'rni ham (token bilan, app.param('userId'))
+const lbHero = (q: unknown) => (typeof q === 'string' ? q : 'all');
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        const r = await db.getLeaderboard(lbHero(req.query.hero), null);
+        if (!r) { res.status(400).json({ success: false, message: 'err_bad_character' }); return; }
+        res.json({ success: true, ...r });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.get('/api/leaderboard/:userId', async (req, res) => {
+    try {
+        const r = await db.getLeaderboard(lbHero(req.query.hero), req.params.userId);
+        if (!r) { res.status(400).json({ success: false, message: 'err_bad_character' }); return; }
+        res.json({ success: true, ...r });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
 app.get('/api/maps', (req, res) => {
     res.json({ success: true, maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor })) });
 });

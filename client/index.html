@@ -995,6 +995,27 @@
         #inv-game-btn:hover { opacity: 1; }
         @media (pointer: coarse) { #inv-game-btn { top: 100px; width: 46px; height: 40px; font-size: 16px; } }
         /* INVENTAR OYNASI (piksel): kataklar, tanlov, pastda sotish */
+        /* REYTING */
+        #lb-panel { position: fixed; inset: 0; z-index: 2600; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.7); padding: 12px; }
+        #lb-panel .lb-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(640px, 100%);
+            max-height: calc(100vh - 24px); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; font: 9px "Press Start 2P", monospace; color: #f3f0ff; }
+        #lb-panel button { font: 9px "Press Start 2P", monospace; border: 3px solid #000; background: #302752; color: #f3f0ff; padding: 8px 10px; margin: 0; width: auto; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+        #lb-panel .lb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        #lb-panel .lb-title { flex: 1; font-size: 14px; color: #ffca28; text-shadow: 2px 2px 0 #000; }
+        #lb-panel .lb-x { padding: 6px 9px; background: #e53935; }
+        #lb-panel .lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+        #lb-panel .lb-tab.active { background: #ffca28; color: #1a1a1a; }
+        #lb-panel .lb-list { overflow-y: auto; flex: 1; min-height: 120px; border: 3px solid #000; background: #120f22; }
+        #lb-panel .lb-row { display: grid; grid-template-columns: 44px 1fr 96px 64px 92px; align-items: center; gap: 6px; padding: 7px 8px; border-bottom: 2px dashed #2b2450; }
+        #lb-panel .lb-row.lb-hdr { color: #9e98c4; font-size: 7px; position: sticky; top: 0; background: #120f22; }
+        #lb-panel .lb-row.me { background: #2d3b1e; color: #b9f6ca; }
+        #lb-panel .lb-rank { color: #ffca28; } #lb-panel .lb-r1 { color: #ffd700; } #lb-panel .lb-r2 { color: #e0e0e0; } #lb-panel .lb-r3 { color: #ff8a50; }
+        #lb-panel .lb-nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #lb-panel .lb-hero { font-size: 7px; } #lb-panel .lb-hero i { margin-right: 4px; }
+        #lb-panel .lb-xp { text-align: right; color: #80d8ff; }
+        #lb-panel .lb-me { margin-top: 10px; padding: 8px; border: 3px solid #4a3f7a; background: #120f22; color: #b9f6ca; text-align: center; line-height: 1.6; }
+        #lb-panel .lb-empty { padding: 20px; text-align: center; color: #9e98c4; }
+        @media (max-width: 520px) { #lb-panel .lb-row { grid-template-columns: 34px 1fr 52px 72px; } #lb-panel .lb-hero { display: none; } }
         #inv-panel { position: fixed; inset: 0; z-index: 2600; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.7); padding: 12px; }
         #inv-panel .inv-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(720px, 100%);
             max-height: calc(100vh - 24px); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; color: #f3f0ff; font: 9px/1.6 "Press Start 2P", monospace; }
@@ -1217,6 +1238,7 @@
         <button id="nav-play-btn" class="hub-btn"><i class="fa-solid fa-play"></i><span data-i18n="nav_play">Play</span></button>
         <button id="nav-character-btn" class="hub-btn"><i class="fa-solid fa-shield-halved"></i><span data-i18n="nav_character">My Character</span></button>
         <button id="nav-inventory-btn" class="hub-btn"><i class="fa-solid fa-bag-shopping"></i><span data-i18n="nav_inventory">Inventory</span></button>
+        <button id="nav-leaderboard-btn" class="hub-btn"><i class="fa-solid fa-trophy"></i><span data-i18n="nav_leaderboard">Leaderboard</span></button>
         <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
         <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad">Watch an ad</span><span class="ad-amount">+500</span></button>
         <!-- Donat ma'lumotlari tayyor bo'lguncha yashirin (bo'sh "tez orada" oynasi ochilmasin): "hidden" ni olib tashlash kifoya -->
@@ -1478,6 +1500,7 @@
     <script src="lobby.js"></script>
     <script src="farmart.js"></script>
     <script src="inventory.js"></script>
+    <script src="leaderboard.js"></script>
     <script src="game.js"></script>
     <script src="voice.js"></script>
     <script src="ads.js"></script>

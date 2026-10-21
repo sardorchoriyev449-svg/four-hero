@@ -728,6 +728,53 @@ export async function renameUser(userId: string, nicknameRaw: unknown): Promise<
     }
 }
 
+// REYTING: umumiy (hamma qahramonlar tajribasi yig'indisi) yoki bitta qahramon bo'yicha. Bloklanganlar va hali
+// tajribasi yo'qlar ko'rinmaydi. Ro'yxat 30 s keshlanadi (bazani har ochilishda yuklamaslik uchun)
+export type LbRow = { rank: number, id: string, nick: string, hero: string, level: number, xp: number };
+const lbCache = new Map<string, { at: number, rows: LbRow[] }>();
+const lbScore = (hero: string): any => hero === 'all'
+    ? { $add: CHARACTER_TYPES.map(c => ({ $ifNull: ['$charXp.' + c, 0] })) }
+    : { $ifNull: ['$charXp.' + hero, 0] };
+export async function getLeaderboard(hero: string, userId: string | null): Promise<{ rows: LbRow[], me: LbRow | null } | null> {
+    if (hero !== 'all' && !CHARACTER_TYPES.includes(hero)) return null;
+    const toRow = (d: any, rank: number): LbRow => {
+        const cx = d.charXp || {};
+        // Umumiy reytingda - eng kuchli qahramoni va uning darajasi
+        const best = hero === 'all' ? CHARACTER_TYPES.reduce((b, c) => ((cx[c] || 0) > (cx[b] || 0) ? c : b), CHARACTER_TYPES[0]) : hero;
+        return { rank, id: String(d._id), nick: d.nickname, hero: best, level: xpLevel(cx[best] || 0), xp: Math.round(d.score || 0) };
+    };
+    let cached = lbCache.get(hero);
+    if (!cached || Date.now() - cached.at > 30000) {
+        const docs = await UserModel.aggregate([
+            { $match: { banned: { $ne: true } } },
+            { $project: { nickname: 1, charXp: 1, score: lbScore(hero) } },
+            { $match: { score: { $gt: 0 } } },
+            { $sort: { score: -1, _id: 1 } },
+            { $limit: 50 }
+        ]);
+        cached = { at: Date.now(), rows: docs.map((d: any, i: number) => toRow(d, i + 1)) };
+        lbCache.set(hero, cached);
+    }
+    let me: LbRow | null = null;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+        const mine: any = await UserModel.findById(userId, { nickname: 1, charXp: 1, banned: 1 }).lean();
+        if (mine && !mine.banned) {
+            const cx = mine.charXp || {};
+            const score = hero === 'all' ? CHARACTER_TYPES.reduce((a, c) => a + (cx[c] || 0), 0) : (cx[hero] || 0);
+            if (score > 0) {
+                const above = await UserModel.aggregate([
+                    { $match: { banned: { $ne: true } } },
+                    { $project: { score: lbScore(hero) } },
+                    { $match: { score: { $gt: score } } },
+                    { $count: 'n' }
+                ]);
+                me = toRow({ ...mine, score }, ((above[0] && above[0].n) || 0) + 1);
+            }
+        }
+    }
+    return { rows: cached.rows, me };
+}
+
 // ADMIN: qahramon darajasini belgilash (0..MAX_LEVEL)
 export const HERO_TYPES = CHARACTER_TYPES;
 export async function setHeroLevel(userId: string, heroes: string[], level: number): Promise<UserRecord | null> {
