@@ -329,7 +329,7 @@ export class GameEngine {
                     x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
-                    weaponColor: p.weaponColor, look: p.look || '', nickname: p.nickname, apples: p.apples,
+                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
@@ -1354,6 +1354,7 @@ export class GameEngine {
         const ar = getMapById(room.selectedLevel).arena;
         // Har bot uchun o'ldirganga tajriba (arenada - tanga ham)
         if (killer && !room.isOver) {
+            this.roomManager.dailyProgress(room.id, killer.id, 'kills', 1);
             this.roomManager.awardReward(room.id, killer.id, ar ? ar.botCoins : 0, ar ? ar.botXp : GameEngine.KILL_XP, true)
                 .catch(err => console.error('awardReward xatosi:', err));
         }
@@ -3241,6 +3242,7 @@ export class GameEngine {
         const killer = killerId ? room.players[killerId] : null;
         if (killer && !room.isOver) {
             killer.kills++;
+            this.roomManager.dailyProgress(room.id, killer.id, 'kills', 1);
             this.roomManager.awardReward(room.id, killer.id, 0, GameEngine.KILL_XP, true).catch(err => console.error('awardReward xatosi:', err));
         }
     }
@@ -4709,6 +4711,7 @@ export class GameEngine {
         (room.gPlats || []).forEach((pl, i) => { pl.state = 'idle'; pl.timer = 0; pl.riders = []; if (gd) pl.y = gd.platforms[i].y; });
         // Boss - jamoaviy g'alaba: xonadagi HAMMAGA (o'sha payt o'lik/arvoh bo'lganlarga ham) tanga va XP
         Object.values(room.players).forEach(p => {
+            this.roomManager.dailyProgress(room.id, p.id, 'bosses', 1);
             this.roomManager.awardReward(room.id, p.id, ar.bossCoins, ar.bossXp, true).catch(err => console.error('awardReward xatosi:', err));
         });
         this.io.to(room.id).emit('arenaBossDown', { boss, coins: ar.bossCoins, xp: ar.bossXp });

@@ -174,6 +174,16 @@ window.Cosmetics = (() => {
         return p.g;
     }
 
+    // Kunai (standart shakl, ranglari bilan)
+    function kunaiShape(ring, grip, b1, b2) {
+        const p = painter(16, 5);
+        for (let y = 1; y < 4; y++) { p.px(0, y, ring); p.px(2, y, ring); }
+        p.px(1, 1, ring); p.px(1, 3, ring);
+        for (let x = 3; x < 7; x++) p.px(x, 2, grip);
+        for (let x = 7; x < 16; x++) { const hw = Math.max(0, Math.round((16 - x) / 4)); for (let y = 2 - hw; y <= 2 + hw; y++) p.px(x, y, y < 2 ? b1 : b2); }
+        return p;
+    }
+
     // ===== BOSH KIYIMLARI (tana kataklariga nisbatan: ax/ay - chap yuqori burchak) =====
     const HEAD = {
         cowboy() {
@@ -243,6 +253,48 @@ window.Cosmetics = (() => {
             const tops = [6, 4, 2, 5, 1, 4, 0, 3, 1, 4, 2, 5, 6];
             tops.forEach((top, x) => { for (let y = top; y < 8; y++) p.px(x, y, y === top ? M[3] : y < top + 2 ? M[2] : y > 5 ? M[0] : M[1]); });
             return { g: p.g, ax: 1, ay: -7 };
+        },
+        viking() {
+            // Viking dubulg'asi: kumush gumbaz, mis kamar, ikki yonda shoxlar
+            const p = painter(22, 9), M = [0x546e7a, 0x90a4ae, 0xcfd8dc];
+            p.disc(11, 9, 7.2, (x, y) => shade(0.95 - (x - 4) / 18 - y / 20, x, y, M));
+            p.rect(3, 7, 16, 2, (x, y) => (y === 7 && x % 3 === 0) ? 0xffca28 : y === 7 ? 0xa1887f : 0x6d4c41);
+            p.rect(10, 2, 2, 5, M[2]);
+            const H = [0xfff8e1, 0xe0d6b8];
+            [[4, 6], [3, 5], [2, 4], [1, 3], [1, 2], [0, 1], [0, 0]].forEach(([x, y], i) => { p.px(x, y, H[0]); p.px(x + 1, y, i < 4 ? H[1] : H[0]); p.px(21 - x, y, H[0]); p.px(20 - x, y, i < 4 ? H[1] : H[0]); });
+            return { g: p.g, ax: -3, ay: -7 };
+        },
+        wizard() {
+            // Sehrgar qalpog'i: binafsha konus, yulduzchalar, keng soyabon
+            const p = painter(20, 14), V = [0x311b92, 0x4527a0, 0x5e35b1, 0x7e57c2];
+            for (let y = 0; y < 12; y++) {
+                const cx = 11 - Math.round(y * 0.15), half = Math.round(y * 0.55);
+                for (let x = cx - half; x <= cx + half; x++) p.px(x, y, shade(0.95 - (x - cx + half) / (2 * half + 2) * 0.7 - y / 40, x, y, V));
+            }
+            p.px(12, 0, V[2]); p.px(13, 1, V[1]);
+            p.rect(0, 12, 20, 2, (x, y) => y === 12 ? V[3] : V[1]);
+            p.rect(5, 10, 11, 1, 0xffca28);
+            [[9, 4], [11, 7], [7, 8]].forEach(([x, y]) => p.px(x, y, 0xffeb3b));
+            p.px(12, 5, 0xfff59d);
+            return { g: p.g, ax: -2, ay: -12 };
+        },
+        pirate() {
+            // Qaroqchi shlyapasi: qora uchburchak, oltin hoshiya, bosh suyagi belgisi
+            const p = painter(22, 8), K = 0x212121, KL = 0x37474f;
+            p.rect(6, 0, 10, 5, (x, y) => y === 0 ? KL : K);
+            p.rect(0, 4, 22, 3, K); p.rect(0, 2, 2, 2, K); p.rect(20, 2, 2, 2, K);
+            p.rect(1, 6, 20, 1, 0xffca28); p.rect(2, 7, 18, 1, K);
+            p.rect(10, 1, 3, 2, 0xfafafa); p.px(10, 2, K); p.px(12, 2, K); p.rect(10, 3, 3, 1, 0xfafafa); p.px(11, 3, K);
+            return { g: p.g, ax: -3, ay: -6 };
+        },
+        chef() {
+            // Oshpaz qalpog'i: oq "bulut" tepa va oq kamar
+            const p = painter(16, 11), W = [0xd6d6d6, 0xeeeeee, 0xfafafa];
+            const cl = (x, y) => shade(0.95 - x / 30 - y / 14, x, y, W);
+            p.disc(4, 4, 3.6, cl); p.disc(8, 3, 4, cl); p.disc(12, 4, 3.6, cl);
+            p.rect(2, 6, 12, 5, (x, y) => y === 6 ? W[1] : (x % 3 === 0 ? W[0] : W[2]));
+            p.rect(2, 10, 12, 1, 0xbdbdbd);
+            return { g: p.g, ax: 0, ay: -9 };
         }
     };
 
@@ -287,6 +339,47 @@ window.Cosmetics = (() => {
             p.rect(6, 0, 9, 1, 0x84ffff); p.rect(6, 1, 9, 1, 0x00e5ff); p.rect(6, 2, 9, 1, 0x00b8d4); p.rect(6, 3, 9, 1, 0x006064);
             for (let x = 7; x < 15; x += 2) p.px(x, 1, 0xff4081);
             return { g: p.g, ax: 0, ay: 4 };
+        },
+        mustache() {
+            // Jingalak mo'ylov (visor ostida)
+            const p = painter(11, 3), B = 0x3e2723;
+            p.px(0, 0, B); p.px(10, 0, B);
+            p.rect(1, 1, 4, 1, B); p.rect(6, 1, 4, 1, B);
+            p.rect(3, 2, 5, 1, 0x5d4037);
+            return { g: p.g, ax: 6, ay: 9 };
+        },
+        eyepatch() {
+            // Qaroqchi ko'z bog'ichi: qiyshiq tasma va qora yamoq
+            const p = painter(15, 9);
+            p.line(0, 1, 8, 4, 0x3e2723); p.line(12, 4, 14, 2, 0x3e2723);
+            p.rect(8, 3, 4, 5, (x, y) => ((x === 8 || x === 11) && (y === 3 || y === 7)) ? null : 0x111111);
+            p.px(9, 4, 0x424242);
+            return { g: p.g, ax: 0, ay: 1 };
+        },
+        shades() {
+            // Qora ko'zoynak (aviator): to'q oyna, yaltirash
+            const p = painter(15, 5), F = 0x111111;
+            p.rect(0, 1, 6, 1, F);
+            const lens = (x0) => p.rect(x0, 0, 5, 5, (x, y) => (y === 4 && (x === x0 || x === x0 + 4)) ? null : y === 0 ? F : y < 2 ? 0x37474f : 0x263238);
+            lens(5); lens(10);
+            p.px(6, 1, 0xffffff); p.px(11, 1, 0xffffff); p.px(7, 2, 0x90a4ae);
+            return { g: p.g, ax: 0, ay: 4 };
+        },
+        ninja() {
+            // Ninja niqobi: yuzning pastki qismini yopadi, chapda tugun uchlari
+            const p = painter(17, 6), N = [0x1a237e, 0x283593, 0x303f9f];
+            p.rect(2, 0, 15, 5, (x, y) => shade(0.9 - y / 8 - (x - 2) / 40, x, y, N));
+            p.rect(2, 0, 15, 1, N[2]);
+            p.line(1, 1, 0, 4, N[1]); p.line(1, 2, 0, 5, N[0]);
+            return { g: p.g, ax: -1, ay: 9 };
+        },
+        heart() {
+            // Yurakcha ko'zoynak
+            const p = painter(18, 6);
+            p.rect(0, 2, 6, 1, 0xad1457);
+            heart(p, 9, 0, 0xff4081); heart(p, 14, 0, 0xff4081);
+            p.px(8, 1, 0xffffff); p.px(13, 1, 0xffffff); p.px(9, 2, 0xff80ab); p.px(14, 2, 0xff80ab);
+            return { g: p.g, ax: 0, ay: 3 };
         }
     };
 
@@ -340,6 +433,54 @@ window.Cosmetics = (() => {
                 p.px(27, 2, PINK.w); p.px(27, 3, PINK.xl); p.px(28, 3, PINK.l); p.px(29, 3, PINK.m);
                 p.px(12, 2, 0xffffff); p.px(20, 2, 0xffffff);
                 return { g: p.g, gx: 2, gy: 3 };
+            },
+            flame() {
+                // Olov qilichi: tig' ustida olov tillari
+                const p = painter(30, 9);
+                p.rect(0, 3, 5, 3, (x) => x % 2 ? 0x212121 : 0x3e2723);
+                p.rect(5, 1, 2, 7, 0xffab00); p.px(5, 1, 0xfff176);
+                for (let x = 7; x < 28; x++) { p.px(x, 3, 0xffeb3b); p.px(x, 4, 0xff9800); p.px(x, 5, 0xe65100); }
+                for (let x = 9; x < 27; x += 3) { p.px(x, 2, 0xff9800); p.px(x + 1, 1, 0xffeb3b); }
+                p.px(28, 4, 0xff9800); p.px(29, 4, 0xffeb3b);
+                return { g: p.g, gx: 2, gy: 4 };
+            },
+            ice() {
+                // Muz qilichi: shaffof ko'k kristall tig'
+                const p = painter(30, 9);
+                p.rect(0, 3, 5, 3, (x) => x % 2 ? 0x455a64 : 0x78909c);
+                for (let y = 1; y < 8; y++) for (let x = 5; x < 8; x++) if (Math.abs(x - 6) + Math.abs(y - 4) <= 3) p.px(x, y, y < 4 ? 0xe0f7fa : 0x4dd0e1);
+                for (let x = 8; x < 27; x++) { p.px(x, 3, 0xe1f5fe); p.px(x, 4, 0x81d4fa); p.px(x, 5, 0x4fc3f7); }
+                for (let x = 11; x < 22; x++) { p.px(x, 2, 0xb3e5fc); p.px(x, 6, 0x29b6f6); }
+                p.px(27, 4, 0x81d4fa); p.px(28, 4, 0xb3e5fc); p.px(29, 4, 0xffffff);
+                [10, 15, 20].forEach(x => p.px(x, 3, 0xffffff));
+                return { g: p.g, gx: 2, gy: 4 };
+            },
+            bone() {
+                // Suyak to'qmoq
+                const p = painter(30, 8), B = [0xd7ccc8, 0xefebe9, 0xfafafa];
+                p.rect(4, 3, 22, 2, (x, y) => y === 3 ? B[1] : B[0]);
+                [[2, 2], [2, 5.5], [27, 2], [27, 5.5]].forEach(([x, y]) => p.disc(x, y, 1.9, (xx, yy) => yy < y ? B[2] : B[1]));
+                return { g: p.g, gx: 7, gy: 3.5 };
+            },
+            fish() {
+                // Baliq qilich: dumidan ushlanadi
+                const p = painter(30, 11);
+                for (let y = 0; y < 11; y++) for (let x = 6; x < 30; x++) {
+                    const k = ((x - 18) / 11.5) ** 2 + ((y - 5) / 4.6) ** 2;
+                    if (k <= 1) p.px(x, y, y < 4 ? 0x81d4fa : y < 7 ? 0x29b6f6 : 0xb3e5fc);
+                }
+                for (let x = 0; x < 7; x++) { const h = Math.round((7 - x) * 0.6); for (let y = 5 - h; y <= 5 + h; y++) p.px(x, y, 0x0288d1); }
+                p.px(25, 4, 0xffffff); p.px(26, 4, 0x111111); p.rect(28, 6, 2, 1, 0x01579b);
+                [12, 16, 20].forEach(x => p.px(x, 3, 0x0288d1));
+                p.rect(15, 0, 3, 1, 0x0288d1);
+                return { g: p.g, gx: 3, gy: 5 };
+            },
+            candy() {
+                // Shirinlik tayoqcha (qizil-oq yo'l-yo'l, uchi qayrilgan)
+                const p = painter(30, 8), st = (x, y) => ((x + y) % 4 < 2) ? 0xe53935 : 0xfafafa;
+                p.rect(0, 5, 25, 2, st);
+                p.line(24, 5, 26, 2, st, 2); p.line(26, 1, 28, 1, st, 2); p.line(28, 2, 28, 4, st, 2);
+                return { g: p.g, gx: 4, gy: 5.5 };
             }
         },
         shield: {
@@ -370,7 +511,43 @@ window.Cosmetics = (() => {
                 p.rect(9, 3, 2, 9, 0xc62828); p.rect(6, 6, 8, 2, 0xc62828);
                 return { g: p.g };
             },
-            pink() { return { g: kiteShield([PINK.d, PINK.m, PINK.l, PINK.xl], 0x880e4f, 0xff80ab, 'heart') }; }
+            pink() { return { g: kiteShield([PINK.d, PINK.m, PINK.l, PINK.xl], 0x880e4f, 0xff80ab, 'heart') }; },
+            pan() {
+                // Tova: qora doira va pastga tutqich
+                const p = painter(19, 27);
+                p.disc(9, 9, 9, 0x212121); p.disc(9, 9, 7.6, (x, y) => (x + y < 14) ? 0x607d8b : 0x455a64);
+                p.px(6, 5, 0x90a4ae); p.px(7, 5, 0x90a4ae); p.px(5, 6, 0x90a4ae);
+                p.rect(8, 18, 3, 9, (x) => x === 8 ? 0x5d4037 : 0x3e2723);
+                return { g: p.g };
+            },
+            pizza() {
+                // Pitsa bo'lagi: tepada qobiq, pishloq, pepperoni
+                const p = painter(20, 24);
+                for (let y = 0; y < 24; y++) {
+                    const half = Math.max(1, Math.round(10 * (1 - y / 24)));
+                    for (let x = 10 - half; x < 10 + half; x++) p.px(x, y, y < 3 ? (y === 0 ? 0xe0b06a : 0xc8893c) : ((x * 7 + y * 3) % 11 === 0 ? 0xffe082 : 0xffc107));
+                }
+                [[6, 6], [13, 8], [9, 13], [11, 18]].forEach(([x, y]) => p.disc(x, y, 1.6, 0xd32f2f));
+                p.px(5, 5, 0xef5350); p.px(12, 7, 0xef5350);
+                [[8, 9], [14, 12], [10, 16]].forEach(([x, y]) => p.px(x, y, 0x388e3c));
+                return { g: p.g };
+            },
+            turtle() {
+                // Toshbaqa kosasi: yashil olti burchaklar, jigarrang hoshiya
+                const p = painter(20, 24);
+                for (let y = 0; y < 24; y++) for (let x = 0; x < 20; x++) {
+                    const k = ((x - 9.5) / 10) ** 2 + ((y - 11.5) / 12) ** 2;
+                    if (k > 1) continue;
+                    if (k > 0.78) { p.px(x, y, 0x8d6e63); continue; }
+                    const cx = Math.floor((x + (Math.floor(y / 6) % 2) * 3) / 6), cy = Math.floor(y / 6);
+                    const edge = (x + (Math.floor(y / 6) % 2) * 3) % 6 === 0 || y % 6 === 0;
+                    p.px(x, y, edge ? 0x1b5e20 : ((cx + cy) % 2 ? 0x43a047 : 0x388e3c));
+                }
+                p.px(7, 4, 0x81c784); p.px(8, 4, 0x81c784);
+                return { g: p.g };
+            },
+            golden() { return { g: kiteShield([0xc79100, 0xffb300, 0xffca28, 0xffe082], 0x6d4c41, 0xfff8e1, 'diamond') }; },
+            ice() { return { g: kiteShield([0x0288d1, 0x4fc3f7, 0x81d4fa, 0xe1f5fe], 0x01579b, 0xe0f7fa, 'diamond') }; }
         },
         shotgun: {
             toy() {
@@ -395,6 +572,38 @@ window.Cosmetics = (() => {
             pink() {
                 const p = shotgunShape({ stock: 0xf06292, body: PINK.d, barrel: [PINK.xl, PINK.l, PINK.m], pump: [0xff80ab, 0xf06292], trig: 0x880e4f });
                 p.px(4, 3, 0xffffff); p.px(6, 3, 0xffffff); p.px(5, 4, 0xffffff);
+                return { g: p.g, gx: 8, gy: 3 };
+            },
+            golden() {
+                const p = shotgunShape({ stock: 0x6d4c41, body: 0xc79100, barrel: [0xfff8e1, 0xffca28, 0xffb300], pump: [0x8d5a3a, 0x6d4c41], trig: 0x5d4037 });
+                p.px(10, 2, 0xfff59d); p.px(18, 1, 0xffffff); p.px(24, 1, 0xffffff);
+                return { g: p.g, gx: 8, gy: 3 };
+            },
+            water() {
+                // Suv to'pponcha: rangli plastik, tepada suv idishi
+                const p = shotgunShape({ stock: 0xff9800, body: 0x29b6f6, barrel: [0xb3e5fc, 0x4fc3f7, 0x0288d1], pump: [0xffeb3b, 0xfbc02d], trig: 0x01579b });
+                p.rect(8, 0, 5, 1, 0x81d4fa); p.px(9, 0, 0xe1f5fe);
+                p.rect(26, 1, 2, 3, 0xff5722);
+                return { g: p.g, gx: 8, gy: 3 };
+            },
+            ice() {
+                const p = shotgunShape({ stock: 0x4fc3f7, body: 0x0277bd, barrel: [0xe1f5fe, 0xb3e5fc, 0x81d4fa], pump: [0x80deea, 0x4dd0e1], trig: 0x01579b });
+                [16, 19, 22, 25].forEach((x, i) => p.px(x, 4 + (i % 2), 0xe1f5fe));
+                return { g: p.g, gx: 8, gy: 3 };
+            },
+            pirate() {
+                // Qaroqchi miltig'i (blunderbuss): yog'och qo'ndoq, uchi kengaygan mis stvol
+                const p = painter(30, 8);
+                for (let x = 0; x < 10; x++) for (let y = 3 + Math.floor(x / 5); y < 7; y++) p.px(x, y, (x + y) % 5 === 0 ? 0x4e342e : 0x6d4c41);
+                p.rect(9, 2, 4, 4, 0x5d4037); p.px(10, 6, 0x3e2723); p.px(11, 7, 0x3e2723);
+                for (let x = 13; x < 26; x++) { p.px(x, 2, 0xe6c07b); p.px(x, 3, 0xc9a24f); p.px(x, 4, 0x9a7a2e); }
+                for (let x = 26; x < 30; x++) for (let y = 4 - (x - 25); y <= 2 + (x - 25) + 2 && y < 8; y++) if (y >= 0) p.px(x, y, y < 3 ? 0xe6c07b : 0xb08d3e);
+                [16, 22].forEach(x => p.rect(x, 2, 1, 3, 0x6d4c41));
+                return { g: p.g, gx: 9, gy: 4 };
+            },
+            laser() {
+                const p = shotgunShape({ stock: 0x212121, body: 0xeceff1, barrel: [0x84ffff, 0x18ffff, 0x00b8d4], pump: [0x424242, 0x212121], trig: 0x111111 });
+                p.rect(27, 1, 1, 3, 0xff1744); p.px(9, 2, 0xff1744); p.px(11, 2, 0x00e676);
                 return { g: p.g, gx: 8, gy: 3 };
             }
         },
@@ -424,6 +633,50 @@ window.Cosmetics = (() => {
                 const cloud = (x, y) => shade(0.95 - (y / 16) - ((x - 16) / 40), x, y, P);
                 p.disc(22, 7, 5.5, cloud); p.disc(26, 5, 4, cloud); p.disc(25.5, 10, 3.5, cloud); p.disc(18.5, 5.5, 3, cloud);
                 return { g: p.g, gx: 9, gy: 6.5 };
+            },
+            crystal() {
+                const g = staffShape({ orb: [0x4fc3f7, 0xe1f5fe], shaft: [0xb0bec5, 0x78909c], ring: [0x80deea, 0x26c6da], tip: [0x4fc3f7, 0xe1f5fe] });
+                [[2, 0], [0, 2], [5, 1], [2, 7]].forEach(([x, y]) => { g[y][x] = 0xb3e5fc; });
+                return { g, gx: 19, gy: 3.5 };
+            },
+            skull() {
+                // Bosh suyagi tayoq: qora tayoq, oq bosh suyagi, yashil ko'zlar
+                const p = painter(32, 9);
+                for (let x = 7; x < 30; x++) { p.px(x, 4, 0x37474f); p.px(x, 5, 0x212121); }
+                p.rect(0, 1, 7, 6, (x, y) => ((x === 0 || x === 6) && (y === 1 || y === 6)) ? null : (x + y < 5 ? 0xffffff : 0xe0e0e0));
+                p.rect(2, 7, 3, 2, 0xd6d6d6); p.px(3, 8, 0x424242);
+                p.px(1, 3, 0x00e676); p.px(2, 3, 0x111111); p.px(4, 3, 0x111111); p.px(5, 3, 0x00e676); p.px(3, 5, 0x424242);
+                p.rect(28, 3, 2, 4, 0x00e676);
+                return { g: p.g, gx: 19, gy: 4.5 };
+            },
+            wand() {
+                // Yulduzli sehrli tayoqcha
+                const p = painter(30, 11), Y = 0xffeb3b;
+                p.rect(0, 5, 20, 1, 0x212121); p.rect(0, 6, 20, 1, 0x424242); p.rect(0, 5, 3, 2, 0xfafafa);
+                p.disc(24, 5.5, 2.4, Y);
+                p.line(24, 0, 24, 10, Y); p.line(19, 4, 29, 4, Y); p.line(20, 9, 23, 6, Y); p.line(28, 9, 25, 6, Y);
+                p.px(23, 4, 0xffffff); p.px(24, 5, 0xfff59d);
+                [[20, 1], [28, 1]].forEach(([x, y]) => p.px(x, y, 0xfff59d));
+                return { g: p.g, gx: 10, gy: 5.5 };
+            },
+            broom() {
+                // Supurgi: jigarrang dasta, qizil bog'ich, somon cho'tka
+                const p = painter(34, 11);
+                p.rect(0, 5, 23, 2, (x, y) => y === 5 ? 0x8d5a3a : 0x6d4c41);
+                for (let x = 23; x < 34; x++) { const h = 1 + Math.round((x - 23) * 0.4); for (let y = 5 - h; y <= 6 + h; y++) p.px(x, y, (y + x) % 3 === 0 ? 0xf9a825 : 0xffca28); }
+                p.rect(23, 3, 2, 6, 0xc62828);
+                return { g: p.g, gx: 11, gy: 5.5 };
+            },
+            lolli() {
+                // Katta aylanma konfet (lollipop)
+                const p = painter(32, 14);
+                p.rect(0, 6, 20, 2, (x, y) => y === 6 ? 0xfafafa : 0xe0e0e0);
+                p.disc(25, 7, 6.2, (x, y) => {
+                    const dx = x - 25, dy = y - 7;
+                    return (Math.floor(Math.atan2(dy, dx) / (Math.PI * 2) * 4 + Math.hypot(dx, dy) / 2.2 + 8) % 2) ? 0xff4081 : 0xfafafa;
+                });
+                p.px(22, 4, 0xffffff);
+                return { g: p.g, gx: 10, gy: 6.5 };
             }
         },
         bow: {
@@ -454,6 +707,67 @@ window.Cosmetics = (() => {
             pinkpistol() {
                 const g = pistolShape({ slide: PINK.l, light: PINK.xl, grip: PINK.d, gripL: PINK.m });
                 return { g, gx: 4, gy: 5, angle: -4 };
+            },
+            golden() {
+                // Oltin qayrilma kamon: egilgan yelkalar, uchlari tashqariga buralgan, dastada yoqut, oltin uchli o'q
+                const p = painter(20, 19), G = [0xc79100, 0xffca28, 0xfff59d];
+                for (let y = 0; y < 19; y++) {
+                    const k = (y - 9) / 9, x = 9 + Math.round(4.5 * (1 - k * k));
+                    p.px(x, y, G[1]); p.px(x + 1, y, G[0]); if (y < 9) p.px(x - 1, y, G[2]);
+                }
+                p.px(10, 0, G[1]); p.px(11, 0, G[2]); p.px(10, 18, G[1]); p.px(11, 18, G[0]);
+                p.line(9, 1, 9, 17, 0xfff8e1);
+                p.rect(13, 7, 3, 5, 0x4e342e); p.px(14, 9, 0xe53935); p.px(14, 8, 0xff8a80);
+                p.rect(0, 9, 17, 1, 0xd7b98e);
+                p.px(0, 8, 0xe53935); p.px(1, 8, 0xe53935); p.px(0, 10, 0xe53935); p.px(1, 10, 0xe53935);
+                p.rect(17, 8, 1, 3, G[1]); p.rect(18, 9, 2, 1, G[2]);
+                return { g: p.g, gx: 4, gy: 9 };
+            },
+            bone() {
+                // Suyak kamon: umurtqa bo'g'imlaridan yasalgan yelkalar, dastada kichik bosh suyagi, qizil pay ip, qora uchli suyak o'q
+                const p = painter(20, 19), B = [0xbcaaa4, 0xd7ccc8, 0xfafafa];
+                for (let y = 0; y < 19; y++) {
+                    const k = (y - 9) / 9, x = 10 + Math.round(3.5 * (1 - k * k)), knob = y % 3 === 0;
+                    p.px(x, y, knob ? B[2] : B[1]); p.px(x + 1, y, knob ? B[1] : B[0]); if (knob) { p.px(x - 1, y, B[2]); p.px(x + 2, y, B[0]); }
+                }
+                p.line(9, 1, 9, 17, 0x8d1c1c);
+                p.rect(12, 7, 4, 4, B[2]); p.rect(13, 11, 2, 1, B[1]);
+                p.px(12, 8, 0x111111); p.px(14, 8, 0x111111); p.px(13, 10, 0x424242);
+                p.rect(0, 9, 17, 1, 0xefebe9); p.px(5, 9, B[0]); p.px(10, 9, B[0]);
+                p.px(0, 8, 0x424242); p.px(0, 10, 0x424242);
+                p.rect(17, 8, 1, 3, 0x212121); p.rect(18, 9, 2, 1, 0x424242);
+                return { g: p.g, gx: 4, gy: 9 };
+            },
+            ice() {
+                // Muz arbaleti: gorizontal kristall qo'ndoq, oldida qirrali muz yoy, oppoq muz o'q
+                const p = painter(24, 15), I = [0x0288d1, 0x4fc3f7, 0x81d4fa, 0xe1f5fe];
+                p.rect(0, 6, 16, 3, (x, y) => y === 6 ? I[2] : y === 7 ? I[1] : I[0]);
+                p.rect(0, 5, 4, 1, I[1]); p.rect(0, 9, 3, 1, I[0]);
+                p.px(6, 9, 0x01579b); p.px(6, 10, 0x01579b);
+                for (let y = 0; y < 15; y++) {
+                    const x = 16 - Math.round(Math.abs(y - 7) * 0.35);
+                    p.px(x, y, I[3]); p.px(x + 1, y, (y % 3 === 0) ? I[3] : I[1]);
+                    if (y % 4 === 1) p.px(x + 2, y, I[2]);
+                }
+                p.line(15, 0, 10, 7, 0xffffff); p.line(10, 7, 15, 14, 0xffffff);
+                p.rect(10, 7, 11, 1, I[3]);
+                p.px(21, 6, I[2]); p.px(21, 8, I[2]); p.px(21, 7, 0xffffff); p.px(22, 7, 0xffffff); p.px(23, 7, I[2]);
+                [[3, 6], [9, 6], [13, 6]].forEach(([x, y]) => p.px(x, y, 0xffffff));
+                return { g: p.g, gx: 4, gy: 7 };
+            },
+            slingshot() {
+                // Rogatka: yog'och sopi, ayri va qizil rezina
+                const p = painter(14, 14), Wd = 0x8d5a3a;
+                p.rect(0, 6, 6, 2, (x, y) => y === 6 ? 0xa1673e : 0x6d4c41);
+                p.line(6, 7, 11, 1, Wd, 2); p.line(6, 6, 11, 12, Wd, 2);
+                p.line(11, 1, 8, 7, 0xe53935); p.line(8, 7, 11, 12, 0xe53935); p.rect(7, 6, 2, 2, 0x6d4c41);
+                return { g: p.g, gx: 2, gy: 7 };
+            },
+            blaster() {
+                const g = pistolShape({ slide: 0xeceff1, light: 0xffffff, grip: 0x263238, gripL: 0x00e5ff });
+                for (let x = 4; x < 14; x += 3) g[2][x] = 0x00e5ff;
+                g[2][15] = 0xff1744;
+                return { g, gx: 4, gy: 5, angle: -4 };
             }
         },
         katana: {
@@ -473,7 +787,22 @@ window.Cosmetics = (() => {
                 return { g: p.g, gx: 3, gy: 2 };
             },
             pink() { return { g: katanaShape({ hilt: [PINK.d, 0xf06292], tsuba: 0xff80ab, blade: [PINK.l, PINK.w, 0xffffff], tip: PINK.xl }), gx: 3, gy: 2 }; },
-            dark() { return { g: katanaShape({ hilt: [0x212121, 0x4a148c], tsuba: 0x7c4dff, blade: [0x212121, 0x37474f, 0x7c4dff], tip: 0xb388ff }), gx: 3, gy: 2 }; }
+            dark() { return { g: katanaShape({ hilt: [0x212121, 0x4a148c], tsuba: 0x7c4dff, blade: [0x212121, 0x37474f, 0x7c4dff], tip: 0xb388ff }), gx: 3, gy: 2 }; },
+            golden() { return { g: katanaShape({ hilt: [0x3e2723, 0xffca28], tsuba: 0xc79100, blade: [0xc79100, 0xffd54f, 0xfff8e1], tip: 0xfff59d }), gx: 3, gy: 2 }; },
+            ice() { return { g: katanaShape({ hilt: [0x01579b, 0xe1f5fe], tsuba: 0x80deea, blade: [0x4fc3f7, 0xb3e5fc, 0xffffff], tip: 0xe1f5fe }), gx: 3, gy: 2 }; },
+            flame() {
+                const g = katanaShape({ hilt: [0x212121, 0xff6d00], tsuba: 0xffab00, blade: [0xe65100, 0xff9800, 0xffeb3b], tip: 0xfff176 });
+                for (let x = 10; x < 30; x += 4) g[0][x] = 0xff9800;
+                return { g, gx: 3, gy: 2 };
+            },
+            jade() { return { g: katanaShape({ hilt: [0x1b5e20, 0xffd54f], tsuba: 0xffd54f, blade: [0x2e7d32, 0x66bb6a, 0xc8e6c9], tip: 0xa5d6a7 }), gx: 3, gy: 2 }; },
+            bamboo() {
+                // Bambuk tayoq: bo'g'imli yashil novda
+                const p = painter(34, 5);
+                p.rect(0, 1, 33, 3, (x, y) => (x % 7 === 6) ? 0x33691e : y === 1 ? 0xaed581 : y === 2 ? 0x8bc34a : 0x689f38);
+                p.px(33, 1, 0xaed581); p.px(10, 0, 0x7cb342); p.px(11, 0, 0x9ccc65);
+                return { g: p.g, gx: 3, gy: 2 };
+            }
         },
         kunai: {
             cards() {
@@ -498,6 +827,42 @@ window.Cosmetics = (() => {
                 p.rect(6, 2, 6, 3, (x) => x % 2 ? 0x78909c : 0xb0bec5);
                 p.rect(12, 3, 4, 1, 0xeceff1); p.px(12, 2, 0xcfd8dc); p.px(12, 4, 0xcfd8dc);
                 return { g: p.g, gx: 8, gy: 3 };
+            },
+            pencil() {
+                // Qalam: o'chirg'ich, sariq tana, uchli grafit
+                const p = painter(16, 4);
+                p.rect(0, 0, 2, 4, 0xf48fb1); p.rect(2, 0, 1, 4, 0x9e9e9e);
+                p.rect(3, 0, 10, 4, (x, y) => y === 0 ? 0xfff176 : y === 3 ? 0xf9a825 : 0xfbc02d);
+                p.rect(13, 0, 1, 4, 0xe0b98a); p.rect(14, 1, 1, 2, 0xe0b98a); p.rect(15, 1, 1, 2, 0x424242);
+                return { g: p.g, gx: 4, gy: 1.5 };
+            },
+            fork() {
+                // Sanchqi
+                const p = painter(16, 5), S = 0xcfd8dc;
+                p.rect(0, 2, 9, 1, S); p.rect(0, 1, 4, 3, (x, y) => y === 1 ? 0xeceff1 : 0xb0bec5);
+                p.rect(9, 1, 2, 3, S);
+                [0, 2, 4].forEach(y => p.rect(11, y, 5, 1, y === 0 ? 0xeceff1 : S));
+                return { g: p.g, gx: 2, gy: 2 };
+            },
+            feather() {
+                // Pat: oq o'zak, to'q sariq yelpig'ich
+                const p = painter(16, 5);
+                p.rect(0, 2, 16, 1, 0xfafafa);
+                p.rect(4, 1, 11, 1, 0xff7043); p.rect(4, 3, 11, 1, 0xf4511e);
+                p.rect(7, 0, 7, 1, 0xffab91); p.rect(7, 4, 7, 1, 0xff8a65);
+                p.px(9, 1, 0xfafafa); p.px(12, 3, 0xfafafa);
+                return { g: p.g, gx: 3, gy: 2 };
+            },
+            golden() { const p = kunaiShape(0x6d4c41, 0x3e2723, 0xfff59d, 0xffca28); p.px(10, 2, 0xffffff); return { g: p.g, gx: 4, gy: 2 }; },
+            icicle() {
+                // Muz parchasi: uzun cho'zinchoq kristall
+                const p = painter(16, 5);
+                for (let x = 0; x < 16; x++) {
+                    const hw = x < 6 ? Math.round(x / 3) : Math.round((15 - x) / 4.5);
+                    for (let y = 2 - hw; y <= 2 + hw; y++) p.px(x, y, y < 2 ? 0xe1f5fe : y === 2 ? 0x81d4fa : 0x4fc3f7);
+                }
+                p.px(5, 1, 0xffffff); p.px(9, 1, 0xffffff);
+                return { g: p.g, gx: 3, gy: 2 };
             }
         }
     };

@@ -2,7 +2,7 @@ import { Server, Socket } from 'socket.io';
 import { RoomState, PlayerState } from '../types';
 import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
-import { getSkinColor, getWeaponSkinColor } from '../skins';
+import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
 import { lookString } from '../cosmetics';
 import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP } from '../maps';
 import { GameEngine } from './game.engine';
@@ -162,6 +162,7 @@ export class RoomManager {
             y: 500,
             characterType: characterType,
             color: getSkinColor(characterType, equippedSkins[characterType] || 'default'),
+            skinFx: getSkinFx(characterType, equippedSkins[characterType] || 'default'),
             hp: 100,
             isInvisible: false,
             speedMultiplier: 1,
@@ -180,6 +181,7 @@ export class RoomManager {
             skinId: equippedSkins[characterType] || 'default',
             equippedSkins: equippedSkins,
             weaponColor: getWeaponSkinColor(characterType, equippedWeaponSkins[characterType] || 'default'),
+            weaponFx: getWeaponSkinFx(characterType, equippedWeaponSkins[characterType] || 'default'),
             equippedWeaponSkins: equippedWeaponSkins,
             equippedCosmetics: equippedCosmetics,
             look: lookString(equippedCosmetics[characterType], characterType),
@@ -371,6 +373,7 @@ export class RoomManager {
             const skinId = player.equippedSkins[characterType] || 'default';
             player.skinId = skinId;
             player.color = getSkinColor(characterType, skinId) ?? CHARACTER_COLORS[characterType];
+            player.skinFx = getSkinFx(characterType, skinId);
             player.look = lookString((player.equippedCosmetics || {})[characterType], characterType);
             // MUHIM: yaxshilashlar HAR BIR PERSONAJGA ALOHIDA tegishli - shu personajga
             // almashganda, uning o'z damage/stamina darajasini keshdan olamiz
@@ -411,8 +414,10 @@ export class RoomManager {
         const skinId = user.equippedSkins[player.characterType] || 'default';
         player.skinId = skinId;
         player.color = getSkinColor(player.characterType, skinId) ?? CHARACTER_COLORS[player.characterType];
+        player.skinFx = getSkinFx(player.characterType, skinId);
         const weaponSkinId = user.equippedWeaponSkins[player.characterType] || 'default';
         player.weaponColor = getWeaponSkinColor(player.characterType, weaponSkinId);
+        player.weaponFx = getWeaponSkinFx(player.characterType, weaponSkinId);
         player.equippedCosmetics = user.equippedCosmetics;
         player.look = lookString(user.equippedCosmetics[player.characterType], player.characterType);
         const charUpgrades = user.upgrades[player.characterType] || { damage: 0, stamina: 0 };
@@ -1050,6 +1055,8 @@ export class RoomManager {
         const xpGain = clearedMap.xpReward ?? ((clearedMap.season || 1) >= 2 ? 25 : db.XP_PER_MAP);
         let levelCleared = false;
         Object.values(room.players).forEach((p) => {
+            this.dailyProgress(roomId, p.id, 'maps', 1);
+            if (clearedMap.bossCoins) this.dailyProgress(roomId, p.id, 'bosses', 1);
             const levelBefore = p.level || 0;
             const pXp = xpGain + RoomManager.xpBoostOf(p);   // XP kuchaytirish bonusi
             p.xp = (p.xp || 0) + pXp;
@@ -1364,7 +1371,7 @@ export class RoomManager {
                     if (r.success) { reply({ success: true, crop: crop.id, k }); this.farmHeroXp(roomId, p.id, RoomManager.FARM_XP_PLANT); }
                 } else {
                     r = await db.farmHarvest(uid, k as number, (pl) => { const c = CROPS.find(x => x.id === pl.c); return !!c && farmGrown(F, pl.t, Date.now(), c.growMs, RoomManager.plotWatered(fd, k as number, pl), RoomManager.cropSpeed(fd, k as number)); }, F.goldenChance);
-                    if (r.success) { reply({ success: true, crop: r.crop, k, n: r.n, golden: r.golden }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); }
+                    if (r.success) { reply({ success: true, crop: r.crop, k, n: r.n, golden: r.golden }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); this.dailyProgress(roomId, p.id, 'harvest', r.n || 1); }
                 }
             } else if (action === 'water' || action === 'fert') {
                 if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= FARM_PLOTS * FARM_ZONES || !near(farmPlotX(F, k as number), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
@@ -1410,7 +1417,7 @@ export class RoomManager {
                     if (r.success) { socket.emit('coinsUpdated', { amount: -tr.price, totalCoins: r.coins }); reply({ success: true, k, planted: tr.id }); }
                 } else {
                     r = await db.orchardHarvest(uid, k as number, (t) => RoomManager.orchardReady(t, Date.now(), RoomManager.fruitSpeed(fd)), (c) => (FRUIT_TREES.find(x => x.id === c) || { yield: 0 }).yield);
-                    if (r.success) { reply({ success: true, k, crop: r.crop, n: r.n }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); }
+                    if (r.success) { reply({ success: true, k, crop: r.crop, n: r.n }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); this.dailyProgress(roomId, p.id, 'harvest', r.n || 1); }
                 }
             } else if (action === 'tree') {
                 const T = F.tree;
@@ -1463,7 +1470,7 @@ export class RoomManager {
                     const fish = Array.from({ length: n }, () => rollFish(true));
                     const use = await db.toolUse(uid, 'net', F.toolUses);
                     r = await db.farmAddFish(uid, fish, 2 * fish.length);
-                    if (r.success) { reply({ success: true, tool: 'net', fish, left: use.left, broken: use.broken }); this.io.to(roomId).emit('myFarmNet', { fish }); }
+                    if (r.success) { reply({ success: true, tool: 'net', fish, left: use.left, broken: use.broken }); this.io.to(roomId).emit('myFarmNet', { fish }); this.dailyProgress(roomId, p.id, 'fish', fish.length); }
                 } else {
                     if (!mf.farm.rod) { reply({ success: false, message: 'mf_need_rod' }); return; }
                     if (mf.fishing) return;
@@ -1485,6 +1492,7 @@ export class RoomManager {
                 r = await db.farmAddFish(uid, [{ ...fi.fish, value }], golden ? 15 : 3);
                 if (r.success) {
                     reply({ success: true, tool: 'rod', fish: { ...fi.fish, value }, zone: arg });
+                    this.dailyProgress(roomId, p.id, 'fish', 1);
                     if (golden) { this.io.to(roomId).emit('mfGoldfish', { nick: p.nickname }); this.grantAchievement(roomId, p.id, 'goldfish', 50).catch(err => console.error('goldfish ach xatosi:', err)); }
                 }
             }
@@ -1760,7 +1768,7 @@ export class RoomManager {
         mf.boss = null;
         const T = getMapById(room.selectedLevel).myFarm!.tree;
         this.io.to(roomId).emit('treeBossDown', { coins: T.rewardCoins, xp: T.rewardXp });
-        Object.values(room.players).forEach(p => { this.awardReward(roomId, p.id, T.rewardCoins, T.rewardXp, true).catch(err => console.error('tree reward xatosi:', err)); });
+        Object.values(room.players).forEach(p => { this.awardReward(roomId, p.id, T.rewardCoins, T.rewardXp, true).catch(err => console.error('tree reward xatosi:', err)); this.dailyProgress(roomId, p.id, 'bosses', 1); });
         if (mf.owner) {
             const owner = mf.owner;
             db.treeBossDone(owner).then((r) => {
@@ -1794,7 +1802,16 @@ export class RoomManager {
         return db.XP_BOOST_PER_LEVEL * Math.min(db.XP_BOOST_MAX, Math.max(0, (p.xpBoost || {})[p.characterType] || 0));   // eng ko'pi 10 daraja
     }
     // boost = true: o'ldirish, boss, xarita o'tish (jang) - kuchaytirish bonusi qo'shiladi; ferma va buyurtmalarda - yo'q
+    // KUNLIK VAZIFA hisoblagichi: o'yin hodisasi (o'ldirish, boss, xarita, hosil, baliq, tanga) - bajarilsa o'yinchiga xabar
+    public dailyProgress(roomId: string, playerId: string, type: string, n: number): void {
+        const p = this.activeRooms[roomId]?.players[playerId];
+        if (!p || p.userId === null || !(n > 0)) return;
+        db.dailyProgress(p.userId, type, n).then((done) => {
+            done.forEach(q => this.io.to(playerId).emit('dailyQuestDone', { type: q.type, need: q.need }));
+        }).catch(err => console.error('dailyProgress xatosi:', err));
+    }
     public async awardReward(roomId: string, playerId: string, coins: number, xp: number, boost: boolean = false): Promise<void> {
+        if (coins > 0) this.dailyProgress(roomId, playerId, 'coins', coins);
         const player = this.activeRooms[roomId]?.players[playerId];
         if (!player) return;
         if (boost && xp > 0) xp += RoomManager.xpBoostOf(player);

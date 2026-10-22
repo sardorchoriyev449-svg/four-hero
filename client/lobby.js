@@ -398,6 +398,7 @@ async function enterMainMenu() {
     showPanel(mainMenuPanel);
     updateControlSchemeButtons();
     await refreshMenuStats();
+    if (window.Daily) Daily.refresh(true);   // kunlik mukofot: belgisi; kunning birinchi kirishida o'zi ochiladi
 }
 
 // BOSH MENYUDAGI DARAJA, XP va TANGA: har safar bosh menyu ochilganda serverdan yangilanadi (ilgari faqat
@@ -1837,7 +1838,11 @@ function renderShop() {
         const swatchBg = skin.accent ? `linear-gradient(135deg, ${colorHex} 0 58%, #${skin.accent.toString(16).padStart(6, '0')} 58% 100%)` : colorHex;
 
         const left = document.createElement('span');
-        left.innerHTML = `<span class="skin-swatch" style="background:${swatchBg}"></span>${tSkinName('skin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        // Afsonaviy (effektli) va eksklyuziv (faqat kunlik mukofot) skinlar - alohida belgi
+        const tag = skin.rarity ? `<span class="skin-tag ${skin.rarity}" title="${t('skinfx_' + skin.fx)}">${t('skin_rarity_' + skin.rarity)}</span>` : '';
+        const priceTxt = skin.exclusive ? ' — ' + t('skin_daily_only') : skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')';
+        left.innerHTML = `<span class="skin-swatch" style="background:${skin.fx === 'rainbow' ? 'linear-gradient(135deg,#ff1744,#ffea00,#00e676,#2979ff,#d500f9)' : swatchBg}"></span>${tSkinName('skin', charType, skin)}${tag}${priceTxt}`;
+        if (skin.fx) left.title = t('skinfx_' + skin.fx);
         row.appendChild(left);
 
         const btn = document.createElement('button');
@@ -1848,6 +1853,10 @@ function renderShop() {
             btn.innerText = t('equip_btn');
             btn.className = 'skin-equip-btn';
             btn.onclick = () => equipSkin(charType, skin.id);
+        } else if (skin.exclusive) {
+            btn.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('skin_day7')}`;
+            btn.className = 'skin-buy-btn';
+            btn.disabled = true;
         } else {
             btn.innerText = t('buy_btn');
             btn.className = 'skin-buy-btn';
@@ -2025,7 +2034,9 @@ function renderWeaponShop() {
         const swatchBg = skin.accent ? `linear-gradient(135deg, ${colorHex} 0 58%, #${skin.accent.toString(16).padStart(6, '0')} 58% 100%)` : colorHex;
 
         const left = document.createElement('span');
-        left.innerHTML = `<span class="skin-swatch" style="background:${swatchBg}"></span>${tSkinName('wskin', charType, skin)}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        const wtag = skin.wfx ? `<span class="skin-tag legendary" title="${t('wfx_' + skin.wfx)}">${t('skin_rarity_unique')}</span>` : '';
+        left.innerHTML = `<span class="skin-swatch" style="background:${swatchBg}"></span>${tSkinName('wskin', charType, skin)}${wtag}${skin.price > 0 ? ' — <i class="fa-solid fa-coins" style="color:#ffcc00;"></i>' + skin.price : ' (' + t('free_label') + ')'}`;
+        if (skin.wfx) left.title = t('wfx_' + skin.wfx);
         row.appendChild(left);
 
         const btn = document.createElement('button');

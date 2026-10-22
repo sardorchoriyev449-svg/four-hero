@@ -9,7 +9,7 @@ import { RoomState } from './types';
 import { RoomManager } from './managers/room.manager';
 import { GameEngine } from './managers/game.engine';
 import * as db from './db';
-import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin } from './skins';
+import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
 import { MAPS, SEASON_MAP_COUNT, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason } from './maps';
 import { config } from 'dotenv';
@@ -502,6 +502,21 @@ app.get('/api/leaderboard/:userId', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 
+// KUNLIK: kirish mukofoti (7 kunlik zanjir, 7-kuni eksklyuziv skin) va 3 ta kunlik vazifa
+app.get('/api/daily/:userId', async (req, res) => {
+    try { const d = await db.getDaily(req.params.userId); res.json(d ? { success: true, ...d } : { success: false, message: 'err_user_not_found' }); }
+    catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/daily/:userId/login', async (req, res) => {
+    try {
+        res.json(await db.claimDailyLogin(req.params.userId));
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/daily/:userId/quest', async (req, res) => {
+    try { res.json(await db.claimDailyQuest(req.params.userId, Number(req.body && req.body.idx))); }
+    catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
 app.get('/api/maps', (req, res) => {
     res.json({ success: true, maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor })) });
 });
@@ -626,6 +641,8 @@ app.post('/api/character/:userId/upgrade', async (req, res) => {
 app.post('/api/skins/:userId/buy', async (req, res) => {
     const { characterType, skinId } = req.body || {};
     if (!isKnownSkin(characterType, skinId)) { res.status(400).json({ success: false, message: 'err_not_found' }); return; }
+    // Eksklyuziv skin (kunlik mukofot) - do'konda sotilmaydi
+    if (isExclusiveSkin(characterType, skinId)) { res.json({ success: false, message: 'err_skin_exclusive' }); return; }
     try {
         const price = getSkinPrice(characterType, skinId);
         const result = await db.buySkin(req.params.userId, characterType, skinId, price, 'body');

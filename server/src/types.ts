@@ -1,4 +1,6 @@
 export interface PlayerState {
+    weaponFx?: string;             // qurol skini effekti (fire, ice, spark, shadow, star)
+    skinFx?: string;               // afsonaviy skin effekti (aura, sparkle, flame, rainbow, ghost, crown)
     jetpack?: boolean;             // Season 2 map-9: ranets (faqat shu xaritada, sotib olingan yoki avtomatdan tushgan)
     vendBuying?: boolean;          // ranets to'lovi ketmoqda (ikki marta to'lanmasin)
     acidCurse?: boolean;           // semiz elf kislotasi: jon o'zi tiklanmaydi (do'kondagi Eliksir davolaydi)

@@ -95,6 +95,7 @@ const userSchema = new mongoose.Schema({
     farmXp: { type: Number, default: 0 },                // FERMA DARAJASI tajribasi
     farmDecor: { type: Object, default: () => ({}) },    // sotib olingan bezaklar: { flowers: true, ... }
     farmDecorOff: { type: Object, default: () => ({}) }, // yashikka olingan (tashqarida ko'rinmaydigan) bezaklar
+    daily: { type: Object, default: () => ({}) },        // KUNLIK: { day, quests: [...], lastLogin, streak }
     farmHive: { type: Boolean, default: false },         // NOTA UYASI (o'sishni tezlatadi)
     farmMill: { type: Number, default: 0 },              // BAHAYBAT TEGIRMON bosqichi (0..4)
     farmSprinklers: { type: Number, default: 0 },        // avtomatik sug'orgichlar (har biri bitta maydonga)
@@ -741,6 +742,103 @@ export async function renameUser(userId: string, nicknameRaw: unknown): Promise<
         if (err && err.code === 11000) return { success: false, message: 'err_nickname_taken' };
         throw err;
     }
+}
+
+// ===== KUNLIK TIZIM =====
+// Kirish mukofoti: ketma-ket kunlar (UTC). 1-6 kun - tanga, 7-kun - EKSKLYUZIV skin (sotib olib bo'lmaydi), keyin qaytadan.
+// Bir kun o'tkazib yuborilsa - zanjir 1-kundan boshlanadi
+export const DAILY_LOGIN_COINS = [100, 150, 200, 300, 400, 500];
+export const DAILY_SKIN_FALLBACK_COINS = 2000;   // hamma qahramonda eksklyuziv skin bor - o'rniga tanga
+// Kunlik vazifalar havzasi: har kuni 3 tasi (turlari har xil), qiyinligi tasodifiy
+const QUEST_POOL: { type: string, need: number[], coins: number[], xp: number }[] = [
+    { type: 'kills', need: [20, 35, 50], coins: [120, 180, 250], xp: 30 },
+    { type: 'bosses', need: [1, 2], coins: [250, 400], xp: 60 },
+    { type: 'maps', need: [2, 3, 4], coins: [160, 220, 300], xp: 40 },
+    { type: 'harvest', need: [10, 20, 30], coins: [140, 200, 260], xp: 30 },
+    { type: 'fish', need: [3, 5, 8], coins: [140, 200, 260], xp: 30 },
+    { type: 'coins', need: [200, 400], coins: [120, 200], xp: 30 }
+];
+export type DailyQuest = { type: string, need: number, have: number, claimed: boolean, coins: number, xp: number };
+const dayStr = (t: number) => new Date(t).toISOString().slice(0, 10);
+function makeDailyQuests(userId: string, day: string): DailyQuest[] {
+    let h = 2166136261;
+    for (const ch of userId + day) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    const rnd = () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
+    const pool = QUEST_POOL.slice();
+    const out: DailyQuest[] = [];
+    while (out.length < 3 && pool.length) {
+        const q = pool.splice(Math.floor(rnd() * pool.length), 1)[0], k = Math.floor(rnd() * q.need.length);
+        out.push({ type: q.type, need: q.need[k], have: 0, claimed: false, coins: q.coins[k], xp: q.xp });
+    }
+    return out;
+}
+// Bugungi vazifalar bor-yo'qligini tekshiradi (yangi kun - yangi vazifalar); kirish zanjiri saqlanadi
+async function ensureDaily(userId: string): Promise<any | null> {
+    const today = dayStr(Date.now());
+    const doc: any = await UserModel.findById(userId, { daily: 1, coins: 1, defaultCharacter: 1, ownedSkins: 1, charXp: 1 }).lean();
+    if (!doc) return null;
+    if (doc.daily && doc.daily.day === today && Array.isArray(doc.daily.quests)) return doc;
+    const fresh = makeDailyQuests(String(userId), today);
+    const upd: any = await UserModel.findOneAndUpdate({ _id: userId, 'daily.day': { $ne: today } },
+        { $set: { 'daily.day': today, 'daily.quests': fresh } }, { returnDocument: 'after', projection: { daily: 1, coins: 1, defaultCharacter: 1, ownedSkins: 1, charXp: 1 } }).lean();
+    return upd || await UserModel.findById(userId, { daily: 1, coins: 1, defaultCharacter: 1, ownedSkins: 1, charXp: 1 }).lean();
+}
+function dailyView(doc: any) {
+    const now = Date.now(), today = dayStr(now), yesterday = dayStr(now - 86400000), d = doc.daily || {};
+    const claimedToday = d.lastLogin === today;
+    const alive = d.lastLogin === today || d.lastLogin === yesterday;
+    const streak = alive ? (d.streak || 0) : 0;   // zanjir uzilgan bo'lsa - 0 (bugun olsa 1-kun bo'ladi)
+    return { day: today, quests: d.quests || [], streak, claimedToday, nextDay: claimedToday ? streak : (streak >= 7 ? 1 : streak + 1),
+        loginCoins: DAILY_LOGIN_COINS, skinId: 'daybreak', msLeft: 86400000 - (now % 86400000) };
+}
+export async function getDaily(userId: string) {
+    const doc = await ensureDaily(userId);
+    return doc ? dailyView(doc) : null;
+}
+export async function claimDailyLogin(userId: string): Promise<{ success: boolean, message?: string, day?: number, coins?: number, skin?: { hero: string, id: string }, user?: UserRecord }> {
+    const doc = await ensureDaily(userId);
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    const v = dailyView(doc);
+    if (v.claimedToday) return { success: false, message: 'daily_already' };
+    const day = v.nextDay, prev = (doc.daily || {}).lastLogin || null;
+    const filter: any = { _id: userId, 'daily.lastLogin': prev === null ? { $in: [null] } : prev };
+    const set: any = { 'daily.lastLogin': v.day, 'daily.streak': day };
+    if (day < 7) {
+        const coins = DAILY_LOGIN_COINS[day - 1];
+        const upd = await UserModel.findOneAndUpdate(filter, { $set: set, $inc: { coins } }, { returnDocument: 'after' });
+        return upd ? { success: true, day, coins, user: docToUser(upd) } : { success: false, message: 'daily_already' };
+    }
+    // 7-kun: eksklyuziv skin - avval tanlangan qahramonga, u bo'lsa - keyingisiga; hammasida bo'lsa - tanga
+    const order = [doc.defaultCharacter || 'knight', ...CHARACTER_TYPES.filter(c => c !== (doc.defaultCharacter || 'knight'))];
+    const hero = order.find(c => !(((doc.ownedSkins || {})[c]) || []).includes('daybreak'));
+    if (!hero) {
+        const upd = await UserModel.findOneAndUpdate(filter, { $set: set, $inc: { coins: DAILY_SKIN_FALLBACK_COINS } }, { returnDocument: 'after' });
+        return upd ? { success: true, day, coins: DAILY_SKIN_FALLBACK_COINS, user: docToUser(upd) } : { success: false, message: 'daily_already' };
+    }
+    const upd = await UserModel.findOneAndUpdate(filter, { $set: set, $addToSet: { ['ownedSkins.' + hero]: 'daybreak' } }, { returnDocument: 'after' });
+    return upd ? { success: true, day, skin: { hero, id: 'daybreak' }, user: docToUser(upd) } : { success: false, message: 'daily_already' };
+}
+// Vazifa hisoblagichi (o'yin hodisalaridan): bajarilib qolgan vazifalar ro'yxati qaytadi (xabar uchun)
+export async function dailyProgress(userId: string, type: string, n: number): Promise<DailyQuest[]> {
+    if (!n || n <= 0) return [];
+    const doc = await ensureDaily(userId);
+    if (!doc || !doc.daily) return [];
+    const i = (doc.daily.quests || []).findIndex((q: DailyQuest) => q.type === type && !q.claimed && q.have < q.need);
+    if (i < 0) return [];
+    const q: DailyQuest = doc.daily.quests[i];
+    await UserModel.updateOne({ _id: userId, 'daily.day': doc.daily.day }, { $inc: { ['daily.quests.' + i + '.have']: n } });
+    return q.have + n >= q.need ? [q] : [];
+}
+export async function claimDailyQuest(userId: string, idx: number): Promise<{ success: boolean, message?: string, coins?: number, xp?: number, user?: UserRecord }> {
+    const doc = await ensureDaily(userId);
+    if (!doc || !Number.isInteger(idx)) return { success: false, message: 'err_server' };
+    const q: DailyQuest | undefined = (doc.daily.quests || [])[idx];
+    if (!q || q.claimed) return { success: false, message: 'daily_quest_claimed' };
+    if (q.have < q.need) return { success: false, message: 'daily_quest_not_done' };
+    const hero = CHARACTER_TYPES.includes(doc.defaultCharacter) ? doc.defaultCharacter : 'knight';
+    const upd = await UserModel.findOneAndUpdate({ _id: userId, 'daily.day': doc.daily.day, ['daily.quests.' + idx + '.claimed']: false },
+        { $set: { ['daily.quests.' + idx + '.claimed']: true }, $inc: { coins: q.coins, xp: q.xp, ['charXp.' + hero]: q.xp } }, { returnDocument: 'after' });
+    return upd ? { success: true, coins: q.coins, xp: q.xp, user: docToUser(upd) } : { success: false, message: 'daily_quest_claimed' };
 }
 
 // REYTING: umumiy (hamma qahramonlar tajribasi yig'indisi) yoki bitta qahramon bo'yicha. Bloklanganlar va hali

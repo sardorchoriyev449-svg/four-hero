@@ -9,79 +9,122 @@ export interface CosmeticItem {
     price: number;
 }
 
-// Narx pog'onalari: oddiy / o'rtacha / noyob
-const C = 200, U = 300, R = 650;
+// Narxlar: har ro'yxatda arzonidan qimmatiga qarab o'sib boradi (do'konda ham shu tartibda)
 
 export const HEAD_ITEMS: CosmeticItem[] = [
-    { id: 'cowboy', name: 'Cowboy Hat', price: U },
-    { id: 'bucket', name: 'Bucket', price: C },
-    { id: 'kasa', name: 'Japanese Hat', price: U },
-    { id: 'bunny', name: 'Bunny Ears', price: U },
-    { id: 'safari', name: 'Robinson Hat', price: U },
-    { id: 'cat', name: 'Cat Ears', price: U },
-    { id: 'crown', name: 'Royal Crown', price: R },
-    { id: 'punk', name: 'Punk Hair', price: R }
+    { id: 'bucket', name: 'Bucket', price: 250 },
+    { id: 'chef', name: 'Chef Hat', price: 400 },
+    { id: 'cowboy', name: 'Cowboy Hat', price: 550 },
+    { id: 'kasa', name: 'Japanese Hat', price: 700 },
+    { id: 'bunny', name: 'Bunny Ears', price: 900 },
+    { id: 'safari', name: 'Robinson Hat', price: 1100 },
+    { id: 'cat', name: 'Cat Ears', price: 1400 },
+    { id: 'pirate', name: 'Pirate Hat', price: 1700 },
+    { id: 'crown', name: 'Royal Crown', price: 2100 },
+    { id: 'punk', name: 'Punk Hair', price: 2600 },
+    { id: 'viking', name: 'Viking Helmet', price: 3200 },
+    { id: 'wizard', name: 'Wizard Hat', price: 3900 }
 ];
 
 export const FACE_ITEMS: CosmeticItem[] = [
-    { id: 'hockey', name: 'Hockey Mask', price: U },
-    { id: 'goggles', name: 'Ski Goggles', price: U },
-    { id: 'clown', name: 'Clown Nose', price: C },
-    { id: 'glasses', name: 'Glasses', price: C },
-    { id: 'cyber', name: 'Cyber Glasses', price: R }
+    { id: 'clown', name: 'Clown Nose', price: 250 },
+    { id: 'glasses', name: 'Glasses', price: 400 },
+    { id: 'mustache', name: 'Mustache', price: 550 },
+    { id: 'hockey', name: 'Hockey Mask', price: 700 },
+    { id: 'goggles', name: 'Ski Goggles', price: 900 },
+    { id: 'eyepatch', name: 'Eye Patch', price: 1100 },
+    { id: 'shades', name: 'Sunglasses', price: 1400 },
+    { id: 'heart', name: 'Heart Glasses', price: 1700 },
+    { id: 'cyber', name: 'Cyber Glasses', price: 2100 },
+    { id: 'ninja', name: 'Ninja Mask', price: 2600 }
 ];
 
 // Har personajning qurol turlari (slot) va ularning ko'rinishlari
 export const WEAPON_ITEMS: { [characterType: string]: { [slot: string]: CosmeticItem[] } } = {
     knight: {
         sword: [
-            { id: 'bat', name: 'Baseball Bat', price: C },
-            { id: 'greatsword', name: 'Black Greatsword', price: U },
-            { id: 'holo', name: 'Hologram Sword', price: R },
-            { id: 'guitar', name: 'Guitar', price: U },
-            { id: 'pink', name: 'Pink Sword', price: C }
+            { id: 'bat', name: 'Baseball Bat', price: 250 },
+            { id: 'pink', name: 'Pink Sword', price: 400 },
+            { id: 'candy', name: 'Candy Cane', price: 550 },
+            { id: 'greatsword', name: 'Black Greatsword', price: 700 },
+            { id: 'guitar', name: 'Guitar', price: 900 },
+            { id: 'bone', name: 'Bone Club', price: 1100 },
+            { id: 'fish', name: 'Fish Sword', price: 1400 },
+            { id: 'holo', name: 'Hologram Sword', price: 1700 },
+            { id: 'ice', name: 'Ice Sword', price: 2100 },
+            { id: 'flame', name: 'Flame Sword', price: 2600 }
         ],
         shield: [
-            { id: 'door', name: 'House Door', price: U },
-            { id: 'cardoor', name: 'Car Door', price: U },
-            { id: 'triangle', name: 'Triangle Shield', price: C },
-            { id: 'pink', name: 'Pink Shield', price: C }
+            { id: 'triangle', name: 'Triangle Shield', price: 250 },
+            { id: 'pink', name: 'Pink Shield', price: 400 },
+            { id: 'door', name: 'House Door', price: 550 },
+            { id: 'cardoor', name: 'Car Door', price: 700 },
+            { id: 'pan', name: 'Frying Pan', price: 900 },
+            { id: 'pizza', name: 'Pizza Slice', price: 1100 },
+            { id: 'turtle', name: 'Turtle Shell', price: 1400 },
+            { id: 'ice', name: 'Ice Shield', price: 1700 },
+            { id: 'golden', name: 'Golden Shield', price: 2100 }
         ],
         shotgun: [
-            { id: 'toy', name: 'Toy Shotgun', price: C },
-            { id: 'branch', name: 'Branch Shotgun', price: U },
-            { id: 'dark', name: 'Dark Shotgun', price: R },
-            { id: 'pink', name: 'Pink Shotgun', price: C }
+            { id: 'toy', name: 'Toy Shotgun', price: 250 },
+            { id: 'pink', name: 'Pink Shotgun', price: 400 },
+            { id: 'water', name: 'Water Gun', price: 550 },
+            { id: 'branch', name: 'Branch Shotgun', price: 700 },
+            { id: 'pirate', name: 'Blunderbuss', price: 900 },
+            { id: 'dark', name: 'Dark Shotgun', price: 1100 },
+            { id: 'ice', name: 'Ice Shotgun', price: 1400 },
+            { id: 'laser', name: 'Laser Shotgun', price: 1700 },
+            { id: 'golden', name: 'Golden Shotgun', price: 2100 }
         ]
     },
     mage: {
         staff: [
-            { id: 'stop', name: 'Stop Sign Staff', price: U },
-            { id: 'torch', name: 'Torch', price: U },
-            { id: 'pink', name: 'Pink Staff', price: C },
-            { id: 'candy', name: 'Cotton Candy', price: R }
+            { id: 'pink', name: 'Pink Staff', price: 250 },
+            { id: 'broom', name: 'Broom', price: 400 },
+            { id: 'stop', name: 'Stop Sign Staff', price: 550 },
+            { id: 'torch', name: 'Torch', price: 700 },
+            { id: 'wand', name: 'Star Wand', price: 900 },
+            { id: 'lolli', name: 'Lollipop', price: 1100 },
+            { id: 'candy', name: 'Cotton Candy', price: 1400 },
+            { id: 'crystal', name: 'Crystal Staff', price: 1700 },
+            { id: 'skull', name: 'Skull Staff', price: 2100 }
         ]
     },
     archer: {
         bow: [
-            { id: 'pistol', name: 'Pistol', price: U },
-            { id: 'cyber', name: 'Cyber Crossbow', price: R },
-            { id: 'elf', name: 'Elven Bow', price: U },
-            { id: 'pinkpistol', name: 'Pink Pistol', price: C }
+            { id: 'pinkpistol', name: 'Pink Pistol', price: 250 },
+            { id: 'slingshot', name: 'Slingshot', price: 400 },
+            { id: 'pistol', name: 'Pistol', price: 550 },
+            { id: 'elf', name: 'Elven Bow', price: 700 },
+            { id: 'bone', name: 'Bone Bow', price: 900 },
+            { id: 'cyber', name: 'Cyber Crossbow', price: 1100 },
+            { id: 'ice', name: 'Ice Bow', price: 1400 },
+            { id: 'blaster', name: 'Blaster', price: 1700 },
+            { id: 'golden', name: 'Golden Bow', price: 2100 }
         ]
     },
     samurai: {
         katana: [
-            { id: 'holo', name: 'Hologram Katana', price: R },
-            { id: 'red', name: 'Red Katana', price: U },
-            { id: 'shinai', name: 'Shinai', price: C },
-            { id: 'pink', name: 'Pink Katana', price: C },
-            { id: 'dark', name: 'Dark Katana', price: R }
+            { id: 'shinai', name: 'Shinai', price: 250 },
+            { id: 'pink', name: 'Pink Katana', price: 400 },
+            { id: 'bamboo', name: 'Bamboo Stick', price: 550 },
+            { id: 'red', name: 'Red Katana', price: 700 },
+            { id: 'jade', name: 'Jade Katana', price: 900 },
+            { id: 'holo', name: 'Hologram Katana', price: 1100 },
+            { id: 'dark', name: 'Dark Katana', price: 1400 },
+            { id: 'ice', name: 'Ice Katana', price: 1700 },
+            { id: 'flame', name: 'Flame Katana', price: 2100 },
+            { id: 'golden', name: 'Golden Katana', price: 2600 }
         ],
         kunai: [
-            { id: 'cards', name: 'Playing Cards', price: U },
-            { id: 'toothbrush', name: 'Toothbrush', price: C },
-            { id: 'dart', name: 'Dart', price: C }
+            { id: 'toothbrush', name: 'Toothbrush', price: 250 },
+            { id: 'dart', name: 'Dart', price: 400 },
+            { id: 'pencil', name: 'Pencil', price: 550 },
+            { id: 'fork', name: 'Fork', price: 700 },
+            { id: 'cards', name: 'Playing Cards', price: 900 },
+            { id: 'feather', name: 'Feather', price: 1100 },
+            { id: 'icicle', name: 'Icicle', price: 1400 },
+            { id: 'golden', name: 'Golden Kunai', price: 1700 }
         ]
     }
 };

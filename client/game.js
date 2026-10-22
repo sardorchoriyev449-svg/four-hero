@@ -879,6 +879,7 @@ function launchGame(socket, roomId, mapData, continued) {
             const sl = scene.add.sprite(c.x + dir * 26, c.y - 2, key).setDepth(4).setFlipX(facingLeft)
                 .setOrigin(facingLeft ? 0.7 : 0.3, 0.5).setAlpha(0.95).setScale(0.6);
             if (me && me.weaponColor) sl.setTint(me.weaponColor);
+            if (c.weaponFx) weaponTrail(scene, c.x + dir * 46, c.y - 2, c.weaponFx, true);
             scene.tweens.add({ targets: sl, scale: 1.1, alpha: 0, duration: key === 'melee_knight' ? 220 : 160, ease: 'Quad.Out',
                 onUpdate: () => { if (c.active) { sl.x = c.x + dir * 26; sl.y = c.y - 2; } }, onComplete: () => sl.destroy() });
             return;
@@ -907,6 +908,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (bt === 'shield') sp.spin = 22; else if (bt === 'shuriken') sp.spin = 30;
             sp.ex = { x: x0, y: y0, vx: Math.cos(a) * spec[0], vy: Math.sin(a) * spec[0], t: performance.now() };
             sp.predicted = true;
+            sp.trailFx = c.weaponFx || '';
             ATK_PREDICT.sprites.push(sp);
         });
         // Server javob bermasa (masalan, stamina yetmadi) - bashorat o'qi o'zi so'nadi
@@ -921,6 +923,7 @@ function launchGame(socket, roomId, mapData, continued) {
         ATK_PREDICT.sprites.forEach(p => {
             const dt = (now - p.ex.t) / 1000;
             p.x = p.ex.x + p.ex.vx * dt; p.y = p.ex.y + p.ex.vy * dt;
+            if (p.trailFx && now - (p.trailAt || 0) > 35 && p.scene) { p.trailAt = now; weaponTrail(p.scene, p.x, p.y, p.trailFx, false); }
             if (p.spin) p.angle += p.spin;
         });
     }
@@ -9944,6 +9947,7 @@ function launchGame(socket, roomId, mapData, continued) {
         this.events.on('postupdate', () => {
             if (currentCharacter && currentCharacter.active && heroVisRight !== null) updateHeroWeaponVisuals(this, currentCharacter, currentCharacter.characterType, heroVisRight);
             if (currentCharacter) drawSocialTags(this);
+            drawSkinFx(this);
         });
 
         // LEVEL UP: tepadan nur tushadi, qahramon biroz ko'tariladi, o'yin hamma uchun to'xtaydi
@@ -10710,6 +10714,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.maxHp = myData.maxHp || 100;
                 currentCharacter.stamina = myData.stamina;
                 currentCharacter.weaponColor = myData.weaponColor;
+                currentCharacter.weaponFx = myData.weaponFx || '';
                 currentCharacter.kills = myData.kills;
                 currentCharacter.isDead = myData.isDead;
                 currentCharacter.respawnTimer = myData.respawnTimer;
@@ -10731,6 +10736,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.curseB = !!myData.curseB;
                 currentCharacter.hasJet = !!myData.jet;
                 setHeroLook(currentCharacter, myData.look);
+                currentCharacter.skinFx = myData.skinFx || '';
 
                 if (myData.isDead) {
                     // O'LGAN ("ARVOH") HOLATI: yarim shaffof va ko'kimtir tus
@@ -10805,6 +10811,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 otherPlayers[id].kills = pData.kills || 0;
                 otherPlayers[id].nick = pData.nickname || '';
                 setHeroLook(otherPlayers[id], pData.look);
+                otherPlayers[id].skinFx = pData.skinFx || '';
                 if (isApples) {
                     const n = pData.apples || 0;
                     if (n === 0 && (otherPlayers[id].apples || 0) > 0) spillApples(this, otherPlayers[id].x, otherPlayers[id].y, otherPlayers[id].apples);
@@ -11039,6 +11046,11 @@ function launchGame(socket, roomId, mapData, continued) {
                         bSprite.setTint(shooter.weaponColor);
                     }
 
+                    // Qurol skini effekti: o'q ortida iz (har kadr), zarba - zarrachalar portlashi
+                    if (shooter && shooter.weaponFx) {
+                        bSprite.trailFx = shooter.weaponFx;
+                        if (isMeleeType) weaponTrail(this, posX + dir * 20, posY, shooter.weaponFx, true);
+                    }
                     if (currentTexture === 'melee_knight' || currentTexture === 'melee_samurai') {
                         // ZARBA IZI: qurol silkinishi bilan birga oldinda yorug' yoy chaqnab, so'nadi
                         bSprite.setOrigin(facingLeft ? 0.7 : 0.3, 0.5).setAlpha(0.95).setScale(0.6);
@@ -11083,6 +11095,90 @@ function launchGame(socket, roomId, mapData, continued) {
         });
     }
 
+    // AFSONAVIY SKIN EFFEKTLARI (har kadr): aura - nur, sparkle - yulduzchalar, flame - oyog'ida olov,
+    // rainbow - kamalak rang, ghost - arvoh (shaffof + iz), crown - eksklyuziv: oltin toj, nur va uchqunlar
+    // QUROL SKINI IZI: o'q uchayotganda / zarba berilganda ortida zarrachalar
+    //   fire - olov uchqunlari, ice - muz parchalari, spark - elektr uchqunlari, shadow - binafsha tutun, star - oltin yulduzchalar
+    const WFX_COL = { fire: [0xff6d00, 0xffab00, 0xffea00], ice: [0x80d8ff, 0xe1f5fe, 0x40c4ff], spark: [0xffea00, 0xffffff, 0xfff176],
+        shadow: [0x4a148c, 0x7b1fa2, 0x311b92], star: [0xfff59d, 0xffd54f, 0xffffff] };
+    function weaponTrail(scene, x, y, fx, burst) {
+        const cols = WFX_COL[fx];
+        if (!cols || !scene || !scene.add) return;
+        const n = burst ? 6 : 1;
+        for (let i = 0; i < n; i++) {
+            const c = cols[Phaser.Math.Between(0, cols.length - 1)], ox = burst ? Phaser.Math.Between(-18, 18) : Phaser.Math.Between(-3, 3), oy = burst ? Phaser.Math.Between(-14, 14) : Phaser.Math.Between(-3, 3);
+            if (fx === 'spark') {
+                const p = scene.add.rectangle(x + ox, y + oy, Phaser.Math.Between(2, 6), 2, c).setDepth(4.1).setAngle(Phaser.Math.Between(0, 180));
+                scene.tweens.add({ targets: p, alpha: 0, x: p.x + Phaser.Math.Between(-10, 10), y: p.y + Phaser.Math.Between(-10, 10), duration: 180, onComplete: () => p.destroy() });
+            } else if (fx === 'star') {
+                const p = scene.add.container(x + ox, y + oy, [scene.add.rectangle(0, 0, 5, 1, c), scene.add.rectangle(0, 0, 1, 5, c)]).setDepth(4.1);
+                scene.tweens.add({ targets: p, alpha: 0, angle: 90, scale: 1.6, duration: 420, onComplete: () => p.destroy() });
+            } else {
+                const sz = fx === 'shadow' ? 6 : fx === 'ice' ? 3 : 4;
+                const p = scene.add.rectangle(x + ox, y + oy, sz, sz, c, fx === 'shadow' ? 0.75 : 1).setDepth(4.05).setAngle(fx === 'ice' ? 45 : 0);
+                const dy = fx === 'fire' ? -Phaser.Math.Between(6, 16) : fx === 'ice' ? Phaser.Math.Between(6, 14) : -Phaser.Math.Between(2, 8);
+                scene.tweens.add({ targets: p, y: p.y + dy, alpha: 0, scale: fx === 'shadow' ? 2.4 : 0.4, duration: fx === 'shadow' ? 520 : 360, onComplete: () => p.destroy() });
+            }
+        }
+    }
+    let skinFxG = null;
+    function drawSkinFx(scene) {
+        if (!skinFxG || !skinFxG.scene) skinFxG = scene.add.graphics().setDepth(2.95);
+        const g = skinFxG, t = scene.time.now;
+        g.clear();
+        [currentCharacter, ...Object.values(otherPlayers)].forEach((sp) => {
+            if (!sp || !sp.active) return;
+            // Kamalak skin yechilgan bo'lsa - rang tusi qolib ketmasin
+            if (sp.rainbowTint && sp.skinFx !== 'rainbow') { sp.clearTint(); sp.rainbowTint = false; }
+            if (!sp.skinFx) return;
+            const fx = sp.skinFx, vis = sp.visible && sp.alpha > 0.35 && !sp.isDead;
+            if (fx === 'rainbow') { if (vis) { sp.setTint(Phaser.Display.Color.HSVToRGB((t / 2200) % 1, 0.65, 1).color); sp.rainbowTint = true; } return; }
+            if (!vis) return;
+            const cx = sp.x, top = sp.y - sp.displayHeight * sp.originY, feet = top + sp.displayHeight;
+            if (fx === 'aura' || fx === 'crown' || fx === 'frost') {
+                const col = fx === 'crown' ? 0xffd54f : fx === 'frost' ? 0xb2ebf2 : 0x40c4ff, r = 30 + Math.sin(t / 220) * 3;
+                g.fillStyle(col, 0.12); g.fillCircle(cx, sp.y, r + 8);
+                g.fillStyle(col, 0.16); g.fillCircle(cx, sp.y, r);
+            }
+            if (fx === 'crown') {
+                // Pikselli oltin toj boshi tepasida (sekin suzadi)
+                const y = top - 14 + Math.sin(t / 300) * 2, x = Math.round(cx - 9);
+                g.fillStyle(0x0a0a0a, 1); g.fillRect(x - 1, y - 1, 20, 10);
+                g.fillStyle(0xffca28, 1); g.fillRect(x, y + 3, 18, 5); [0, 7, 14].forEach(dx => g.fillRect(x + dx, y, 4, 4));
+                g.fillStyle(0xe53935, 1); g.fillRect(x + 8, y + 4, 2, 2); g.fillStyle(0x40c4ff, 1); g.fillRect(x + 3, y + 4, 2, 2); g.fillRect(x + 13, y + 4, 2, 2);
+            }
+            // Zarrachalar (har ~0.12 s): uchqun, olov, arvoh izi
+            if (t - (sp.fxAt || 0) < (fx === 'flame' ? 70 : 130)) return;
+            sp.fxAt = t;
+            if (fx === 'sparkle' || fx === 'crown') {
+                const s = scene.add.rectangle(cx + Phaser.Math.Between(-20, 20), sp.y + Phaser.Math.Between(-24, 18), 3, 3, fx === 'crown' ? 0xfff59d : [0xffffff, 0xffeb3b, 0x80d8ff, 0xea80fc][Phaser.Math.Between(0, 3)]).setDepth(3.1);
+                scene.tweens.add({ targets: s, y: s.y - 18, alpha: 0, scale: 0.3, angle: 90, duration: 700, onComplete: () => s.destroy() });
+            } else if (fx === 'flame') {
+                const f = scene.add.rectangle(cx + Phaser.Math.Between(-12, 12), feet - 4, 5, 5, [0xff6d00, 0xffab00, 0xffea00, 0xd84315][Phaser.Math.Between(0, 3)]).setDepth(3.1);
+                scene.tweens.add({ targets: f, y: f.y - Phaser.Math.Between(16, 34), alpha: 0, scale: 0.4, duration: 450, onComplete: () => f.destroy() });
+            } else if (fx === 'ghost') {
+                // Arvoh: o'zi biroz shaffof, harakatlansa - ortida so'nuvchi iz
+                const moving = Math.abs(sp.x - (sp.fxLastX ?? sp.x)) > 1; sp.fxLastX = sp.x;
+                if (moving) {
+                    const ghost = scene.add.image(sp.x, sp.y, sp.texture.key).setOrigin(sp.originX, sp.originY).setFlipX(sp.flipX).setAlpha(0.35).setTint(0x80cbc4).setDepth(2.9);
+                    scene.tweens.add({ targets: ghost, alpha: 0, duration: 380, onComplete: () => ghost.destroy() });
+                }
+                const m = scene.add.rectangle(cx + Phaser.Math.Between(-14, 14), sp.y + Phaser.Math.Between(-10, 20), 4, 4, 0xb2dfdb, 0.7).setDepth(3.1);
+                scene.tweens.add({ targets: m, y: m.y - 22, alpha: 0, duration: 800, onComplete: () => m.destroy() });
+            } else if (fx === 'frost') {
+                // Qor parchasi (+ shaklida) tepadan sekin tushadi; oyog'ida sovuq bug'
+                const sx = cx + Phaser.Math.Between(-22, 22), sy = top - Phaser.Math.Between(0, 10);
+                const flake = scene.add.container(sx, sy, [scene.add.rectangle(0, 0, 6, 2, 0xe1f5fe), scene.add.rectangle(0, 0, 2, 6, 0xe1f5fe), scene.add.rectangle(0, 0, 2, 2, 0x80deea)]).setDepth(3.1);
+                scene.tweens.add({ targets: flake, y: sy + Phaser.Math.Between(40, 70), x: sx + Phaser.Math.Between(-10, 10), angle: 180, alpha: 0, duration: 1100, onComplete: () => flake.destroy() });
+                const mist = scene.add.rectangle(cx + Phaser.Math.Between(-14, 14), feet - 3, 8, 4, 0xb3e5fc, 0.55).setDepth(3.05);
+                scene.tweens.add({ targets: mist, x: mist.x + Phaser.Math.Between(-16, 16), scaleX: 2.2, alpha: 0, duration: 700, onComplete: () => mist.destroy() });
+                if (Math.random() < 0.25) { const gl = scene.add.rectangle(cx + Phaser.Math.Between(-10, 10), sp.y + Phaser.Math.Between(-16, 12), 2, 2, 0xffffff).setDepth(3.15); scene.tweens.add({ targets: gl, scale: 2.5, alpha: 0, duration: 260, onComplete: () => gl.destroy() }); }
+            } else if (fx === 'aura' && Math.random() < 0.5) {
+                const z = scene.add.rectangle(cx + Phaser.Math.Between(-22, 22), sp.y + Phaser.Math.Between(-20, 20), 2, 6, 0x80d8ff).setDepth(3.1);
+                scene.tweens.add({ targets: z, alpha: 0, duration: 200, onComplete: () => z.destroy() });
+            }
+        });
+    }
     // Qahramonlar ustida: ADMIN belgisi va ovozli chatda gapirayotgan bo'lsa - tovush to'lqinlari
     let socialGfx = null;
     function drawSocialTags(scene) {
@@ -11167,6 +11263,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const nowB = performance.now();
         Object.values(bulletSprites).forEach((bs) => {
             if (bs && bs.active && bs.spin) bs.angle += bs.spin;
+            if (bs && bs.active && bs.trailFx && bs.visible && nowB - (bs.trailAt || 0) > 35) { bs.trailAt = nowB; weaponTrail(this, bs.x, bs.y, bs.trailFx, false); }
             if (!bs || !bs.ex || !bs.active) return;
             const dt = Math.min(0.12, (nowB - bs.ex.t) / 1000);
             bs.x = bs.ex.x + bs.ex.vx * dt;
