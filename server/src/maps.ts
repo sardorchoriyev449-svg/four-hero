@@ -570,7 +570,7 @@ export interface SquidDef {
 // ovoz. Tanlov: KIRISH ("Respect" yutug'i, +200 XP - akkauntga bir marta) yoki "YO'Q" (keyin ham kirish mumkin).
 // Ichkarida: bog'langan elf malika, richag -> tepadan "OQ YUZ" tushadi; uni faqat bombalar portlashi yaralaydi,
 // joni ozgina qolganda yorug' chiqish ochiladi - chiqqan qahramon bilan xarita o'tiladi.
-// Kirmasa: 100 m tepaga (4 platforma, har 25 m da yangi qism); yer silkinganda 4 tadan 3 tasiga tosh tushadi
+// Kirmasa: 60 m tepaga (4 platforma, har 25 m da yangi qism); yer silkinganda 4 tadan 3 tasiga tosh tushadi
 export interface DoorsDef {
     triggerX: number;
     yellowX: number;
@@ -640,7 +640,7 @@ const CLIMB_STAGE = [
     { x: 1047, y: 245, w: 122, h: 12 }, { x: 1220, y: 245, w: 110, h: 12 }, { x: 1411, y: 245, w: 118, h: 12 }, { x: 1593, y: 245, w: 120, h: 12 },
     { x: 1294, y: 135, w: 174, h: 12 }
 ];
-const CLIMB_STAGES = 10, CLIMB_STEP = 435;
+const CLIMB_STAGES = 6, CLIMB_STEP = 435;   // 6 qavat x 10 m = 60 m
 const CLIMB_TOWER = Array.from({ length: CLIMB_STAGES }, (_, k) => CLIMB_STAGE.map(pl => ({ ...pl, y: pl.y - k * CLIMB_STEP }))).flat();
 
 // MAP-5 G'ORI: 400 m qochish yo'li - chuqur jarlik ustidagi tosh ustunlar (ular orasidagi bo'shliqlar richag
@@ -1444,9 +1444,9 @@ export const MAPS: MapDef[] = [
         groundColor: 0x2b2733,
         mapWidth: CAVE_RUN.roomX1,
         platforms: [
-            // Tepaga chiqish (0-99): rasmdagi 10 platformali qavat bir joyda ustma-ust 10 marta - tepa-tepaga chiqiladi
+            // Tepaga chiqish (0-59): rasmdagi 10 platformali qavat bir joyda ustma-ust 6 marta - tepa-tepaga chiqiladi
             ...CLIMB_TOWER,
-            // G'or yo'li: tosh ustunlar (100-...)
+            // G'or yo'li: tosh ustunlar (60-...)
             ...CAVE_RUN.blocks
         ],
         pits: CAVE_RUN.floorHoles,
@@ -1454,7 +1454,7 @@ export const MAPS: MapDef[] = [
             doorLocked: true,
             triggerX: 560, yellowX: 700, blackX: 840,
             climbX0: 1000, climbX1: 1820, climbPlats: CLIMB_TOWER.map((_, i) => i), climbStartX: 1340, segments: CLIMB_STAGES, segMeters: 10, stageStep: CLIMB_STEP, stageRows: [[0, 1, 2, 3], [5, 6, 7, 8]],
-            rockEveryMs: 700, rockWarnMs: 2000, rockDamagePct: 0.6,
+            rockEveryMs: 900, rockWarnMs: 2800, rockDamagePct: 0.6,
             roomX0: 2200, roomX1: CAVE_RUN.roomX1, roomEntryX: 2260, elfX: 2620, elfY: 200, leverX: 2380, exitX: CAVE_RUN.exitX,
             runMeters: CAVE_RUN.runMeters, floorY: CAVE_RUN.floorY, floorHoles: CAVE_RUN.floorHoles, wallHoles: CAVE_RUN.wallHoles,
             holeHandEveryMs: 700, holeHandWarnMs: 650, holeHandUpMs: 850, holeHandReach: 52, holeHandGrabAtMs: 300, holeHandCdMs: 3600, holeDamage: 30, grabMs: 900,

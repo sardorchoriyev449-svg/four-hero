@@ -3,6 +3,7 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import zlib from 'zlib';
+import { monitorEventLoopDelay } from 'perf_hooks';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { RoomState } from './types';
@@ -788,8 +789,33 @@ const hasReservedKey = (v: unknown): boolean => {
     return false;
 };
 
+// UNUMDORLIK JURNALI (har 5 daqiqada, faqat o'yinchilar bo'lsa): server sikli kechikishi (event loop) va
+// klientlar hisoboti - ping, FPS, "qotishlar", WebSocket o'rniga HTTP (polling) da qolganlar. Render jurnalida ko'rinadi
+const loopDelay = monitorEventLoopDelay({ resolution: 20 });
+loopDelay.enable();
+const clientReports: { fps: number, fpsMin: number, ping: number, pingMax: number, long: number, tr: string, mobile: boolean }[] = [];
+setInterval(() => {
+    const ms = (ns: number) => Math.round(ns / 1e6);
+    const lag = `server sikli: o'rtacha ${ms(loopDelay.mean)}ms, p99 ${ms(loopDelay.percentile(99))}ms, eng ko'p ${ms(loopDelay.max)}ms`;
+    loopDelay.reset();
+    if (!clientReports.length) return;
+    const med = (a: number[]) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] || 0;
+    const r = clientReports.splice(0);
+    console.log(`[UNUMDORLIK] ${lag} | hisobotlar: ${r.length} | ping mediana ${med(r.map(x => x.ping))}ms, eng ko'p ${Math.max(...r.map(x => x.pingMax))}ms` +
+        ` | FPS mediana ${med(r.map(x => x.fps))}, past (<30): ${r.filter(x => x.fpsMin < 30).length} | qotishlar (>120ms kadr) jami ${r.reduce((a, x) => a + x.long, 0)}` +
+        ` | HTTP (polling) da: ${r.filter(x => x.tr === 'polling').length} | telefon: ${r.filter(x => x.mobile).length}`);
+}, 5 * 60 * 1000).unref();
+
 io.on('connection', (socket) => {
     console.log(`Foydalanuvchi ulandi: ${socket.id}`);
+    // Ping o'lchash (klientdagi tarmoq ko'rsatkichi uchun) va daqiqalik unumdorlik hisoboti
+    socket.on('pingCheck', (cb: unknown) => { if (typeof cb === 'function') cb(); });
+    socket.on('clientStats', (d: any) => {
+        if (!d || typeof d !== 'object' || clientReports.length > 5000) return;
+        const n = (v: unknown, max: number) => Math.max(0, Math.min(max, Number(v) || 0));
+        clientReports.push({ fps: n(d.fps, 500), fpsMin: n(d.fpsMin, 500), ping: n(d.ping, 30000), pingMax: n(d.pingMax, 30000), long: n(d.long, 100000),
+            tr: d.tr === 'polling' ? 'polling' : 'websocket', mobile: !!d.mobile });
+    });
     socket.use((packet, next) => { if (!packet.slice(1).some(hasReservedKey)) next(); });
 
     // Hisob nomidan kelgan so'rov: userId bo'lsa, token to'g'ri bo'lishi shart.
@@ -1012,6 +1038,10 @@ io.on('connection', (socket) => {
     socket.on('doorChoice', (data: { roomId: string, choice: string }) => {
         const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
         if (room && room.isStarted && (data.choice === 'enter' || data.choice === 'no')) gameEngine.doorChoice(room, socket.id, data.choice);
+    });
+    socket.on('rockTouch', (data: { roomId: string, k: number }) => {
+        const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
+        if (room && room.isStarted && Number.isInteger(data.k)) gameEngine.doorsRockTouch(room, socket.id, data.k);
     });
     socket.on('doorsInteract', (roomId: string) => {
         const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;

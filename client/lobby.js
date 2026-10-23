@@ -1,4 +1,53 @@
-const socket = io();
+// Darhol WebSocket: avval HTTP so'rovlar (polling) bilan ulanib, keyin WebSocket'ga o'tish o'rniga. Ba'zi tarmoq/proksi/
+// antiviruslarda o'tish bo'lmay qolardi - o'yin har holat uchun alohida HTTP so'rovda qolib, internet yaxshi bo'lsa ham
+// "qotardi". WebSocket umuman ishlamasa (to'silgan) - avtomatik polling ga qaytadi (tryAllTransports)
+const socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
+
+// TARMOQ / FPS KO'RSATKICHI (o'yin oynasining o'ng-yuqori burchagida): ping, kadr tezligi va ulanish turi.
+// "Qotish" sababini ajratish uchun: ping katta - internet; FPS past - qurilma; "HTTP" - WebSocket to'silgan.
+// Har 60 s da qisqa hisobot serverga ketadi (server jurnaliga umumiy statistika yoziladi)
+const NetStats = (() => {
+    let frames = 0, fps = 60, ping = 0, long = 0, last = performance.now(), el = null;
+    const fpsHist = [], pingHist = [];
+    const loop = () => {
+        const now = performance.now();
+        if (now - last > 120 && document.visibilityState === 'visible') long++;   // 120 ms dan uzun kadr - ko'zga ko'rinadigan "qotish"
+        last = now; frames++;
+        requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    const transport = () => (socket.io && socket.io.engine && socket.io.engine.transport && socket.io.engine.transport.name) || '';
+    const inGame = () => { const gc = document.getElementById('game-container'); return !!(gc && gc.offsetParent !== null && gc.querySelector('canvas')); };
+    setInterval(() => {
+        fps = frames; frames = 0;
+        if (!inGame()) { if (el) el.style.display = 'none'; return; }
+        fpsHist.push(fps);
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'net-stats';
+            el.style.cssText = 'position:absolute;bottom:6px;left:8px;z-index:40;font:10px "Press Start 2P",monospace;padding:4px 6px;background:rgba(0,0,0,0.55);pointer-events:none;letter-spacing:0';
+        }
+        const gc = document.getElementById('game-container');
+        if (el.parentNode !== gc) gc.appendChild(el);
+        el.style.display = '';
+        const pc = ping > 250 ? '#ff5252' : ping > 130 ? '#ffd54f' : '#69f0ae', fc = fps < 25 ? '#ff5252' : fps < 45 ? '#ffd54f' : '#69f0ae';
+        const tr = transport() === 'polling' ? ' <span style="color:#ff5252">HTTP</span>' : '';
+        el.innerHTML = `<span style="color:${fc}">FPS ${fps}</span> <span style="color:${pc}">${socket.connected ? ping + 'ms' : '--'}</span>${tr}`;
+    }, 1000);
+    setInterval(() => {
+        if (!socket.connected) return;
+        const t0 = performance.now();
+        socket.timeout(5000).emit('pingCheck', (err) => { if (!err) { ping = Math.round(performance.now() - t0); pingHist.push(ping); } });
+    }, 2000);
+    setInterval(() => {
+        if (!socket.connected || !fpsHist.length) return;
+        const med = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] || 0;
+        socket.emit('clientStats', { fps: med(fpsHist), fpsMin: Math.min(...fpsHist), ping: med(pingHist), pingMax: Math.max(0, ...pingHist), long, tr: transport(),
+            cores: navigator.hardwareConcurrency || 0, mobile: /Mobi|Android|iPhone/i.test(navigator.userAgent) });
+        fpsHist.length = 0; pingHist.length = 0; long = 0;
+    }, 60000);
+    return { get ping() { return ping; }, get fps() { return fps; } };
+})();
 
 // O'YIN USLUBIDAGI DIALOG: brauzerning oq alert()/confirm() oynalari o'rniga (o'yinni to'xtatmaydi,
 // dizaynga mos). Bir vaqtda bittasi - qolganlari navbatda kutadi

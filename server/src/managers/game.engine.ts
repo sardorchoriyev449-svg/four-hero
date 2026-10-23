@@ -2378,7 +2378,7 @@ export class GameEngine {
                 });
             });
             dr.wave = { safes, phase: 'warn', t: T(d.rockWarnMs), n: 0, rocks };
-            this.io.to(roomId).emit('climbQuake', { safes, ms: d.rockWarnMs });
+            this.io.to(roomId).emit('climbQuake', { safes, ms: d.rockWarnMs, rocks: rocks.map(r => ({ x: r.x, y0: r.y0, ty: r.ty, r: r.r })) });
         }
         if (dr.wave) {
             const w = dr.wave;
@@ -2388,17 +2388,16 @@ export class GameEngine {
                 const total = T(d.rockWarnMs), f = Math.min(1, w.n / total);
                 w.rocks.forEach(rk => {
                     rk.y = rk.y0 + (rk.ty - rk.y0) * f * f;
+                    // Asosiy tegish - qahramonning o'z ekranida (rockTouch): server joyi tarmoq kechikishi bilan keladi va
+                    // ekranda tegmagan tosh ham "tekkandek" bo'lardi. Server faqat qo'nish paytida, tosh platformaga
+                    // to'liq tushganda va qahramon chuqur uning ichida qolganda o'zi uradi (aldovga qarshi zaxira)
+                    if (w.n < total) return;
                     alive.forEach(p => {
                         if (rk.hit.includes(p.id)) return;
-                        // Tosh (doira) qahramon (to'rtburchak) ga tegdimi. +3 px zaxira: qahramon joyi serverga tarmoq
-                        // kechikishi bilan keladi - ekranda tekkandek ko'ringan tosh haqiqatan ham jon olsin
                         const cx = Math.max(p.x - this.PLAYER_HALF_W, Math.min(rk.x, p.x + this.PLAYER_HALF_W));
                         const cy = Math.max(p.y - this.PLAYER_HALF_H, Math.min(rk.y, p.y + this.PLAYER_HALF_H));
-                        if (Math.hypot(rk.x - cx, rk.y - cy) > rk.r + 3) return;
-                        rk.hit.push(p.id);
-                        this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.rockDamagePct));
-                        this.knockback(p, (p.x < rk.x ? -1 : 1) * 160, 200);
-                        this.io.to(roomId).emit('rockHit', { id: p.id, x: Math.round(p.x), y: Math.round(p.y) });
+                        if (Math.hypot(rk.x - cx, rk.y - cy) > rk.r - 14) return;
+                        this.rockHitPlayer(roomId, d, rk, p);
                     });
                 });
                 if (w.n >= total) {
@@ -2413,6 +2412,24 @@ export class GameEngine {
                 dr.nextWave = dr.tick + T(d.rockEveryMs);
             }
         }
+    }
+    private rockHitPlayer(roomId: string, d: NonNullable<MapDef['doors']>, rk: { x: number, hit: string[] }, p: PlayerState): void {
+        rk.hit.push(p.id);
+        this.hurtPlayer(p, Math.round((p.maxHp || 100) * d.rockDamagePct));
+        this.knockback(p, (p.x < rk.x ? -1 : 1) * 160, 200);
+        this.io.to(roomId).emit('rockHit', { id: p.id, x: Math.round(p.x), y: Math.round(p.y) });
+    }
+    // Qahramon o'z ekranida toshga tegdi (klient tekshiradi - u ko'rgani bo'yicha). Server faqat ishonarlilikni tekshiradi:
+    // to'lqin hali tushmoqda, tosh bor, qahramon tosh yonida (tarmoq kechikishi uchun zaxira bilan)
+    public doorsRockTouch(room: RoomState, playerId: string, k: number): void {
+        const dr = room.doors, d = getMapById(room.selectedLevel).doors, p = room.players[playerId];
+        if (!dr || !d || dr.state !== 'climb' || !dr.wave || !p || p.isDead || room.isOver) return;
+        const w = dr.wave, rk = w.rocks[k];
+        if (!rk || rk.hit.includes(p.id)) return;
+        const cx = Math.max(p.x - this.PLAYER_HALF_W, Math.min(rk.x, p.x + this.PLAYER_HALF_W));
+        const cy = Math.max(p.y - this.PLAYER_HALF_H, Math.min(rk.y, p.y + this.PLAYER_HALF_H));
+        if (Math.hypot(rk.x - cx, rk.y - cy) > rk.r + 140) return;
+        this.rockHitPlayer(room.id, d, rk, p);
     }
     // Tupurib chiqarish / qo'yib yuborish joyi: bo'shliq ustida emas - ustun ustida
     private caveSafeX(d: NonNullable<MapDef['doors']>, x: number): number {

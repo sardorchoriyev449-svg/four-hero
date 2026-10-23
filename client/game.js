@@ -549,8 +549,26 @@ function launchGame(socket, roomId, mapData, continued) {
     let emotes = [];           // qahramonlar tepasidagi emotsiyalar: { img, playerId }
     let lastEmoteAt = -1e9;
 
+    // MATN USLUBI: Phaser setColor/setStroke/setShadow... har chaqirilganda matnni qaytadan chizib, rasmini GPU ga
+    // yuklaydi - hatto rang o'sha-o'sha bo'lsa ham. O'yinda bunday chaqiruvlar har kadrda (masalan My Farm belgilari)
+    // bo'lib, sekin telefonlarda "qotish"ga sabab bo'lardi. Uslub o'zgarmagan bo'lsa - qayta chizilmaydi
+    if (!Phaser.GameObjects.TextStyle.prototype.__dedup) {
+        const TS = Phaser.GameObjects.TextStyle.prototype, origUpdate = TS.update;
+        const KEYS = ['fontFamily', 'fontSize', 'fontStyle', 'backgroundColor', 'color', 'stroke', 'strokeThickness', 'shadowOffsetX', 'shadowOffsetY',
+            'shadowColor', 'shadowBlur', 'shadowStroke', 'shadowFill', 'align', 'maxLines', 'fixedWidth', 'fixedHeight', 'resolution', 'rtl',
+            'testString', 'baselineX', 'baselineY', 'wordWrapWidth', 'wordWrapUseAdvanced'];
+        TS.update = function (recalculateMetrics) {
+            const sig = KEYS.map(k => this[k]).join('|');
+            if (sig === this.__sig && this.parent && this.parent.canvas) return this.parent;
+            this.__sig = sig;
+            return origUpdate.call(this, recalculateMetrics);
+        };
+        TS.__dedup = true;
+    }
     const config = {
         type: Phaser.AUTO,
+        // Noutbuklarda kuchliroq (diskret) videokartani so'raydi; piksel grafikada MSAA silliqlash kerak emas
+        render: { powerPreference: 'high-performance', antialiasGL: false },
         banner: false,   // konsolga har raundda Phaser yozuvi chiqmasin
         parent: 'game-container', // O'yin aynan index.html dagi shu div ichiga tushadi
         // Ichki o'lcham doim 800x600; ekrandagi o'lchami - #game-container qutisiga moslashadi
@@ -6564,8 +6582,22 @@ function launchGame(socket, roomId, mapData, continued) {
                 });
             });
         }
-        // Tushayotgan toshlar - serverdagi aynan o'sha joyda (tegsa - jon ketadi)
-        const rocks = (S.state === 'climb' && S.wave && S.wave.rocks) || [];
+        // Tushayotgan toshlar: klient ularni serverdagi formula bilan O'ZI chizadi (tarmoq kechikishisiz, silliq).
+        // O'z qahramoni ekranda toshga TEGSAGINA serverga aytiladi - tegmagan tosh jon olmaydi
+        const LW = drObj.localWave;
+        let rocks = (S.state === 'climb' && S.wave && S.wave.rocks) || [];
+        if (S.state === 'climb' && LW && t0 - LW.start <= LW.ms + 400) {
+            const f = Math.min(1, (t0 - LW.start) / LW.ms);
+            rocks = LW.rocks.map(r => ({ x: r.x, y: r.y0 + (r.ty - r.y0) * f * f, r: r.r }));
+            if (f >= 1 && t0 - LW.start > LW.ms + 150) rocks = [];
+            if (me && !me.isDead && f < 1) rocks.forEach((r, k) => {
+                if (LW.sent[k]) return;
+                const cx = Math.max(me.x - 14, Math.min(r.x, me.x + 14)), cy = Math.max(me.y - 22, Math.min(r.y, me.y + 22));
+                if (Math.hypot(r.x - cx, r.y - cy) > r.r - 4) return;
+                LW.sent[k] = true;
+                socket.emit('rockTouch', { roomId, k });
+            });
+        } else if (LW) drObj.localWave = null;
         while (drObj.fallingRocks.length < rocks.length) {
             const img = scene.add.circle(0, 0, 30, 0x757575).setStrokeStyle(5, 0x0a0a0a).setDepth(3.45);
             const hl = scene.add.circle(0, 0, 10, 0x9e9e9e).setDepth(3.46);
@@ -6575,9 +6607,11 @@ function launchGame(socket, roomId, mapData, continued) {
             const r = rocks[k];
             o.img.setVisible(!!r); o.hl.setVisible(!!r);
             if (!r) { o.y = null; return; }
-            o.y = o.y === null || Math.abs(o.y - r.y) > 200 ? r.y : Phaser.Math.Linear(o.y, r.y, 0.5);
-            o.img.setPosition(r.x, o.y).setRadius(r.r).setAngle(o.y);
-            o.hl.setPosition(r.x - r.r * 0.35, o.y - r.r * 0.35).setRadius(r.r * 0.3);
+            o.y = LW ? r.y : (o.y === null || Math.abs(o.y - r.y) > 200 ? r.y : Phaser.Math.Linear(o.y, r.y, 0.5));
+            // Radius faqat o'zgarganda: setRadius doira shaklini noldan qayta hisoblaydi (har kadrda - telefonda og'ir)
+            if (o.r !== r.r) { o.r = r.r; o.img.setRadius(r.r); o.hl.setRadius(r.r * 0.3); }
+            o.img.setPosition(r.x, o.y).setAngle(o.y);
+            o.hl.setPosition(r.x - r.r * 0.35, o.y - r.r * 0.35);
         });
         const inCave = S.state === 'room' || (S.state === 'done' && cam.scrollX >= d.roomX0 - 10);
         drObj.caveBg.setVisible(inCave);
@@ -9707,7 +9741,8 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('climbStart', () => sfx('banner'));
         socket.off('climbQuake');
         socket.on('climbQuake', (d) => {
-            this.cameras.main.shake(600, 0.008); sfx('rumble');
+            if (drObj && d && d.rocks) drObj.localWave = { rocks: d.rocks, start: this.time.now, ms: d.ms, sent: {} };
+            this.cameras.main.shake(400, 0.005); sfx('rumble');
         });
         socket.off('rockHit');
         socket.on('rockHit', (d) => {

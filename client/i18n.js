@@ -2153,14 +2153,20 @@ const TRANSLATIONS = {
 
 const SUPPORTED_LANGS = ['en', 'ru'];
 
+// Tanlangan til xotirada saqlanadi: t() o'yinda har kadrda yuzlab marta chaqiriladi, localStorage esa sekin (ayniqsa telefonda)
+let cachedLang = null;
 function getLang() {
-    const saved = localStorage.getItem('gameLang');
-    return SUPPORTED_LANGS.includes(saved) ? saved : 'en';
+    if (cachedLang) return cachedLang;
+    let saved = null;
+    try { saved = localStorage.getItem('gameLang'); } catch (e) { }
+    cachedLang = SUPPORTED_LANGS.includes(saved) ? saved : 'en';
+    return cachedLang;
 }
 
 function setLang(lang) {
     if (!SUPPORTED_LANGS.includes(lang)) return;
-    localStorage.setItem('gameLang', lang);
+    cachedLang = lang;
+    try { localStorage.setItem('gameLang', lang); } catch (e) { }
     applyStaticTranslations();
     if (typeof onLanguageChanged === 'function') onLanguageChanged();
 }
