@@ -1162,6 +1162,61 @@
         .upgrade-row .upgrade-pay-points { background: #b388ff; color: #1a0640; box-shadow: inset -3px -3px 0 #7c4dff, 0 3px 0 var(--px-ink); }
         .upgrade-row .upgrade-pay-coins { background: var(--px-gold); color: #3b2a00; box-shadow: inset -3px -3px 0 var(--px-gold-d), 0 3px 0 var(--px-ink); }
 
+        /* ===== GARDEROB (wardrobe.js): chapda katta jonli ko'rinish, o'ngda turkumlar va kartochkalar ===== */
+        .wd-open-btn { display: block; width: 100%; margin: -4px 0 14px; padding: 12px; font-size: 11px; background: var(--px-gold); color: #3b2a00;
+            box-shadow: inset -3px -3px 0 var(--px-gold-d), 0 3px 0 var(--px-ink); }
+        #wardrobe { position: fixed; inset: 0; z-index: 2500; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.78); padding: 12px; box-sizing: border-box; }
+        #wardrobe .wd-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(1040px, 100%);
+            height: min(700px, calc(100vh - 24px)); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; font: 9px "Press Start 2P", monospace; color: #f3f0ff; }
+        #wardrobe button { font-family: "Press Start 2P", monospace; }
+        #wardrobe .wd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        #wardrobe .wd-title { flex: 1; font-size: 15px; color: #ffca28; text-shadow: 2px 2px 0 #000; }
+        #wardrobe .wd-x { width: auto; margin: 0; padding: 8px 11px; font-size: 12px; background: #e53935; color: #fff; border: 3px solid #000; box-shadow: 3px 3px 0 #000; }
+        #wardrobe .wd-body { flex: 1; min-height: 0; display: flex; gap: 14px; }
+        #wardrobe .wd-left { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+        #wardrobe .wd-stage { height: 230px; margin: 0; }
+        #wardrobe #wd-preview { width: 288px; height: 216px; image-rendering: pixelated; animation: px-bob 1.2s steps(2) infinite; }
+        #wardrobe .wd-wcolor { display: flex; align-items: center; gap: 8px; font-size: 8px; line-height: 1.6; padding: 6px 8px; background: #241d40; border: 3px solid #000; min-height: 22px; }
+        #wardrobe .wd-wcolor .skin-swatch { flex-shrink: 0; }
+        #wardrobe .wd-try { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 8px; line-height: 1.7; color: #b9b0e0; min-height: 34px; }
+        #wardrobe .wd-try b { color: #69f0ae; }
+        #wardrobe .wd-reset { width: auto; margin: 0; padding: 6px 8px; font-size: 8px; background: #302752; color: #f3f0ff; border: 3px solid #000; box-shadow: 2px 2px 0 #000; flex-shrink: 0; }
+        #wardrobe .wd-heroes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        #wardrobe .wd-hero-btn { margin: 0; width: 100%; padding: 9px 4px; font-size: 8px; background: var(--px-panel-2); color: var(--px-muted); box-shadow: inset -3px -3px 0 rgba(0,0,0,.35), 0 3px 0 var(--px-ink); }
+        #wardrobe .wd-hero-btn.active { background: var(--px-accent); color: #062b24; }
+        #wardrobe .wd-hero-btn:disabled { opacity: .35; cursor: not-allowed; }
+        #wardrobe .wd-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        #wardrobe .wd-cats { margin-bottom: 8px; }
+        #wardrobe .wd-cat-note { text-align: left; margin: 0 0 8px; min-height: 0; }
+        #wardrobe .wd-cat-note:empty { display: none; }
+        #wardrobe .wd-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; align-content: start; padding: 2px 4px 2px 2px; }
+        #wardrobe .wd-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px; background: var(--px-panel-2); cursor: pointer;
+            border: 3px solid var(--px-ink); box-shadow: inset 0 0 0 2px var(--px-panel-3); }
+        #wardrobe .wd-card:hover { box-shadow: inset 0 0 0 2px #b388ff; }
+        #wardrobe .wd-card.trying { box-shadow: inset 0 0 0 3px #69f0ae; background: #23304a; }
+        #wardrobe .wd-card.equipped { box-shadow: inset 0 0 0 3px var(--px-accent); }
+        #wardrobe .wd-card .cos-name { min-height: 32px; }
+        #wardrobe .wd-card .skin-tag { margin: 4px 0 0; display: inline-block; }
+        #wardrobe .wd-card button { width: 100%; margin: 0; }
+        #wardrobe .wd-hero-icon { width: 96px; height: 72px; image-rendering: pixelated; background: var(--px-bg); border: 2px solid var(--px-ink); }
+        #wardrobe .wd-swatch { width: 96px; height: 72px; border: 3px solid var(--px-ink); box-shadow: inset 0 0 0 3px rgba(255,255,255,.18), inset -10px -10px 0 rgba(0,0,0,.22); }
+        #wardrobe .wd-swatch.fx-fire { background-image: radial-gradient(circle at 30% 70%, #ffea00 0 10%, transparent 11%), radial-gradient(circle at 70% 40%, #ff9100 0 12%, transparent 13%) !important; }
+        #wardrobe .wd-swatch.fx-ice { background-image: linear-gradient(45deg, transparent 45%, #e1f5fe 46% 54%, transparent 55%), linear-gradient(-45deg, transparent 45%, #e1f5fe 46% 54%, transparent 55%) !important; }
+        #wardrobe .wd-swatch.fx-spark { background-image: linear-gradient(120deg, transparent 40%, #fff 41% 47%, transparent 48%), linear-gradient(60deg, transparent 55%, #fff176 56% 60%, transparent 61%) !important; }
+        #wardrobe .wd-swatch.fx-shadow { background-image: radial-gradient(circle at 35% 40%, rgba(49,27,146,.9) 0 22%, transparent 23%), radial-gradient(circle at 65% 65%, rgba(74,20,140,.9) 0 18%, transparent 19%) !important; }
+        #wardrobe .wd-swatch.fx-star { background-image: radial-gradient(circle at 30% 30%, #fff 0 6%, transparent 7%), radial-gradient(circle at 70% 60%, #fff 0 5%, transparent 6%), radial-gradient(circle at 45% 80%, #ffd54f 0 5%, transparent 6%) !important; }
+        @media (max-width: 760px), (max-height: 520px) {
+            #wardrobe { padding: 0; }
+            #wardrobe .wd-box { height: 100vh; width: 100vw; border-width: 0; padding: 10px; }
+            #wardrobe .wd-body { flex-direction: column; gap: 8px; }
+            #wardrobe .wd-left { width: 100%; display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; }
+            #wardrobe .wd-stage { height: 116px; grid-row: span 3; }
+            #wardrobe #wd-preview { width: 144px; height: 108px; }
+            #wardrobe .wd-heroes { grid-template-columns: repeat(4, 1fr); grid-column: 1 / -1; }
+            #wardrobe .wd-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+            #wardrobe .wd-hero-icon, #wardrobe .wd-swatch { width: 72px; height: 54px; }
+        }
+
         /* ===== DETALLAR (bosh kiyimi, yuz, qurol ko'rinishlari) ===== */
         .cos-note { text-align: left; margin: 0 0 10px; }
         .cos-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
@@ -1272,6 +1327,7 @@
         </div>
         <button id="nav-play-btn" class="hub-btn"><i class="fa-solid fa-play"></i><span data-i18n="nav_play">Play</span></button>
         <button id="nav-character-btn" class="hub-btn"><i class="fa-solid fa-shield-halved"></i><span data-i18n="nav_character">My Character</span></button>
+        <button id="nav-wardrobe-btn" class="hub-btn"><i class="fa-solid fa-shirt"></i><span data-i18n="nav_wardrobe">Wardrobe</span></button>
         <button id="nav-inventory-btn" class="hub-btn"><i class="fa-solid fa-bag-shopping"></i><span data-i18n="nav_inventory">Inventory</span></button>
         <button id="nav-daily-btn" class="hub-btn"><i class="fa-solid fa-calendar-check"></i><span data-i18n="nav_daily">Daily rewards</span><span class="daily-dot hidden"></span></button>
         <button id="nav-leaderboard-btn" class="hub-btn"><i class="fa-solid fa-trophy"></i><span data-i18n="nav_leaderboard">Leaderboard</span></button>
@@ -1343,6 +1399,7 @@
         </div>
 
         <div class="char-stage"><canvas id="char-preview" width="64" height="48"></canvas></div>
+        <button id="char-wardrobe-btn" class="wd-open-btn"><i class="fa-solid fa-shirt"></i> <span data-i18n="wd_open_btn">Customize look</span></button>
         <div id="char-tabs" class="char-tabs"></div>
         <p id="char-locked-note" class="settings-note hidden" data-i18n="char_locked_note">Showing the character currently selected in this room.</p>
 
@@ -1359,17 +1416,14 @@
         <div class="char-xp"><div class="char-xp-bar"><span id="char-xp-fill"></span></div><span id="char-xp-text"></span></div>
         <div id="perks-content"></div>
 
-        <h3 style="text-align:left; margin-top: 22px;" data-i18n="char_skins_title">Skins</h3>
-        <div id="shop-content"></div>
-
-        <h3 style="text-align:left; margin-top: 22px;" data-i18n="char_weapon_skins_title">Weapon Skins</h3>
-        <div id="weapon-shop-content"></div>
-
-        <!-- Detallar: bosh kiyimi, yuz buyumi (hamma qahramonga umumiy) va qurol ko'rinishlari -->
-        <h3 style="text-align:left; margin-top: 22px;" data-i18n="cos_title">Accessories</h3>
-        <p class="settings-note cos-note" data-i18n="cos_note">Head and face items are shared by all heroes - buy once, wear on anyone.</p>
-        <div id="cos-tabs" class="cos-tabs"></div>
-        <div id="cos-grid" class="cos-grid"></div>
+        <!-- Skinlar, qurol rangi va aksessuarlar - alohida GARDEROB oynasida (wardrobe.js). Eski ro'yxatlar yashirin qoladi
+             (lobby.js ularni hali ham chizadi - boshqa joylar shularga tayanadi) -->
+        <div class="hidden">
+            <div id="shop-content"></div>
+            <div id="weapon-shop-content"></div>
+            <div id="cos-tabs" class="cos-tabs"></div>
+            <div id="cos-grid" class="cos-grid"></div>
+        </div>
     </div>
 
     <!-- ===== SOZLAMALAR ===== -->
@@ -1538,6 +1592,7 @@
     <script src="inventory.js"></script>
     <script src="leaderboard.js"></script>
     <script src="daily.js"></script>
+    <script src="wardrobe.js"></script>
     <script src="game.js"></script>
     <script src="voice.js"></script>
     <script src="ads.js"></script>

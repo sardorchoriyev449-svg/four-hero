@@ -330,6 +330,7 @@ function showPanel(panel) {
 // Til almashganda, hozir ekranda turgan dinamik (JS orqali chizilgan) matnlarni yangilash
 // (i18n.js dagi setLang() shu funksiyani avtomatik chaqiradi)
 function onLanguageChanged() {
+    if (window.Wardrobe && Wardrobe.isOpen()) Wardrobe.refresh();
     if (roomMaps.length > 0) renderLevelList();
     if (latestPlayerListData) renderPlayerList(latestPlayerListData);
     if (latestGameOverData) renderGameOver(latestGameOverData);
@@ -592,6 +593,9 @@ navPlayBtn.onclick = () => {
 navCharacterBtn.onclick = () => {
     openCharacterScreen({ locked: false, returnPanel: mainMenuPanel });
 };
+// GARDEROB: bosh menyudan ham, "Mening personajim" ichidan ham ochiladi (alohida oyna - wardrobe.js)
+document.getElementById('nav-wardrobe-btn').onclick = () => Wardrobe.open({ fromMenu: true });
+document.getElementById('char-wardrobe-btn').onclick = () => Wardrobe.open();
 // Sozlamalar: bosh menyudan ham, xona (lobbi) ichidan ham ochiladi - "Orqaga" qayerdan ochilgan bo'lsa o'sha yerga qaytaradi
 let settingsReturnPanel = null;
 function openSettings(returnPanel) {
@@ -1614,23 +1618,24 @@ function renderCharTabs() {
         const btn = document.createElement('button');
         btn.className = 'char-tab-btn' + (type === selectedCharTab ? ' active' : '');
         btn.innerText = tCharName(type);
-        btn.onclick = () => {
-            if (selectedCharTab === type) return;
-            selectedCharTab = type;
-            renderCharTabs();
-            charDetailsDesc.innerText = t('char_' + selectedCharTab + '_desc');
-            renderUpgrades();
-            renderShop();
-            renderWeaponShop();
-            // Keyingi safar ekran ochilganda shu personaj birinchi ko'rsatilishi uchun eslab qolamiz
-            currentUser.defaultCharacter = type;
-            fetch('/api/character/' + currentUser.id + '/default', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ characterType: type })
-            }).catch(() => {});
-        };
+        btn.onclick = () => { if (selectedCharTab !== type) selectCharTab(type); };
         charTabsDiv.appendChild(btn);
     });
+}
+// Qahramonni tanlash ("Mening personajim" tablari va Garderob oynasi)
+function selectCharTab(type) {
+    selectedCharTab = type;
+    renderCharTabs();
+    charDetailsDesc.innerText = t('char_' + selectedCharTab + '_desc');
+    renderUpgrades();
+    renderShop();
+    renderWeaponShop();
+    // Keyingi safar ekran ochilganda shu personaj birinchi ko'rsatilishi uchun eslab qolamiz
+    currentUser.defaultCharacter = type;
+    fetch('/api/character/' + currentUser.id + '/default', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterType: type })
+    }).catch(() => {});
 }
 
 // Har qanday buy/upgrade/equip amalidan so'ng, agar hozir bir xonada bo'lsak,
