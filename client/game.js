@@ -4357,6 +4357,15 @@ function launchGame(socket, roomId, mapData, continued) {
                 dimg.setTexture(Math.floor(tNow / (moving ? 90 : 260)) % 2 ? 'px_mf_dog1' : 'px_mf_dog0');
                 dimg.setAngle(ds && ds.b ? (ds.f < 0 ? 12 : -12) : moving && !(ds && ds.a) ? Math.sin(tNow / 45) * 4 : 0);
                 dimg.setDepth(ds && (Math.abs(ds.x - 470) > 4 || ds.y < 570) ? 3.3 : -0.45);
+                if (ds && ds.h) dimg.setTintFill(0xff5252); else dimg.clearTint();
+                // Jon chizig'i (zarar olgan bo'lsa)
+                if (!O.dogBar) O.dogBar = scene.add.graphics().setDepth(3.35);
+                O.dogBar.clear();
+                if (ds && ds.hp < ds.mx) {
+                    O.dogBar.fillStyle(0x000000, 0.7); O.dogBar.fillRect(dimg.x - 20, dimg.y - 62, 40, 6);
+                    O.dogBar.fillStyle(ds.hp / ds.mx > 0.35 ? 0x00e5ff : 0xff5252, 1); O.dogBar.fillRect(dimg.x - 19, dimg.y - 61, Math.max(1, Math.round(38 * ds.hp / ds.mx)), 4);
+                }
+            } else if (O.dogBar) { O.dogBar.clear();
             }
             O.house.setTexture(D.paint ? 'px_farmhouse_p' : 'px_farmhouse');
             if (O.shownLevel !== lv) {
@@ -5235,16 +5244,22 @@ function launchGame(socket, roomId, mapData, continued) {
         c.setVelocity(vx, vy);
         if (vx < 0) lastDirection = 'left'; else if (vx > 0) lastDirection = 'right';
     }
-    // Nishonga olish: sichqoncha bosilgan nuqtaga; aks holda qarab turgan tomondagi eng yaqin dushmanga
+    // Nishonga olish: sichqoncha bosilgan nuqtaga. Aks holda - qahramon turgan joydan QARAB TURGAN TOMONGA to'g'ri;
+    // faqat dushman to'g'ri ustidan / ostidan uchib o'tayotgan bo'lsa (yonma-yon emas) - o'q o'zi unga qarab ketadi
     function skyAim(pointer) {
         const c = currentCharacter;
         if (!c) return 0;
         if (pointer && pointer.worldX !== undefined) return Math.atan2(pointer.worldY - c.y, pointer.worldX - c.x);
         const dir = lastDirection === 'right' ? 1 : -1;
-        let best = null, bd = 760;
+        let best = null, bd = 520;
         const cand = [...((skyState && skyState.enemies) || [])];
         if (skyState && skyState.boss) cand.push(skyState.boss);
-        cand.forEach((e) => { const dx = e.x - c.x; if (dx * dir < -20) return; const d = Math.hypot(dx, e.y - c.y); if (d < bd) { bd = d; best = e; } });
+        cand.forEach((e) => {
+            const dx = e.x - c.x, dy = e.y - c.y;
+            if (Math.abs(dx) > 90 || Math.abs(dy) < 60) return;   // ustida/ostida emas (yonida yoki orqasida) - to'g'ri otiladi
+            const d = Math.abs(dy);
+            if (d < bd) { bd = d; best = e; }
+        });
         return best ? Math.atan2(best.y - c.y, best.x - c.x) : (dir > 0 ? 0 : Math.PI);
     }
     function skyBossFall(scene, d) {
@@ -6612,7 +6627,7 @@ function launchGame(socket, roomId, mapData, continued) {
         ensureCritterTextures(scene);
         if (!crObj || crObj.scene !== scene || !crObj.spr.scene) {
             const txt = (size, color) => scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: size, color, stroke: '#000', strokeThickness: 4, align: 'center' }).setOrigin(0.5, 1);
-            crObj = { scene, spr: scene.add.image(0, 0, 'px_crit_sit').setOrigin(0.5, 1).setDepth(4.2).setScale(0.8).setVisible(false),
+            crObj = { scene, spr: scene.add.image(0, 0, 'px_crit_sit').setOrigin(0.5, 1).setDepth(4.2).setScale(0.75).setVisible(false),
                 bubble: scene.add.image(0, 0, 'px_crit_bubble').setOrigin(0.3, 1).setDepth(4.25).setVisible(false),
                 food: scene.add.image(0, 0, 'px_crit_sit').setDepth(4.26).setVisible(false),
                 mark: txt('16px', '#ff5252').setDepth(4.27).setVisible(false),
@@ -6680,7 +6695,7 @@ function launchGame(socket, roomId, mapData, continued) {
             petIds.add(q.id);
             let o = O.pets[q.id];
             if (!o) {
-                o = O.pets[q.id] = scene.add.image(q.x, q.y, 'px_crit_fly0').setDepth(4.18).setScale(0.6);
+                o = O.pets[q.id] = scene.add.image(q.x, q.y, 'px_crit_fly0').setDepth(4.18).setScale(0.55);
                 o.bar = scene.add.graphics().setDepth(4.19);
                 o.lv = scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 1).setDepth(4.19);
             }
@@ -6688,7 +6703,7 @@ function launchGame(socket, roomId, mapData, continued) {
             o.x = Math.abs(o.x - q.x) > 300 ? q.x : Phaser.Math.Linear(o.x, q.x, k);
             o.y = Math.abs(o.y - q.y) > 300 ? q.y : Phaser.Math.Linear(o.y, q.y, k);
             o.setTexture(q.st === 'dash' ? 'px_crit_scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'px_crit_fly0' : 'px_crit_fly1')).setFlipX(q.f < 0)
-                .setAngle(q.st === 'dash' ? q.f * 14 : 0).setScale(q.st === 'dash' ? 0.66 : 0.6);
+                .setAngle(q.st === 'dash' ? q.f * 10 : 0).setScale(q.st === 'dash' ? 0.6 : 0.55);
             if (q.fl) o.setTintFill(0xff5252); else if (o.happyUntil && t0 < o.happyUntil) o.setTint(0xffd1e8); else o.clearTint();
             if (q.st === 'dash' && Math.random() < 0.6) { const tr = scene.add.rectangle(o.x, o.y, 5, 5, 0xd1c4e9, 0.8).setDepth(4.17); scene.tweens.add({ targets: tr, alpha: 0, scale: 0.2, duration: 220, onComplete: () => tr.destroy() }); }
             const pd = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet;
@@ -6705,11 +6720,11 @@ function launchGame(socket, roomId, mapData, continued) {
         const restX = mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.pethouse && !(mfState.farm.decorOff || {}).pethouse ? 392 : 280;
         if (hostPet && hostPet.r) {
             if (!O.rest || !O.rest.scene) {
-                O.rest = scene.add.image(restX, 572, 'px_crit_blink').setOrigin(0.5, 1).setDepth(-0.4).setScale(0.62);
+                O.rest = scene.add.image(restX, 572, 'px_crit_blink').setOrigin(0.5, 1).setDepth(-0.4).setScale(0.6);
                 O.restBar = scene.add.graphics().setDepth(-0.39);
                 O.restZ = scene.add.text(restX, 520, 'z', { fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.39);
             }
-            O.rest.setVisible(true).setX(restX).setScale(0.62, 0.62 + Math.sin(t0 / 600) * 0.025);
+            O.rest.setVisible(true).setX(restX).setScale(0.6, 0.6 + Math.sin(t0 / 600) * 0.02);
             O.restZ.setVisible(true).setText(Math.floor(t0 / 600) % 3 === 0 ? 'z' : Math.floor(t0 / 600) % 3 === 1 ? 'zZ' : 'zZz').setPosition(restX + 18, 520 - (t0 % 1800) / 90);
             O.restBar.clear(); O.restBar.fillStyle(0x000000, 0.7); O.restBar.fillRect(restX - 20, 576, 40, 6);
             O.restBar.fillStyle(0x76ff03, 1); O.restBar.fillRect(restX - 19, 577, Math.max(1, Math.round(38 * hostPet.hp / hostPet.mx)), 4);
@@ -10162,6 +10177,14 @@ function launchGame(socket, roomId, mapData, continued) {
             if (typeof showTopToast === 'function') showTopToast(t('mf_raid_' + d.kind));
         });
         socket.on('mfSlimeLand', (d) => { if (!d) return; sfxAt('thud', d.x, 0.8); puff(d.x, 568, 0x66bb6a, 8); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) this.cameras.main.shake(120, 0.004); });
+        socket.off('mfDogHurt'); socket.off('mfDogDown');
+        socket.on('mfDogHurt', (d) => { if (d) sfxAt('hit', d.x, 0.6); });
+        socket.on('mfDogDown', (d) => {
+            if (!d) return;
+            sfxAt('explosion', d.x, 0.8);
+            for (let i = 0; i < 14; i++) { const r = this.add.rectangle(d.x + (Math.random() - 0.5) * 30, d.y - 20, 5, 5, [0x607d8b, 0x90a4ae, 0x00e5ff, 0x37474f][i % 4]).setDepth(3.6); this.tweens.add({ targets: r, x: r.x + (Math.random() - 0.5) * 140, y: r.y - 30 - Math.random() * 60, angle: 360, alpha: 0, duration: 900, onComplete: () => r.destroy() }); }
+            if (typeof showTopToast === 'function') showTopToast(t('mf_dog_down'));
+        });
         socket.off('mfDogBite');
         socket.on('mfDogBite', (d) => {
             if (!d) return;

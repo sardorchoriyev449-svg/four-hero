@@ -344,7 +344,7 @@ export interface RoomState {
             air?: boolean, vx?: number, vy?: number, jumpCd?: number, hopFromY?: number, hopToY?: number, hopH?: number }[],
         nextCrowAt?: number,
         // Robot it (bezak sotib olingan bo'lsa): fermani himoya qiladi
-        dog?: { x: number, y: number, face: number, vx: number, vy: number, air: boolean, biteAt: number, bite: number, jumpCd: number } | null,   // biteAt - keyingi tishlashgacha tiklar
+        dog?: { x: number, y: number, face: number, vx: number, vy: number, air: boolean, biteAt: number, bite: number, jumpCd: number, hp: number, hurt: number } | null,   // biteAt - keyingi tishlashgacha tiklar
         nextRaidAt: number, raidKind: string | null, safeUntil: { [pid: string]: number },
         // Baxaybat daraxt BOSS jangi
         boss: { hp: number, maxHp: number, hitFlash: number, nextAt: number, last: string,

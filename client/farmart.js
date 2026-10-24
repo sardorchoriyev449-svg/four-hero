@@ -326,70 +326,66 @@
             for (let x = 4; x < 8; x++) { set(x, 16, 0xfff59d); set(x, 17, 0xfffde7); }
         })
     };
-    // AJDARCHA (o'ngga qaragan, 34x30 kontur bilan): ingichka zumrad tana, uzun egilgan bo'yin, cho'zinchoq tumshuq, orqaga qayrilgan
-    // fil suyagi shoxlar, oltin ko'z, oltin qorin plastinkalari, ko'rshapalak qanotlari (binafsha parda, zumrad suyaklar),
-    // uchi nayzasimon uzun dum. frame: fly0/fly1 - qanot tepada/pastda; sit/blink - qo'ngan (qanot yig'iq, dum o'ralgan);
-    // eat - og'zi ochiq (yashil uchqun); scared - qanotlar yoyilgan, og'iz ochiq
+    // AJDARCHA (o'yinchi chizgan rasm asosida): yon tomondan, to'rtburchak uslub - katta och ko'k bosh, qora ko'z yorig'i
+    // (ichida oq chaqnash), og'iz chizig'i, boshdan orqaga ketgan to'q ko'k shox, uzun to'q ko'k tana va dum (orqasida
+    // tikanchalar, uchida nayza), orqada yotgan uch qavat uzun och ko'k qanot, ikki qora oyoq. Rasm chapga qaragan holda
+    // chiziladi va oxirida ko'zgudek aylantiriladi (o'yinda hamma narsa o'ngga qaragan). Pastki qator - oyoq tagi (yerga tegadi)
+    // frame: sit/blink - qo'ngan; fly0/fly1 - qanot tepada/pastda (oyoqlar yig'ilgan); eat - og'zi ochiq; scared - ko'zi katta
     function critterGrid(frame) {
-        const W = 32, H = 28, OY = 4, g = gridNew(W, H), put = (x, y, c) => { x = Math.round(x); y = Math.round(y) + OY; if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };   // OY - qanot tepaga ko'tarilishi uchun joy
-        const S = [0x0b4f3f, 0x117a65, 0x1abc9c, 0x76d7c4], BELLY = [0xd4ac0d, 0xf4d03f, 0xf9e79f], HORN = [0xd5c4a1, 0xfdf6e3];
-        const MEM = [0x4a235a, 0x6c3483, 0x8e44ad, 0xbb8fce], BONE = 0x0e6251, EYE = 0xffd700, INK = 0x0b1a16;
-        const fly = frame === 'fly0' || frame === 'fly1' || frame === 'scared', open = frame === 'eat' || frame === 'scared';
-        const ell = (cx, cy, rx, ry, f) => { for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) { const d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2; if (d <= 1) put(x, y, f(x, y, d)); } };
-        const thick = (pts, w, f) => { for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2 || 1; for (let k = 0; k <= n; k++) { const x = x0 + (x1 - x0) * k / n, y = y0 + (y1 - y0) * k / n, r = w(i + k / n); for (let yy = -r; yy <= r; yy++) for (let xx = -r; xx <= r; xx++) if (xx * xx + yy * yy <= r * r + 0.3) put(x + xx, y + yy, f(x + xx, y + yy, yy)); } } };
-        const scale = (x, y, v) => (x + y * 2) % 5 === 0 ? S[Math.max(0, v - 1)] : S[v];
-        // ORQA QANOT (uzoqdagi - to'qroq)
-        const wing = (bx, by, back) => {
-            const tips = !fly ? [[bx - 2, by - 4], [bx - 6, by - 3], [bx - 8, by]]
-                : (frame === 'fly0' || frame === 'scared') ? [[bx, by - 12], [bx - 7, by - 10], [bx - 12, by - 6]] : [[bx - 2, by + 9], [bx - 8, by + 8], [bx - 12, by + 4]];
-            // parda: uchlar va bo'g'im orasidagi uchburchaklar
-            const tri = (a, b, c, col) => { const minx = Math.min(a[0], b[0], c[0]), maxx = Math.max(a[0], b[0], c[0]), miny = Math.min(a[1], b[1], c[1]), maxy = Math.max(a[1], b[1], c[1]);
-                const s = (p, q, r) => (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1]);
-                for (let y = miny; y <= maxy; y++) for (let x = minx; x <= maxx; x++) { const P = [x, y], d1 = s(P, a, b), d2 = s(P, b, c), d3 = s(P, c, a); if (!((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0))) put(x, y, col(x, y)); } };
-            const root = [bx, by], elbow = fly ? [(bx + tips[0][0]) / 2 + 1, (by + tips[0][1]) / 2] : [bx - 2, by - 2];
-            tri(root, elbow, tips[1], (x, y) => back ? MEM[0] : (x + y) % 4 === 0 ? MEM[1] : MEM[2]);
-            tri(root, tips[1], tips[2], (x, y) => back ? MEM[0] : (y % 3 === 0) ? MEM[2] : MEM[1]);
-            tri(elbow, tips[0], tips[1], (x, y) => back ? MEM[0] : MEM[3 - ((x + y) % 2)]);
-            // suyaklar
-            thick([root, elbow, tips[0]], () => 0.5, () => back ? INK : BONE);
-            thick([elbow, tips[1]], () => 0, () => back ? INK : BONE);
-            thick([elbow, tips[2]], () => 0, () => back ? INK : BONE);
-            put(tips[0][0], tips[0][1] - 1, HORN[0]);   // tirnoqcha
-        };
-        wing(14, 9, true);
-        // DUM: tanadan orqaga, pastga egilib, uchi yuqoriga qayrilgan nayza
-        const tail = fly ? [[9, 13], [6, 14], [3, 13], [1, 11]] : [[9, 14], [6, 17], [3, 18], [1, 16], [2, 13]];
-        thick(tail, (t) => Math.max(0, 1.2 - t * 0.5), (x, y, yy) => yy < 0 ? S[2] : S[1]);
-        const tip = tail[tail.length - 1];
-        [[0, -2], [-1, -1], [0, -1], [1, -1], [-1, 0], [0, 0], [1, 0], [0, 1]].forEach(([dx, dy]) => put(tip[0] + dx, tip[1] + dy, dy < 0 ? MEM[2] : MEM[1]));
-        // OYOQLAR (qo'nganda - tik, tirnoqli; uchganda - bukilgan)
-        const leg = (x, y) => { if (fly) { thick([[x, y], [x - 1, y + 2], [x - 3, y + 2]], () => 0.4, () => S[1]); return; }
-            thick([[x, y], [x, y + 3], [x + 1, y + 5]], () => 0.6, () => S[1]); put(x + 2, y + 6, HORN[0]); put(x, y + 6, HORN[0]); put(x + 1, y + 6, HORN[1]); };
-        leg(11, 15); leg(17, 15);
-        // TANA: ingichka cho'zinchoq, pastida oltin plastinkalar
-        ell(14, 12.5, 6.5, 3.4, (x, y, d) => y >= 13.5 ? (x % 2 ? BELLY[1] : BELLY[0]) : scale(x, y, y < 11 ? 3 : 2));
-        // BO'YIN: yuqoriga egilgan, oldida oltin qorin chizig'i
-        thick([[19, 11], [21, 8], [22, 6]], (t) => 1.6 - t * 0.35, (x, y, yy) => (x - y) > 14 ? BELLY[1] : scale(x, y, 2));
-        // orqa tishchalari (tikanlar)
-        [[11, 8], [14, 8], [17, 8], [20, 6], [8, 11]].forEach(([x, y]) => { put(x, y, S[0]); put(x, y - 1, S[1]); });
-        // BOSH: cho'zinchoq tumshuq
-        ell(24, 5, 3.2, 2.3, (x, y) => scale(x, y, y < 5 ? 3 : 2));
-        ell(27.5, open ? 5 : 5.6, 2.6, 1.4, (x, y) => y < 5.5 ? S[2] : S[1]);
-        if (open) { for (let x = 25; x <= 30; x++) { put(x, 6, 0x641e16); put(x, 7, S[1]); } put(29, 6, 0xffffff); put(30, 7, 0xffffff);
-            if (frame === 'eat') { put(31, 5, 0x76ff03); put(31, 6, 0xccff90); } }
-        else { put(26, 6, S[0]); put(27, 6, S[0]); put(28, 6, S[0]); }
-        put(30, 5, INK);   // burun teshigi
-        // ko'z
-        if (frame === 'blink') { put(24, 4, INK); put(25, 4, INK); }
-        else { put(24, 4, EYE); put(25, 4, EYE); put(25, 3, frame === 'scared' ? 0xffffff : EYE); put(24, 4, frame === 'scared' ? 0xffffff : EYE); put(25, 4, INK); }
-        // SHOXLAR: orqaga qayrilgan, fil suyagi
-        thick([[22, 3], [20, 1], [18, 1]], () => 0.45, (x) => x > 19 ? HORN[1] : HORN[0]);
-        thick([[23, 3], [22, 0]], () => 0.3, () => HORN[0]);
-        // yoqa tikani
-        put(21, 4, S[1]); put(20, 3, S[2]);
-        // OLD QANOT (yaqindagi)
-        wing(16, 10, false);
-        return gridOutline(g, 0x081410);
+        const W = 49, H = 23, OY = 7, g = gridNew(W, H);
+        const put = (x, y, c) => { y += OY; if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const rect = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(x, y, typeof c === 'function' ? c(x, y) : c); };
+        const LB = [0x6fc3dc, 0x9ad8e8, 0xc4ecf5], DB = [0x2a32a0, 0x3d47c9, 0x5a64e0], INK = 0x000000, LEG = 0x14163a;
+        const fly = frame === 'fly0' || frame === 'fly1' || frame === 'scared';
+        // DUM va TANA (to'q ko'k): pastki uzun chiziq boshdan dum uchigacha, ustida yelka, orqada pog'onali dum
+        rect(8, 12, 46, 12, (x) => x % 6 === 0 ? DB[0] : DB[1]);
+        rect(14, 9, 30, 11, (x, y) => y === 9 ? DB[2] : (x + y) % 7 === 0 ? DB[0] : DB[1]);
+        rect(30, 10, 41, 11, (x, y) => y === 10 ? DB[2] : DB[1]);
+        rect(41, 11, 46, 11, DB[1]);
+        // tikanchalar (orqa va dum ustida) va dum uchidagi nayza
+        [31, 34, 37, 40].forEach(x => { put(x, 9, DB[0]); put(x + 1, 9, DB[0]); put(x, 8, DB[0]); });
+        rect(47, 10, 48, 13, DB[0]); put(48, 9, DB[2]); put(48, 14, DB[2]); put(47, 11, LB[1]);
+        // OYOQLAR: qo'nganda - tik turadi (pastki qator - yer); uchganda - orqaga yig'ilgan
+        if (!fly) {
+            rect(14, 10, 16, 15, LEG); rect(13, 14, 17, 15, LEG); put(13, 15, 0xcfd8dc); put(12, 15, 0xcfd8dc);
+            rect(25, 10, 28, 14, LEG); rect(26, 14, 31, 15, LEG); put(25, 15, 0xcfd8dc); put(26, 15, 0xcfd8dc);
+        } else {
+            rect(15, 12, 17, 13, LEG); rect(17, 13, 20, 13, LEG);
+            rect(26, 12, 28, 13, LEG); rect(28, 13, 31, 13, LEG);
+        }
+        // QANOTLAR: uch qavat uzun och ko'k "pat", orasida qora chiziq, ustkisida ingichka chiziq va dumaloq uchlar
+        const strips = [{ x0: 17, x1: 37, y: 4, h: 2, line: true }, { x0: 18, x1: 35, y: 7, h: 1, line: false }, { x0: 23, x1: 34, y: 9, h: 1, line: true }];
+        strips.forEach((st, i) => {
+            for (let x = st.x0; x <= st.x1; x++) {
+                const k = x - st.x0;
+                // qanot qoqish: tepada - orqaga-yuqoriga ko'tarilgan, pastda - orqaga-pastga tushgan
+                const dy = frame === 'fly0' || frame === 'scared' ? -Math.round(k * (0.42 - i * 0.08)) : frame === 'fly1' ? Math.round(k * (0.22 + i * 0.05)) : 0;
+                const y = st.y + dy;
+                put(x, y - 1, INK);
+                for (let r = 0; r < st.h; r++) put(x, y + r, r === 0 ? (st.line && x > st.x0 + 1 && x < st.x1 - 2 && st.h > 1 ? LB[2] : LB[1]) : ((x + i) % 5 === 0 ? LB[0] : LB[1]));
+                if (st.line && x === st.x1 - 3) put(x, y + st.h - 1, LB[0]);   // chiziq uchidagi dumaloq
+                if (st.line && st.h === 1 && x > st.x0 && x < st.x1 - 3) put(x, y, x % 2 ? LB[2] : LB[1]);
+                put(x, y + st.h, INK);
+            }
+            put(st.x1 + 1, st.y + (frame === 'fly0' || frame === 'scared' ? -Math.round((st.x1 - st.x0) * (0.42 - i * 0.08)) : frame === 'fly1' ? Math.round((st.x1 - st.x0) * (0.22 + i * 0.05)) : 0), INK);
+        });
+        // BOSH: katta och ko'k to'rtburchak, tepasi yorug', o'ng (bo'yin) tomoni qora chegara
+        rect(3, 5, 13, 11, (x, y) => y === 5 ? LB[2] : x === 3 || y === 11 ? LB[0] : LB[1]);
+        rect(14, 5, 14, 10, INK);
+        // ko'z: qora yoriq, ichida oq chaqnashlar (qo'rqqanda - katta oq ko'z)
+        if (frame === 'blink') rect(5, 7, 8, 7, INK);
+        else if (frame === 'scared') { rect(4, 6, 9, 8, INK); rect(5, 6, 8, 7, 0xffffff); put(6, 7, INK); put(7, 7, INK); }
+        else { rect(5, 6, 8, 7, INK); put(6, 6, 0xffffff); put(7, 7, 0xffffff); }
+        // og'iz: chiziq (yeganda - ochiq, ichi qizil, tishchalar)
+        if (frame === 'eat' || frame === 'scared') { rect(2, 9, 7, 10, INK); rect(3, 10, 6, 10, 0xc62828); put(3, 9, 0xffffff); put(5, 9, 0xffffff); }
+        else rect(3, 9, 7, 9, INK);
+        put(2, 9, INK); put(4, 6, LB[0]);   // burun
+        // SHOX: boshdan orqaga-pastga ketgan to'q ko'k qiya to'sin (qora hoshiya bilan)
+        for (let k = 0; k <= 6; k++) { const x = 9 + k, y = 4 + Math.round(k * 0.55); put(x, y - 1, INK); put(x, y, DB[2]); put(x, y + 1, DB[1]); put(x, y + 2, INK); }
+        put(16, 7, INK); put(16, 8, INK);
+        // chizilgani chapga qaragan - ko'zgudek aylantiramiz (o'ngga qaraydi)
+        g.forEach(row => row.reverse());
+        return gridOutline(g, 0x000000);
     }
     // PUSHISTIK UYCHASI: lavanda devorlar, pushti tom, dumaloq eshik, ustida yurakcha, yog'och poydevor (22x24)
     function pethouseGrid() {

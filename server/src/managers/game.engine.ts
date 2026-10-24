@@ -2442,6 +2442,18 @@ export class GameEngine {
         if (Math.hypot(rk.x - cx, rk.y - cy) > rk.r + 140) return;
         this.rockHitPlayer(room.id, d, rk, p);
     }
+    // ROBOT ITGA ZARAR: joni tugasa - buziladi (bezak yo'qoladi, egasi do'kondan qayta sotib oladi)
+    private dogHurt(roomId: string, dmg: number): void {
+        const room = this.activeRooms[roomId], mf = room && room.myFarm, d = mf && mf.dog;
+        if (!mf || !d || d.hp <= 0) return;
+        d.hp = Math.max(0, d.hp - dmg); d.hurt = 6;
+        this.io.to(roomId).emit('mfDogHurt', { x: Math.round(d.x), y: Math.round(d.y) });
+        if (d.hp > 0) return;
+        this.io.to(roomId).emit('mfDogDown', { x: Math.round(d.x), y: Math.round(d.y) });
+        mf.dog = null;
+        if (mf.farm) { mf.farm.decor.dog = false; delete mf.farm.decor.dog; }
+        if (mf.owner) db.farmDecorLose(mf.owner, 'dog').then(() => this.roomManager.sendMyFarm(roomId)).catch(err => console.error('farmDecorLose xatosi:', err));
+    }
     // SILASH: yaqinda bo'lsa - yuraklar (hammaga); yoqimtoy maxluqcha silansa - qo'rquvi yo'qoladi
     public petAnimal(room: RoomState, playerId: string, kind: string): void {
         const p = room.players[playerId];
@@ -3340,8 +3352,9 @@ export class GameEngine {
             if (m.kind === 'crow') return;
             if (m.hitFlash > 0) m.hitFlash--;
             if (m.hitCd > 0) m.hitCd--;
-            // Nishon: eng yaqin tirik qahramon (tepada - daraxt shoxida bo'lsa ham)
-            const tg = alive.slice().sort((a, c) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(c.x - m.x, c.y - m.y))[0];
+            // Nishon: eng yaqin tirik qahramon (tepada - daraxt shoxida bo'lsa ham) yoki robot it
+            const dogT = mf.dog && mf.dog.hp > 0 ? { x: mf.dog.x, y: mf.dog.y - this.PLAYER_HALF_H } : null;
+            const tg = [...alive, ...(dogT ? [dogT] : [])].sort((a, c) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(c.x - m.x, c.y - m.y))[0];
             const tgFeet = tg ? tg.y + this.PLAYER_HALF_H : GROUND;
             if (m.kind === 'zveg') {
                 const Z = RD.zveg, mouthX = m.x + m.face * 8, mouthY = m.y - 44;
@@ -3360,6 +3373,12 @@ export class GameEngine {
                                 this.hurtPlayer(p, Z.tongueDamage);
                                 this.knockback(p, (p.x < m.x ? -1 : 1) * 160, -260);
                             });
+                            // til itga tegdimi
+                            if (mf.dog && mf.dog.hp > 0) {
+                                const dgx = mf.dog.x, dgy = mf.dog.y - 20, ex = t2.tx - mouthX, ey = t2.ty - mouthY, L2 = ex * ex + ey * ey || 1;
+                                const u = Math.max(0, Math.min(1, ((dgx - mouthX) * ex + (dgy - mouthY) * ey) / L2));
+                                if (Math.hypot(dgx - (mouthX + ex * u), dgy - (mouthY + ey * u)) <= 26) this.dogHurt(roomId, Z.tongueDamage);
+                            }
                         } else { m.tongue = null; m.tongueCd = Math.round(Z.tongueCdMs / 30); }
                     }
                 } else if (m.air) {
@@ -3427,10 +3446,14 @@ export class GameEngine {
             const halfW = m.kind === 'slime' ? 52 : m.kind === 'slimelet' ? 22 : 20, h = m.kind === 'slime' ? 90 : 46;
             if (m.hitCd <= 0) {
                 const hit = alive.find(p => now >= (mf.safeUntil[p.id] || 0) && Math.abs(p.x - m.x) <= halfW + 12 && p.y + 24 > m.y - h && p.y - 24 < m.y);
+                const dmg = m.kind === 'slime' ? RD.slime.dmg : m.kind === 'slimelet' ? RD.slimelet.dmg : RD.zveg.dmg;
                 if (hit) {
-                    const dmg = m.kind === 'slime' ? RD.slime.dmg : m.kind === 'slimelet' ? RD.slimelet.dmg : RD.zveg.dmg;
                     this.hurtPlayer(hit, dmg);
                     this.knockback(hit, hit.x < m.x ? -380 : 380, -260);
+                    m.hitCd = m.kind === 'zveg' ? 40 : 30;
+                } else if (mf.dog && mf.dog.hp > 0 && Math.abs(mf.dog.x - m.x) <= halfW + 16 && mf.dog.y > m.y - h - 10 && mf.dog.y - 40 < m.y) {
+                    // Robot itga tegdi
+                    this.dogHurt(roomId, dmg);
                     m.hitCd = m.kind === 'zveg' ? 40 : 30;
                 }
             }
@@ -3502,7 +3525,10 @@ export class GameEngine {
         const DG = FARM_DOG, hasDog = !!(mf.farm && mf.farm.decor.dog && !(mf.farm.decorOff || {}).dog);
         if (!hasDog) mf.dog = null;
         else {
-            if (!mf.dog) mf.dog = { x: DG.homeX, y: GROUND, face: 1, vx: 0, vy: 0, air: false, biteAt: 0, bite: 0, jumpCd: 0 };
+            if (!mf.dog) mf.dog = { x: DG.homeX, y: GROUND, face: 1, vx: 0, vy: 0, air: false, biteAt: 0, bite: 0, jumpCd: 0, hp: DG.hp, hurt: 0 };
+            if (mf.dog.hurt > 0) mf.dog.hurt--;
+            // Maxluq yo'q paytda - asta tuzaladi
+            if (!mf.mobs.some(m => m.kind !== 'crow') && !mf.shrooms.length && mf.dog.hp < DG.hp) mf.dog.hp = Math.min(DG.hp, mf.dog.hp + DG.regenPerSec * dt);
             if (mf.dog.biteAt > 0) mf.dog.biteAt--;   // keyingi tishlashgacha qolgan tiklar
             const d = mf.dog;
             if (d.bite > 0) d.bite--;
@@ -3555,13 +3581,13 @@ export class GameEngine {
         }
         // Dunyo holati (faqat kerak bo'lganda): qo'ziqorinlar va boss
         const on = mf.shrooms.length > 0 || mf.mobs.length > 0 || !!(mf.spores && mf.spores.length) || !!b
-            || !!(mf.dog && (Math.abs(mf.dog.x - FARM_DOG.homeX) > 2 || mf.dog.y < GROUND));
+            || !!(mf.dog && (Math.abs(mf.dog.x - FARM_DOG.homeX) > 2 || mf.dog.y < GROUND || mf.dog.hp < FARM_DOG.hp));
         if ((on || mf.worldOn) && this.frame % this.BROADCAST_EVERY === 0) {
             mf.worldOn = on;
             this.io.to(roomId).emit('mfWorld', {
                 spores: (mf.spores || []).map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), vx: Math.round(s.vx), vy: Math.round(s.vy) })),
                 shrooms: mf.shrooms.map(sh => ({ id: sh.id, x: sh.x, k: sh.k, hp: Math.ceil(sh.hp), maxHp: sh.maxHp, f: sh.hitFlash > 0, eatIn: Math.max(0, Math.ceil((sh.born + SD.eatMs - now) / 1000)) })),
-                dog: mf.dog ? { x: Math.round(mf.dog.x), y: Math.round(mf.dog.y), f: mf.dog.face, b: mf.dog.bite > 0, a: mf.dog.air } : null,
+                dog: mf.dog ? { x: Math.round(mf.dog.x), y: Math.round(mf.dog.y), f: mf.dog.face, b: mf.dog.bite > 0, a: mf.dog.air, hp: Math.ceil(mf.dog.hp), mx: FARM_DOG.hp, h: mf.dog.hurt > 0 } : null,
                 mobs: mf.mobs.map(m => ({ id: m.id, k: m.kind, x: Math.round(m.x), y: Math.round(m.y), hp: Math.ceil(m.hp), maxHp: m.maxHp, f: m.hitFlash > 0, face: m.face, v: m.v, air: !!m.hopEnd || !!m.air,
                     tg: m.tongue ? { p: m.tongue.phase, x: Math.round(m.tongue.tx), y: Math.round(m.tongue.ty) } : null, ph: m.phase || null })),
                 boss: b ? { hp: Math.ceil(b.hp), maxHp: b.maxHp, f: b.hitFlash > 0,

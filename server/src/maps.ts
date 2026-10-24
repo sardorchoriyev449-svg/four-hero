@@ -246,7 +246,9 @@ export function currentFarmSeason(now: number = Date.now()): FarmSeason {
 }
 // ROBOT IT (ferma bezagi "Robot it" sotib olingan va yashikda bo'lmasa): maxluq chiqsa - eng yaqiniga yugurib boradi,
 // shoxlarga sakrab chiqadi va tishlaydi (o'zi zarar olmaydi). Maxluq qolmasa - uyiga (it uychasi yoniga) qaytadi
-export const FARM_DOG = { homeX: 470, speed: 290, damage: 16, biteMs: 520, reach: 24, jumpUp: 150 };
+// Maxluqlar itga ham hujum qiladi: joni tugasa - it buziladi (bezak yo'qoladi, do'kondan qayta sotib olinadi).
+// Maxluq yo'q paytda - asta o'zi tuzaladi
+export const FARM_DOG = { homeX: 470, speed: 290, damage: 16, biteMs: 520, reach: 24, jumpUp: 150, hp: 160, regenPerSec: 3 };
 
 export interface MyFarmDef {
     zoneX0: number; zoneW: number;  // maydonlar: chap cheti va kengligi

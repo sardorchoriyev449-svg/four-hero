@@ -408,6 +408,10 @@ export async function petFeed(userId: string, item: string): Promise<{ success: 
     return { success: true, pet: petOf(upd), heal, n: (upd.farmBag || {})[item] || 0 };
 }
 
+// Fermadagi bezak buzildi (robot it maxluqlardan o'ldi) - qayta sotib olish kerak
+export async function farmDecorLose(userId: string, id: string): Promise<void> {
+    await UserModel.updateOne({ _id: userId }, { $unset: { ['farmDecor.' + id]: 1, ['farmDecorOff.' + id]: 1 } });
+}
 // Ferma omboridagi narsa: soni va bittasini olish (ajdarchani boqish)
 export async function farmItemCount(userId: string, item: string): Promise<number> {
     const doc: any = await UserModel.findById(userId, { farmBag: 1 }).lean();

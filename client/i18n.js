@@ -20,6 +20,7 @@ const TRANSLATIONS = {
         // Main menu (hub)
         nav_play: 'Play',
         nav_character: 'My Character',
+        mf_dog_down: "Monsters broke your robot dog! Buy a new one in the Shop.",
         critter_hint_nofood: "Dragonet wants {f} - you have none. Grow it on My Farm!",
         critter_hint_have: "Dragonet wants {f} from your farm (you have {n}). Sneak up and stand still next to it",
         nav_pet: "Dragonet",
@@ -1126,6 +1127,7 @@ const TRANSLATIONS = {
         generic_error: 'Произошла ошибка',
         nav_play: 'Играть',
         nav_character: 'Мой персонаж',
+        mf_dog_down: "Монстры сломали твоего робота-пса! Купи нового в Магазине.",
         decor_pethouse_desc: "Уютный домик: пока Дракончик отдыхает на ферме, он лечится сам.",
         decor_pethouse: "Домик дракончика",
         critter_hint_nofood: "Дракончик хочет {f} - у тебя нет. Вырасти это на My Farm!",
