@@ -347,7 +347,7 @@ export class GameEngine {
             this.io.to(roomId).emit('gameStateUpdate', {
                 round: room.round || 0,
                 critter: cr ? { ph: cr.phase, x: Math.round(cr.x), y: Math.round(cr.y), f: cr.face, al: Math.round(cr.alarm * 100), w: cr.wish, sc: cr.scared,
-                    foods: cr.foods, carry: Object.keys(cr.carry), fed: cr.fed } : null,
+                    have: cr.have, fed: cr.fed } : null,
                 pets: room.pets ? Object.entries(room.pets).map(([id, q]) => ({ id, x: Math.round(q.x), y: Math.round(q.y), f: q.face, st: q.st, fl: q.hitFlash > 0 })) : [],
                 players,
                 bots: room.bots,
@@ -2573,6 +2573,13 @@ export class GameEngine {
         (map.pits || []).forEach(pt => { if (pt.x + pt.w <= p.x) x0 = Math.max(x0, pt.x + pt.w + 20); else if (pt.x >= p.x) x1 = Math.min(x1, pt.x - 20); });
         return x1 - x0 >= 160 ? { x0, x1, y: GROUND_TOP } : null;
     }
+    // JANG BORMI: bosslar (jon chizig'i bor va jang holatida) - butun xaritada jang; botlar/maxluqlar - ularning joylari
+    private critterCombat(room: RoomState, map: MapDef): { boss: boolean, pts: { x: number, y: number }[] } {
+        const CALM = ['sleep', 'idle', 'intro', 'defeat', 'dead', 'done', 'hidden', 'dying', 'fall', 'smash', 'wait', 'asleep', 'walk', 'talk'];
+        const boss = Object.entries(room).some(([k, v]: [string, any]) => k !== 'critter' && v && typeof v === 'object' && !Array.isArray(v)
+            && typeof v.hp === 'number' && typeof v.maxHp === 'number' && v.hp > 0 && !v.dead && !CALM.includes(v.state));
+        return { boss, pts: this.petTargets(room, map) };
+    }
     private updateCritter(room: RoomState, roomId: string): void {
         const C = CRITTER, now = Date.now(), map = getMapById(room.selectedLevel);
         if (room.isOver || !map) return;
@@ -2582,12 +2589,15 @@ export class GameEngine {
         let cr = room.critter;
         if (!cr) {
             if (now < room.critterNextAt || !alive.length) return;
-            room.critterNextAt = now + rnd(C.everyMs);
             const p = alive[Math.floor(Math.random() * alive.length)];
+            // JANG PAYTIDA CHIQMAYDI: boss jangi bo'lsa yoki qahramon yonida (1200 px) raqib bo'lsa - keyinroq yana urinadi
+            const cb = this.critterCombat(room, map);
+            if (cb.boss || cb.pts.some(e => Math.abs(e.x - p.x) < C.calmR)) { room.critterNextAt = now + C.retryMs; return; }
+            room.critterNextAt = now + rnd(C.everyMs);
             // Harakatlanuvchi sirtlar (toshlar, lift, osmon) - faqat uchib o'tadi
             const odd = ['stones', 'lift', 'sky', 'back'].includes(map.mode);
             const sf = !odd && Math.random() < C.landChance ? this.critterSurface(map, p) : null;
-            const base = { alarm: 0, wish: C.foods[Math.floor(Math.random() * C.foods.length)], scared: false, foods: [], carry: {}, fed: [], hold: {}, seq: 0 };
+            const base = { alarm: 0, wish: C.foods[Math.floor(Math.random() * C.foods.length)], scared: false, have: {}, fed: [], hold: {}, seq: 0 };
             if (sf) {
                 const side = Math.random() < 0.5 ? -1 : 1;
                 let x = p.x + side * (260 + Math.random() * 160);
@@ -2596,17 +2606,12 @@ export class GameEngine {
                 if (Math.abs(x - p.x) < 140) { x = Math.max(sf.x0 + 30, Math.min(sf.x1 - 30, p.x + (x >= p.x ? 160 : -160))); }
                 const fromX = x + (x > p.x ? 1 : -1) * 520;
                 cr = room.critter = { ...base, phase: 'in', x: fromX, y: sf.y - 420, face: x > fromX ? 1 : -1, t: 0, dur: Math.round(C.inMs / 30), x0: fromX, y0: sf.y - 420, x1: x, y1: sf.y };
-                // Ovqat: har tirik o'yinchiga bittadan - shu sirtda, maxluqchadan uzoqroqda (qidirib topiladi)
-                const n = Math.min(4, alive.length);
-                for (let k = 0; k < n; k++) {
-                    let fx = x;
-                    for (let tries = 0; tries < 12; tries++) {
-                        fx = x + (Math.random() < 0.5 ? -1 : 1) * (200 + Math.random() * 420);
-                        fx = Math.max(sf.x0 + 20, Math.min(sf.x1 - 20, fx));
-                        if (Math.abs(fx - x) >= 150 && cr.foods.every(f => Math.abs(f.x - fx) > 60)) break;
-                    }
-                    cr.foods.push({ id: ++cr.seq, x: Math.round(fx), y: sf.y });
-                }
+                // SO'RAGAN NARSASI - faqat fermadan: har o'yinchining ombori tekshiriladi (bor-yo'qligi ekranda ko'rinadi)
+                const crNow = cr, wish = cr.wish;
+                alive.forEach((pl) => {
+                    if (pl.userId === null) { crNow.have[pl.id] = 0; return; }
+                    db.farmItemCount(pl.userId, wish).then((n) => { if (room.critter === crNow) crNow.have[pl.id] = n; }).catch(() => {});
+                });
                 this.io.to(roomId).emit('critterLand', { x: Math.round(x) });
             } else {
                 const dir = Math.random() < 0.5 ? -1 : 1, y = 90 + Math.random() * 120;
@@ -2622,6 +2627,17 @@ export class GameEngine {
             if (q >= 1) room.critter = null;
             return;
         }
+        const flyAway = (scared: boolean) => {
+            cr!.phase = 'out'; cr!.scared = scared; cr!.t = 0; cr!.dur = Math.round((scared ? C.outMs * 0.7 : C.outMs) / 30);
+            cr!.x0 = cr!.x; cr!.y0 = cr!.y; cr!.x1 = cr!.x + cr!.face * (scared ? -1 : 1) * 600; cr!.y1 = cr!.y - 520;
+            cr!.face = cr!.x1 > cr!.x ? 1 : -1;
+            if (scared) this.io.to(roomId).emit('critterScared', { x: Math.round(cr!.x), y: Math.round(cr!.y) });
+        };
+        // Jang yaqinlashdi (raqib 600 px ichida yoki boss jangi) - qo'nayotgan / o'tirgan ajdarcha uchib ketadi
+        if (cr.phase === 'in' || cr.phase === 'sit' || cr.phase === 'eat') {
+            const cb = this.critterCombat(room, map);
+            if (cb.boss || cb.pts.some(e => Math.hypot(e.x - cr!.x, e.y - cr!.y) < C.fleeR)) { if (cr.phase === 'in') { cr.x1 = cr.x; cr.y1 = cr.y; } flyAway(false); return; }
+        }
         if (cr.phase === 'in') {
             const e = 1 - (1 - q) * (1 - q);   // sekinlashib qo'nadi
             cr.x = cr.x0 + (cr.x1 - cr.x0) * e; cr.y = cr.y0 + (cr.y1 - cr.y0) * e - Math.sin(q * Math.PI) * 40;
@@ -2634,33 +2650,17 @@ export class GameEngine {
             if (q >= 1) room.critter = null;
             return;
         }
-        const flyAway = (scared: boolean) => {
-            cr!.phase = 'out'; cr!.scared = scared; cr!.t = 0; cr!.dur = Math.round((scared ? C.outMs * 0.7 : C.outMs) / 30);
-            cr!.x0 = cr!.x; cr!.y0 = cr!.y; cr!.x1 = cr!.x + cr!.face * (scared ? -1 : 1) * 600; cr!.y1 = cr!.y - 520;
-            cr!.face = cr!.x1 > cr!.x ? 1 : -1;
-            cr!.foods = []; cr!.carry = {};
-            if (scared) this.io.to(roomId).emit('critterScared', { x: Math.round(cr!.x), y: Math.round(cr!.y) });
-        };
         if (cr.phase === 'eat') {
             if (cr.t >= Math.round(C.eatMs / 30)) {
-                // Hamma tirik o'yinchi boqdimi yoki ovqat qolmadimi - ketadi; aks holda yana o'tiradi
-                const left = cr.foods.length + Object.keys(cr.carry).length;
-                if (!left || alive.every(p => cr!.fed.includes(p.id))) flyAway(false);
+                // So'ragan narsasi bor (hali boqmagan) o'yinchi qolmadi - ketadi; aks holda yana o'tiradi
+                const left = alive.some(p => !cr!.fed.includes(p.id) && (cr!.have[p.id] || 0) > 0);
+                if (!left) flyAway(false);
                 else { cr.phase = 'sit'; cr.t = 0; cr.dur = Math.round(C.sitMs * 0.6 / 30); }
             }
             return;
         }
         // ===== O'TIRIBDI (sit) =====
         if (cr.t >= cr.dur || !alive.length) { flyAway(false); return; }
-        // Ovqatni olish: qahramon ustidan o'tsa (o'zi oladi; bittadan, o'zi boqib bo'lgan bo'lsa - olmaydi)
-        cr.foods = cr.foods.filter(f => {
-            const p = alive.find(pp => !cr!.carry[pp.id] && !cr!.fed.includes(pp.id) && Math.abs(pp.x - f.x) <= 34 && Math.abs(pp.y + this.PLAYER_HALF_H - f.y) <= 60);
-            if (!p) return true;
-            cr!.carry[p.id] = { x: f.x, y: f.y };
-            this.io.to(roomId).emit('critterPick', { id: p.id, x: f.x, y: f.y });
-            return false;
-        });
-        Object.keys(cr.carry).forEach(pid => { if (!room.players[pid] || room.players[pid].isDead) { const at = cr!.carry[pid]; delete cr!.carry[pid]; cr!.foods.push({ id: ++cr!.seq, x: at.x, y: at.y }); } });
         // Yaqinda otilgan o'q - darhol qo'rqib uchib ketadi
         if (room.bullets.some(b => Math.hypot(b.x - cr!.x, b.y - (cr!.y - 14)) <= C.scareShotR)) { flyAway(true); return; }
         // QO'RQUV: yaqinidagi har qimirlagan qahramon qo'shadi (yaqinroq - ko'proq, sakrash/hujum - yana ko'proq;
@@ -2675,15 +2675,16 @@ export class GameEngine {
             if (sp > C.moveSpeed) a += (C.alarmFar + (C.alarmNear - C.alarmFar) * (1 - d / C.alertR)) * (mo && Math.abs(mo.vy) > 150 ? C.alarmJump : 1);
             if (p.isHoldingAttack) a += C.alarmAttack;
             inc += a * calmK;
-            // BOQISH: ovqat ko'targan qahramon yonida jim turdi
-            if (cr!.phase === 'sit' && cr!.carry[p.id] && d <= C.feedR && sp <= C.moveSpeed && cr!.alarm < 0.75) {
+            // BOQISH: fermasida so'ragan narsasi bor qahramon yonida jim turdi - ombordan bittasi ketadi
+            if (cr!.phase === 'sit' && !cr!.fed.includes(p.id) && (cr!.have[p.id] || 0) > 0 && d <= C.feedR && sp <= C.moveSpeed && cr!.alarm < 0.75) {
                 cr!.hold[p.id] = (cr!.hold[p.id] || 0) + 1;
                 if (cr!.hold[p.id] >= Math.round(C.feedHoldMs / 30)) {
-                    delete cr!.carry[p.id]; delete cr!.hold[p.id];
+                    delete cr!.hold[p.id];
                     cr!.fed.push(p.id);
+                    cr!.have[p.id] = Math.max(0, (cr!.have[p.id] || 1) - 1);
                     cr!.phase = 'eat'; cr!.t = 0; cr!.alarm = 0;
                     cr!.face = p.x >= cr!.x ? 1 : -1;
-                    this.roomManager.critterFed(roomId, p.id).catch(err => console.error('critterFed xatosi:', err));
+                    this.roomManager.critterFed(roomId, p.id, cr!.wish).catch(err => console.error('critterFed xatosi:', err));
                 }
             } else delete cr!.hold[p.id];
         });

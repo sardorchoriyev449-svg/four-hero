@@ -408,7 +408,17 @@ export async function petFeed(userId: string, item: string): Promise<{ success: 
     return { success: true, pet: petOf(upd), heal, n: (upd.farmBag || {})[item] || 0 };
 }
 
-// PUSHISTIK boqildi: do'stlik +1 (yangi qiymat qaytadi)
+// Ferma omboridagi narsa: soni va bittasini olish (ajdarchani boqish)
+export async function farmItemCount(userId: string, item: string): Promise<number> {
+    const doc: any = await UserModel.findById(userId, { farmBag: 1 }).lean();
+    return Math.max(0, Number(doc && doc.farmBag && doc.farmBag[item]) || 0);
+}
+export async function farmItemTake(userId: string, item: string): Promise<boolean> {
+    const r = await UserModel.updateOne({ _id: userId, ['farmBag.' + item]: { $gte: 1 } }, { $inc: { ['farmBag.' + item]: -1 } });
+    return r.modifiedCount === 1;
+}
+
+// AJDARCHA boqildi: do'stlik +1 (yangi qiymat qaytadi)
 export async function addPetTrust(userId: string): Promise<number | null> {
     const doc = await UserModel.findByIdAndUpdate(userId, { $inc: { petTrust: 1 } }, { returnDocument: 'after' });
     return doc ? Math.max(0, Number((doc as any).petTrust) || 0) : null;

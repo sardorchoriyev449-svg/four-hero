@@ -1130,9 +1130,11 @@ export class RoomManager {
     // QUTI SINDIRILDI: sindirgan o'yinchiga tanga (hisobi bo'lsa bazaga yoziladi,
     // mehmonga - faqat ekranda ko'rsatiladi, saqlanmaydi)
     // PUSHISTIK boqildi: do'stlik +1 (hisobli - bazaga), tanga; 10 ga yetsa - doimiy hamroh va katta mukofot
-    public async critterFed(roomId: string, playerId: string): Promise<void> {
+    public async critterFed(roomId: string, playerId: string, item: string): Promise<void> {
         const room = this.activeRooms[roomId], p = room?.players[playerId];
         if (!room || !p) return;
+        // So'ragan narsasi - faqat fermadan: ombordan bittasi olinadi (bu orada sotilgan/ishlatilgan bo'lsa - boqilmaydi)
+        if (p.userId === null || !(await db.farmItemTake(p.userId, item))) { this.io.to(playerId).emit('critterNoItem', { item }); return; }
         const before = p.petTrust || 0;
         let trust = before + 1;
         if (p.userId !== null) { const t = await db.addPetTrust(p.userId); if (t !== null) trust = t; }

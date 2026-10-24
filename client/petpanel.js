@@ -73,7 +73,7 @@
         close();
         el = document.createElement('div');
         el.id = 'pet-panel';
-        el.innerHTML = `<div class="pp-box"><div class="pp-head"><span class="pp-title"><i class="fa-solid fa-dove"></i> ${t('pet_title')}</span>
+        el.innerHTML = `<div class="pp-box"><div class="pp-head"><span class="pp-title"><i class="fa-solid fa-dragon"></i> ${t('pet_title')}</span>
             <button class="pp-x"><i class="fa-solid fa-xmark"></i></button></div><div class="pp-body"><p class="pp-note">...</p></div></div>`;
         el.onclick = (e) => { if (e.target === el) close(); };
         el.querySelector('.pp-x').onclick = close;

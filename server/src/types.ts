@@ -286,7 +286,7 @@ export interface RoomState {
     // Yoqimtoy maxluqcha (barcha xaritalarda): fly - uchib o'tish, in - qo'nish, sit - o'tiradi, eat - yeydi, out - uchib ketadi
     critter?: { phase: 'fly' | 'in' | 'sit' | 'eat' | 'out', x: number, y: number, face: number, t: number, dur: number,
         x0: number, y0: number, x1: number, y1: number, alarm: number, wish: string, scared: boolean,
-        foods: { id: number, x: number, y: number }[], carry: { [pid: string]: { x: number, y: number } }, fed: string[], hold: { [pid: string]: number }, seq: number } | null;
+        have: { [pid: string]: number }, fed: string[], hold: { [pid: string]: number }, seq: number } | null;   // have - so'ragan narsasi fermasida nechta
     critterNextAt?: number;
     // Jangdagi hamrohlar (egasi id si bo'yicha): follow - egasi yonida, dash - raqibga uchib boradi, back - qaytadi
     pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number } };

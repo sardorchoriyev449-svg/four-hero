@@ -6572,7 +6572,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function ensureCritterTextures(scene) {
         if (scene.textures.exists('px_crit_sit')) return;
         ['fly0', 'fly1', 'sit', 'blink', 'eat', 'scared'].forEach(f => gridToTexture(scene, 'px_crit_' + f, critterGrid(f), 3));
-        ['berry', 'apple', 'cookie', 'fish', 'carrot'].forEach(k => gridToTexture(scene, 'px_cfood_' + k, critterFoodGrid(k), 3));
+
         // Hamrohning kislota tomchisi: to'q yashil kontur, och yashil yadro, oq yaltirash
         const ac = scene.add.graphics();
         ac.fillStyle(0x1b5e20, 1); ac.fillCircle(9, 9, 9); ac.fillStyle(0x76ff03, 1); ac.fillCircle(9, 9, 6.5); ac.fillStyle(0xccff90, 1); ac.fillCircle(7, 7, 3); ac.fillStyle(0xffffff, 1); ac.fillRect(5, 5, 2, 2);
@@ -6593,7 +6593,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const S = critterState;
         if (S && (S.ph === 'sit' || S.ph === 'eat') && near(S.x, S.y, 80)) return { kind: 'critter', x: S.x, y: S.y - 20 };
         const mine = crObj && crObj.pets[socket.id];
-        if (mine && Math.abs(mine.x - me.x) <= 70 && Math.abs(mine.y - me.y) <= 80) return { kind: 'pet', x: mine.x, y: mine.y - 16 };   // 'Lv' yozuvi ustida
+        if (mine && Math.abs(mine.x - me.x) <= 70 && Math.abs(mine.y - me.y) <= 80) return { kind: 'pet', x: mine.x, y: mine.y - 24 };   // 'Lv' yozuvi ustida
         if (isMyFarm && mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.dog && !(mfState.farm.decorOff || {}).dog) {
             const ds = mfWorldState && mfWorldState.dog, dx = ds ? ds.x : 470, dy = ds ? ds.y : 570;
             if (near(dx, dy, 80)) return { kind: 'dog', x: dx, y: dy - 30 };
@@ -6601,14 +6601,20 @@ function launchGame(socket, roomId, mapData, continued) {
         if (crObj && crObj.restAt && near(crObj.restAt.x, crObj.restAt.y, 80)) return { kind: 'petrest', x: crObj.restAt.x, y: crObj.restAt.y - 30 };
         return null;
     }
+    // Ajdarcha so'ragan narsa - fermadagi ekin/meva rasmi (birinchi kerak bo'lganda yaratiladi)
+    function critterFoodTex(scene, id) {
+        const key = 'px_cfood_' + id;
+        if (!scene.textures.exists(key) && window.FarmArt) gridToTexture(scene, key, FarmArt.cropGrid(id, 2), 2);
+        return key;
+    }
     // Har kadr: maxluqcha, fikr pufagi (yemoqchi bo'lgan narsasi), qo'rquv belgisi, ovqatlar, ko'tarilgan ovqat, hamrohlar
     function updateCritter(scene) {
         ensureCritterTextures(scene);
         if (!crObj || crObj.scene !== scene || !crObj.spr.scene) {
             const txt = (size, color) => scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: size, color, stroke: '#000', strokeThickness: 4, align: 'center' }).setOrigin(0.5, 1);
-            crObj = { scene, spr: scene.add.image(0, 0, 'px_crit_sit').setOrigin(0.5, 1).setDepth(4.2).setVisible(false),
+            crObj = { scene, spr: scene.add.image(0, 0, 'px_crit_sit').setOrigin(0.5, 1).setDepth(4.2).setScale(0.8).setVisible(false),
                 bubble: scene.add.image(0, 0, 'px_crit_bubble').setOrigin(0.3, 1).setDepth(4.25).setVisible(false),
-                food: scene.add.image(0, 0, 'px_cfood_berry').setDepth(4.26).setVisible(false),
+                food: scene.add.image(0, 0, 'px_crit_sit').setDepth(4.26).setVisible(false),
                 mark: txt('16px', '#ff5252').setDepth(4.27).setVisible(false),
                 meter: scene.add.graphics().setDepth(4.27),
                 hint: scene.add.text(400, 92, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#fff3e0', stroke: '#000', strokeThickness: 4, align: 'center', wordWrap: { width: 560 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1003).setVisible(false),
@@ -6628,24 +6634,22 @@ function launchGame(socket, roomId, mapData, continued) {
             O.spr.setVisible(true).setTexture('px_crit_' + fr).setPosition(O.x, O.y + bob + (flying ? 20 : 0)).setFlipX(S.f < 0)
                 .setAngle(S.al > 55 && S.ph === 'sit' ? Math.sin(t0 / 30) * 5 : flying ? Math.sin(t0 / 160) * 6 : 0);
             const sitting = S.ph === 'sit';
-            // Fikr pufagi: o'tirganda - yemoqchi bo'lgan narsasi
-            O.bubble.setVisible(sitting || S.ph === 'eat').setPosition(O.x + 6, O.y - 50 + Math.sin(t0 / 500) * 2);
-            O.food.setVisible(sitting).setTexture('px_cfood_' + S.w).setPosition(O.x + 6 + 9, O.y - 50 - 34 + Math.sin(t0 / 500) * 2);
-            if (S.ph === 'eat') { O.food.setVisible(true).setTexture('px_cfood_' + S.w).setPosition(O.x + 15, O.y - 84).setScale(1 + 0.15 * Math.sin(t0 / 90)); }
-            else O.food.setScale(1);
+            // Fikr pufagi: o'tirganda - yemoqchi bo'lgan narsasi (fermadagi ekin/meva)
+            const fk = critterFoodTex(scene, S.w), by = O.y - 70 + Math.sin(t0 / 500) * 2;
+            O.bubble.setVisible(sitting || S.ph === 'eat').setPosition(O.x + 14, by);
+            O.food.setVisible(sitting || S.ph === 'eat').setTexture(fk).setPosition(O.x + 14 + 9, by - 34).setScale(S.ph === 'eat' ? 0.8 + 0.12 * Math.sin(t0 / 90) : 0.8);
             // Qo'rquv: "!" va qizil chiziqcha (to'lsa - uchib ketadi)
-            O.mark.setVisible(sitting && S.al > 8).setText(S.al > 55 ? '!!' : '!').setPosition(O.x - 26, O.y - 40 - (S.al > 55 ? Math.abs(Math.sin(t0 / 60)) * 4 : 0)).setColor(S.al > 55 ? '#ff1744' : '#ffd54f');
+            O.mark.setVisible(sitting && S.al > 8).setText(S.al > 55 ? '!!' : '!').setPosition(O.x - 34, O.y - 52 - (S.al > 55 ? Math.abs(Math.sin(t0 / 60)) * 4 : 0)).setColor(S.al > 55 ? '#ff1744' : '#ffd54f');
             if (sitting) {
                 O.meter.fillStyle(0x000000, 0.7); O.meter.fillRect(O.x - 22, O.y + 6, 44, 6);
                 O.meter.fillStyle(S.al > 55 ? 0xff1744 : S.al > 25 ? 0xffd54f : 0x69f0ae, 1); O.meter.fillRect(O.x - 21, O.y + 7, Math.max(1, Math.round(42 * (1 - S.al / 100))), 4);
             }
             // Maslahat (o'z qahramoni yaqinida bo'lsa)
             if (me && !me.isDead && sitting) {
-                const d = Math.abs(me.x - S.x), carry = (S.carry || []).includes(socket.id), fed = (S.fed || []).includes(socket.id);
+                const d = Math.abs(me.x - S.x), fed = (S.fed || []).includes(socket.id), have = (S.have || {})[socket.id], fname = t('crop_' + S.w);
                 if (fed) hint = d < 500 ? t('critter_hint_fed') : '';
-                else if (carry) hint = t('critter_hint_carry');
-                else if (d < 700) hint = (S.foods || []).length ? t('critter_hint_food').replace('{f}', t('critter_food_' + S.w)) : t('critter_hint_near');
-                if (hint && d < 360 && !fed) hint += '\n' + (S.al > 55 ? t('critter_hint_freeze') : t('critter_hint_slow'));
+                else if (d < 700) hint = have === undefined ? t('critter_hint_near') : have > 0 ? t('critter_hint_have').replace('{f}', fname).replace('{n}', have) : t('critter_hint_nofood').replace('{f}', fname);
+                if (hint && d < 360 && !fed && have > 0) hint += '\n' + (S.al > 55 ? t('critter_hint_freeze') : t('critter_hint_slow'));
             }
         } else {
             O.spr.setVisible(false); O.bubble.setVisible(false); O.food.setVisible(false); O.mark.setVisible(false); O.x = null;
@@ -6676,7 +6680,7 @@ function launchGame(socket, roomId, mapData, continued) {
             petIds.add(q.id);
             let o = O.pets[q.id];
             if (!o) {
-                o = O.pets[q.id] = scene.add.image(q.x, q.y, 'px_crit_fly0').setDepth(4.18).setScale(0.72);
+                o = O.pets[q.id] = scene.add.image(q.x, q.y, 'px_crit_fly0').setDepth(4.18).setScale(0.6);
                 o.bar = scene.add.graphics().setDepth(4.19);
                 o.lv = scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 1).setDepth(4.19);
             }
@@ -6684,15 +6688,15 @@ function launchGame(socket, roomId, mapData, continued) {
             o.x = Math.abs(o.x - q.x) > 300 ? q.x : Phaser.Math.Linear(o.x, q.x, k);
             o.y = Math.abs(o.y - q.y) > 300 ? q.y : Phaser.Math.Linear(o.y, q.y, k);
             o.setTexture(q.st === 'dash' ? 'px_crit_scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'px_crit_fly0' : 'px_crit_fly1')).setFlipX(q.f < 0)
-                .setAngle(q.st === 'dash' ? q.f * 18 : 0).setScale(q.st === 'dash' ? 0.8 : 0.72);
+                .setAngle(q.st === 'dash' ? q.f * 14 : 0).setScale(q.st === 'dash' ? 0.66 : 0.6);
             if (q.fl) o.setTintFill(0xff5252); else if (o.happyUntil && t0 < o.happyUntil) o.setTint(0xffd1e8); else o.clearTint();
             if (q.st === 'dash' && Math.random() < 0.6) { const tr = scene.add.rectangle(o.x, o.y, 5, 5, 0xd1c4e9, 0.8).setDepth(4.17); scene.tweens.add({ targets: tr, alpha: 0, scale: 0.2, duration: 220, onComplete: () => tr.destroy() }); }
             const pd = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet;
             o.bar.clear();
             if (pd) {
-                o.bar.fillStyle(0x000000, 0.7); o.bar.fillRect(o.x - 15, o.y - 24, 30, 5);
-                o.bar.fillStyle(pd.hp / pd.mx > 0.4 ? 0x76ff03 : 0xff5252, 1); o.bar.fillRect(o.x - 14, o.y - 23, Math.max(1, Math.round(28 * pd.hp / pd.mx)), 3);
-                o.lv.setText('Lv' + pd.l).setPosition(o.x, o.y - 26).setVisible(true);
+                o.bar.fillStyle(0x000000, 0.7); o.bar.fillRect(o.x - 15, o.y - 32, 30, 5);
+                o.bar.fillStyle(pd.hp / pd.mx > 0.4 ? 0x76ff03 : 0xff5252, 1); o.bar.fillRect(o.x - 14, o.y - 31, Math.max(1, Math.round(28 * pd.hp / pd.mx)), 3);
+                o.lv.setText('Lv' + pd.l).setPosition(o.x, o.y - 34).setVisible(true);
             } else o.lv.setVisible(false);
         });
         Object.keys(O.pets).forEach((pid) => { if (!petIds.has(pid)) { O.pets[pid].bar.destroy(); O.pets[pid].lv.destroy(); O.pets[pid].destroy(); delete O.pets[pid]; } });
@@ -6701,11 +6705,11 @@ function launchGame(socket, roomId, mapData, continued) {
         const restX = mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.pethouse && !(mfState.farm.decorOff || {}).pethouse ? 392 : 280;
         if (hostPet && hostPet.r) {
             if (!O.rest || !O.rest.scene) {
-                O.rest = scene.add.image(restX, 572, 'px_crit_blink').setOrigin(0.5, 1).setDepth(-0.4).setScale(0.75);
+                O.rest = scene.add.image(restX, 572, 'px_crit_blink').setOrigin(0.5, 1).setDepth(-0.4).setScale(0.62);
                 O.restBar = scene.add.graphics().setDepth(-0.39);
                 O.restZ = scene.add.text(restX, 520, 'z', { fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.39);
             }
-            O.rest.setVisible(true).setX(restX).setScale(0.75, 0.75 + Math.sin(t0 / 600) * 0.03);
+            O.rest.setVisible(true).setX(restX).setScale(0.62, 0.62 + Math.sin(t0 / 600) * 0.025);
             O.restZ.setVisible(true).setText(Math.floor(t0 / 600) % 3 === 0 ? 'z' : Math.floor(t0 / 600) % 3 === 1 ? 'zZ' : 'zZz').setPosition(restX + 18, 520 - (t0 % 1800) / 90);
             O.restBar.clear(); O.restBar.fillStyle(0x000000, 0.7); O.restBar.fillRect(restX - 20, 576, 40, 6);
             O.restBar.fillStyle(0x76ff03, 1); O.restBar.fillRect(restX - 19, 577, Math.max(1, Math.round(38 * hostPet.hp / hostPet.mx)), 4);
@@ -9952,6 +9956,8 @@ function launchGame(socket, roomId, mapData, continued) {
             for (let i = 0; i < 6; i++) { const r = this.add.rectangle(d.x + (Math.random() - 0.5) * 20, d.y + (Math.random() - 0.5) * 20, 4, 4, i % 2 ? 0x76ff03 : 0xffffff).setDepth(4.3); this.tweens.add({ targets: r, x: r.x + (Math.random() - 0.5) * 50, y: r.y + (Math.random() - 0.5) * 50, alpha: 0, duration: 300, onComplete: () => r.destroy() }); }
         });
         socket.on('critterLand', (d) => { if (d) sfxAt('chirp', d.x, 0.9); });
+        socket.off('critterNoItem');
+        socket.on('critterNoItem', (d) => { if (d && typeof showTopToast === 'function') showTopToast(t('critter_hint_nofood').replace('{f}', t('crop_' + d.item))); });
         socket.on('critterPick', (d) => {
             if (!d) return;
             sfxAt('pop', d.x, 0.8);

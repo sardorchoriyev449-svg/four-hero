@@ -325,11 +325,11 @@ export interface ApplesDef {
     bigWall: PlatformDef;
 }
 
-// YOQIMTOY MAXLUQCHA "PUSHISTIK" (barcha xaritalarda): zarar bermaydi va xalaqit qilmaydi (to'qnashmaydi).
-// Vaqti-vaqti bilan osmondan uchib o'tadi yoki qahramon turgan sirtga qo'nib o'tiradi. O'tirganda tepasida yemoqchi
-// bo'lgan narsasi chiqadi va xuddi shu ovqat xaritada paydo bo'ladi (har tirik o'yinchiga bittadan). Yaqinida yugurish,
-// sakrash, otish - uni qo'rqitadi (qo'rquv to'lsa - uchib ketadi): asta-sekin, to'xtab-to'xtab yaqinlashish kerak.
-// Ovqatni olib, yonida jim tursa - yeydi: do'stlik +1 (akkauntga saqlanadi) va tanga. 10 ta do'stlik - doimiy hamroh
+// AJDARCHA (barcha xaritalarda): zarar bermaydi va xalaqit qilmaydi (to'qnashmaydi). Faqat JANG BO'LMAGANDA chiqadi
+// (raqib yo'q yoki qahramondan juda uzoqda); jang yaqinlashsa - uchib ketadi. Ba'zan osmondan uchib o'tadi, ba'zan qahramon
+// turgan sirtga qo'nib o'tiradi: tepasida yemoqchi bo'lgan narsasi chiqadi - u faqat FERMADA yetishtiriladi (ombordan beriladi).
+// Yaqinida yugurish, sakrash, otish - uni qo'rqitadi (qo'rquv to'lsa - uchib ketadi): asta-sekin, to'xtab-to'xtab yaqinlashib,
+// yonida jim tursa - yeydi: do'stlik +1 (akkauntga saqlanadi) va tanga. 10 ta do'stlik - doimiy hamroh
 export const CRITTER = {
     // CRITTER_TEST (faqat sinov uchun) - darhol chiqadi va doim qo'nadi
     firstMs: process.env.CRITTER_TEST ? [1500, 2500] : [25000, 50000], everyMs: process.env.CRITTER_TEST ? [4000, 5000] : [55000, 110000],   // birinchi chiqishi va keyingilari orasidagi vaqt (tasodifiy oraliq)
@@ -343,7 +343,8 @@ export const CRITTER = {
     alarmJump: 2, alarmAttack: 0.05, alarmCalm: 0.018, scareShotR: 170,
     trustMax: 10, trustCalm: 0.06,       // har do'stlik qo'rquvni 6% kamaytiradi (10 da - 40%)
     coins: 30, tamedCoins: 300,
-    foods: ['berry', 'apple', 'cookie', 'fish', 'carrot']
+    foods: ['carrot', 'tomato', 'corn', 'strawberry', 'pumpkin', 'apple', 'pear', 'cherry'],   // so'raydiganlari - faqat fermadan
+    calmR: 1200, fleeR: 600, retryMs: 8000   // raqib shu masofadan yaqin bo'lsa chiqmaydi / o'tirgan bo'lsa uchib ketadi; keyingi urinish
 };
 
 // PUSHISTIK - HAMROH (do'stlik 10 bo'lgach): har xaritada egasi bilan uchadi va raqiblarga yordam beradi -
