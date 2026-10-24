@@ -326,6 +326,61 @@
             for (let x = 4; x < 8; x++) { set(x, 16, 0xfff59d); set(x, 17, 0xfffde7); }
         })
     };
+    function critterGrid(frame) {
+        const W = 18, H = 16, g = gridNew(W, H), put = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const CREAM = [0xfff8ee, 0xffefd9, 0xffe0bd], WING = [0xd1c4e9, 0xb39ddb, 0x9575cd], PINK = 0xff9eb5, INK = 0x1a1020;
+        const fly = frame === 'fly0' || frame === 'fly1' || frame === 'scared';
+        // qanotlar (tana ortida)
+        const wing = (side) => {
+            const bx = side < 0 ? 1 : 16, up = frame === 'fly0' || frame === 'scared';
+            const rows = !fly ? [[8, 1], [9, 2], [10, 2]] : up ? [[3, 2], [4, 3], [5, 3], [6, 2], [7, 1]] : [[9, 1], [10, 2], [11, 3], [12, 3], [13, 2]];
+            rows.forEach(([y, n]) => { for (let k = 0; k < n; k++) put(bx - side * k, y, k === 0 ? WING[2] : k === n - 1 ? WING[0] : WING[1]); });
+        };
+        wing(-1); wing(1);
+        // tana - yumaloq
+        for (let y = 2; y < 15; y++) for (let x = 2; x < 16; x++) {
+            const d = Math.hypot((x - 8.5) / 6.3, (y - 8.8) / 6.2);
+            if (d <= 1) put(x, y, d > 0.82 && y > 8 ? CREAM[2] : (x + y) % 5 === 0 && d > 0.6 ? CREAM[1] : CREAM[0]);
+        }
+        // bosh ustidagi patcha
+        [[8, 1], [9, 0], [10, 1], [7, 2]].forEach(([x, y]) => put(x, y, WING[1]));
+        if (frame === 'scared') { put(9, 0, WING[2]); put(6, 1, WING[1]); put(11, 0, WING[1]); }
+        // ko'zlar
+        if (frame === 'blink') { [5, 6, 11, 12].forEach(x => put(x, 8, INK)); }
+        else if (frame === 'scared') { [[5, 6], [6, 6], [5, 7], [6, 7], [11, 6], [12, 6], [11, 7], [12, 7]].forEach(([x, y]) => put(x, y, 0xffffff)); put(6, 7, INK); put(11, 7, INK); }
+        else {
+            [[5, 7], [6, 7], [5, 8], [6, 8], [11, 7], [12, 7], [11, 8], [12, 8]].forEach(([x, y]) => put(x, y, INK));
+            put(5, 7, 0xffffff); put(11, 7, 0xffffff);
+        }
+        // yuzcha va og'iz
+        put(4, 10, PINK); put(13, 10, PINK); put(3, 10, PINK); put(14, 10, PINK);
+        if (frame === 'eat') { put(8, 10, 0xc2185b); put(9, 10, 0xc2185b); put(8, 11, 0xe57373); put(9, 11, 0xe57373); }
+        else if (frame === 'scared') { put(8, 11, INK); put(9, 11, INK); }
+        else { put(8, 10, 0xff8a65); put(9, 10, 0xff8a65); }
+        // oyoqchalar (o'tirganda)
+        if (!fly) { put(6, 15, 0xff9800); put(7, 15, 0xff9800); put(10, 15, 0xff9800); put(11, 15, 0xff9800); }
+        return gridOutline(g, 0x3a2a40);
+    }
+    // PUSHISTIK UYCHASI: lavanda devorlar, pushti tom, dumaloq eshik, ustida yurakcha, yog'och poydevor (22x24)
+    function pethouseGrid() {
+        const W = 22, H = 24, g = gridNew(W, H), set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const WALL = [0xb39ddb, 0xc5b3e6, 0xd1c4e9, 0xe8e0f5], ROOF = [0xad1457, 0xd81b60, 0xec407a, 0xf48fb1];
+        // tom (uchburchak, ikki tomonga osilgan)
+        for (let y = 0; y < 9; y++) { const hw = 2 + y * 1.25; for (let x = Math.round(11 - hw); x <= Math.round(10 + hw); x++) set(x, y, shade(0.95 - y / 12 - (x - 11 + hw) / (hw * 4), x, y, ROOF)); }
+        for (let x = 0; x < W; x++) set(x, 9, ROOF[0]);
+        // devor
+        for (let y = 10; y < 21; y++) for (let x = 2; x < 20; x++) set(x, y, shade(0.9 - (x - 2) / 30 - (y - 10) / 40, x, y, WALL));
+        // dumaloq eshik
+        for (let y = 12; y < 21; y++) for (let x = 7; x < 15; x++) { const d = Math.hypot((x - 10.5) / 3.6, (y - 15.5) / 5); if (y >= 15 ? Math.abs(x - 10.5) <= 3.6 : d <= 1) set(x, y, y > 17 ? 0x2a1638 : 0x4a2c5a); }
+        set(9, 14, 0x7e57c2); set(10, 13, 0x7e57c2);
+        // yurakcha (tom ostida)
+        [[9, 4], [10, 4], [12, 4], [13, 4], [9, 5], [10, 5], [11, 5], [12, 5], [13, 5], [10, 6], [11, 6], [12, 6], [11, 7]].forEach(([x, y]) => set(x - 0.5 | 0, y, 0xfff176));
+        // derazalar
+        [[3, 13], [16, 13]].forEach(([x, y]) => { for (let yy = y; yy < y + 3; yy++) for (let xx = x; xx < x + 3; xx++) set(xx, yy, yy === y ? 0xfff9c4 : 0xffe082); });
+        // poydevor
+        for (let x = 1; x < 21; x++) { set(x, 21, 0x8d6e63); set(x, 22, 0x6d4c41); set(x, 23, 0x4e342e); }
+        return gridOutline(g, 0x2a1a30);
+    }
     window.FarmArt = {
         homeGrid: (id) => homeGrids[id](),
         homeIcon: (id) => iconURL('home_' + id, homeGrids[id](), id === 'rug' ? 2 : 3),
@@ -336,8 +391,9 @@
         rodIcon: () => iconURL('rod', rodGrid(), 3),
         fertGrid, waterGrid,
         fertIcon: () => iconURL('fert', fertGrid(), 3),
-        elixirGrid, chipGrid, coinGrid, flowersGrid, lanternGrid, dogGrid, paintGrid,
-        icon: (key) => iconURL('ic_' + key, { elixir: elixirGrid, chip: chipGrid, coin: coinGrid, flowers: flowersGrid, lantern: lanternGrid, dog: () => dogGrid(0), paint: paintGrid,
+        elixirGrid, chipGrid, coinGrid, flowersGrid, lanternGrid, dogGrid, paintGrid, pethouseGrid, critterGrid,
+        critterIcon: (f) => iconURL('crit_' + f, critterGrid(f), 4),
+        icon: (key) => iconURL('ic_' + key, { elixir: elixirGrid, chip: chipGrid, coin: coinGrid, flowers: flowersGrid, lantern: lanternGrid, dog: () => dogGrid(0), paint: paintGrid, pethouse: pethouseGrid,
             rod: rodGrid, net: mfNetGrid, fert: fertGrid, water: waterGrid }[key](), key === 'coin' ? 2 : 3),
         waterIcon: () => iconURL('water', waterGrid(), 3)
     };

@@ -5,7 +5,7 @@ import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
 import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL } from '../perks';
-import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown } from '../maps';
+import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs } from '../maps';
 
 // Xarita bo'yicha bot "tura oladigan" bitta sirt (yer yoki bitta platforma) -
 // X oralig'i va bot markazi o'sha sirtda turganda ega bo'lishi kerak bo'lgan Y
@@ -276,6 +276,10 @@ export class GameEngine {
             // 4n. SARIQ ESHIK (Season 2, map-5)
             this.updateDoors(room, roomId);
 
+            // YOQIMTOY MAXLUQCHA (barcha xaritalarda) va o'rgatilgan hamrohlar
+            this.updateCritter(room, roomId);
+            this.updatePets(room, roomId);
+
             // 4o. HIS BACK (Season 2, map-6)
             this.updateBack(room, roomId);
 
@@ -329,7 +333,7 @@ export class GameEngine {
                     x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
-                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', nickname: p.nickname, apples: p.apples,
+                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting } : null, nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
@@ -339,8 +343,12 @@ export class GameEngine {
                     isAdmin: !!p.isAdmin
                 };
             });
+            const cr = room.critter;
             this.io.to(roomId).emit('gameStateUpdate', {
                 round: room.round || 0,
+                critter: cr ? { ph: cr.phase, x: Math.round(cr.x), y: Math.round(cr.y), f: cr.face, al: Math.round(cr.alarm * 100), w: cr.wish, sc: cr.scared,
+                    foods: cr.foods, carry: Object.keys(cr.carry), fed: cr.fed } : null,
+                pets: room.pets ? Object.entries(room.pets).map(([id, q]) => ({ id, x: Math.round(q.x), y: Math.round(q.y), f: q.face, st: q.st, fl: q.hitFlash > 0 })) : [],
                 players,
                 bots: room.bots,
                 bullets: room.bullets,
@@ -985,10 +993,10 @@ export class GameEngine {
             // faqat melee uchun markazlashtirilar edi, o'q/olov esa yuqori-chap
             // burchagidan hisoblanardi - shu nomuvofiqlik ba'zan o'q botga tegib
             // ham zarar bermay o'tib ketishiga sabab bo'lardi)
-            const isMelee = bullet.bulletType === 'melee';
+            const isMelee = bullet.bulletType === 'melee' || bullet.bulletType === 'petbite';
             const isTornado = bullet.bulletType === 'tornado';
-            const hitW = isMelee ? 54 : isTornado ? 40 : 10;
-            const hitH = isMelee ? 44 : isTornado ? 60 : 10;
+            const hitW = isMelee ? 54 : isTornado ? 40 : bullet.bulletType === 'acid' ? 16 : 10;
+            const hitH = isMelee ? 44 : isTornado ? 60 : bullet.bulletType === 'acid' ? 16 : 10;
             // Oldingi tekshirilgan joydan hozirgi joygacha (supurib o'tgan yo'l) - hech narsa "sakrab" o'tilmaydi
             const fx = bullet.sx ?? bullet.x, fy = bullet.sy ?? bullet.y;
             const hitX = Math.min(fx, bullet.x) - hitW / 2;
@@ -1012,7 +1020,7 @@ export class GameEngine {
             else if (bullet.bulletType === 'shield') baseDamage = 45;      // 16-daraja: otilgan qalqon (10 s da bir)
             else if (bullet.bulletType === 'shuriken') baseDamage = 14;    // 16-daraja: har bir shuriken
             // + daraja imkoniyati "DAMAGE +5"
-            const damage = baseDamage * damageMultiplier + (owner ? bonusDamageOf(owner) : 0);
+            const damage = bullet.dmg !== undefined ? bullet.dmg : baseDamage * damageMultiplier + (owner ? bonusDamageOf(owner) : 0);
 
             const map = getMapById(room.selectedLevel);
 
@@ -1827,6 +1835,9 @@ export class GameEngine {
         room.farm = map.farm ? { state: 'idle', timer: 0, tick: 0, kills: 0, target: map.farm.killsPerPlayer * Math.max(1, Object.keys(room.players).length),
             spawned: 0, nextSpawnTick: 0, lastDogTick: -100000, rooted: {}, rootCd: {} } : null;
         room.lift = map.lift ? { state: 'hidden', y: 600, t: 0, spawned: 0, nextBotTick: 0 } : null;
+        room.critter = null;
+        room.critterNextAt = 0;
+        room.pets = {};
         room.freezeUntil = 0;
         room.back = map.back ? { state: 'walk', timer: 0, tick: 0, nextBarrel: 0, counter: 0, barrels: [] } : null;
         const rbd = map.robot;
@@ -2430,6 +2441,258 @@ export class GameEngine {
         const cy = Math.max(p.y - this.PLAYER_HALF_H, Math.min(rk.y, p.y + this.PLAYER_HALF_H));
         if (Math.hypot(rk.x - cx, rk.y - cy) > rk.r + 140) return;
         this.rockHitPlayer(room.id, d, rk, p);
+    }
+    // SILASH: yaqinda bo'lsa - yuraklar (hammaga); yoqimtoy maxluqcha silansa - qo'rquvi yo'qoladi
+    public petAnimal(room: RoomState, playerId: string, kind: string): void {
+        const p = room.players[playerId];
+        if (!p || p.isDead) return;
+        const feet = p.y + this.PLAYER_HALF_H;
+        let at: { x: number, y: number } | null = null;
+        if (kind === 'dog') {
+            const d = room.myFarm && room.myFarm.dog;
+            if (d && Math.abs(d.x - p.x) <= 90 && Math.abs(d.y - feet) <= 90) at = { x: d.x, y: d.y - 30 };
+        } else if (kind === 'critter') {
+            const c = room.critter;
+            if (c && (c.phase === 'sit' || c.phase === 'eat') && Math.abs(c.x - p.x) <= 90 && Math.abs(c.y - feet) <= 90) { c.alarm = 0; at = { x: c.x, y: c.y - 30 }; }
+        } else if (kind === 'pet') {
+            const q = room.pets && room.pets[playerId];
+            if (q) at = { x: q.x, y: q.y };
+        } else if (kind === 'petrest') {
+            if (room.myFarm && p.pet && p.pet.resting) at = { x: p.x, y: p.y - 30 };
+        }
+        if (at) this.io.to(room.id).emit('animalPetted', { kind, by: playerId, x: Math.round(at.x), y: Math.round(at.y) });
+    }
+    // ===== HAMROH PUSHISTIK: egasi bilan uchadi, kislota tupuradi, raqibga uchib borib uradi =====
+    // Nishonlar: botlar, ferma maxluqlari va qo'ziqorinlari, osmondagi dushmanlar, tosh gorilla
+    private petTargets(room: RoomState, map: MapDef): { x: number, y: number }[] {
+        const out: { x: number, y: number }[] = [];
+        room.bots.forEach(b => { if (b.hp > 0 && !(b.emerge && b.emerge > 0)) out.push({ x: b.x, y: b.y }); });
+        const mf = room.myFarm;
+        if (mf) {
+            mf.mobs.forEach(m => { if (m.hp > 0 && (m.kind !== 'crow' || m.phase === 'eat')) out.push({ x: m.x, y: m.kind === 'crow' ? m.y : m.y - (m.kind === 'slime' ? 45 : 25) }); });
+            mf.shrooms.forEach(sh => out.push({ x: sh.x, y: 545 }));
+        }
+        if (room.sky) room.sky.enemies.forEach(en => { if (en.hp > 0) out.push({ x: en.x, y: en.y }); });
+        const g = room.gorilla, gd = map.gorilla;
+        if (g && gd && g.state !== 'intro' && g.state !== 'defeat' && g.state !== 'smash' && g.state !== 'fall') out.push({ x: g.x, y: 570 - gd.height / 2 });
+        return out;
+    }
+    private updatePets(room: RoomState, roomId: string): void {
+        if (!room.pets) room.pets = {};
+        const map = getMapById(room.selectedLevel), now = Date.now(), dt = this.TICK_SECONDS;
+        const combat = !room.pvp && !room.isOver;
+        let targets: { x: number, y: number }[] | null = null;
+        Object.values(room.players).forEach((p) => {
+            const P = p.pet;
+            const ok = !!P && (p.petTrust || 0) >= 10 && !P.resting && P.hp > 0 && !p.isDead;
+            if (!ok) { delete room.pets![p.id]; return; }
+            let pt = room.pets![p.id];
+            if (!pt) pt = room.pets![p.id] = { x: p.x - 40, y: p.y - 50, face: 1, st: 'follow', tx: 0, ty: 0, spitAt: 40, dashAt: 100, hitFlash: 0 };
+            if (pt.hitFlash > 0) pt.hitFlash--;
+            // spitAt / dashAt - keyingi tupurish / uchib urishgacha qolgan tiklar
+            if (pt.spitAt > 0) pt.spitAt--;
+            if (pt.dashAt > 0) pt.dashAt--;
+            const mo = this.playerMotion.get(p.id);
+            const ownerFace = mo && Math.abs(mo.vx) > 20 ? (mo.vx > 0 ? 1 : -1) : pt.face;
+            if (targets === null) targets = combat ? this.petTargets(room, map) : [];
+            const near = targets.filter(t => Math.hypot(t.x - pt.x, t.y - pt.y) <= PET.range && Math.abs(t.x - p.x) <= PET.range + 120)
+                .sort((a, b) => Math.hypot(a.x - pt.x, a.y - pt.y) - Math.hypot(b.x - pt.x, b.y - pt.y))[0];
+            const dmg = petDamage(P!.lvl, P!.up);
+            const gainXp = (n: number) => {
+                if (P!.lvl >= PET.maxLevel) return;
+                P!.xp += n;
+                while (P!.lvl < PET.maxLevel && P!.xp >= petXpNeed(P!.lvl)) {
+                    P!.xp -= petXpNeed(P!.lvl); P!.lvl++;
+                    this.io.to(p.id).emit('petLevelUp', { lvl: P!.lvl });
+                }
+                p.petDirtyAt = p.petDirtyAt || now;
+            };
+            if (pt.st === 'dash') {
+                // Raqibga juda tez uchib boradi; yetganda - zarba (egasining nomidan), o'zi ham biroz zarar oladi
+                const dx = pt.tx - pt.x, dy = pt.ty - pt.y, d = Math.hypot(dx, dy), step = PET.dashSpeed * dt;
+                pt.face = dx >= 0 ? 1 : -1;
+                if (d <= step + 6) {
+                    pt.x = pt.tx; pt.y = pt.ty;
+                    room.bulletIdCounter++;
+                    room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: p.id, x: pt.x, y: pt.y, vx: 0, vy: 0, color: 0, lifetime: 2, bulletType: 'petbite', justSpawned: false, dmg: Math.round(dmg * PET.dashK) });
+                    P!.hp = Math.max(0, P!.hp - PET.dashHurt); pt.hitFlash = 5;
+                    p.petDirtyAt = p.petDirtyAt || now;
+                    gainXp(PET.dashXp);
+                    this.io.to(roomId).emit('petDash', { id: p.id, x: Math.round(pt.x), y: Math.round(pt.y) });
+                    pt.st = 'back';
+                } else { pt.x += dx / d * step; pt.y += dy / d * step; }
+            } else {
+                // Egasi orqasida, boshi balandida uchib yuradi (orqaga qaytganda - tezroq)
+                const fx = p.x - ownerFace * 42, fy = p.y - 46 + Math.sin(now / 260) * 5;
+                const dx = fx - pt.x, dy = fy - pt.y, d = Math.hypot(dx, dy);
+                const sp = (pt.st === 'back' ? 1.8 : 1) * PET.followSpeed * dt * Math.min(1, 0.35 + d / 120);
+                if (d > 900) { pt.x = fx; pt.y = fy; }
+                else if (d > 2) { pt.x += dx / d * Math.min(d, sp); pt.y += dy / d * Math.min(d, sp); }
+                if (pt.st === 'back' && d < 30) pt.st = 'follow';
+                pt.face = near ? (near.x >= pt.x ? 1 : -1) : (Math.abs(dx) > 6 ? (dx > 0 ? 1 : -1) : ownerFace);
+                if (near && pt.st === 'follow') {
+                    const dd = Math.hypot(near.x - pt.x, near.y - pt.y);
+                    if (pt.dashAt <= 0 && dd <= PET.dashRange) {   // joni oz bo'lsa ham uradi - so'nggi zarbada charchab, fermaga dam olishga ketadi
+                        pt.st = 'dash'; pt.tx = near.x; pt.ty = near.y; pt.dashAt = Math.round(petDashMs(P!.up) / 30);
+                    } else if (pt.spitAt <= 0) {
+                        // KISLOTA: dumaloq tomchi, nishonga to'g'ri uchadi
+                        pt.spitAt = Math.round(petSpitMs(P!.up) / 30);
+                        const ang = Math.atan2(near.y - pt.y, near.x - pt.x);
+                        room.bulletIdCounter++;
+                        room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: p.id, x: pt.x + Math.cos(ang) * 14, y: pt.y + 4, vx: Math.cos(ang) * PET.spitSpeed, vy: Math.sin(ang) * PET.spitSpeed,
+                            color: 0x76ff03, lifetime: 45, bulletType: 'acid', justSpawned: true, dmg });
+                        gainXp(PET.spitXp);
+                        this.io.to(roomId).emit('petSpit', { id: p.id, x: Math.round(pt.x), y: Math.round(pt.y) });
+                    }
+                }
+            }
+            // Joni tugadi - jangdan yo'qoladi, fermada dam oladi
+            if (P!.hp <= 0) {
+                P!.hp = 0; P!.resting = true; P!.restAt = now;
+                delete room.pets![p.id];
+                this.io.to(roomId).emit('petDown', { id: p.id, x: Math.round(pt.x), y: Math.round(pt.y) });
+                p.petDirtyAt = now - 60000;
+            }
+            // Bazaga yozish: o'zgarishdan ~8 s keyin (yoki darhol - yiqilganda)
+            if (p.petDirtyAt && now - p.petDirtyAt >= 8000 && p.userId !== null) {
+                p.petDirtyAt = 0;
+                db.petSave(p.userId, P!).catch(err => console.error('petSave xatosi:', err));
+            }
+        });
+    }
+    // ===== YOQIMTOY MAXLUQCHA "PUSHISTIK" =====
+    // Qahramon turgan joydagi sirt (qo'zg'almas platforma yoki yer) - maxluqcha faqat shunday joyga qo'nadi (yetib borsa bo'ladi)
+    private critterSurface(map: MapDef, p: PlayerState): { x0: number, x1: number, y: number } | null {
+        const feet = p.y + this.PLAYER_HALF_H, mo = this.playerMotion.get(p.id);
+        if (mo && Math.abs(mo.vy) > 20) return null;   // havoda
+        const pl = map.platforms.find(q => p.x >= q.x && p.x <= q.x + q.w && Math.abs(feet - q.y) <= 5);
+        if (pl) return pl.w >= 120 ? { x0: pl.x, x1: pl.x + pl.w, y: pl.y } : null;
+        if (Math.abs(feet - GROUND_TOP) > 5) return null;
+        // Yer: qahramon atrofidagi jarliksiz oraliq
+        let x0 = 40, x1 = map.mapWidth - 40;
+        (map.pits || []).forEach(pt => { if (pt.x + pt.w <= p.x) x0 = Math.max(x0, pt.x + pt.w + 20); else if (pt.x >= p.x) x1 = Math.min(x1, pt.x - 20); });
+        return x1 - x0 >= 160 ? { x0, x1, y: GROUND_TOP } : null;
+    }
+    private updateCritter(room: RoomState, roomId: string): void {
+        const C = CRITTER, now = Date.now(), map = getMapById(room.selectedLevel);
+        if (room.isOver || !map) return;
+        const alive = Object.values(room.players).filter(p => !p.isDead);
+        const rnd = (a: number[]) => a[0] + Math.random() * (a[1] - a[0]);
+        if (!room.critterNextAt) room.critterNextAt = now + rnd(C.firstMs);
+        let cr = room.critter;
+        if (!cr) {
+            if (now < room.critterNextAt || !alive.length) return;
+            room.critterNextAt = now + rnd(C.everyMs);
+            const p = alive[Math.floor(Math.random() * alive.length)];
+            // Harakatlanuvchi sirtlar (toshlar, lift, osmon) - faqat uchib o'tadi
+            const odd = ['stones', 'lift', 'sky', 'back'].includes(map.mode);
+            const sf = !odd && Math.random() < C.landChance ? this.critterSurface(map, p) : null;
+            const base = { alarm: 0, wish: C.foods[Math.floor(Math.random() * C.foods.length)], scared: false, foods: [], carry: {}, fed: [], hold: {}, seq: 0 };
+            if (sf) {
+                const side = Math.random() < 0.5 ? -1 : 1;
+                let x = p.x + side * (260 + Math.random() * 160);
+                if (x < sf.x0 + 30 || x > sf.x1 - 30) x = p.x - side * (260 + Math.random() * 160);
+                x = Math.max(sf.x0 + 30, Math.min(sf.x1 - 30, x));
+                if (Math.abs(x - p.x) < 140) { x = Math.max(sf.x0 + 30, Math.min(sf.x1 - 30, p.x + (x >= p.x ? 160 : -160))); }
+                const fromX = x + (x > p.x ? 1 : -1) * 520;
+                cr = room.critter = { ...base, phase: 'in', x: fromX, y: sf.y - 420, face: x > fromX ? 1 : -1, t: 0, dur: Math.round(C.inMs / 30), x0: fromX, y0: sf.y - 420, x1: x, y1: sf.y };
+                // Ovqat: har tirik o'yinchiga bittadan - shu sirtda, maxluqchadan uzoqroqda (qidirib topiladi)
+                const n = Math.min(4, alive.length);
+                for (let k = 0; k < n; k++) {
+                    let fx = x;
+                    for (let tries = 0; tries < 12; tries++) {
+                        fx = x + (Math.random() < 0.5 ? -1 : 1) * (200 + Math.random() * 420);
+                        fx = Math.max(sf.x0 + 20, Math.min(sf.x1 - 20, fx));
+                        if (Math.abs(fx - x) >= 150 && cr.foods.every(f => Math.abs(f.x - fx) > 60)) break;
+                    }
+                    cr.foods.push({ id: ++cr.seq, x: Math.round(fx), y: sf.y });
+                }
+                this.io.to(roomId).emit('critterLand', { x: Math.round(x) });
+            } else {
+                const dir = Math.random() < 0.5 ? -1 : 1, y = 90 + Math.random() * 120;
+                const fromX = p.x - dir * 560, toX = p.x + dir * 560;
+                cr = room.critter = { ...base, phase: 'fly', x: fromX, y, face: dir, t: 0, dur: Math.round(C.flyMs / 30), x0: fromX, y0: y, x1: toX, y1: y };
+            }
+            return;
+        }
+        cr.t++;
+        const q = Math.min(1, cr.t / cr.dur);
+        if (cr.phase === 'fly') {
+            cr.x = cr.x0 + (cr.x1 - cr.x0) * q; cr.y = cr.y0 + Math.sin(cr.t / 9) * 18;
+            if (q >= 1) room.critter = null;
+            return;
+        }
+        if (cr.phase === 'in') {
+            const e = 1 - (1 - q) * (1 - q);   // sekinlashib qo'nadi
+            cr.x = cr.x0 + (cr.x1 - cr.x0) * e; cr.y = cr.y0 + (cr.y1 - cr.y0) * e - Math.sin(q * Math.PI) * 40;
+            if (q >= 1) { cr.phase = 'sit'; cr.t = 0; cr.dur = Math.round(C.sitMs / 30); cr.x = cr.x1; cr.y = cr.y1; }
+            return;
+        }
+        if (cr.phase === 'out') {
+            const e = q * q;
+            cr.x = cr.x0 + (cr.x1 - cr.x0) * e; cr.y = cr.y0 + (cr.y1 - cr.y0) * e;
+            if (q >= 1) room.critter = null;
+            return;
+        }
+        const flyAway = (scared: boolean) => {
+            cr!.phase = 'out'; cr!.scared = scared; cr!.t = 0; cr!.dur = Math.round((scared ? C.outMs * 0.7 : C.outMs) / 30);
+            cr!.x0 = cr!.x; cr!.y0 = cr!.y; cr!.x1 = cr!.x + cr!.face * (scared ? -1 : 1) * 600; cr!.y1 = cr!.y - 520;
+            cr!.face = cr!.x1 > cr!.x ? 1 : -1;
+            cr!.foods = []; cr!.carry = {};
+            if (scared) this.io.to(roomId).emit('critterScared', { x: Math.round(cr!.x), y: Math.round(cr!.y) });
+        };
+        if (cr.phase === 'eat') {
+            if (cr.t >= Math.round(C.eatMs / 30)) {
+                // Hamma tirik o'yinchi boqdimi yoki ovqat qolmadimi - ketadi; aks holda yana o'tiradi
+                const left = cr.foods.length + Object.keys(cr.carry).length;
+                if (!left || alive.every(p => cr!.fed.includes(p.id))) flyAway(false);
+                else { cr.phase = 'sit'; cr.t = 0; cr.dur = Math.round(C.sitMs * 0.6 / 30); }
+            }
+            return;
+        }
+        // ===== O'TIRIBDI (sit) =====
+        if (cr.t >= cr.dur || !alive.length) { flyAway(false); return; }
+        // Ovqatni olish: qahramon ustidan o'tsa (o'zi oladi; bittadan, o'zi boqib bo'lgan bo'lsa - olmaydi)
+        cr.foods = cr.foods.filter(f => {
+            const p = alive.find(pp => !cr!.carry[pp.id] && !cr!.fed.includes(pp.id) && Math.abs(pp.x - f.x) <= 34 && Math.abs(pp.y + this.PLAYER_HALF_H - f.y) <= 60);
+            if (!p) return true;
+            cr!.carry[p.id] = { x: f.x, y: f.y };
+            this.io.to(roomId).emit('critterPick', { id: p.id, x: f.x, y: f.y });
+            return false;
+        });
+        Object.keys(cr.carry).forEach(pid => { if (!room.players[pid] || room.players[pid].isDead) { const at = cr!.carry[pid]; delete cr!.carry[pid]; cr!.foods.push({ id: ++cr!.seq, x: at.x, y: at.y }); } });
+        // Yaqinda otilgan o'q - darhol qo'rqib uchib ketadi
+        if (room.bullets.some(b => Math.hypot(b.x - cr!.x, b.y - (cr!.y - 14)) <= C.scareShotR)) { flyAway(true); return; }
+        // QO'RQUV: yaqinidagi har qimirlagan qahramon qo'shadi (yaqinroq - ko'proq, sakrash/hujum - yana ko'proq;
+        // do'stligi katta qahramondan kamroq qo'rqadi). Hamma jim tursa - asta tinchlanadi
+        let inc = 0;
+        alive.forEach((p) => {
+            const d = Math.hypot(p.x - cr!.x, (p.y + this.PLAYER_HALF_H) - cr!.y);
+            if (d > C.alertR) { delete cr!.hold[p.id]; return; }
+            const mo = this.playerMotion.get(p.id), sp = mo ? Math.hypot(mo.vx, mo.vy) : 0;
+            const calmK = 1 - C.trustCalm * Math.min(C.trustMax, p.petTrust || 0);
+            let a = 0;
+            if (sp > C.moveSpeed) a += (C.alarmFar + (C.alarmNear - C.alarmFar) * (1 - d / C.alertR)) * (mo && Math.abs(mo.vy) > 150 ? C.alarmJump : 1);
+            if (p.isHoldingAttack) a += C.alarmAttack;
+            inc += a * calmK;
+            // BOQISH: ovqat ko'targan qahramon yonida jim turdi
+            if (cr!.phase === 'sit' && cr!.carry[p.id] && d <= C.feedR && sp <= C.moveSpeed && cr!.alarm < 0.75) {
+                cr!.hold[p.id] = (cr!.hold[p.id] || 0) + 1;
+                if (cr!.hold[p.id] >= Math.round(C.feedHoldMs / 30)) {
+                    delete cr!.carry[p.id]; delete cr!.hold[p.id];
+                    cr!.fed.push(p.id);
+                    cr!.phase = 'eat'; cr!.t = 0; cr!.alarm = 0;
+                    cr!.face = p.x >= cr!.x ? 1 : -1;
+                    this.roomManager.critterFed(roomId, p.id).catch(err => console.error('critterFed xatosi:', err));
+                }
+            } else delete cr!.hold[p.id];
+        });
+        if (cr.phase !== 'sit') return;
+        cr.alarm = inc > 0 ? Math.min(1, cr.alarm + inc) : Math.max(0, cr.alarm - C.alarmCalm);
+        // Eng yaqin qahramonga qarab turadi
+        const nearP = alive.slice().sort((a, b) => Math.abs(a.x - cr!.x) - Math.abs(b.x - cr!.x))[0];
+        if (nearP && Math.abs(nearP.x - cr.x) > 8) cr.face = nearP.x > cr.x ? 1 : -1;
+        if (cr.alarm >= 1) flyAway(true);
     }
     // Tupurib chiqarish / qo'yib yuborish joyi: bo'shliq ustida emas - ustun ustida
     private caveSafeX(d: NonNullable<MapDef['doors']>, x: number): number {
@@ -3234,13 +3497,70 @@ export class GameEngine {
                 }
             }
         }
+        // ROBOT IT: eng yaqin maxluq/qo'ziqorinni quvadi va tishlaydi; hech kim qolmasa - uyiga qaytadi
+        const DG = FARM_DOG, hasDog = !!(mf.farm && mf.farm.decor.dog && !(mf.farm.decorOff || {}).dog);
+        if (!hasDog) mf.dog = null;
+        else {
+            if (!mf.dog) mf.dog = { x: DG.homeX, y: GROUND, face: 1, vx: 0, vy: 0, air: false, biteAt: 0, bite: 0, jumpCd: 0 };
+            if (mf.dog.biteAt > 0) mf.dog.biteAt--;   // keyingi tishlashgacha qolgan tiklar
+            const d = mf.dog;
+            if (d.bite > 0) d.bite--;
+            if (d.jumpCd > 0) d.jumpCd--;
+            // Nishonlar: yerdagi/shoxdagi maxluqlar, ekin yeyayotgan (pastga qo'ngan) qarg'alar, qo'ziqorinlar
+            type Tg = { x: number, y: number, hw: number, hit: () => void };
+            const tgs: Tg[] = [];
+            mf.mobs.forEach((m) => {
+                if (m.hp <= 0) return;
+                if (m.kind === 'crow' && m.phase !== 'eat') return;
+                const hw = m.kind === 'slime' ? 54 : m.kind === 'slimelet' || m.kind === 'crow' ? 22 : 20;
+                tgs.push({ x: m.x, y: m.kind === 'crow' ? GROUND : m.y, hw, hit: () => {
+                    m.hp = Math.max(0, m.hp - DG.damage); m.hitFlash = 4;
+                    if (m.hp <= 0) this.roomManager.mobKilled(roomId, m.id, room.hostId);
+                } });
+            });
+            mf.shrooms.forEach((sh) => tgs.push({ x: sh.x, y: GROUND, hw: 22, hit: () => {
+                sh.hp = Math.max(0, sh.hp - DG.damage); sh.hitFlash = 4;
+                if (sh.hp <= 0) this.roomManager.shroomKilled(roomId, sh.id, room.hostId);
+            } }));
+            const tg = tgs.sort((a, c) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(c.x - d.x, c.y - d.y))[0];
+            if (d.air) fallStep(d);
+            else {
+                const goX = tg ? tg.x : DG.homeX, dx = goX - d.x;
+                const close = tg && Math.abs(dx) <= tg.hw + DG.reach && Math.abs(tg.y - d.y) <= 44;
+                if (close) {
+                    // TISHLASH
+                    d.face = dx >= 0 ? 1 : -1;
+                    if (d.biteAt <= 0) {
+                        d.biteAt = Math.round(DG.biteMs / 30); d.bite = 8;
+                        tg!.hit();
+                        this.io.to(roomId).emit('mfDogBite', { x: Math.round(d.x + d.face * 18), y: Math.round(d.y - 14) });
+                    }
+                } else {
+                    // Nishon tepada (shoxda) - shoxga sakraydi; aks holda shu sirt bo'ylab yuguradi (chetidan yiqiladi)
+                    const up = tg && tg.y < d.y - 30 && !d.jumpCd ? climbTo(d, tg.x, tg.y) : null;
+                    if (up && d.y - up.y <= DG.jumpUp) {
+                        const T2 = 0.6;
+                        d.face = up.x >= d.x ? 1 : -1;
+                        d.vx = (up.x - d.x) / T2; d.vy = (up.y - d.y - 0.5 * 900 * T2 * T2) / T2; d.air = true; d.jumpCd = 20;
+                    } else if (Math.abs(dx) > (tg ? 4 : 10)) {
+                        d.face = dx > 0 ? 1 : -1;
+                        d.x += d.face * Math.min(Math.abs(dx), DG.speed * dt);
+                        d.x = Math.max(60, Math.min(groundX1, d.x));
+                        // Nishon pastda yoki uyga qaytishda - shox chetidan yiqilib tushadi
+                        if (!surfAt(d.x, d.y) || (!tg && d.y < GROUND && Math.abs(dx) <= 10)) { d.air = true; d.vx = d.face * 60; d.vy = 0; }
+                    } else if (!tg && d.y < GROUND) { d.air = true; d.vx = 0; d.vy = 0; }
+                }
+            }
+        }
         // Dunyo holati (faqat kerak bo'lganda): qo'ziqorinlar va boss
-        const on = mf.shrooms.length > 0 || mf.mobs.length > 0 || !!(mf.spores && mf.spores.length) || !!b;
+        const on = mf.shrooms.length > 0 || mf.mobs.length > 0 || !!(mf.spores && mf.spores.length) || !!b
+            || !!(mf.dog && (Math.abs(mf.dog.x - FARM_DOG.homeX) > 2 || mf.dog.y < GROUND));
         if ((on || mf.worldOn) && this.frame % this.BROADCAST_EVERY === 0) {
             mf.worldOn = on;
             this.io.to(roomId).emit('mfWorld', {
                 spores: (mf.spores || []).map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), vx: Math.round(s.vx), vy: Math.round(s.vy) })),
                 shrooms: mf.shrooms.map(sh => ({ id: sh.id, x: sh.x, k: sh.k, hp: Math.ceil(sh.hp), maxHp: sh.maxHp, f: sh.hitFlash > 0, eatIn: Math.max(0, Math.ceil((sh.born + SD.eatMs - now) / 1000)) })),
+                dog: mf.dog ? { x: Math.round(mf.dog.x), y: Math.round(mf.dog.y), f: mf.dog.face, b: mf.dog.bite > 0, a: mf.dog.air } : null,
                 mobs: mf.mobs.map(m => ({ id: m.id, k: m.kind, x: Math.round(m.x), y: Math.round(m.y), hp: Math.ceil(m.hp), maxHp: m.maxHp, f: m.hitFlash > 0, face: m.face, v: m.v, air: !!m.hopEnd || !!m.air,
                     tg: m.tongue ? { p: m.tongue.phase, x: Math.round(m.tongue.tx), y: Math.round(m.tongue.ty) } : null, ph: m.phase || null })),
                 boss: b ? { hp: Math.ceil(b.hp), maxHp: b.maxHp, f: b.hitFlash > 0,

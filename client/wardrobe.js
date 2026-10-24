@@ -11,6 +11,8 @@
     const catLabel = (c) => c === 'skin' ? t('char_skins_title') : c === 'wskin' ? t('wd_cat_wskin') : t('slot_' + c);
     const catIcon = { skin: 'fa-shirt', wskin: 'fa-palette', head: 'fa-hat-cowboy', face: 'fa-glasses' };
     const coinsHtml = (n) => `<i class="fa-solid fa-coins"></i> ${n}`;
+    // Sotib olishdan oldin tasdiq (narxlar 10 000 gacha - adashib bosilsa pul ketib qolmasin)
+    const confirmBuy = (name, price) => new Promise(r => pxConfirm(t('cos_buy_confirm').replace('{name}', name).replace('{price}', price), () => r(true), () => r(false)));
 
     function equippedSkin(type) {
         const id = (currentUser.equippedSkins && currentUser.equippedSkins[type]) || 'default';
@@ -92,7 +94,7 @@
                     tag: s.rarity ? `<br><span class="skin-tag ${s.rarity}">${t('skin_rarity_' + s.rarity)}</span>` : '',
                     equipped: eq && eq.id === s.id, owned: owned.includes(s.id), price: s.price, locked: s.exclusive && !owned.includes(s.id) ? t('skin_day7') : '',
                     trying: tryOn && tryOn.cat === 'skin' && tryOn.id === s.id, tryKey: { cat: 'skin', id: s.id },
-                    equip: () => equipSkin(type, s.id), buy: () => buySkin(type, s.id)
+                    equip: () => equipSkin(type, s.id), buy: async () => { if (await confirmBuy(tSkinName('skin', type, s), s.price)) await buySkin(type, s.id); }
                 }));
             });
             return;
@@ -109,7 +111,7 @@
                     tag: s.wfx ? `<br><span class="skin-tag legendary">${t('skin_rarity_unique')}</span>` : '',
                     equipped: eq && eq.id === s.id, owned: owned.includes(s.id), price: s.price,
                     trying: tryOn && tryOn.cat === 'wskin' && tryOn.id === s.id, tryKey: { cat: 'wskin', id: s.id },
-                    equip: () => equipWeaponSkin(type, s.id), buy: () => buyWeaponSkin(type, s.id)
+                    equip: () => equipWeaponSkin(type, s.id), buy: async () => { if (await confirmBuy(tSkinName('wskin', type, s), s.price)) await buyWeaponSkin(type, s.id); }
                 }));
             });
             return;

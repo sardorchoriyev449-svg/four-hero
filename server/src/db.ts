@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { config } from 'dotenv';
 import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL, UPGRADE_COSTS, BASE_UPGRADES } from './perks';
+import { PET, CRITTER, petXpNeed, petUpCap, petMaxHp, petDamage, petSpitMs, petDashMs, petHealOf } from './maps';
 config({quiet:true})
 // Agar MongoDB'ga ulanib bo'lmasa yoki vaqtincha uzilib qolsa, so'rovlar
 // abadiy "osilib qolmasligi" uchun (aks holda foydalanuvchi cheksiz kutib qolardi)
@@ -111,7 +112,9 @@ const userSchema = new mongoose.Schema({
     // Xarita o'tilgani uchun tanga - har xaritaga faqat BIR MARTA (qayta o'tilsa berilmaydi)
     coinMaps: { type: [Number], default: () => [] },
     // XP KUCHAYTIRISH darajasi - har personajga alohida: { knight: 2, ... }
-    xpBoost: { type: Object, default: () => ({}) }
+    xpBoost: { type: Object, default: () => ({}) },
+    petTrust: { type: Number, default: 0 },   // Pushistik bilan do'stlik (necha marta boqilgan)
+    pet: { type: Object, default: () => ({}) }   // hamroh Pushistik: { lvl, xp, hp, up: { dmg, hp, spd }, resting, restAt }
 }, { timestamps: true });
 
 const UserModel = mongoose.model('User', userSchema);
@@ -141,6 +144,8 @@ export interface UserRecord {
     banReason: string;
     createdAt: Date | null;
     xpBoost: { [character: string]: number };
+    petTrust: number;
+    pet: PetData;
 }
 
 // TAJRIBA DARAJASI (eng yuqori - 100): 1-15 darajalar - har keyingisiga kerakli XP ikki baravar
@@ -201,7 +206,9 @@ function docToUser(doc: any): UserRecord {
         banned: !!doc.banned,
         banReason: doc.banReason || '',
         createdAt: doc.createdAt || null,
-        xpBoost: doc.xpBoost || {}
+        xpBoost: doc.xpBoost || {},
+        petTrust: Math.max(0, Number(doc.petTrust) || 0),
+        pet: petOf(doc)
     };
 }
 
@@ -329,6 +336,82 @@ export async function addCoins(userId: string, amount: number): Promise<UserReco
         { returnDocument: 'after' }
     );
     return doc ? docToUser(doc) : null;
+}
+
+// ===== HAMROH PUSHISTIK =====
+export interface PetData { lvl: number; xp: number; hp: number; up: { dmg: number; hp: number; spd: number }; resting: boolean; restAt: number; }
+export function petOf(doc: any): PetData {
+    const p = (doc && doc.pet) || {}, up = p.up || {};
+    const u = { dmg: Math.max(0, Math.min(PET.upMax, up.dmg | 0)), hp: Math.max(0, Math.min(PET.upMax, up.hp | 0)), spd: Math.max(0, Math.min(PET.upMax, up.spd | 0)) };
+    const mx = petMaxHp(u);
+    return { lvl: Math.max(1, Math.min(PET.maxLevel, p.lvl | 0 || 1)), xp: Math.max(0, p.xp | 0), hp: typeof p.hp === 'number' ? Math.max(0, Math.min(mx, p.hp)) : mx,
+        up: u, resting: !!p.resting, restAt: Number(p.restAt) || 0 };
+}
+// Uychasi bo'lsa - dam olayotgan Pushistik o'zi asta tiklanadi (o'tgan vaqt bo'yicha hisoblanadi)
+function petWithHouse(doc: any, pet: PetData): PetData {
+    const house = !!(doc.farmDecor && doc.farmDecor.pethouse && !(doc.farmDecorOff && doc.farmDecorOff.pethouse));
+    if (!house || !pet.resting || !pet.restAt) return pet;
+    const mx = petMaxHp(pet.up), now = Date.now(), gain = Math.floor((now - pet.restAt) / PET.houseRegenMs);
+    if (gain <= 0 || pet.hp >= mx) return pet;
+    const hp = Math.min(mx, pet.hp + gain);
+    return { ...pet, hp, restAt: pet.restAt + gain * PET.houseRegenMs, resting: hp < mx * PET.returnPct };
+}
+export async function getPetInfo(userId: string): Promise<any | null> {
+    const doc: any = await UserModel.findById(userId, { petTrust: 1, pet: 1, farmBag: 1, farmDecor: 1, farmDecorOff: 1, coins: 1 }).lean();
+    if (!doc) return null;
+    let pet = petOf(doc);
+    const synced = petWithHouse(doc, pet);
+    if (synced !== pet) { pet = synced; await UserModel.updateOne({ _id: userId }, { $set: { pet } }); }
+    const bag = Object.entries(doc.farmBag || {}).filter(([k, n]) => (n as number) > 0 && petHealOf(k) > 0).map(([k, n]) => ({ id: k, n, heal: petHealOf(k) }));
+    return { trust: Math.max(0, Number(doc.petTrust) || 0), pet, maxHp: petMaxHp(pet.up), dmg: petDamage(pet.lvl, pet.up), spitMs: petSpitMs(pet.up), dashMs: petDashMs(pet.up),
+        need: petXpNeed(pet.lvl), cap: petUpCap(pet.lvl), prices: PET.upPrices, upMax: PET.upMax, maxLevel: PET.maxLevel, returnPct: PET.returnPct,
+        house: !!(doc.farmDecor && doc.farmDecor.pethouse), bag, coins: doc.coins || 0 };
+}
+// Jangdan keyin jon/tajriba/daraja saqlanadi (faqat shu maydonlar - ovqat/kuchaytirish bilan to'qnashmasin)
+export async function petSave(userId: string, pet: PetData): Promise<void> {
+    await UserModel.updateOne({ _id: userId }, { $set: { 'pet.lvl': pet.lvl, 'pet.xp': pet.xp, 'pet.hp': pet.hp, 'pet.resting': pet.resting, 'pet.restAt': pet.restAt } });
+}
+export async function petUpgrade(userId: string, kind: string): Promise<{ success: boolean, message?: string, pet?: PetData, coins?: number }> {
+    if (!['dmg', 'hp', 'spd'].includes(kind)) return { success: false, message: 'err_server' };
+    const doc: any = await UserModel.findById(userId, { petTrust: 1, pet: 1, coins: 1 }).lean();
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    if ((doc.petTrust || 0) < CRITTER.trustMax) return { success: false, message: 'err_pet_not_tamed' };
+    const pet = petOf(doc), cur = (pet.up as any)[kind] as number;
+    if (cur >= PET.upMax) return { success: false, message: 'err_upgrade_max' };
+    if (cur >= petUpCap(pet.lvl)) return { success: false, message: 'err_pet_level|' + (2 * (cur + 1)) };
+    const price = PET.upPrices[cur];
+    const filter: any = { _id: userId, coins: { $gte: price } };
+    filter['pet.up.' + kind] = cur === 0 ? { $in: [0, null] } : cur;
+    const set: any = { ['pet.up.' + kind]: cur + 1 };
+    if (kind === 'hp') set['pet.hp'] = pet.hp + PET.hpPerUp;   // yangi jon qo'shiladi
+    const upd: any = await UserModel.findOneAndUpdate(filter, { $inc: { coins: -price }, $set: set }, { returnDocument: 'after' }).lean();
+    if (!upd) return { success: false, message: (doc.coins || 0) < price ? 'err_not_enough_coins' : 'err_server' };
+    return { success: true, pet: petOf(upd), coins: upd.coins };
+}
+// Ekin/meva berib jonini tiklash (ombordan bittasi ketadi)
+export async function petFeed(userId: string, item: string): Promise<{ success: boolean, message?: string, pet?: PetData, heal?: number, n?: number }> {
+    const heal = petHealOf(item);
+    if (!heal) return { success: false, message: 'err_server' };
+    const doc: any = await UserModel.findById(userId, { petTrust: 1, pet: 1, farmBag: 1, farmDecor: 1, farmDecorOff: 1 }).lean();
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    if ((doc.petTrust || 0) < CRITTER.trustMax) return { success: false, message: 'err_pet_not_tamed' };
+    const pet = petWithHouse(doc, petOf(doc)), mx = petMaxHp(pet.up);
+    if (pet.hp >= mx) return { success: false, message: 'err_pet_full' };
+    if (!doc.farmBag || !(doc.farmBag[item] > 0)) return { success: false, message: 'err_no_item' };
+    const next: PetData = { ...pet, hp: Math.min(mx, pet.hp + heal), xp: pet.xp + PET.feedXp };
+    while (next.lvl < PET.maxLevel && next.xp >= petXpNeed(next.lvl)) { next.xp -= petXpNeed(next.lvl); next.lvl++; }
+    if (next.resting && next.hp >= mx * PET.returnPct) { next.resting = false; next.restAt = 0; }
+    else if (next.resting) next.restAt = Date.now();
+    const upd: any = await UserModel.findOneAndUpdate({ _id: userId, ['farmBag.' + item]: { $gte: 1 } },
+        { $inc: { ['farmBag.' + item]: -1 }, $set: { pet: next } }, { returnDocument: 'after' }).lean();
+    if (!upd) return { success: false, message: 'err_no_item' };
+    return { success: true, pet: petOf(upd), heal, n: (upd.farmBag || {})[item] || 0 };
+}
+
+// PUSHISTIK boqildi: do'stlik +1 (yangi qiymat qaytadi)
+export async function addPetTrust(userId: string): Promise<number | null> {
+    const doc = await UserModel.findByIdAndUpdate(userId, { $inc: { petTrust: 1 } }, { returnDocument: 'after' });
+    return doc ? Math.max(0, Number((doc as any).petTrust) || 0) : null;
 }
 
 // SKIN SOTIB OLISH

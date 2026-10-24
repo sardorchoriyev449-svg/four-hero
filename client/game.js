@@ -417,7 +417,7 @@ function launchGame(socket, roomId, mapData, continued) {
         window.__game = {
             get map() { return map; }, get hero() { return currentCharacter; }, get dialog() { return dialog; },
             get backState() { return backState; }, get backBarrels() { return backBarrels; }, get backOnRamp() { return backOnRamp; },
-            get tntState() { return tntState; }, get tntObj() { return tntObj; }, get robotState() { return robotState; }, get robotObj() { return robotObj; }, get vendState() { return vendState; }, get vendObj() { return vendObj; }, get skyState() { return skyState; }, get skyObj() { return skyObj; }, get pvpState() { return pvpState; }, get mfState() { return mfState; }, get liftState() { return liftState; }, get fatElfState() { return fatElfState; }, get mfHouse() { return mfHouse; }, get mfReel() { return mfReel; }, get mfOffset() { return mfOffset; }, set mfOffset(v) { mfOffset = v; }, get stoneSprites() { return stoneSprites; }
+            get tntState() { return tntState; }, get tntObj() { return tntObj; }, get robotState() { return robotState; }, get robotObj() { return robotObj; }, get vendState() { return vendState; }, get vendObj() { return vendObj; }, get skyState() { return skyState; }, get skyObj() { return skyObj; }, get pvpState() { return pvpState; }, get mfState() { return mfState; }, get liftState() { return liftState; }, get fatElfState() { return fatElfState; }, get critterState() { return critterState; }, get petsState() { return petsState; }, get crObj() { return crObj; }, get mfHouse() { return mfHouse; }, get mfReel() { return mfReel; }, get mfOffset() { return mfOffset; }, set mfOffset(v) { mfOffset = v; }, get stoneSprites() { return stoneSprites; }
         };
     }
     // O'YIN OVOZLARI: sfx - har doim bir xil balandlikda; sfxAt - qahramondan uzoqlashgan sari pasayadi
@@ -521,6 +521,10 @@ function launchGame(socket, roomId, mapData, continued) {
     // FERMA
     // SARIQ ESHIK
     let drState = null;
+    let critterState = null;   // yoqimtoy maxluqcha (serverdan, barcha xaritalarda)
+    let petsState = [];        // jangdagi hamroh Pushistiklar (serverdan): { id: egasi, x, y, f, st, fl }
+    let lastPlayersState = {}; // oxirgi holatdagi o'yinchilar (hamroh maxluqcha uchun)
+    let crObj = null;          // maxluqcha rasmlari: { scene, spr, bubble, food, mark, meter, hint, foods: {}, carried: {}, pets: {} }
     let drObj = null;          // { yellow, black, elf, ropes, lever, exit, barrier, cliff, monster, bombs: {} }
     const drShown = {};        // bir martalik hodisalar (dialoglar, tanlov)
     // KALMAR
@@ -3453,7 +3457,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 ${S.prices.fert ? useCard('fert', px('fert'), t('item_fert'), t('item_fert_desc'), mfBag ? mfBag.fert || 0 : 0) : ''}
                 ${S.prices.water ? useCard('water', px('water'), t('item_water'), t('item_water_desc'), mfBag ? mfBag.water || 0 : 0) : ''}
                 ${S.prices.decor_flowers ? sec('shop_sec_decor') : ''}
-                ${['flowers', 'lantern', 'paint', 'dog'].filter(id => S.prices['decor_' + id]).map(decorCard).join('')}
+                ${['flowers', 'lantern', 'paint', 'dog', 'pethouse'].filter(id => S.prices['decor_' + id]).map(decorCard).join('')}
                 ${S.farmUp ? sec('shop_sec_grow') + growCards() : ''}
                 ${S.prices.home_chest ? sec('shop_sec_home') : ''}
                 ${['chest', 'table', 'chair', 'bed', 'shelf', 'fireplace', 'pot', 'plant', 'rug', 'painting', 'lamp'].filter(id => S.prices['home_' + id]).map(homeCard).join('')}
@@ -3778,6 +3782,7 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_mf_flowers', FarmArt.flowersGrid(), 3);
         mk('px_mf_lantern', FarmArt.lanternGrid(), 3);
         mk('px_mf_dog0', FarmArt.dogGrid(0), 3);
+        mk('px_mf_pethouse', FarmArt.pethouseGrid(), 3);
         mk('px_mf_dog1', FarmArt.dogGrid(1), 3);
         mk('px_coin_ic', FarmArt.coinGrid(), 3);
         map.myFarm.fruitTrees.forEach(tr => { mk('px_or_' + tr.id + '_0', orTreeGrid(tr.id, false), 3); mk('px_or_' + tr.id + '_1', orTreeGrid(tr.id, true), 3); mk('px_mf_' + tr.id + '_2', mfCropGrid(tr.id, 2), 3); });
@@ -3960,6 +3965,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const decorObj = {
             flowers: [scene.add.image(60, 574, 'px_mf_flowers').setOrigin(0.5, 1).setDepth(-0.4), scene.add.image(245, 574, 'px_mf_flowers').setOrigin(0.5, 1).setDepth(-0.4)],
             lantern: [scene.add.image(310, 574, 'px_mf_lantern').setOrigin(0.5, 1).setDepth(-0.46)],
+            pethouse: [scene.add.image(392, 574, 'px_mf_pethouse').setOrigin(0.5, 1).setDepth(-0.46)],
             dog: [scene.add.image(520, 574, 'px_kennel').setOrigin(0.5, 1).setDepth(-0.46).setScale(0.75), scene.add.image(470, 574, 'px_mf_dog0').setOrigin(0.5, 1).setDepth(-0.45)]
         };
         const lanternGlow = scene.add.circle(310, 470, 40, 0xffe082, 0.25).setDepth(-0.44).setBlendMode(Phaser.BlendModes.ADD);
@@ -4340,7 +4346,18 @@ function launchGame(socket, roomId, mapData, continued) {
             Object.keys(f.decor || {}).forEach(k => { if (f.decor[k] && !Off[k]) D[k] = true; });   // yashikdagilari - tashqarida yo'q
             Object.keys(O.decorObj).forEach(k => O.decorObj[k].forEach(o => o.setVisible(!!D[k])));
             O.lanternGlow.setVisible(!!D.lantern).setAlpha(0.15 + 0.12 * Math.sin(tNow / 300) + O.rainA * 0.2);
-            if (D.dog) O.decorObj.dog[1].setTexture(Math.floor(tNow / 260) % 2 ? 'px_mf_dog1' : 'px_mf_dog0');
+            if (D.dog) {
+                const dimg = O.decorObj.dog[1], ds = mfWorldState && mfWorldState.dog;
+                const tx = ds ? ds.x : 470, ty = ds ? ds.y + 4 : 574;
+                const moving = Math.abs(tx - dimg.x) > 1.5 || (ds && ds.a);
+                dimg.x = Math.abs(tx - dimg.x) > 160 ? tx : Phaser.Math.Linear(dimg.x, tx, 0.35);
+                dimg.y = Math.abs(ty - dimg.y) > 160 ? ty : Phaser.Math.Linear(dimg.y, ty, 0.35);
+                if (ds) dimg.setFlipX(ds.f < 0);
+                // Yugurganda - tez dum silkitadi va sakraydi; tishlaganda - oldinga intiladi
+                dimg.setTexture(Math.floor(tNow / (moving ? 90 : 260)) % 2 ? 'px_mf_dog1' : 'px_mf_dog0');
+                dimg.setAngle(ds && ds.b ? (ds.f < 0 ? 12 : -12) : moving && !(ds && ds.a) ? Math.sin(tNow / 45) * 4 : 0);
+                dimg.setDepth(ds && (Math.abs(ds.x - 470) > 4 || ds.y < 570) ? 3.3 : -0.45);
+            }
             O.house.setTexture(D.paint ? 'px_farmhouse_p' : 'px_farmhouse');
             if (O.shownLevel !== lv) {
                 O.shownLevel = lv;
@@ -6537,6 +6554,167 @@ function launchGame(socket, roomId, mapData, continued) {
         scene.tweens.add({ targets: [face, red], alpha: 0, delay: 520, duration: 260, onComplete: () => { face.destroy(); red.destroy(); } });
         scene.cameras.main.shake(500, 0.02);
         sfx('scream');
+    }
+    // ===== YOQIMTOY MAXLUQCHA "PUSHISTIK": momiq yumaloq jonzot, katta ko'zlar, pushti yuzcha, binafsha qanotlar =====
+    // frame: fly0/fly1 - qanot tepada/pastda; sit/blink - o'tirgan (oyoqchalari ko'rinadi); eat - og'zi ochiq; scared - qo'rqqan
+    const critterGrid = (frame) => FarmArt.critterGrid(frame);   // rasm - farmart.js da (menyudagi panel ham ishlatadi)
+    // Ovqatlar (9x9): rezavor, olma, pechenye, baliq, sabzi
+    function critterFoodGrid(kind) {
+        const g = gridNew(9, 9), put = (x, y, c) => { if (g[y] && x >= 0 && x < 9) g[y][x] = c; };
+        const disc = (cx, cy, r, f) => { for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (Math.hypot(x - cx, y - cy) <= r) put(x, y, f(x, y)); };
+        if (kind === 'berry') { [[3, 5], [6, 5], [4.5, 3]].forEach(([cx, cy]) => disc(cx, cy, 1.8, (x, y) => x < cx && y < cy ? 0xb388ff : 0x6a1b9a)); put(4, 0, 0x43a047); put(5, 1, 0x43a047); }
+        else if (kind === 'apple') { disc(4, 5, 3.4, (x, y) => x < 3 && y < 4 ? 0xff8a80 : y > 6 ? 0xb71c1c : 0xe53935); put(4, 1, 0x5d4037); put(5, 0, 0x66bb6a); put(6, 0, 0x66bb6a); }
+        else if (kind === 'cookie') { disc(4, 4.5, 3.6, (x, y) => (x + y) % 3 === 0 ? 0xc68642 : 0xe0a95f); [[3, 3], [6, 4], [4, 6], [2, 5]].forEach(([x, y]) => put(x, y, 0x4e342e)); }
+        else if (kind === 'fish') { for (let x = 1; x < 8; x++) { const h = x < 6 ? Math.round(2.2 - Math.abs(x - 3.5) * 0.4) : 0; for (let y = 4 - h; y <= 4 + h; y++) put(x, y, y < 4 ? 0x81d4fa : 0x29b6f6); } put(0, 3, 0x0288d1); put(0, 5, 0x0288d1); put(0, 4, 0x0288d1); put(6, 3, 0x111111); put(8, 4, 0x0288d1); }
+        else { for (let y = 2; y < 9; y++) { const hw = Math.max(0, Math.round((8 - y) / 3)); for (let x = 4 - hw; x <= 4 + hw; x++) put(x, y, (y % 2) ? 0xfb8c00 : 0xff9800); } put(3, 0, 0x43a047); put(4, 1, 0x66bb6a); put(5, 0, 0x43a047); put(4, 0, 0x2e7d32); }
+        return gridOutline(g, 0x2a1a10);
+    }
+    function ensureCritterTextures(scene) {
+        if (scene.textures.exists('px_crit_sit')) return;
+        ['fly0', 'fly1', 'sit', 'blink', 'eat', 'scared'].forEach(f => gridToTexture(scene, 'px_crit_' + f, critterGrid(f), 3));
+        ['berry', 'apple', 'cookie', 'fish', 'carrot'].forEach(k => gridToTexture(scene, 'px_cfood_' + k, critterFoodGrid(k), 3));
+        // Hamrohning kislota tomchisi: to'q yashil kontur, och yashil yadro, oq yaltirash
+        const ac = scene.add.graphics();
+        ac.fillStyle(0x1b5e20, 1); ac.fillCircle(9, 9, 9); ac.fillStyle(0x76ff03, 1); ac.fillCircle(9, 9, 6.5); ac.fillStyle(0xccff90, 1); ac.fillCircle(7, 7, 3); ac.fillStyle(0xffffff, 1); ac.fillRect(5, 5, 2, 2);
+        ac.generateTexture('px_pet_acid', 18, 18); ac.destroy();
+        // fikr pufagi (oq, pastida ikki kichik doiracha)
+        const b = scene.add.graphics();
+        b.fillStyle(0x000000, 1); b.fillRoundedRect(0, 0, 46, 38, 10);
+        b.fillStyle(0xffffff, 1); b.fillRoundedRect(3, 3, 40, 32, 8);
+        b.fillStyle(0x000000, 1); b.fillCircle(14, 42, 5); b.fillCircle(8, 50, 3);
+        b.fillStyle(0xffffff, 1); b.fillCircle(14, 42, 3); b.fillCircle(8, 50, 1.5);
+        b.generateTexture('px_crit_bubble', 48, 54); b.destroy();
+    }
+    // SILASH: o'z qahramoni yonidagi eng yaqin jonzot (robot it, o'tirgan Pushistik, o'z hamrohi, fermada dam olayotgani)
+    function petTarget() {
+        const me = currentCharacter;
+        if (!me || me.isDead) return null;
+        const feet = me.y + 24, near = (x, y, r) => Math.abs(me.x - x) <= r && Math.abs(feet - y) <= 90;
+        const S = critterState;
+        if (S && (S.ph === 'sit' || S.ph === 'eat') && near(S.x, S.y, 80)) return { kind: 'critter', x: S.x, y: S.y - 20 };
+        const mine = crObj && crObj.pets[socket.id];
+        if (mine && Math.abs(mine.x - me.x) <= 70 && Math.abs(mine.y - me.y) <= 80) return { kind: 'pet', x: mine.x, y: mine.y - 16 };   // 'Lv' yozuvi ustida
+        if (isMyFarm && mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.dog && !(mfState.farm.decorOff || {}).dog) {
+            const ds = mfWorldState && mfWorldState.dog, dx = ds ? ds.x : 470, dy = ds ? ds.y : 570;
+            if (near(dx, dy, 80)) return { kind: 'dog', x: dx, y: dy - 30 };
+        }
+        if (crObj && crObj.restAt && near(crObj.restAt.x, crObj.restAt.y, 80)) return { kind: 'petrest', x: crObj.restAt.x, y: crObj.restAt.y - 30 };
+        return null;
+    }
+    // Har kadr: maxluqcha, fikr pufagi (yemoqchi bo'lgan narsasi), qo'rquv belgisi, ovqatlar, ko'tarilgan ovqat, hamrohlar
+    function updateCritter(scene) {
+        ensureCritterTextures(scene);
+        if (!crObj || crObj.scene !== scene || !crObj.spr.scene) {
+            const txt = (size, color) => scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: size, color, stroke: '#000', strokeThickness: 4, align: 'center' }).setOrigin(0.5, 1);
+            crObj = { scene, spr: scene.add.image(0, 0, 'px_crit_sit').setOrigin(0.5, 1).setDepth(4.2).setVisible(false),
+                bubble: scene.add.image(0, 0, 'px_crit_bubble').setOrigin(0.3, 1).setDepth(4.25).setVisible(false),
+                food: scene.add.image(0, 0, 'px_cfood_berry').setDepth(4.26).setVisible(false),
+                mark: txt('16px', '#ff5252').setDepth(4.27).setVisible(false),
+                meter: scene.add.graphics().setDepth(4.27),
+                hint: scene.add.text(400, 92, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#fff3e0', stroke: '#000', strokeThickness: 4, align: 'center', wordWrap: { width: 560 } }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1003).setVisible(false),
+                foods: {}, carried: {}, pets: {}, x: null, y: null };
+        }
+        const O = crObj, S = critterState, t0 = scene.time.now, me = currentCharacter;
+        O.meter.clear();
+        let hint = '';
+        if (S) {
+            O.x = O.x === null || Math.abs(O.x - S.x) > 150 ? S.x : Phaser.Math.Linear(O.x, S.x, 0.3);
+            O.y = O.y === null || Math.abs(O.y - S.y) > 150 ? S.y : Phaser.Math.Linear(O.y, S.y, 0.3);
+            const flying = S.ph === 'fly' || S.ph === 'in' || S.ph === 'out';
+            const fr = flying ? (S.sc ? 'scared' : (Math.floor(t0 / 110) % 2 ? 'fly0' : 'fly1'))
+                : S.ph === 'eat' ? (Math.floor(t0 / 180) % 2 ? 'eat' : 'sit')
+                : S.al > 55 ? 'scared' : (t0 % 3200 < 160 ? 'blink' : 'sit');
+            const bob = S.ph === 'sit' ? -Math.abs(Math.sin(t0 / 380)) * 2 : 0;
+            O.spr.setVisible(true).setTexture('px_crit_' + fr).setPosition(O.x, O.y + bob + (flying ? 20 : 0)).setFlipX(S.f < 0)
+                .setAngle(S.al > 55 && S.ph === 'sit' ? Math.sin(t0 / 30) * 5 : flying ? Math.sin(t0 / 160) * 6 : 0);
+            const sitting = S.ph === 'sit';
+            // Fikr pufagi: o'tirganda - yemoqchi bo'lgan narsasi
+            O.bubble.setVisible(sitting || S.ph === 'eat').setPosition(O.x + 6, O.y - 50 + Math.sin(t0 / 500) * 2);
+            O.food.setVisible(sitting).setTexture('px_cfood_' + S.w).setPosition(O.x + 6 + 9, O.y - 50 - 34 + Math.sin(t0 / 500) * 2);
+            if (S.ph === 'eat') { O.food.setVisible(true).setTexture('px_cfood_' + S.w).setPosition(O.x + 15, O.y - 84).setScale(1 + 0.15 * Math.sin(t0 / 90)); }
+            else O.food.setScale(1);
+            // Qo'rquv: "!" va qizil chiziqcha (to'lsa - uchib ketadi)
+            O.mark.setVisible(sitting && S.al > 8).setText(S.al > 55 ? '!!' : '!').setPosition(O.x - 26, O.y - 40 - (S.al > 55 ? Math.abs(Math.sin(t0 / 60)) * 4 : 0)).setColor(S.al > 55 ? '#ff1744' : '#ffd54f');
+            if (sitting) {
+                O.meter.fillStyle(0x000000, 0.7); O.meter.fillRect(O.x - 22, O.y + 6, 44, 6);
+                O.meter.fillStyle(S.al > 55 ? 0xff1744 : S.al > 25 ? 0xffd54f : 0x69f0ae, 1); O.meter.fillRect(O.x - 21, O.y + 7, Math.max(1, Math.round(42 * (1 - S.al / 100))), 4);
+            }
+            // Maslahat (o'z qahramoni yaqinida bo'lsa)
+            if (me && !me.isDead && sitting) {
+                const d = Math.abs(me.x - S.x), carry = (S.carry || []).includes(socket.id), fed = (S.fed || []).includes(socket.id);
+                if (fed) hint = d < 500 ? t('critter_hint_fed') : '';
+                else if (carry) hint = t('critter_hint_carry');
+                else if (d < 700) hint = (S.foods || []).length ? t('critter_hint_food').replace('{f}', t('critter_food_' + S.w)) : t('critter_hint_near');
+                if (hint && d < 360 && !fed) hint += '\n' + (S.al > 55 ? t('critter_hint_freeze') : t('critter_hint_slow'));
+            }
+        } else {
+            O.spr.setVisible(false); O.bubble.setVisible(false); O.food.setVisible(false); O.mark.setVisible(false); O.x = null;
+        }
+        O.hint.setVisible(!!hint).setText(hint);
+        // Xaritadagi ovqatlar
+        const fIds = new Set(((S && S.foods) || []).map(f => f.id));
+        ((S && S.foods) || []).forEach((f) => {
+            let o = O.foods[f.id];
+            if (!o) { o = O.foods[f.id] = scene.add.image(f.x, f.y, 'px_cfood_' + S.w).setOrigin(0.5, 1).setDepth(4.15); o.glow = scene.add.circle(f.x, f.y - 12, 18, 0xfff59d, 0.25).setDepth(4.14).setBlendMode(Phaser.BlendModes.ADD); }
+            o.setPosition(f.x, f.y - 4 - Math.abs(Math.sin(t0 / 300 + f.id)) * 6);
+            o.glow.setPosition(f.x, f.y - 14).setAlpha(0.18 + 0.12 * Math.sin(t0 / 200 + f.id));
+        });
+        Object.keys(O.foods).forEach((id) => { if (!fIds.has(Number(id))) { O.foods[id].glow.destroy(); O.foods[id].destroy(); delete O.foods[id]; } });
+        // Ko'tarilgan ovqat - qahramon tepasida
+        const carriers = new Set((S && S.ph !== 'out' && S.carry) || []);
+        carriers.forEach((pid) => {
+            const spr = pid === socket.id ? currentCharacter : otherPlayers[pid];
+            if (!spr) return;
+            let o = O.carried[pid];
+            if (!o) o = O.carried[pid] = scene.add.image(0, 0, 'px_cfood_' + S.w).setDepth(4.3);
+            o.setTexture('px_cfood_' + S.w).setPosition(spr.x, spr.y - 44 + Math.sin(t0 / 200) * 2);
+        });
+        Object.keys(O.carried).forEach((pid) => { if (!carriers.has(pid)) { O.carried[pid].destroy(); delete O.carried[pid]; } });
+        // HAMROHLAR (serverdan): egasi yonida uchadi, raqibga kislota tupuradi / uchib borib uradi. Ustida daraja va jon
+        const petIds = new Set();
+        (petsState || []).forEach((q) => {
+            petIds.add(q.id);
+            let o = O.pets[q.id];
+            if (!o) {
+                o = O.pets[q.id] = scene.add.image(q.x, q.y, 'px_crit_fly0').setDepth(4.18).setScale(0.72);
+                o.bar = scene.add.graphics().setDepth(4.19);
+                o.lv = scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '7px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5, 1).setDepth(4.19);
+            }
+            const k = q.st === 'dash' ? 0.6 : 0.25;
+            o.x = Math.abs(o.x - q.x) > 300 ? q.x : Phaser.Math.Linear(o.x, q.x, k);
+            o.y = Math.abs(o.y - q.y) > 300 ? q.y : Phaser.Math.Linear(o.y, q.y, k);
+            o.setTexture(q.st === 'dash' ? 'px_crit_scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'px_crit_fly0' : 'px_crit_fly1')).setFlipX(q.f < 0)
+                .setAngle(q.st === 'dash' ? q.f * 18 : 0).setScale(q.st === 'dash' ? 0.8 : 0.72);
+            if (q.fl) o.setTintFill(0xff5252); else if (o.happyUntil && t0 < o.happyUntil) o.setTint(0xffd1e8); else o.clearTint();
+            if (q.st === 'dash' && Math.random() < 0.6) { const tr = scene.add.rectangle(o.x, o.y, 5, 5, 0xd1c4e9, 0.8).setDepth(4.17); scene.tweens.add({ targets: tr, alpha: 0, scale: 0.2, duration: 220, onComplete: () => tr.destroy() }); }
+            const pd = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet;
+            o.bar.clear();
+            if (pd) {
+                o.bar.fillStyle(0x000000, 0.7); o.bar.fillRect(o.x - 15, o.y - 24, 30, 5);
+                o.bar.fillStyle(pd.hp / pd.mx > 0.4 ? 0x76ff03 : 0xff5252, 1); o.bar.fillRect(o.x - 14, o.y - 23, Math.max(1, Math.round(28 * pd.hp / pd.mx)), 3);
+                o.lv.setText('Lv' + pd.l).setPosition(o.x, o.y - 26).setVisible(true);
+            } else o.lv.setVisible(false);
+        });
+        Object.keys(O.pets).forEach((pid) => { if (!petIds.has(pid)) { O.pets[pid].bar.destroy(); O.pets[pid].lv.destroy(); O.pets[pid].destroy(); delete O.pets[pid]; } });
+        // DAM OLAYOTGAN hamroh: ferma egasining fermasida (uychasi bo'lsa - uning oldida) uxlaydi, ustida "Zz" va jon
+        const hostPet = isMyFarm && mfState && lastPlayersState && lastPlayersState[mfState.hostPid] && lastPlayersState[mfState.hostPid].pet;
+        const restX = mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.pethouse && !(mfState.farm.decorOff || {}).pethouse ? 392 : 280;
+        if (hostPet && hostPet.r) {
+            if (!O.rest || !O.rest.scene) {
+                O.rest = scene.add.image(restX, 572, 'px_crit_blink').setOrigin(0.5, 1).setDepth(-0.4).setScale(0.75);
+                O.restBar = scene.add.graphics().setDepth(-0.39);
+                O.restZ = scene.add.text(restX, 520, 'z', { fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.39);
+            }
+            O.rest.setVisible(true).setX(restX).setScale(0.75, 0.75 + Math.sin(t0 / 600) * 0.03);
+            O.restZ.setVisible(true).setText(Math.floor(t0 / 600) % 3 === 0 ? 'z' : Math.floor(t0 / 600) % 3 === 1 ? 'zZ' : 'zZz').setPosition(restX + 18, 520 - (t0 % 1800) / 90);
+            O.restBar.clear(); O.restBar.fillStyle(0x000000, 0.7); O.restBar.fillRect(restX - 20, 576, 40, 6);
+            O.restBar.fillStyle(0x76ff03, 1); O.restBar.fillRect(restX - 19, 577, Math.max(1, Math.round(38 * hostPet.hp / hostPet.mx)), 4);
+        } else if (O.rest) { O.rest.setVisible(false); O.restZ.setVisible(false); O.restBar.clear(); }
+        O.restAt = hostPet && hostPet.r ? { x: restX, y: 572 } : null;
+        // E bilan silash mumkin bo'lgan eng yaqin jonzot - tepasida "E ♥"
+        const pt = petTarget();
+        if (!O.eHint || !O.eHint.scene) O.eHint = scene.add.text(0, 0, 'E \u2665', { fontFamily: '"Press Start 2P", monospace', fontSize: '9px', color: '#ff80ab', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5, 1).setDepth(4.5);
+        O.eHint.setVisible(!!pt && !dialog).setPosition(pt ? pt.x : 0, pt ? pt.y - 34 + Math.sin(t0 / 200) * 2 : 0);
     }
     function updateDoors(scene) {
         if (!drObj || !drState) return;
@@ -9154,6 +9332,14 @@ function launchGame(socket, roomId, mapData, continued) {
             if (pauseMenuOpen) return false;
             // 1) Dialog ochiq bo'lsa - keyingi gap
             if (dialog) { if (dry) return true; advanceDialog(); return; }
+            // SILASH (E): jonzot yonida - silanadi; fermada dam olayotgan o'z hamrohi - ovqat berish oynasi
+            const pk = petTarget();
+            if (pk) {
+                if (dry) return true;
+                if (pk.kind === 'petrest' && mfIsHost() && window.PetPanel) PetPanel.open();
+                socket.emit('petAnimal', { roomId, kind: pk.kind });
+                return;
+            }
             // 0) DO'KON: peshtaxta yonida - savdo oynasi
             if ((isShop || isVend) && currentCharacter && Math.abs(currentCharacter.x - map.shop.counterX) <= map.shop.range) {
                 if (dry) return true;
@@ -9739,6 +9925,58 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         socket.off('climbStart');
         socket.on('climbStart', () => sfx('banner'));
+        // PUSHISTIK hodisalari: qo'nish (chiyillash), ovqat olindi, qo'rqib uchib ketdi, boqildi (yuraklar, do'stlik)
+        socket.off('critterLand'); socket.off('critterPick'); socket.off('critterScared'); socket.off('critterFed');
+        socket.off('animalPetted'); socket.off('petDown'); socket.off('petLevelUp'); socket.off('petSpit'); socket.off('petDash');
+        // Silandi: yuraklar, ovoz; it dumini silkitadi, Pushistik ko'zini yumib quvonadi
+        socket.on('animalPetted', (d) => {
+            if (!d) return;
+            sfxAt(d.kind === 'dog' ? 'bark' : 'chirp', d.x, 0.8);
+            for (let i = 0; i < 6; i++) {
+                const h = this.add.text(d.x + (Math.random() - 0.5) * 30, d.y, '\u2665', { fontFamily: 'Arial', fontSize: (12 + Math.random() * 8) + 'px', color: i % 2 ? '#ff4081' : '#ff80ab', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(4.45);
+                this.tweens.add({ targets: h, y: d.y - 40 - Math.random() * 30, alpha: 0, duration: 900 + Math.random() * 400, delay: i * 60, onComplete: () => h.destroy() });
+            }
+            if (d.kind === 'pet' && crObj && crObj.pets[d.by]) crObj.pets[d.by].happyUntil = this.time.now + 1500;
+        });
+        socket.on('petDown', (d) => {
+            if (!d) return;
+            sfxAt('flutter', d.x, 1);
+            for (let i = 0; i < 10; i++) { const f = this.add.rectangle(d.x + (Math.random() - 0.5) * 24, d.y, 4, 3, i % 2 ? 0xfff8ee : 0xb39ddb).setDepth(4.3); this.tweens.add({ targets: f, y: f.y + 30 + Math.random() * 30, x: f.x + (Math.random() - 0.5) * 60, alpha: 0, duration: 900, onComplete: () => f.destroy() }); }
+            if (d.id === socket.id && typeof showTopToast === 'function') showTopToast(t('pet_down'));
+        });
+        socket.on('petLevelUp', (d) => { if (!d) return; sfx('xp'); if (typeof showTopToast === 'function') showTopToast(t('pet_level_up').replace('{l}', d.lvl)); });
+        socket.on('petSpit', (d) => { if (d) sfxAt('spit', d.x, d.id === socket.id ? 0.55 : 0.35); });
+        socket.on('petDash', (d) => {
+            if (!d) return;
+            sfxAt('whoosh', d.x, 0.7);
+            for (let i = 0; i < 6; i++) { const r = this.add.rectangle(d.x + (Math.random() - 0.5) * 20, d.y + (Math.random() - 0.5) * 20, 4, 4, i % 2 ? 0x76ff03 : 0xffffff).setDepth(4.3); this.tweens.add({ targets: r, x: r.x + (Math.random() - 0.5) * 50, y: r.y + (Math.random() - 0.5) * 50, alpha: 0, duration: 300, onComplete: () => r.destroy() }); }
+        });
+        socket.on('critterLand', (d) => { if (d) sfxAt('chirp', d.x, 0.9); });
+        socket.on('critterPick', (d) => {
+            if (!d) return;
+            sfxAt('pop', d.x, 0.8);
+            if (d.id === socket.id && typeof showTopToast === 'function') showTopToast(t('critter_got_food'));
+        });
+        socket.on('critterScared', (d) => {
+            if (!d) return;
+            sfxAt('flutter', d.x, 1);
+            for (let i = 0; i < 10; i++) { const f = this.add.rectangle(d.x + (Math.random() - 0.5) * 30, d.y - 20, 4, 3, i % 2 ? 0xfff8ee : 0xb39ddb).setDepth(4.3); this.tweens.add({ targets: f, x: f.x + (Math.random() - 0.5) * 90, y: f.y + 20 + Math.random() * 40, angle: 180, alpha: 0, duration: 900 + Math.random() * 500, onComplete: () => f.destroy() }); }
+            const me = currentCharacter;
+            if (me && Math.abs(me.x - d.x) < 700 && typeof showTopToast === 'function') showTopToast(t('critter_scared'));
+        });
+        socket.on('critterFed', (d) => {
+            if (!d) return;
+            const cx = crObj && crObj.x !== null ? crObj.x : (currentCharacter ? currentCharacter.x : 400), cy = crObj && crObj.y !== null ? crObj.y - 30 : 400;
+            sfxAt('chirp', cx, 1); this.time.delayedCall(220, () => sfx(d.tamed ? 'win' : 'xp'));
+            for (let i = 0; i < (d.tamed ? 18 : 8); i++) {
+                const h = this.add.text(cx + (Math.random() - 0.5) * 40, cy, '\u2665', { fontFamily: 'Arial', fontSize: (14 + Math.random() * 10) + 'px', color: i % 3 ? '#ff4081' : '#ff80ab', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(4.4);
+                this.tweens.add({ targets: h, y: cy - 60 - Math.random() * 60, x: h.x + (Math.random() - 0.5) * 60, alpha: 0, duration: 1100 + Math.random() * 600, delay: i * 40, onComplete: () => h.destroy() });
+            }
+            if (typeof showTopToast === 'function') {
+                if (d.id === socket.id) showTopToast(d.tamed ? t('critter_tamed') : t('critter_fed_me').replace('{t}', d.trust).replace('{c}', d.coins));
+                else showTopToast(t('critter_fed_other').replace('{n}', d.nick || '?'));
+            }
+        });
         socket.off('climbQuake');
         socket.on('climbQuake', (d) => {
             if (drObj && d && d.rocks) drObj.localWave = { rocks: d.rocks, start: this.time.now, ms: d.ms, sent: {} };
@@ -9918,6 +10156,12 @@ function launchGame(socket, roomId, mapData, continued) {
             if (typeof showTopToast === 'function') showTopToast(t('mf_raid_' + d.kind));
         });
         socket.on('mfSlimeLand', (d) => { if (!d) return; sfxAt('thud', d.x, 0.8); puff(d.x, 568, 0x66bb6a, 8); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) this.cameras.main.shake(120, 0.004); });
+        socket.off('mfDogBite');
+        socket.on('mfDogBite', (d) => {
+            if (!d) return;
+            sfxAt(Math.random() < 0.35 ? 'bark' : 'chomp', d.x, 0.8);
+            for (let i = 0; i < 5; i++) { const r = this.add.rectangle(d.x + (Math.random() - 0.5) * 16, d.y + (Math.random() - 0.5) * 12, 4, 4, i % 2 ? 0x00e5ff : 0xffffff).setDepth(3.6); this.tweens.add({ targets: r, x: r.x + (Math.random() - 0.5) * 40, y: r.y - 10 - Math.random() * 20, alpha: 0, duration: 300, onComplete: () => r.destroy() }); }
+        });
         socket.on('mfMobDown', (d) => {
             if (!d) return;
             sfxAt('squish', d.x, 1);
@@ -10205,6 +10449,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 return;
             }
             const serverPlayers = data.players;
+            critterState = data.critter || null;
+            petsState = data.pets || [];
+            lastPlayersState = serverPlayers || {};
             const serverBots = data.bots || [];
             serverBotsLast = serverBots;
             const serverBullets = data.bullets || [];
@@ -11041,6 +11288,16 @@ function launchGame(socket, roomId, mapData, continued) {
                 const posX = (isMeleeType && ownerSprite) ? ownerSprite.x + dir * 26 : bData.x;
                 const posY = (isMeleeType && ownerSprite) ? ownerSprite.y - 2 : bData.y;
 
+                if (!bulletSprites[bData.id] && bData.bulletType === 'petbite') { bulletSprites[bData.id] = this.add.rectangle(bData.x, bData.y, 1, 1, 0, 0).setVisible(false); return; }
+                if (bulletSprites[bData.id] && bData.bulletType === 'petbite') return;
+                if (!bulletSprites[bData.id] && bData.bulletType === 'acid') {
+                    ensureCritterTextures(this);
+                    const s = this.add.image(bData.x, bData.y, 'px_pet_acid').setDepth(4.05);
+                    s.ex = { x: bData.x, y: bData.y, vx: bData.vx || 0, vy: bData.vy || 0, t: performance.now() };
+                    s.spin = 12;
+                    bulletSprites[bData.id] = s;
+                    return;
+                }
                 if (!bulletSprites[bData.id] && bData.bulletType === 'tornado') {
                     bulletSprites[bData.id] = this.add.rectangle(bData.x, bData.y, 1, 1, 0, 0).setVisible(false);
                     return;
@@ -11366,6 +11623,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isBoss && bossState) drawBossBar(this, bossState.hp, bossState.maxHp);
         if (isLift) updateLift(this);
         if (isDoors) updateDoors(this);
+        updateCritter(this);
         if (isBack) updateBack(this);
         if (isTnt) updateTnt(this);
         if (isRobot) updateRobot(this);

@@ -161,6 +161,8 @@
         stab:      (t, v, o) => { sweep(1800, 600, t, 0.08, 'sawtooth', 0.08 * v, o); noise(t, 0.06, 0.25 * v, 'highpass', 5000, 3000, o); },
         rumble:    (t, v, o) => { noise(t, 1.4, 0.55 * v, 'lowpass', 220, 60, o); sweep(55, 40, t, 1.3, 'sine', 0.25 * v, o); },
         pop:       (t, v, o) => { sweep(300, 900, t, 0.08, 'sine', 0.25 * v, o); noise(t, 0.12, 0.3 * v, 'lowpass', 1500, 300, o); },
+        chirp:     (t, v, o) => { sweep(1900, 2800, t, 0.07, 'sine', 0.06 * v, o); sweep(2200, 3200, t + 0.11, 0.06, 'sine', 0.05 * v, o); sweep(2600, 2100, t + 0.2, 0.08, 'sine', 0.04 * v, o); },
+        flutter:   (t, v, o) => { [0, 0.07, 0.14, 0.21, 0.28].forEach(d => noise(t + d, 0.05, 0.3 * v, 'bandpass', 900, 400, o)); sweep(2400, 3400, t, 0.12, 'sine', 0.04 * v, o); },
         bark:      (t, v, o) => { [0, 0.22].forEach(d => { sweep(520, 260, t + d, 0.12, 'square', 0.08 * v, o); noise(t + d, 0.1, 0.25 * v, 'bandpass', 1400, 700, o); }); },
         spit:      (t, v, o) => { noise(t, 0.25, 0.45 * v, 'bandpass', 900, 2500, o); sweep(200, 500, t, 0.15, 'sine', 0.08 * v, o); },
         fire:      (t, v, o) => { noise(t, 1.4, 0.5 * v, 'lowpass', 1500, 400, o); },

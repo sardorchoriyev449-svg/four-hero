@@ -1,4 +1,7 @@
 export interface PlayerState {
+    petTrust?: number;             // Pushistik bilan do'stlik (0..10, akkauntda saqlanadi); 10 - doimiy hamroh
+    pet?: import('./db').PetData;  // hamroh Pushistik (daraja, jon, kuchaytirishlar); petDirtyAt - bazaga yozish navbati
+    petDirtyAt?: number;
     weaponFx?: string;             // qurol skini effekti (fire, ice, spark, shadow, star)
     skinFx?: string;               // afsonaviy skin effekti (aura, sparkle, flame, rainbow, ghost, crown)
     jetpack?: boolean;             // Season 2 map-9: ranets (faqat shu xaritada, sotib olingan yoki avtomatdan tushgan)
@@ -198,7 +201,8 @@ export interface BulletState {
     vy: number;
     color: number;
     lifetime: number;
-    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'lightning' | 'shield' | 'shuriken' | 'tornado';
+    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'lightning' | 'shield' | 'shuriken' | 'tornado' | 'acid' | 'petbite';
+    dmg?: number;         // qat'iy zarar (hamroh Pushistikning kislotasi / zarbasi) - egasining kuchaytirishlari qo'shilmaydi
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
     sy?: number;
@@ -279,6 +283,13 @@ export interface SnakeState {
 }
 
 export interface RoomState {
+    // Yoqimtoy maxluqcha (barcha xaritalarda): fly - uchib o'tish, in - qo'nish, sit - o'tiradi, eat - yeydi, out - uchib ketadi
+    critter?: { phase: 'fly' | 'in' | 'sit' | 'eat' | 'out', x: number, y: number, face: number, t: number, dur: number,
+        x0: number, y0: number, x1: number, y1: number, alarm: number, wish: string, scared: boolean,
+        foods: { id: number, x: number, y: number }[], carry: { [pid: string]: { x: number, y: number } }, fed: string[], hold: { [pid: string]: number }, seq: number } | null;
+    critterNextAt?: number;
+    // Jangdagi hamrohlar (egasi id si bo'yicha): follow - egasi yonida, dash - raqibga uchib boradi, back - qaytadi
+    pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number } };
     tornadoes?: { id: string, owner: string, x: number, y: number, dir: number, t: number, pulse: number }[];   // sehrgar tornadolari
     id: string;
     name: string;
@@ -332,6 +343,8 @@ export interface RoomState {
             plot?: number, phase?: 'in' | 'eat' | 'out', eatAt?: number,
             air?: boolean, vx?: number, vy?: number, jumpCd?: number, hopFromY?: number, hopToY?: number, hopH?: number }[],
         nextCrowAt?: number,
+        // Robot it (bezak sotib olingan bo'lsa): fermani himoya qiladi
+        dog?: { x: number, y: number, face: number, vx: number, vy: number, air: boolean, biteAt: number, bite: number, jumpCd: number } | null,   // biteAt - keyingi tishlashgacha tiklar
         nextRaidAt: number, raidKind: string | null, safeUntil: { [pid: string]: number },
         // Baxaybat daraxt BOSS jangi
         boss: { hp: number, maxHp: number, hitFlash: number, nextAt: number, last: string,

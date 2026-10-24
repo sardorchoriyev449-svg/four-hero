@@ -4,7 +4,7 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP, CRITTER, PET } from '../maps';
 import { GameEngine } from './game.engine';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
@@ -120,6 +120,8 @@ export class RoomManager {
         let charXp: { [c: string]: number } = {};
         let acidCurse = false, boltCurse = false, mutedUntil = 0;
         let xpBoost: { [c: string]: number } = {};
+        let petTrust = 0;
+        let pet: db.PetData | undefined;
         if (userId !== null) {
             const user = await db.getUserById(userId);
             // Admin bloklagan hisob - xonaga kira olmaydi
@@ -144,6 +146,8 @@ export class RoomManager {
                 boltCurse = !!user.cursedBolt;
                 mutedUntil = user.mutedUntil || 0;
                 xpBoost = user.xpBoost || {};
+                petTrust = user.petTrust || 0;
+                pet = user.pet;
             }
         }
         this.pendingJoins.delete(socket.id);
@@ -175,7 +179,7 @@ export class RoomManager {
             userId: userId,
             clientId: typeof clientId === 'string' ? clientId.slice(0, 64) : null,
             isAdmin: !!(socket.data && (socket.data as any).isAdmin),
-            acidCurse, boltCurse, mutedUntil, xpBoost,
+            acidCurse, boltCurse, mutedUntil, xpBoost, petTrust, pet,
             nickname: nickname,
             kills: 0,
             skinId: equippedSkins[characterType] || 'default',
@@ -1125,6 +1129,23 @@ export class RoomManager {
 
     // QUTI SINDIRILDI: sindirgan o'yinchiga tanga (hisobi bo'lsa bazaga yoziladi,
     // mehmonga - faqat ekranda ko'rsatiladi, saqlanmaydi)
+    // PUSHISTIK boqildi: do'stlik +1 (hisobli - bazaga), tanga; 10 ga yetsa - doimiy hamroh va katta mukofot
+    public async critterFed(roomId: string, playerId: string): Promise<void> {
+        const room = this.activeRooms[roomId], p = room?.players[playerId];
+        if (!room || !p) return;
+        const before = p.petTrust || 0;
+        let trust = before + 1;
+        if (p.userId !== null) { const t = await db.addPetTrust(p.userId); if (t !== null) trust = t; }
+        const cur = this.activeRooms[roomId]?.players[playerId];
+        if (!cur) return;
+        cur.petTrust = trust;
+        const tamed = before < CRITTER.trustMax && trust >= CRITTER.trustMax;
+        if (trust >= CRITTER.trustMax && !cur.pet) cur.pet = { lvl: 1, xp: 0, hp: PET.baseHp, up: { dmg: 0, hp: 0, spd: 0 }, resting: false, restAt: 0 };
+        const coins = tamed ? CRITTER.tamedCoins : CRITTER.coins;
+        this.io.to(roomId).emit('critterFed', { id: playerId, nick: cur.nickname, trust: Math.min(trust, CRITTER.trustMax), coins, tamed });
+        await this.awardCrateCoins(roomId, playerId, coins);
+    }
+
     public async awardCrateCoins(roomId: string, playerId: string, amount: number): Promise<void> {
         const player = this.activeRooms[roomId]?.players[playerId];
         if (!player) return;

@@ -504,6 +504,45 @@ app.get('/api/leaderboard/:userId', async (req, res) => {
 });
 
 // KUNLIK: kirish mukofoti (7 kunlik zanjir, 7-kuni eksklyuziv skin) va 3 ta kunlik vazifa
+// HAMROH PUSHISTIK: ma'lumot, kuchaytirish, ekin/meva bilan davolash. Natija o'yinchi xonada bo'lsa - u yerga ham
+function petToRooms(userId: string, pet: db.PetData): void {
+    Object.values(activeRooms).forEach(room => {
+        const p = Object.values(room.players).find(pl => pl.userId === userId);
+        if (p) { p.pet = pet; p.petDirtyAt = 0; }
+    });
+}
+function petFromRooms(userId: string): db.PetData | null {
+    for (const room of Object.values(activeRooms)) { const p = Object.values(room.players).find(pl => pl.userId === userId); if (p && p.pet) return p.pet; }
+    return null;
+}
+app.get('/api/pet/:userId', async (req, res) => {
+    try {
+        // Jangda bo'lsa - xonadagi eng yangi holat (bazaga hali yozilmagan bo'lishi mumkin) avval saqlanadi
+        const live = petFromRooms(req.params.userId);
+        if (live) await db.petSave(req.params.userId, live);
+        const d = await db.getPetInfo(req.params.userId);
+        res.json(d ? { success: true, ...d } : { success: false, message: 'err_user_not_found' });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/pet/:userId/upgrade', async (req, res) => {
+    try {
+        const live = petFromRooms(req.params.userId);
+        if (live) await db.petSave(req.params.userId, live);
+        const r = await db.petUpgrade(req.params.userId, String(req.body && req.body.kind));
+        if (r.success && r.pet) petToRooms(req.params.userId, r.pet);
+        res.json(r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/pet/:userId/feed', async (req, res) => {
+    try {
+        const live = petFromRooms(req.params.userId);
+        if (live) await db.petSave(req.params.userId, live);
+        const r = await db.petFeed(req.params.userId, String(req.body && req.body.item));
+        if (r.success && r.pet) petToRooms(req.params.userId, r.pet);
+        res.json(r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
 app.get('/api/daily/:userId', async (req, res) => {
     try { const d = await db.getDaily(req.params.userId); res.json(d ? { success: true, ...d } : { success: false, message: 'err_user_not_found' }); }
     catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
@@ -1038,6 +1077,11 @@ io.on('connection', (socket) => {
     socket.on('doorChoice', (data: { roomId: string, choice: string }) => {
         const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
         if (room && room.isStarted && (data.choice === 'enter' || data.choice === 'no')) gameEngine.doorChoice(room, socket.id, data.choice);
+    });
+    // SILASH: robot it (fermada), yoqimtoy Pushistik (o'tirganda) yoki o'z hamrohi - yaqinida bo'lsa, hammaga ko'rinadi
+    socket.on('petAnimal', (data: { roomId: string, kind: string }) => {
+        const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
+        if (room && room.isStarted && typeof data.kind === 'string') gameEngine.petAnimal(room, socket.id, data.kind);
     });
     socket.on('rockTouch', (data: { roomId: string, k: number }) => {
         const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;

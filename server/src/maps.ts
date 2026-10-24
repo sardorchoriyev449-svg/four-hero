@@ -204,7 +204,7 @@ export interface RaidDef {
 }
 // BEZAKLAR (do'kondan, bir marta): fermada hammaga ko'rinadi
 export const FARM_DECOR: { id: string, price: number }[] = [
-    { id: 'flowers', price: 80 }, { id: 'lantern', price: 120 }, { id: 'paint', price: 150 }, { id: 'dog', price: 250 }
+    { id: 'flowers', price: 80 }, { id: 'lantern', price: 120 }, { id: 'paint', price: 150 }, { id: 'dog', price: 250 }, { id: 'pethouse', price: 1500 }
 ];
 export const FARM_PLOTS = 6;       // bitta maydondagi grядkalar
 export const FARM_ZONES = 6;       // 1-maydon ochiq, qolganlari - "Free plot" (sotib olinadi; oxirgi 2 tasi ferma darajasi bilan)
@@ -244,6 +244,10 @@ export function currentFarmSeason(now: number = Date.now()): FarmSeason {
     const m = new Date(now).getUTCMonth();
     return m >= 2 && m <= 4 ? 'spring' : m >= 5 && m <= 7 ? 'summer' : m >= 8 && m <= 10 ? 'autumn' : 'winter';
 }
+// ROBOT IT (ferma bezagi "Robot it" sotib olingan va yashikda bo'lmasa): maxluq chiqsa - eng yaqiniga yugurib boradi,
+// shoxlarga sakrab chiqadi va tishlaydi (o'zi zarar olmaydi). Maxluq qolmasa - uyiga (it uychasi yoniga) qaytadi
+export const FARM_DOG = { homeX: 470, speed: 290, damage: 16, biteMs: 520, reach: 24, jumpUp: 150 };
+
 export interface MyFarmDef {
     zoneX0: number; zoneW: number;  // maydonlar: chap cheti va kengligi
     plotX0: number; plotW: number; plotGap: number;
@@ -319,6 +323,52 @@ export interface ApplesDef {
     // KATTA DEVOR va undagi KATTA ESHIK: 12 ta olma tutgan qahramonga elf kalit
     // beradi, kalit bilan eshik ochiladi, hamma eshikdan kirsa - xarita o'tildi
     bigWall: PlatformDef;
+}
+
+// YOQIMTOY MAXLUQCHA "PUSHISTIK" (barcha xaritalarda): zarar bermaydi va xalaqit qilmaydi (to'qnashmaydi).
+// Vaqti-vaqti bilan osmondan uchib o'tadi yoki qahramon turgan sirtga qo'nib o'tiradi. O'tirganda tepasida yemoqchi
+// bo'lgan narsasi chiqadi va xuddi shu ovqat xaritada paydo bo'ladi (har tirik o'yinchiga bittadan). Yaqinida yugurish,
+// sakrash, otish - uni qo'rqitadi (qo'rquv to'lsa - uchib ketadi): asta-sekin, to'xtab-to'xtab yaqinlashish kerak.
+// Ovqatni olib, yonida jim tursa - yeydi: do'stlik +1 (akkauntga saqlanadi) va tanga. 10 ta do'stlik - doimiy hamroh
+export const CRITTER = {
+    // CRITTER_TEST (faqat sinov uchun) - darhol chiqadi va doim qo'nadi
+    firstMs: process.env.CRITTER_TEST ? [1500, 2500] : [25000, 50000], everyMs: process.env.CRITTER_TEST ? [4000, 5000] : [55000, 110000],   // birinchi chiqishi va keyingilari orasidagi vaqt (tasodifiy oraliq)
+    landChance: process.env.CRITTER_TEST ? 1 : 0.65,   // qo'nadimi (aks holda - shunchaki uchib o'tadi)
+    flyMs: 7000, inMs: 2600, outMs: 1700, sitMs: 45000, eatMs: 2200,
+    alertR: 330,               // shu masofada qahramon harakati uni xavotirga soladi
+    feedR: 72,                 // ovqatni shu masofadan beradi
+    feedHoldMs: 700,           // yonida shuncha jim tursa - yeydi
+    moveSpeed: 30,             // shundan tez qimirlagan qahramon "harakatda"
+    alarmNear: 0.085, alarmFar: 0.025,   // tikiga qo'rquv: yaqinda / uzoqda harakatlansa
+    alarmJump: 2, alarmAttack: 0.05, alarmCalm: 0.018, scareShotR: 170,
+    trustMax: 10, trustCalm: 0.06,       // har do'stlik qo'rquvni 6% kamaytiradi (10 da - 40%)
+    coins: 30, tamedCoins: 300,
+    foods: ['berry', 'apple', 'cookie', 'fish', 'carrot']
+};
+
+// PUSHISTIK - HAMROH (do'stlik 10 bo'lgach): har xaritada egasi bilan uchadi va raqiblarga yordam beradi -
+// og'zidan dumaloq KISLOTA tupuradi va tez UCHIB BORIB uradi (urganda o'zi ham biroz zarar oladi). Joni tugasa - jangdan
+// yo'qoladi va egasining fermasida DAM OLADI; ekin/meva berib jonini tiklash mumkin (40% dan keyin yana jangga qaytadi).
+// Darajasi: hujumlar va ovqatdan tajriba oladi (1..10). Kuchaytirishlar (zarar, jon, tezlik) - tanga bilan, daraja ochadi.
+// Fermadagi PUSHISTIK UYCHASI: dam olayotganda jonini o'zi asta tiklaydi
+export const PET = {
+    baseHp: 80, hpPerUp: 25, baseDmg: 10, dmgPerLvl: 2, dmgPerUp: 5, dashK: 2.2,
+    spitMs: 1500, spitPerUp: 140, dashMs: 4600, dashPerUp: 380,
+    range: 470, dashRange: 340, spitSpeed: 560, dashSpeed: 950, followSpeed: 420, dashHurt: 5,
+    returnPct: 0.4, maxLevel: 10, upMax: 5, upPrices: [300, 600, 1000, 1500, 2200],
+    houseRegenMs: 20000, feedXp: 4, spitXp: 1, dashXp: 2
+};
+export const petXpNeed = (lvl: number) => 40 * lvl;
+export const petUpCap = (lvl: number) => Math.min(PET.upMax, Math.floor(lvl / 2));
+export const petMaxHp = (up: { hp?: number }) => PET.baseHp + PET.hpPerUp * (up.hp || 0);
+export const petDamage = (lvl: number, up: { dmg?: number }) => PET.baseDmg + PET.dmgPerLvl * (lvl - 1) + PET.dmgPerUp * (up.dmg || 0);
+export const petSpitMs = (up: { spd?: number }) => PET.spitMs - PET.spitPerUp * (up.spd || 0);
+export const petDashMs = (up: { spd?: number }) => PET.dashMs - PET.dashPerUp * (up.spd || 0);
+// Ovqat (ferma omboridan): ekin va mevalar - bozordagi narxiga yarasha jon tiklaydi
+export function petHealOf(item: string): number {
+    if (item === 'blueapple') return 30;
+    const c = CROPS.find(x => x.id === item) || FRUIT_TREES.find(x => x.id === item);
+    return c ? Math.max(6, Math.min(45, Math.round(c.sell * 0.5))) : 0;
 }
 
 export interface PitDef {
@@ -1684,7 +1734,7 @@ MAPS.push({
     mapWidth: 800,
     platforms: [],
     shop: { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, rod: 100, net: 300, fert: 25, water: 150,
-        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250,
+        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250, decor_pethouse: 1500,
         ...Object.fromEntries(HOME_ITEMS.map(h => ['home_' + h.id, h.price])), hive: FARM_HIVE.price },
         farmUp: { hive: FARM_HIVE, mill: FARM_MILL, sprinkler: FARM_SPRINKLER, scarecrow: FARM_SCARECROW, greenhouse: FARM_GREENHOUSE } },
     playerSpawns: [
