@@ -333,7 +333,7 @@ export class GameEngine {
                     x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
-                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting } : null, nickname: p.nickname, apples: p.apples,
+                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
@@ -2496,7 +2496,7 @@ export class GameEngine {
         let targets: { x: number, y: number }[] | null = null;
         Object.values(room.players).forEach((p) => {
             const P = p.pet;
-            const ok = !!P && (p.petTrust || 0) >= 10 && !P.resting && P.hp > 0 && !p.isDead;
+            const ok = !!P && (p.petTrust || 0) >= 10 && !P.resting && !P.home && P.hp > 0 && !p.isDead;
             if (!ok) { delete room.pets![p.id]; return; }
             let pt = room.pets![p.id];
             if (!pt) pt = room.pets![p.id] = { x: p.x - 40, y: p.y - 50, face: 1, st: 'follow', tx: 0, ty: 0, spitAt: 40, dashAt: 100, hitFlash: 0 };
@@ -2534,6 +2534,18 @@ export class GameEngine {
                     pt.st = 'back';
                 } else { pt.x += dx / d * step; pt.y += dy / d * step; }
             } else {
+                // DAM OLISH: egasi ~2 s qimirlamay tursa va raqib bo'lmasa - boshiga yoki yoniga (yerga) qo'nadi; qimirlasa - yana uchadi
+                const still = !mo || Math.hypot(mo.vx, mo.vy) < 15;
+                pt.idle = still && !near ? (pt.idle || 0) + 1 : 0;
+                if (pt.st === 'perch' && (!still || near)) pt.st = 'follow';
+                if (pt.st === 'follow' && (pt.idle || 0) > 70) { pt.st = 'perch'; pt.spot = Math.random() < 0.5 ? 'head' : 'ground'; pt.tx = ownerFace; }   // tx - qo'nish paytidagi egasining yo'nalishi (joy shu bo'yicha o'zgarmaydi)
+                if (pt.st === 'perch') {
+                    const side = pt.tx >= 0 ? 1 : -1, tx = pt.spot === 'head' ? p.x : p.x - side * 46, ty = pt.spot === 'head' ? p.y - this.PLAYER_HALF_H - 17 : p.y + this.PLAYER_HALF_H - 18;
+                    const dx = tx - pt.x, dy = ty - pt.y, d = Math.hypot(dx, dy), sp = PET.followSpeed * 0.8 * dt;
+                    if (d > 1) { pt.x += dx / d * Math.min(d, sp); pt.y += dy / d * Math.min(d, sp); }
+                    pt.face = d > 4 ? (dx >= 0 ? 1 : -1) : side;   // qo'ngach - egasi qaragan tomonga qaraydi
+                    return;
+                }
                 // Egasi orqasida, boshi balandida uchib yuradi (orqaga qaytganda - tezroq)
                 const fx = p.x - ownerFace * 42, fy = p.y - 46 + Math.sin(now / 260) * 5;
                 const dx = fx - pt.x, dy = fy - pt.y, d = Math.hypot(dx, dy);
@@ -2600,8 +2612,10 @@ export class GameEngine {
         if (!room.critterNextAt) room.critterNextAt = now + rnd(C.firstMs);
         let cr = room.critter;
         if (!cr) {
-            if (now < room.critterNextAt || !alive.length) return;
-            const p = alive[Math.floor(Math.random() * alive.length)];
+            // Ajdarchasi bor (o'rgatgan) o'yinchilarga yovvoyisi kelmaydi - faqat hali o'rgatmaganlar uchun chiqadi
+            const wild = alive.filter(pl => (pl.petTrust || 0) < C.trustMax);
+            if (now < room.critterNextAt || !wild.length) return;
+            const p = wild[Math.floor(Math.random() * wild.length)];
             // JANG PAYTIDA CHIQMAYDI: boss jangi bo'lsa yoki qahramon yonida (1200 px) raqib bo'lsa - keyinroq yana urinadi
             const cb = this.critterCombat(room, map);
             if (cb.boss || cb.pts.some(e => Math.abs(e.x - p.x) < C.calmR)) { room.critterNextAt = now + C.retryMs; return; }
@@ -2621,7 +2635,7 @@ export class GameEngine {
                 // SO'RAGAN NARSASI - faqat fermadan: har o'yinchining ombori tekshiriladi (bor-yo'qligi ekranda ko'rinadi)
                 const crNow = cr, wish = cr.wish;
                 alive.forEach((pl) => {
-                    if (pl.userId === null) { crNow.have[pl.id] = 0; return; }
+                    if (pl.userId === null || (pl.petTrust || 0) >= C.trustMax) { crNow.have[pl.id] = 0; return; }
                     db.farmItemCount(pl.userId, wish).then((n) => { if (room.critter === crNow) crNow.have[pl.id] = n; }).catch(() => {});
                 });
                 this.io.to(roomId).emit('critterLand', { x: Math.round(x) });
@@ -2688,7 +2702,7 @@ export class GameEngine {
             if (p.isHoldingAttack) a += C.alarmAttack;
             inc += a * calmK;
             // BOQISH: fermasida so'ragan narsasi bor qahramon yonida jim turdi - ombordan bittasi ketadi
-            if (cr!.phase === 'sit' && !cr!.fed.includes(p.id) && (cr!.have[p.id] || 0) > 0 && d <= C.feedR && sp <= C.moveSpeed && cr!.alarm < 0.75) {
+            if (cr!.phase === 'sit' && (p.petTrust || 0) < C.trustMax && !cr!.fed.includes(p.id) && (cr!.have[p.id] || 0) > 0 && d <= C.feedR && sp <= C.moveSpeed && cr!.alarm < 0.75) {
                 cr!.hold[p.id] = (cr!.hold[p.id] || 0) + 1;
                 if (cr!.hold[p.id] >= Math.round(C.feedHoldMs / 30)) {
                     delete cr!.hold[p.id];

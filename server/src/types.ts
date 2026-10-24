@@ -289,7 +289,7 @@ export interface RoomState {
         have: { [pid: string]: number }, fed: string[], hold: { [pid: string]: number }, seq: number } | null;   // have - so'ragan narsasi fermasida nechta
     critterNextAt?: number;
     // Jangdagi hamrohlar (egasi id si bo'yicha): follow - egasi yonida, dash - raqibga uchib boradi, back - qaytadi
-    pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number } };
+    pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back' | 'perch', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number, idle?: number, spot?: 'head' | 'ground' } };
     tornadoes?: { id: string, owner: string, x: number, y: number, dir: number, t: number, pulse: number }[];   // sehrgar tornadolari
     id: string;
     name: string;

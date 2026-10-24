@@ -361,6 +361,15 @@ export const PET = {
     returnPct: 0.4, maxLevel: 10, upMax: 5, upPrices: [300, 600, 1000, 1500, 2200],
     houseRegenMs: 20000, feedXp: 4, spitXp: 1, dashXp: 2
 };
+// AJDARCHA SKINLARI (o'rgatilgandan keyin): rang, bosh kiyimi, tana buyumi - arzonidan qimmatiga. Rasmlari - client/farmart.js
+export const PET_SKINS: { [slot: string]: { id: string, price: number }[] } = {
+    c: [{ id: 'default', price: 0 }, { id: 'mint', price: 500 }, { id: 'rose', price: 800 }, { id: 'sunny', price: 1200 }, { id: 'lava', price: 1800 },
+        { id: 'frost', price: 2500 }, { id: 'shadow', price: 3200 }, { id: 'galaxy', price: 4500 }],
+    h: [{ id: 'bow', price: 300 }, { id: 'flower', price: 500 }, { id: 'cap', price: 700 }, { id: 'headphones', price: 1000 }, { id: 'horns', price: 1400 },
+        { id: 'wizard', price: 1900 }, { id: 'crown', price: 2600 }, { id: 'helmet', price: 3400 }],
+    b: [{ id: 'bell', price: 300 }, { id: 'scarf', price: 500 }, { id: 'bandana', price: 700 }, { id: 'saddle', price: 1000 }, { id: 'cape', price: 1400 },
+        { id: 'armor', price: 2000 }, { id: 'chain', price: 2600 }, { id: 'jet', price: 3500 }]
+};
 export const petXpNeed = (lvl: number) => 40 * lvl;
 export const petUpCap = (lvl: number) => Math.min(PET.upMax, Math.floor(lvl / 2));
 export const petMaxHp = (up: { hp?: number }) => PET.baseHp + PET.hpPerUp * (up.hp || 0);

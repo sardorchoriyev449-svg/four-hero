@@ -533,6 +533,32 @@ app.post('/api/pet/:userId/upgrade', async (req, res) => {
         res.json(r);
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
+app.post('/api/pet/:userId/skin', async (req, res) => {
+    try {
+        const b = req.body || {};
+        const live = petFromRooms(req.params.userId);
+        if (live) await db.petSave(req.params.userId, live);
+        const r = await db.petSkin(req.params.userId, String(b.action), String(b.slot), String(b.id));
+        if (r.success && r.pet) petToRooms(req.params.userId, r.pet);
+        res.json(r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/pet/:userId/home', async (req, res) => {
+    try {
+        const live = petFromRooms(req.params.userId);
+        if (live) await db.petSave(req.params.userId, live);
+        const r = await db.petHome(req.params.userId, !!(req.body && req.body.home));
+        if (r.success && r.pet) petToRooms(req.params.userId, r.pet);
+        res.json(r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+app.post('/api/pet/:userId/name', async (req, res) => {
+    try {
+        const r = await db.petRename(req.params.userId, req.body && req.body.name);
+        if (r.success && r.pet) Object.values(activeRooms).forEach(room => { const p = Object.values(room.players).find(pl => pl.userId === req.params.userId); if (p && p.pet) p.pet.name = r.pet!.name; });
+        res.json(r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
 app.post('/api/pet/:userId/feed', async (req, res) => {
     try {
         const live = petFromRooms(req.params.userId);
@@ -540,6 +566,17 @@ app.post('/api/pet/:userId/feed', async (req, res) => {
         const r = await db.petFeed(req.params.userId, String(req.body && req.body.item));
         if (r.success && r.pet) petToRooms(req.params.userId, r.pet);
         res.json(r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
+// O'YINNI NOLDAN BOSHLASH (sozlamalar): o'yinda/xonada bo'lmaganda; tasdiq so'zi bilan
+app.post('/api/account/:userId/reset', async (req, res) => {
+    try {
+        if (!req.body || req.body.confirm !== 'RESET') { res.json({ success: false, message: 'err_server' }); return; }
+        const inRoom = Object.values(activeRooms).some(room => Object.values(room.players).some(p => p.userId === req.params.userId));
+        if (inRoom) { res.json({ success: false, message: 'err_reset_in_room' }); return; }
+        const user = await db.resetProgress(req.params.userId);
+        res.json(user ? { success: true, user } : { success: false, message: 'err_user_not_found' });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 

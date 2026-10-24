@@ -331,11 +331,25 @@
     // tikanchalar, uchida nayza), orqada yotgan uch qavat uzun och ko'k qanot, ikki qora oyoq. Rasm chapga qaragan holda
     // chiziladi va oxirida ko'zgudek aylantiriladi (o'yinda hamma narsa o'ngga qaragan). Pastki qator - oyoq tagi (yerga tegadi)
     // frame: sit/blink - qo'ngan; fly0/fly1 - qanot tepada/pastda (oyoqlar yig'ilgan); eat - og'zi ochiq; scared - ko'zi katta
-    function critterGrid(frame) {
+    // AJDARCHA SKINLARI: rang (bosh/qanot - och, tana/dum - to'q), bosh kiyimi va tana buyumi. id lar server/src/maps.ts (PET_SKINS) bilan bir xil
+    const PET_PAL = {
+        default: { L: [0x6fc3dc, 0x9ad8e8, 0xc4ecf5], D: [0x2a32a0, 0x3d47c9, 0x5a64e0] },
+        mint: { L: [0x7fd6a8, 0xa8e8c4, 0xd4f7e3], D: [0x1e7a55, 0x2e9e6e, 0x48c08a] },
+        rose: { L: [0xf2a7c3, 0xf8c8da, 0xfde6ef], D: [0xb0306a, 0xd24a86, 0xe874a4] },
+        sunny: { L: [0xf7d774, 0xfbe7a1, 0xfff6d6], D: [0xc77d0a, 0xe89a1c, 0xf5b942] },
+        lava: { L: [0xff8a50, 0xffb07a, 0xffd6b8], D: [0x7a1405, 0xa8230c, 0xd4381a], glow: 0xffd54f },
+        frost: { L: [0xd6f3ff, 0xeefaff, 0xffffff], D: [0x3b7fb8, 0x5aa0d8, 0x86c3ef], glow: 0xffffff },
+        shadow: { L: [0x5d5a70, 0x7a778f, 0x9d9ab2], D: [0x121018, 0x1f1b29, 0x302a40], eye: 0xff1744 },
+        galaxy: { L: [0x8e7cc3, 0xb5a7e0, 0xdcd3f5], D: [0x1b1240, 0x2c1d63, 0x46308f], glow: 0xfff59d }
+    };
+    // look: "rang|bosh|tana" (masalan "rose|bow|scarf"); bo'sh - standart
+    function critterGrid(frame, look) {
+        const [lc, lh, lb] = String(look || '').split('|');
+        const PAL = PET_PAL[lc] || PET_PAL.default;
         const W = 49, H = 23, OY = 7, g = gridNew(W, H);
         const put = (x, y, c) => { y += OY; if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
         const rect = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(x, y, typeof c === 'function' ? c(x, y) : c); };
-        const LB = [0x6fc3dc, 0x9ad8e8, 0xc4ecf5], DB = [0x2a32a0, 0x3d47c9, 0x5a64e0], INK = 0x000000, LEG = 0x14163a;
+        const LB = PAL.L, DB = PAL.D, INK = 0x000000, LEG = 0x14163a;
         const fly = frame === 'fly0' || frame === 'fly1' || frame === 'scared';
         // DUM va TANA (to'q ko'k): pastki uzun chiziq boshdan dum uchigacha, ustida yelka, orqada pog'onali dum
         rect(8, 12, 46, 12, (x) => x % 6 === 0 ? DB[0] : DB[1]);
@@ -345,6 +359,10 @@
         // tikanchalar (orqa va dum ustida) va dum uchidagi nayza
         [31, 34, 37, 40].forEach(x => { put(x, 9, DB[0]); put(x + 1, 9, DB[0]); put(x, 8, DB[0]); });
         rect(47, 10, 48, 13, DB[0]); put(48, 9, DB[2]); put(48, 14, DB[2]); put(47, 11, LB[1]);
+        // Rangga xos detal: lava - yorug' yoriqlar, muz - yaltirash, galaktika - yulduzchalar
+        if (PAL.glow) [[18, 11], [23, 10], [27, 11], [33, 11], [38, 10], [44, 12]].forEach(([x, y], i) => { if (lc !== 'frost' || i % 2 === 0) put(x, y, PAL.glow); });
+        // PLASH (tana buyumi) - qanotlar ostida, yelkadan dumga osilib turadi
+        if (lb === 'cape') { for (let x = 16; x <= 32; x++) { const y0 = 8 + Math.floor((x - 16) / 5); for (let y = y0; y <= y0 + 2; y++) put(x, y, y === y0 ? 0xc62828 : (x + y) % 4 === 0 ? 0x7f0000 : 0x9a1010); } put(16, 8, 0xffca28); }
         // OYOQLAR: qo'nganda - tik turadi (pastki qator - yer); uchganda - orqaga yig'ilgan
         if (!fly) {
             rect(14, 10, 16, 15, LEG); rect(13, 14, 17, 15, LEG); put(13, 15, 0xcfd8dc); put(12, 15, 0xcfd8dc);
@@ -383,6 +401,32 @@
         // SHOX: boshdan orqaga-pastga ketgan to'q ko'k qiya to'sin (qora hoshiya bilan)
         for (let k = 0; k <= 6; k++) { const x = 9 + k, y = 4 + Math.round(k * 0.55); put(x, y - 1, INK); put(x, y, DB[2]); put(x, y + 1, DB[1]); put(x, y + 2, INK); }
         put(16, 7, INK); put(16, 8, INK);
+        // Ko'z rangi (soya rangida - qizil)
+        if (PAL.eye && frame !== 'blink') { put(6, 6, PAL.eye); put(7, 7, PAL.eye); }
+        // ===== BOSH KIYIMLARI (bosh: x 3..13, tepasi - 5-qator) =====
+        const H2 = {
+            bow: () => { [[5, 3], [5, 4], [6, 3], [6, 4], [8, 3], [8, 4], [9, 3], [9, 4]].forEach(([x, y]) => put(x, y, 0xff6f9e)); put(7, 4, 0xd81b60); put(7, 3, 0xd81b60); put(5, 3, 0xffb3cc); put(9, 3, 0xffb3cc); },
+            flower: () => { put(6, 4, 0x43a047); [[5, 2], [7, 2], [6, 1], [6, 3]].forEach(([x, y]) => put(x, y, 0xffffff)); put(6, 2, 0xffb300); put(8, 3, 0xff80ab); put(9, 2, 0xff80ab); put(8, 4, 0x43a047); },
+            cap: () => { rect(4, 3, 11, 4, (x, y) => y === 3 ? 0xef5350 : 0xc62828); rect(1, 4, 3, 4, 0x8e0000); put(8, 2, 0xffffff); put(7, 2, 0xc62828); put(9, 2, 0xc62828); },
+            headphones: () => { rect(4, 2, 11, 2, 0x37474f); put(3, 3, 0x37474f); put(12, 3, 0x37474f); rect(2, 5, 3, 8, (x, y) => y === 5 || y === 8 ? 0x263238 : 0x00e5ff); rect(12, 5, 13, 8, (x, y) => y === 5 || y === 8 ? 0x263238 : 0x00e5ff); },
+            horns: () => { [[5, 4], [5, 3], [6, 2], [6, 1], [7, 0]].forEach(([x, y]) => put(x, y, 0xfdf6e3)); [[9, 4], [10, 3], [10, 2], [11, 1], [12, 0]].forEach(([x, y]) => put(x, y, 0xd5c4a1)); put(5, 4, 0xa1887f); put(9, 4, 0xa1887f); },
+            wizard: () => { for (let y = 4; y >= -3; y--) { const hw = Math.max(0, Math.round((y + 3) * 0.7)); for (let x = 8 - hw; x <= 8 + hw; x++) put(x + Math.round((4 - y) * 0.4), y, y === 4 ? 0x7e57c2 : 0x4527a0); } rect(3, 4, 13, 4, 0x5e35b1); put(9, 1, 0xffeb3b); put(7, 3, 0xfff59d); put(11, -2, 0xffeb3b); },
+            crown: () => { rect(4, 3, 11, 4, (x, y) => y === 4 ? 0xc79100 : 0xffca28); [4, 7, 10].forEach(x => { put(x, 2, 0xffca28); put(x + 1, 2, 0xffca28); put(x, 1, 0xffe082); }); put(7, 3, 0xe53935); put(10, 4, 0x1e88e5); put(5, 4, 0x1e88e5); },
+            helmet: () => { rect(3, 3, 13, 5, (x, y) => y === 3 ? 0xcfd8dc : y === 5 ? 0x546e7a : 0x90a4ae); rect(3, 6, 4, 8, 0x78909c); rect(8, 0, 9, 2, 0xe53935); put(10, 1, 0xff8a80); [5, 8, 11].forEach(x => put(x, 4, 0xeceff1)); }
+        };
+        // ===== TANA BUYUMLARI (tana: x 14..30, bo'yin - x 13..16) =====
+        const B2 = {
+            bell: () => { rect(15, 8, 16, 12, 0xd32f2f); rect(16, 13, 18, 14, 0xffca28); put(17, 15, 0xc79100); put(16, 13, 0xfff59d); },
+            scarf: () => { rect(14, 8, 16, 12, (x, y) => (y % 2) ? 0xe53935 : 0xfafafa); rect(17, 8, 21, 8, (x) => x % 2 ? 0xe53935 : 0xfafafa); put(22, 9, 0xe53935); },
+            bandana: () => { for (let y = 10; y <= 13; y++) for (let x = 14; x <= 17 - (y - 10); x++) put(x, y, (x + y) % 3 === 0 ? 0xffffff : 0x1e88e5); put(14, 9, 0x1565c0); put(16, 9, 0x1565c0); },
+            saddle: () => { rect(19, 8, 25, 9, (x, y) => y === 8 ? 0xa1673e : 0x6d4c41); rect(21, 10, 22, 12, 0x4e342e); put(19, 7, 0x8d5a3a); put(25, 7, 0x8d5a3a); put(22, 9, 0xffca28); },
+            cape: () => {},
+            armor: () => { for (let x = 17; x <= 29; x++) for (let y = 9; y <= 12; y++) put(x, y, ((x - 17) % 4 === 0) ? 0x546e7a : y === 9 ? 0xcfd8dc : 0x90a4ae); [18, 22, 26].forEach(x => put(x, 11, 0xeceff1)); rect(14, 9, 16, 12, 0x78909c); },
+            chain: () => { [[14, 10], [15, 11], [16, 12], [17, 12], [18, 11], [19, 10]].forEach(([x, y], i) => put(x, y, i % 2 ? 0xffe082 : 0xffb300)); rect(16, 13, 17, 14, 0xffca28); put(16, 13, 0xffffff); },
+            jet: () => { rect(20, 5, 24, 8, (x, y) => x === 20 || y === 5 ? 0xb0bec5 : 0x607d8b); rect(21, 4, 22, 4, 0xe53935); const fl = frame === 'fly1' ? 2 : 1; rect(25, 6, 25 + fl, 7, 0xff9100); put(26 + fl, 6, 0xffea00); put(23, 6, 0x00e5ff); }
+        };
+        if (lb && B2[lb]) B2[lb]();
+        if (lh && H2[lh]) H2[lh]();
         // chizilgani chapga qaragan - ko'zgudek aylantiramiz (o'ngga qaraydi)
         g.forEach(row => row.reverse());
         return gridOutline(g, 0x000000);
@@ -418,7 +462,7 @@
         fertGrid, waterGrid,
         fertIcon: () => iconURL('fert', fertGrid(), 3),
         elixirGrid, chipGrid, coinGrid, flowersGrid, lanternGrid, dogGrid, paintGrid, pethouseGrid, critterGrid,
-        critterIcon: (f) => iconURL('crit_' + f, critterGrid(f), 4),
+        critterIcon: (f, look) => iconURL('crit_' + f + '_' + (look || ''), critterGrid(f, look), 4),
         icon: (key) => iconURL('ic_' + key, { elixir: elixirGrid, chip: chipGrid, coin: coinGrid, flowers: flowersGrid, lantern: lanternGrid, dog: () => dogGrid(0), paint: paintGrid, pethouse: pethouseGrid,
             rod: rodGrid, net: mfNetGrid, fert: fertGrid, water: waterGrid }[key](), key === 'coin' ? 2 : 3),
         waterIcon: () => iconURL('water', waterGrid(), 3)

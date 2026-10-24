@@ -4050,7 +4050,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // Yomg'ir: ekran ustida ikki qatlam tomchi va biroz qoraygan osmon
         const rain1 = scene.add.tileSprite(0, 0, 800, 600, 'px_rain').setOrigin(0, 0).setScrollFactor(0).setDepth(4.4).setAlpha(0);
         const rain2 = scene.add.tileSprite(0, 0, 800, 600, 'px_rain').setOrigin(0, 0).setScrollFactor(0).setDepth(-3.0).setAlpha(0);
-        const gloom = scene.add.rectangle(0, 0, 800, 600, 0x37474f, 0).setOrigin(0, 0).setScrollFactor(0).setDepth(-3.1);
+        const gloom = scene.add.rectangle(0, 0, 800, 600, 0x37474f, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(-3.1).setAlpha(0);   // fillAlpha 1 - shaffofligi setAlpha bilan
         // 5-darajadan: platformada panjara va chiroqlar
         const rail = scene.add.graphics();
         for (let x = F.riverX0 + 10; x < F.dockX1 - 4; x += 36) { rail.fillStyle(0x0a0a0a, 1); rail.fillRect(x - 1, 528, 8, 34); rail.fillStyle(0x8d6e63, 1); rail.fillRect(x, 530, 6, 32); }
@@ -4114,6 +4114,51 @@ function launchGame(socket, roomId, mapData, continued) {
         O.season = season;
     }
     function mfNow() { return Date.now() + mfOffset; }
+    // Tun kuchi 0..1: kun [0, 0.5), shom [0.5, 0.58), tun [0.58, 0.92), tong [0.92, 1) - 12 daqiqalik aylanish ichida
+    const MF_DAY_MS = 12 * 60000;
+    function mfNightK(now) {
+        const q = (((now % MF_DAY_MS) + MF_DAY_MS) % MF_DAY_MS) / MF_DAY_MS;
+        if (q < 0.5) return 0;
+        if (q < 0.58) return (q - 0.5) / 0.08;
+        if (q < 0.92) return 1;
+        return 1 - (q - 0.92) / 0.08;
+    }
+    function mfDrawNight(scene, O, k, tNow) {
+        if (!O.night) {
+            O.night = scene.add.rectangle(0, 0, 800, 600, 0x0b1033, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(4.9).setAlpha(0);   // fillAlpha 1 - shaffofligi setAlpha bilan
+            // yulduzlar va oy (osmonda, tepaliklar ortida)
+            O.stars = scene.add.graphics().setScrollFactor(0).setDepth(4.91);   // qorong'i ustida - yorqin (faqat osmonda, tepaliklardan yuqorida)
+            for (let i = 0; i < 70; i++) { const x = (i * 137) % 800, y = 12 + ((i * 89) % 230), s = i % 7 === 0 ? 3 : 2; O.stars.fillStyle(i % 5 === 0 ? 0xfff59d : 0xffffff, 1); O.stars.fillRect(x, y, s, s); }
+            O.moon = scene.add.graphics().setScrollFactor(0).setDepth(4.91);
+            O.moon.fillStyle(0xfff8e1, 1); O.moon.fillCircle(640, 92, 30); O.moon.fillStyle(0xe8dfc0, 1); O.moon.fillCircle(630, 84, 6); O.moon.fillCircle(652, 102, 4); O.moon.fillCircle(646, 78, 3);
+            O.moonGlow = scene.add.circle(640, 92, 64, 0xfff8e1, 1).setScrollFactor(0).setDepth(4.92).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+            // chiroqlar (qorong'i ustida - yorug')
+            O.nightLights = scene.add.graphics().setDepth(4.93).setBlendMode(Phaser.BlendModes.ADD);
+            O.flies = Array.from({ length: 14 }, (_, i) => ({ x: 240 + i * 260 + (i % 3) * 40, y: 470 + (i % 4) * 22, ph: i * 1.7,
+                dot: scene.add.rectangle(0, 0, 3, 3, 0xd4ff5e, 1).setDepth(4.94).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0) }));
+        }
+        O.night.setAlpha(0.66 * k);
+        O.stars.setAlpha(k * (1 - O.rainA) * (0.75 + 0.25 * Math.sin(tNow / 700))); O.moon.setAlpha(k * (1 - O.rainA * 0.7)); O.moonGlow.setAlpha(0.12 * k * (1 - O.rainA));
+        O.nightLights.clear();
+        if (k > 0.02) {
+            const glow = (x, y, r, c, a) => { O.nightLights.fillStyle(c, a * k * 0.5); O.nightLights.fillCircle(x, y, r); O.nightLights.fillStyle(c, a * k); O.nightLights.fillCircle(x, y, r * 0.45); };
+            const f = mfState && mfState.farm, D = (f && f.decor) || {}, Off = (f && f.decorOff) || {};
+            const flick = 0.85 + 0.15 * Math.sin(tNow / 140);
+            glow(150 - 30, 500, 44, 0xffb74d, 0.35 * flick);    // uy derazasi
+            glow(150 + 30, 500, 44, 0xffb74d, 0.35 * flick);
+            if (D.lantern && !Off.lantern) glow(310, 470, 70, 0xffe082, 0.45 * flick);
+            if (D.pethouse && !Off.pethouse) glow(392, 545, 30, 0xff80ab, 0.4);
+            if (D.dog && !Off.dog) { const ds = mfWorldState && mfWorldState.dog; glow(ds ? ds.x + 10 : 480, (ds ? ds.y : 570) - 34, 12, 0x00e5ff, 0.7); }
+        }
+        O.flies.forEach((fl) => {
+            fl.dot.setAlpha(k > 0.3 ? (0.4 + 0.6 * Math.abs(Math.sin(tNow / 400 + fl.ph))) * k : 0);
+            fl.dot.setPosition(fl.x + Math.sin(tNow / 1300 + fl.ph) * 40, fl.y + Math.sin(tNow / 900 + fl.ph * 2) * 18);
+        });
+        // Tun boshlandi / tong otdi - xabar
+        const isNight = k > 0.5;
+        if (O.wasNight !== undefined && O.wasNight !== isNight && typeof showTopToast === 'function') showTopToast(t(isNight ? 'mf_night_start' : 'mf_night_end'));
+        O.wasNight = isNight;
+    }
     // Yomg'ir jadvali (serverdagi bilan bir xil formula): yomg'irli vaqt ikki marta hisoblanadi
     const mfRainSlot = (n, every) => ((Math.imul(n ^ 0x5bd1e995, 0x27d4eb2d) >>> 7) % every) === 0;
     function mfRaining(now) {
@@ -4252,7 +4297,11 @@ function launchGame(socket, roomId, mapData, continued) {
             O.fall1.tilePositionY = -tNow / (se === 'winter' ? 26 : 34) * sp; O.fall1.tilePositionX = Math.sin(tNow / 1400) * 30 + tNow / 90;
             O.fall2.tilePositionY = -tNow / 44 * sp; O.fall2.tilePositionX = -Math.sin(tNow / 1700) * 24 + tNow / 140;
         }
-        O.sun.forEach(pt => pt.setAlpha(1 - O.rainA));
+        // KECHA-KUNDUZ (hammada bir xil - ferma soati bo'yicha): 12 daqiqalik aylanish - 6 daqiqa kun, 1 shom, 4 tun, 1 tong.
+        // Tunda: osmon qorayadi, oy va yulduzlar, fonar / uy / uycha chiroqlari yonadi, o't o'chirgich qo'ng'izlar uchadi
+        const night = mfNightK(mfNow());
+        O.sun.forEach(pt => pt.setAlpha((1 - O.rainA) * (1 - night)));
+        mfDrawNight(scene, O, night, tNow);
         if (O.rainA > 0.01) { O.rain1.tilePositionY = -tNow / 2.2; O.rain1.tilePositionX = tNow / 9; O.rain2.tilePositionY = -tNow / 3.4; O.rain2.tilePositionX = tNow / 14; }
         if (mfLastRain !== null && raining !== mfLastRain && typeof showTopToast === 'function') showTopToast(t(raining ? 'mf_rain_start' : 'mf_rain_end'));
         mfLastRain = raining;
@@ -4345,7 +4394,7 @@ function launchGame(socket, roomId, mapData, continued) {
             const Off = f.decorOff || {}, D = {}, lv = mfState.level || 0;
             Object.keys(f.decor || {}).forEach(k => { if (f.decor[k] && !Off[k]) D[k] = true; });   // yashikdagilari - tashqarida yo'q
             Object.keys(O.decorObj).forEach(k => O.decorObj[k].forEach(o => o.setVisible(!!D[k])));
-            O.lanternGlow.setVisible(!!D.lantern).setAlpha(0.15 + 0.12 * Math.sin(tNow / 300) + O.rainA * 0.2);
+            O.lanternGlow.setVisible(!!D.lantern).setAlpha(0.15 + 0.12 * Math.sin(tNow / 300) + O.rainA * 0.2 + mfNightK(mfNow()) * 0.3);
             if (D.dog) {
                 const dimg = O.decorObj.dog[1], ds = mfWorldState && mfWorldState.dog;
                 const tx = ds ? ds.x : 470, ty = ds ? ds.y + 4 : 574;
@@ -5214,7 +5263,7 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         const rain1 = scene.add.tileSprite(0, 0, 800, 600, 'px_rain').setOrigin(0, 0).setScrollFactor(0).setDepth(4.4).setAlpha(0.55);
         const rain2 = scene.add.tileSprite(0, 0, 800, 600, 'px_rain').setOrigin(0, 0).setScrollFactor(0).setDepth(-3.0).setAlpha(0.35).setScale(1);
-        const flash = scene.add.rectangle(0, 0, 800, 600, 0xdfe8ff, 0).setOrigin(0, 0).setScrollFactor(0).setDepth(4.6);
+        const flash = scene.add.rectangle(0, 0, 800, 600, 0xdfe8ff, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(4.6).setAlpha(0);   // fillAlpha 1 - chaqnash setAlpha bilan
         const fx = scene.add.graphics().setDepth(2.9);          // o'qlar, chaqmoqlar, sopto olovlari
         const bars = scene.add.graphics().setDepth(3.5);        // botlar jon chiziqlari
         skyObj = { fx, bars, cars: {}, boss: null, bossFall: false, bolts: [], nextFlame: 0, lastAim: 0, keyEnter: scene.input.keyboard.addKey('ENTER'),
@@ -6584,6 +6633,13 @@ function launchGame(socket, roomId, mapData, continued) {
         else { for (let y = 2; y < 9; y++) { const hw = Math.max(0, Math.round((8 - y) / 3)); for (let x = 4 - hw; x <= 4 + hw; x++) put(x, y, (y % 2) ? 0xfb8c00 : 0xff9800); } put(3, 0, 0x43a047); put(4, 1, 0x66bb6a); put(5, 0, 0x43a047); put(4, 0, 0x2e7d32); }
         return gridOutline(g, 0x2a1a10);
     }
+    // Ajdarcha rasmi berilgan ko'rinishda ("rang|bosh|tana"; bo'sh - standart)
+    function petTex(scene, f, k) {
+        if (!k || k === '||') return 'px_crit_' + f;
+        const key = 'px_crit_' + f + '_' + k;
+        if (!scene.textures.exists(key) && window.FarmArt) gridToTexture(scene, key, FarmArt.critterGrid(f, k), 3);
+        return key;
+    }
     function ensureCritterTextures(scene) {
         if (scene.textures.exists('px_crit_sit')) return;
         ['fly0', 'fly1', 'sit', 'blink', 'eat', 'scared'].forEach(f => gridToTexture(scene, 'px_crit_' + f, critterGrid(f), 3));
@@ -6607,8 +6663,9 @@ function launchGame(socket, roomId, mapData, continued) {
         const feet = me.y + 24, near = (x, y, r) => Math.abs(me.x - x) <= r && Math.abs(feet - y) <= 90;
         const S = critterState;
         if (S && (S.ph === 'sit' || S.ph === 'eat') && near(S.x, S.y, 80)) return { kind: 'critter', x: S.x, y: S.y - 20 };
-        const mine = crObj && crObj.pets[socket.id];
-        if (mine && Math.abs(mine.x - me.x) <= 70 && Math.abs(mine.y - me.y) <= 80) return { kind: 'pet', x: mine.x, y: mine.y - 24 };   // 'Lv' yozuvi ustida
+        // o'z hamrohi - faqat qo'nib turganda (uchib yurganda E bilan bilmasdan silanmasin)
+        const mine = crObj && crObj.pets[socket.id], mineSt = (petsState || []).find(q => q.id === socket.id);
+        if (mine && mineSt && mineSt.st === 'perch' && Math.abs(mine.x - me.x) <= 70 && Math.abs(mine.y - me.y) <= 80) return { kind: 'pet', x: mine.x, y: mine.y - 24 };   // 'Lv' yozuvi ustida
         if (isMyFarm && mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.dog && !(mfState.farm.decorOff || {}).dog) {
             const ds = mfWorldState && mfWorldState.dog, dx = ds ? ds.x : 470, dy = ds ? ds.y : 570;
             if (near(dx, dy, 80)) return { kind: 'dog', x: dx, y: dy - 30 };
@@ -6702,7 +6759,9 @@ function launchGame(socket, roomId, mapData, continued) {
             const k = q.st === 'dash' ? 0.6 : 0.25;
             o.x = Math.abs(o.x - q.x) > 300 ? q.x : Phaser.Math.Linear(o.x, q.x, k);
             o.y = Math.abs(o.y - q.y) > 300 ? q.y : Phaser.Math.Linear(o.y, q.y, k);
-            o.setTexture(q.st === 'dash' ? 'px_crit_scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'px_crit_fly0' : 'px_crit_fly1')).setFlipX(q.f < 0)
+            const pk = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet ? lastPlayersState[q.id].pet.k : '';
+            const perch = q.st === 'perch' && Math.hypot(o.x - q.x, o.y - q.y) < 6;
+            o.setTexture(petTex(scene, perch ? (t0 % 3600 < 180 ? 'blink' : 'sit') : q.st === 'dash' ? 'scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'fly0' : 'fly1'), pk)).setFlipX(q.f < 0)
                 .setAngle(q.st === 'dash' ? q.f * 10 : 0).setScale(q.st === 'dash' ? 0.6 : 0.55);
             if (q.fl) o.setTintFill(0xff5252); else if (o.happyUntil && t0 < o.happyUntil) o.setTint(0xffd1e8); else o.clearTint();
             if (q.st === 'dash' && Math.random() < 0.6) { const tr = scene.add.rectangle(o.x, o.y, 5, 5, 0xd1c4e9, 0.8).setDepth(4.17); scene.tweens.add({ targets: tr, alpha: 0, scale: 0.2, duration: 220, onComplete: () => tr.destroy() }); }
@@ -6711,7 +6770,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (pd) {
                 o.bar.fillStyle(0x000000, 0.7); o.bar.fillRect(o.x - 15, o.y - 32, 30, 5);
                 o.bar.fillStyle(pd.hp / pd.mx > 0.4 ? 0x76ff03 : 0xff5252, 1); o.bar.fillRect(o.x - 14, o.y - 31, Math.max(1, Math.round(28 * pd.hp / pd.mx)), 3);
-                o.lv.setText('Lv' + pd.l).setPosition(o.x, o.y - 34).setVisible(true);
+                o.lv.setText((pd.n ? pd.n + ' ' : '') + 'Lv' + pd.l).setPosition(o.x, o.y - 34).setVisible(true);
             } else o.lv.setVisible(false);
         });
         Object.keys(O.pets).forEach((pid) => { if (!petIds.has(pid)) { O.pets[pid].bar.destroy(); O.pets[pid].lv.destroy(); O.pets[pid].destroy(); delete O.pets[pid]; } });
@@ -6724,7 +6783,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 O.restBar = scene.add.graphics().setDepth(-0.39);
                 O.restZ = scene.add.text(restX, 520, 'z', { fontFamily: '"Press Start 2P", monospace', fontSize: '10px', color: '#e1bee7', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.39);
             }
-            O.rest.setVisible(true).setX(restX).setScale(0.6, 0.6 + Math.sin(t0 / 600) * 0.02);
+            O.rest.setVisible(true).setTexture(petTex(scene, 'blink', hostPet.k)).setX(restX).setScale(0.6, 0.6 + Math.sin(t0 / 600) * 0.02);
             O.restZ.setVisible(true).setText(Math.floor(t0 / 600) % 3 === 0 ? 'z' : Math.floor(t0 / 600) % 3 === 1 ? 'zZ' : 'zZz').setPosition(restX + 18, 520 - (t0 % 1800) / 90);
             O.restBar.clear(); O.restBar.fillStyle(0x000000, 0.7); O.restBar.fillRect(restX - 20, 576, 40, 6);
             O.restBar.fillStyle(0x76ff03, 1); O.restBar.fillRect(restX - 19, 577, Math.max(1, Math.round(38 * hostPet.hp / hostPet.mx)), 4);
@@ -9353,7 +9412,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (dialog) { if (dry) return true; advanceDialog(); return; }
             // SILASH (E): jonzot yonida - silanadi; fermada dam olayotgan o'z hamrohi - ovqat berish oynasi
             const pk = petTarget();
-            if (pk) {
+            if (pk && pk.kind !== 'pet') {
                 if (dry) return true;
                 if (pk.kind === 'petrest' && mfIsHost() && window.PetPanel) PetPanel.open();
                 socket.emit('petAnimal', { roomId, kind: pk.kind });
@@ -9458,7 +9517,9 @@ function launchGame(socket, roomId, mapData, continued) {
             // 4) Yaqindagi tanga
             const coin = findNearestCoin();
             if (coin && dry) return true;
-            if (coin) socket.emit('pickupCoin', { roomId: roomId, coinId: coin.coinId });
+            if (coin) { socket.emit('pickupCoin', { roomId: roomId, coinId: coin.coinId }); return; }
+            // 5) Boshqa hech narsa yo'q - qo'nib turgan o'z hamrohini silash
+            if (pk && pk.kind === 'pet') { if (dry) return true; socket.emit('petAnimal', { roomId, kind: 'pet' }); return; }
             return false;
         };
         this.input.keyboard.on('keydown-E', () => interact());

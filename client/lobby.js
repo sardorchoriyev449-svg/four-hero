@@ -593,6 +593,21 @@ navPlayBtn.onclick = () => {
 navCharacterBtn.onclick = () => {
     openCharacterScreen({ locked: false, returnPanel: mainMenuPanel });
 };
+// O'YINNI NOLDAN BOSHLASH (sozlamalar): ikki marta tasdiq - so'ng akkaunt progressi yangidek, sahifa qayta yuklanadi
+document.getElementById('reset-progress-btn').onclick = async () => {
+    if (!currentUser) return;
+    const ask = (txt) => new Promise(r => pxConfirm(txt, () => r(true), () => r(false)));
+    if (!(await ask(t('reset_confirm1'))) || !(await ask(t('reset_confirm2')))) return;
+    try {
+        const r = await fetch('/api/account/' + currentUser.id + '/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'RESET' }) }).then(x => x.json());
+        if (!r.success) { pxAlert(tMsg(r.message)); return; }
+        const token = currentUser.token;
+        currentUser = Object.assign({}, r.user, { token });
+        localStorage.setItem('gameUser', JSON.stringify(currentUser));
+        sessionStorage.removeItem('lastRoomId');
+        location.reload();
+    } catch (e) { pxAlert(t('server_unreachable')); }
+};
 // GARDEROB: bosh menyudan ham, "Mening personajim" ichidan ham ochiladi (alohida oyna - wardrobe.js)
 document.getElementById('nav-wardrobe-btn').onclick = () => Wardrobe.open({ fromMenu: true });
 document.getElementById('char-wardrobe-btn').onclick = () => Wardrobe.open();

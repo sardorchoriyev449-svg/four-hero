@@ -1136,13 +1136,14 @@ export class RoomManager {
         // So'ragan narsasi - faqat fermadan: ombordan bittasi olinadi (bu orada sotilgan/ishlatilgan bo'lsa - boqilmaydi)
         if (p.userId === null || !(await db.farmItemTake(p.userId, item))) { this.io.to(playerId).emit('critterNoItem', { item }); return; }
         const before = p.petTrust || 0;
+        if (before >= CRITTER.trustMax) return;   // ajdarcha bitta - o'rgatilgandan keyin boshqasi boqilmaydi
         let trust = before + 1;
         if (p.userId !== null) { const t = await db.addPetTrust(p.userId); if (t !== null) trust = t; }
         const cur = this.activeRooms[roomId]?.players[playerId];
         if (!cur) return;
         cur.petTrust = trust;
         const tamed = before < CRITTER.trustMax && trust >= CRITTER.trustMax;
-        if (trust >= CRITTER.trustMax && !cur.pet) cur.pet = { lvl: 1, xp: 0, hp: PET.baseHp, up: { dmg: 0, hp: 0, spd: 0 }, resting: false, restAt: 0 };
+        if (trust >= CRITTER.trustMax && !cur.pet) cur.pet = { lvl: 1, xp: 0, hp: PET.baseHp, up: { dmg: 0, hp: 0, spd: 0 }, resting: false, restAt: 0, own: [], c: 'default', h: '', b: '', name: '', home: false };
         const coins = tamed ? CRITTER.tamedCoins : CRITTER.coins;
         this.io.to(roomId).emit('critterFed', { id: playerId, nick: cur.nickname, trust: Math.min(trust, CRITTER.trustMax), coins, tamed });
         await this.awardCrateCoins(roomId, playerId, coins);

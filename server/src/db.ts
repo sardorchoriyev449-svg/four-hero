@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { config } from 'dotenv';
 import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL, UPGRADE_COSTS, BASE_UPGRADES } from './perks';
-import { PET, CRITTER, petXpNeed, petUpCap, petMaxHp, petDamage, petSpitMs, petDashMs, petHealOf } from './maps';
+import { PET, CRITTER, PET_SKINS, petXpNeed, petUpCap, petMaxHp, petDamage, petSpitMs, petDashMs, petHealOf } from './maps';
 config({quiet:true})
 // Agar MongoDB'ga ulanib bo'lmasa yoki vaqtincha uzilib qolsa, so'rovlar
 // abadiy "osilib qolmasligi" uchun (aks holda foydalanuvchi cheksiz kutib qolardi)
@@ -339,22 +339,25 @@ export async function addCoins(userId: string, amount: number): Promise<UserReco
 }
 
 // ===== HAMROH PUSHISTIK =====
-export interface PetData { lvl: number; xp: number; hp: number; up: { dmg: number; hp: number; spd: number }; resting: boolean; restAt: number; }
+export interface PetData { lvl: number; xp: number; hp: number; up: { dmg: number; hp: number; spd: number }; resting: boolean; restAt: number; own: string[]; c: string; h: string; b: string; name: string; home: boolean; }   // home - o'yinchi uni fermada dam olishga qoldirgan
 export function petOf(doc: any): PetData {
     const p = (doc && doc.pet) || {}, up = p.up || {};
     const u = { dmg: Math.max(0, Math.min(PET.upMax, up.dmg | 0)), hp: Math.max(0, Math.min(PET.upMax, up.hp | 0)), spd: Math.max(0, Math.min(PET.upMax, up.spd | 0)) };
     const mx = petMaxHp(u);
+    const own: string[] = Array.isArray(p.own) ? p.own.filter((k: any) => typeof k === 'string') : [];
+    const eq = (slot: string, v: any) => (typeof v === 'string' && own.includes(slot + ':' + v) && PET_SKINS[slot].some(s => s.id === v)) ? v : (slot === 'c' ? 'default' : '');
     return { lvl: Math.max(1, Math.min(PET.maxLevel, p.lvl | 0 || 1)), xp: Math.max(0, p.xp | 0), hp: typeof p.hp === 'number' ? Math.max(0, Math.min(mx, p.hp)) : mx,
-        up: u, resting: !!p.resting, restAt: Number(p.restAt) || 0 };
+        up: u, resting: !!p.resting, restAt: Number(p.restAt) || 0, own, c: eq('c', p.c), h: eq('h', p.h), b: eq('b', p.b), name: petName(p.name), home: !!p.home };
 }
 // Uychasi bo'lsa - dam olayotgan Pushistik o'zi asta tiklanadi (o'tgan vaqt bo'yicha hisoblanadi)
 function petWithHouse(doc: any, pet: PetData): PetData {
     const house = !!(doc.farmDecor && doc.farmDecor.pethouse && !(doc.farmDecorOff && doc.farmDecorOff.pethouse));
-    if (!house || !pet.resting || !pet.restAt) return pet;
+    // charchab dam olayotgan yoki o'yinchi fermada qoldirgan (home) - uychada asta tuzaladi
+    if (!house || !(pet.resting || pet.home) || !pet.restAt) return pet;
     const mx = petMaxHp(pet.up), now = Date.now(), gain = Math.floor((now - pet.restAt) / PET.houseRegenMs);
     if (gain <= 0 || pet.hp >= mx) return pet;
     const hp = Math.min(mx, pet.hp + gain);
-    return { ...pet, hp, restAt: pet.restAt + gain * PET.houseRegenMs, resting: hp < mx * PET.returnPct };
+    return { ...pet, hp, restAt: pet.restAt + gain * PET.houseRegenMs, resting: pet.resting && hp < mx * PET.returnPct };
 }
 export async function getPetInfo(userId: string): Promise<any | null> {
     const doc: any = await UserModel.findById(userId, { petTrust: 1, pet: 1, farmBag: 1, farmDecor: 1, farmDecorOff: 1, coins: 1 }).lean();
@@ -365,7 +368,7 @@ export async function getPetInfo(userId: string): Promise<any | null> {
     const bag = Object.entries(doc.farmBag || {}).filter(([k, n]) => (n as number) > 0 && petHealOf(k) > 0).map(([k, n]) => ({ id: k, n, heal: petHealOf(k) }));
     return { trust: Math.max(0, Number(doc.petTrust) || 0), pet, maxHp: petMaxHp(pet.up), dmg: petDamage(pet.lvl, pet.up), spitMs: petSpitMs(pet.up), dashMs: petDashMs(pet.up),
         need: petXpNeed(pet.lvl), cap: petUpCap(pet.lvl), prices: PET.upPrices, upMax: PET.upMax, maxLevel: PET.maxLevel, returnPct: PET.returnPct,
-        house: !!(doc.farmDecor && doc.farmDecor.pethouse), bag, coins: doc.coins || 0 };
+        house: !!(doc.farmDecor && doc.farmDecor.pethouse), bag, coins: doc.coins || 0, skins: PET_SKINS };
 }
 // Jangdan keyin jon/tajriba/daraja saqlanadi (faqat shu maydonlar - ovqat/kuchaytirish bilan to'qnashmasin)
 export async function petSave(userId: string, pet: PetData): Promise<void> {
@@ -386,6 +389,66 @@ export async function petUpgrade(userId: string, kind: string): Promise<{ succes
     if (kind === 'hp') set['pet.hp'] = pet.hp + PET.hpPerUp;   // yangi jon qo'shiladi
     const upd: any = await UserModel.findOneAndUpdate(filter, { $inc: { coins: -price }, $set: set }, { returnDocument: 'after' }).lean();
     if (!upd) return { success: false, message: (doc.coins || 0) < price ? 'err_not_enough_coins' : 'err_server' };
+    return { success: true, pet: petOf(upd), coins: upd.coins };
+}
+// O'YINNI NOLDAN BOSHLASH: akkaunt qoladi (ism, nickname, parol, blok/ovoz holati, kunlik zanjir, reklama limiti),
+// qolgan hamma narsa (tanga, darajalar, skinlar, ferma, ajdarcha, yutuqlar...) - yangi akkauntdagidek. Qiymatlar aniq
+// yoziladi (o'chirilmaydi) - eski saqlangan xonalardan progress "tiklanib" qolmasin
+export async function resetProgress(userId: string): Promise<UserRecord | null> {
+    const KEEP = new Set(['_id', '__v', 'fullName', 'nickname', 'passwordHash', 'createdAt', 'updatedAt', 'banned', 'banReason', 'mutedUntil', 'adLastAt', 'adDay', 'adCount', 'daily']);
+    const fresh: any = new UserModel({ fullName: 'x', nickname: 'x', passwordHash: 'x' }).toObject();
+    const set: any = {}, unset: any = {};
+    Object.keys((userSchema as any).obj).forEach((k) => {
+        if (KEEP.has(k)) return;
+        if (fresh[k] !== undefined) set[k] = fresh[k]; else unset[k] = 1;
+    });
+    const upd: any = { $set: set };
+    if (Object.keys(unset).length) upd.$unset = unset;
+    const r = await UserModel.updateOne({ _id: userId }, upd);
+    if (r.matchedCount !== 1) return null;
+    return getUserById(userId);
+}
+// FERMADA QOLDIRISH / O'ZI BILAN OLISH: fermada qolsa - jangga chiqmaydi, uychasida uxlaydi (uycha bo'lsa - tuzaladi)
+export async function petHome(userId: string, home: boolean): Promise<{ success: boolean, message?: string, pet?: PetData }> {
+    const doc: any = await UserModel.findById(userId, { petTrust: 1, pet: 1, farmDecor: 1, farmDecorOff: 1 }).lean();
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    if ((doc.petTrust || 0) < CRITTER.trustMax) return { success: false, message: 'err_pet_not_tamed' };
+    const pet = petWithHouse(doc, petOf(doc));   // shu paytgacha tuzalgani hisoblanadi
+    const upd: any = await UserModel.findOneAndUpdate({ _id: userId },
+        { $set: { 'pet.home': home, 'pet.hp': pet.hp, 'pet.resting': pet.resting, 'pet.restAt': home || pet.resting ? Date.now() : 0 } }, { returnDocument: 'after' }).lean();
+    return { success: true, pet: petOf(upd) };
+}
+// Ajdarcha ismi: 1..14 belgi, harf/raqam/bo'sh joy/-_ (boshqasi olib tashlanadi)
+export function petName(v: any): string {
+    return typeof v === 'string' ? v.replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 14) : '';
+}
+export async function petRename(userId: string, raw: unknown): Promise<{ success: boolean, message?: string, pet?: PetData }> {
+    const name = petName(raw);
+    if (!name) return { success: false, message: 'err_pet_name' };
+    const doc: any = await UserModel.findOneAndUpdate({ _id: userId, petTrust: { $gte: CRITTER.trustMax } }, { $set: { 'pet.name': name } }, { returnDocument: 'after' }).lean();
+    if (!doc) return { success: false, message: 'err_pet_not_tamed' };
+    return { success: true, pet: petOf(doc) };
+}
+// SKIN: sotib olish (darhol kiyiladi) yoki kiyish / yechish ('none' - bosh/tana buyumini yechish)
+export async function petSkin(userId: string, action: string, slot: string, id: string): Promise<{ success: boolean, message?: string, pet?: PetData, coins?: number }> {
+    const list = PET_SKINS[slot];
+    if (!list || !['buy', 'equip'].includes(action)) return { success: false, message: 'err_server' };
+    const doc: any = await UserModel.findById(userId, { petTrust: 1, pet: 1, coins: 1 }).lean();
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    if ((doc.petTrust || 0) < CRITTER.trustMax) return { success: false, message: 'err_pet_not_tamed' };
+    const pet = petOf(doc), key = slot + ':' + id;
+    if (action === 'equip') {
+        const free = (slot === 'c' && id === 'default') || (slot !== 'c' && id === 'none');
+        if (!free && !pet.own.includes(key)) return { success: false, message: 'err_skin_not_owned' };
+        const upd: any = await UserModel.findOneAndUpdate({ _id: userId }, { $set: { ['pet.' + slot]: free && slot !== 'c' ? '' : id } }, { returnDocument: 'after' }).lean();
+        return { success: true, pet: petOf(upd), coins: upd.coins };
+    }
+    const item = list.find(s => s.id === id);
+    if (!item || item.price <= 0) return { success: false, message: 'err_server' };
+    if (pet.own.includes(key)) return { success: false, message: 'shop_not_needed' };
+    const upd: any = await UserModel.findOneAndUpdate({ _id: userId, coins: { $gte: item.price }, 'pet.own': { $ne: key } },
+        { $inc: { coins: -item.price }, $addToSet: { 'pet.own': key }, $set: { ['pet.' + slot]: id } }, { returnDocument: 'after' }).lean();
+    if (!upd) return { success: false, message: (doc.coins || 0) < item.price ? 'err_not_enough_coins' : 'err_server' };
     return { success: true, pet: petOf(upd), coins: upd.coins };
 }
 // Ekin/meva berib jonini tiklash (ombordan bittasi ketadi)
