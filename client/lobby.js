@@ -626,7 +626,8 @@ navDonateBtn.onclick = () => {
     renderDonatePanel();
     showPanel(donatePanel);
 };
-// DONAT: Ovchi qahramoni ($5) va Supporter Pack ($5: tanga + belgi) - Paddle orqali
+// PREMIUM: Ovchi qahramoni ($5, bir martalik) - Paddle orqali. Tanga paketi (Supporter Pack) olib tashlandi:
+// Paddle virtual valyuta va donatlarni qabul qilmaydi (oldin sotib olganlarning yurak belgisi saqlanadi)
 async function renderDonatePanel() {
     const box = document.getElementById('donate-content');
     if (!box || !currentUser) return;
@@ -638,17 +639,11 @@ async function renderDonatePanel() {
             <div><b>${tCharName('hunter')}</b> — $5<p>${t('char_hunter_desc')}</p></div>
             <button class="donate-hero-btn" ${owned || !on ? 'disabled' : ''}>${owned ? '<i class="fa-solid fa-check"></i> ' + t('hero_owned') : '<i class="fa-solid fa-cart-shopping"></i> ' + t('hero_buy_btn').replace('{p}', '$5')}</button>
         </div>
-        <div class="donate-card">
-            <div class="donate-sup"><i class="fa-solid fa-heart"></i></div>
-            <div><b>${t('supporter_title')}</b> — $5<p>${t('supporter_desc').replace('{c}', coins)}</p></div>
-            <button class="donate-sup-btn" ${on ? '' : 'disabled'}><i class="fa-solid fa-cart-shopping"></i> ${t('hero_buy_btn').replace('{p}', '$5')}</button>
-        </div>
         <p class="settings-note">${on ? t('donate_secure') : t('err_pay_off')}</p>
         <p class="settings-note"><a href="/terms.html" target="_blank">${t('link_terms')}</a> &middot; <a href="/refund.html" target="_blank">${t('link_refund')}</a></p>`;
     try { drawHero(box.querySelector('.donate-hero').getContext('2d'), 'hunter', '#5d7a3a', null, 0, 0); } catch (e) { }
-    const hb = box.querySelector('.donate-hero-btn'), sb = box.querySelector('.donate-sup-btn');
+    const hb = box.querySelector('.donate-hero-btn');
     hb.onclick = () => startCheckout('hunter', hb);
-    sb.onclick = () => startCheckout('supporter', sb);
 }
 socket.on('supporterThanks', (d) => {
     if (!d || !currentUser) return;

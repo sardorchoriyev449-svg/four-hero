@@ -150,7 +150,7 @@ const TRANSLATIONS = {
         wd_none: "nothing",
         wd_wskin_note: "Weapon color tints your attacks; UNIQUE ones leave a trail of effects behind every shot and strike.",
         nav_settings: 'Settings',
-        nav_donate: 'Support the Author',
+        nav_donate: 'Premium',
         nav_watch_ad: 'Watch an ad',
         settings_controls: 'Phone controls',
         tc_customize: 'Arrange buttons',
@@ -338,7 +338,7 @@ const TRANSLATIONS = {
         settings_no_music_note: 'Shots, hits, bosses, coins and dialog sounds.',
 
         // Donate
-        donate_title: 'Support the Author',
+        donate_title: 'Premium hero',
         donate_placeholder: "Donation details coming soon. Thanks for wanting to support the game!",
 
         // Lobby
@@ -1657,7 +1657,7 @@ const TRANSLATIONS = {
         hud_shift_mine: "MINE",
         hud_r_trap: "TRAP",
         hero_premium: "Premium hero",
-        hero_buy_note: "Buy once and play with it forever. The payment supports the game author.",
+        hero_buy_note: "Buy once and play with it forever.",
         hero_buy_btn: "Buy for {p}",
         hero_owned: "Owned",
         hero_unlocked: "{h} unlocked! Choose it in My Character.",
@@ -1665,7 +1665,7 @@ const TRANSLATIONS = {
         donate_text: "Any amount helps keep the servers running and new maps coming. Thank you!",
         donate_secure: "Secure checkout by Paddle, our reseller (Merchant of Record).",
         pay_cancelled: "Payment cancelled.",
-        pay_thanks: "Thank you for supporting the game!",
+        pay_thanks: "Thank you for your purchase!",
         pay_thanks_hero: "Thank you! Unlocking the hero...",
         err_pay_off: "Payments are not available yet.",
         err_pay_failed: "Could not open the payment page. Try again later.",
@@ -1818,7 +1818,7 @@ const TRANSLATIONS = {
         wd_none: "ничего",
         wd_wskin_note: "Цвет оружия окрашивает атаки; УНИКАЛЬНЫЕ оставляют след эффектов за каждым выстрелом и ударом.",
         nav_settings: 'Настройки',
-        nav_donate: 'Поддержать автора',
+        nav_donate: 'Премиум',
         nav_watch_ad: 'Смотреть рекламу',
         settings_controls: 'Управление на телефоне',
         tc_customize: 'Расставить кнопки',
@@ -2002,7 +2002,7 @@ const TRANSLATIONS = {
         rotate_hint: 'Поверните телефон боком',
         settings_no_music_note: 'Выстрелы, удары, боссы, монеты и звуки диалогов.',
 
-        donate_title: 'Поддержать автора',
+        donate_title: 'Премиум-герой',
         donate_placeholder: 'Информация для доната скоро появится. Спасибо за поддержку игры!',
 
         lobby_room_prefix: 'Комната:',
@@ -3382,7 +3382,7 @@ const TRANSLATIONS = {
         hud_shift_mine: "МИНА",
         hud_r_trap: "КАПКАН",
         hero_premium: "Премиум-герой",
-        hero_buy_note: "Покупается один раз - навсегда. Оплата поддерживает автора игры.",
+        hero_buy_note: "Покупается один раз - навсегда.",
         hero_buy_btn: "Купить за {p}",
         hero_owned: "Куплено",
         hero_unlocked: "{h} открыт! Выбери его в «Мой персонаж».",
@@ -3390,7 +3390,7 @@ const TRANSLATIONS = {
         donate_text: "Любая сумма помогает держать серверы и делать новые карты. Спасибо!",
         donate_secure: "Безопасная оплата через Paddle - нашего реселлера (Merchant of Record).",
         pay_cancelled: "Оплата отменена.",
-        pay_thanks: "Спасибо за поддержку игры!",
+        pay_thanks: "Спасибо за покупку!",
         pay_thanks_hero: "Спасибо! Открываем героя...",
         err_pay_off: "Оплата пока недоступна.",
         err_pay_failed: "Не удалось открыть страницу оплаты. Попробуй позже.",
