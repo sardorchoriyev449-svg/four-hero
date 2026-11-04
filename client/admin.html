@@ -284,7 +284,7 @@
         <div class="act">
             <label><i class="fa-solid fa-star"></i> Qahramon darajasi (eng yuqori - <span id="m-maxlvl">15</span>: hamma imkoniyatlar ochiq)</label>
             <div class="row">
-                <select id="m-hero"><option value="all">Hammasi</option><option value="knight">Knight</option><option value="archer">Archer</option><option value="mage">Mage</option><option value="samurai">Samurai</option></select>
+                <select id="m-hero"><option value="all">Hammasi</option><option value="knight">Knight</option><option value="archer">Archer</option><option value="mage">Mage</option><option value="samurai">Samurai</option><option value="hunter">Hunter</option></select>
                 <input id="m-level" type="number" min="0" max="15" placeholder="10">
                 <button class="primary" id="m-level-btn">Saqlash</button>
             </div>
@@ -403,7 +403,7 @@
             tr.appendChild(el('td', '', u.fullName));
             tr.appendChild(el('td', '', String(u.coins)));
             tr.appendChild(el('td', '', u.maps + (stats ? ' / ' + stats.maps : '')));
-            tr.appendChild(el('td', 'levels', [u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai].join(' / ')));
+            tr.appendChild(el('td', 'levels', [u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join(' / ')));
             tr.appendChild(el('td', '', u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '-'));
             const act = el('td'); const b = el('button', 'primary', 'Boshqarish'); b.onclick = () => openUser(u); act.appendChild(b); tr.appendChild(act);
             body.appendChild(tr);
@@ -487,7 +487,7 @@
         $('m-unmute-btn').disabled = !u.mutedUntil;
         loadCatalog().then(() => markOwned(u)).catch(() => { });
         $('m-nick').textContent = u.nickname;
-        $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · xaritalar: ${u.maps} · darajalar K/A/M/S: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
+        $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · xaritalar: ${u.maps} · darajalar K/A/M/S/H: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
         $('m-maps').value = u.maps; $('m-coins').value = ''; $('m-level').value = ''; $('m-reason').value = '';
         $('m-msg').textContent = ''; $('m-msg').className = 'msg';
         $('modal').classList.remove('hidden');

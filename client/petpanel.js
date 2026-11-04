@@ -34,7 +34,7 @@
             const n = P.up[k], max = d.upMax, locked = n >= d.cap && n < max, price = d.prices[n];
             const dots = Array.from({ length: max }, (_, i) => `<span class="pp-dot ${i < n ? 'on' : ''}"></span>`).join('');
             const btn = n >= max ? `<button disabled>${t('pet_up_max')}</button>`
-                : locked ? `<button disabled><i class="fa-solid fa-lock"></i> Lv ${2 * (n + 1)}</button>`
+                : locked ? `<button disabled><i class="fa-solid fa-lock"></i> Lv ${3 * (n + 1)}</button>`
                 : `<button class="pp-buy" data-k="${k}"><i class="fa-solid fa-coins"></i> ${price}</button>`;
             return `<div class="pp-up"><i class="fa-solid ${icon} pp-ic"></i><div class="pp-upb"><b>${t('pet_up_' + k)}</b><small>${t('pet_up_' + k + '_d')}</small><div>${dots}</div></div>${btn}</div>`;
         }).join('');

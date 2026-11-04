@@ -3,6 +3,24 @@
 // Keraksizini tanlab sotish mumkin - bozordagi narxda (ekin - meva elfi narxi, baliq - o'z narxi)
 (function () {
     let el = null, inv = null, tab = 'all', selCrops = {}, selFish = new Set(), focusCrop = null, busy = false;
+    // QO'LDAGI NARSA: tanlangan hosil qahramon qo'lida ko'rinadi (masalan, Balot Magiga gul berish uchun)
+    // akkauntga bog'langan (boshqa akkaunt bilan kirilsa - qo'l bo'sh); o'yin boshida sumkada borligi tekshiriladi
+    let held = null, heldFor = null, checking = false;
+    const uid = () => (typeof currentUser !== 'undefined' && currentUser && currentUser.id) || null;
+    const loadHeld = () => { heldFor = uid(); held = null; try { const v = JSON.parse(localStorage.getItem('heldItem') || 'null'); if (v && v.u === heldFor) held = v.id; } catch (e) { } };
+    window.HeldItem = {
+        get: () => { if (heldFor !== uid()) loadHeld(); return heldFor ? held : null; },
+        set: (id) => { heldFor = uid(); held = (heldFor && id) || null; try { if (held) localStorage.setItem('heldItem', JSON.stringify({ u: heldFor, id: held })); else localStorage.removeItem('heldItem'); } catch (e) { } },
+        // sovg'a berildi: qolgan soni 0 bo'lsa - qo'l bo'shaydi
+        used: (left) => { if (!(left > 0)) window.HeldItem.set(null); },
+        // sumkada hali bormi (boshqa qurilmada sotilgan / berilgan bo'lishi mumkin)
+        verify: () => {
+            const id = window.HeldItem.get(), u = uid();
+            if (!id || !u || checking) return;
+            checking = true;
+            fetch('/api/inventory/' + u).then(r => r.json()).then((d) => { checking = false; if (d && d.success && !(d.crops && d.crops[id] > 0) && window.HeldItem.get() === id) window.HeldItem.set(null); }).catch(() => { checking = false; });
+        }
+    };
     const $ = (sel) => el && el.querySelector(sel);
     const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const art = () => window.FarmArt;
@@ -60,10 +78,19 @@
             const have = inv.crops[focusCrop], n = selCrops[focusCrop] || 0, price = cropPrice(focusCrop);
             html = `<div class="inv-line"><img src="${art().cropIcon(focusCrop)}" alt=""><b>${t('crop_' + focusCrop)}</b> ×${have}
                 <span class="inv-muted">${t('inv_each').replace('{c}', price)}</span>
-                <span class="inv-qty"><button data-q="-1">-</button><b>${n}</b><button data-q="1">+</button><button data-q="all">${t('inv_all')}</button></span></div>`;
+                <span class="inv-qty"><button data-q="-1">-</button><b>${n}</b><button data-q="1">+</button><button data-q="all">${t('inv_all')}</button></span>
+                <button class="inv-hold">${held === focusCrop ? t('inv_unhold') : t('inv_hold')}</button></div>`;
         }
         const tot = selTotal();
         $('.inv-detail').innerHTML = html;
+        const hb = $('.inv-hold');
+        if (hb) hb.onclick = () => {
+            const was = held === focusCrop;
+            window.HeldItem.set(was ? null : focusCrop);
+            if (window.GameAudio) GameAudio.sfx('click');
+            if (!was && typeof showTopToast === 'function') showTopToast(t('inv_held').replace('{i}', t('crop_' + focusCrop)));
+            if (was) renderInfo(); else close();
+        };
         el.querySelectorAll('.inv-qty button').forEach((b) => { b.onclick = () => {
             const have = inv.crops[focusCrop], cur = selCrops[focusCrop] || 0;
             const n = b.dataset.q === 'all' ? (cur === have ? 0 : have) : Math.max(0, Math.min(have, cur + Number(b.dataset.q)));
@@ -101,6 +128,7 @@
             const have = new Set(inv.fish.map(f => f.u));
             [...selFish].forEach((u) => { if (!have.has(u)) selFish.delete(u); });
             if (focusCrop && !inv.crops[focusCrop]) focusCrop = null;
+            if (held && !inv.crops[held]) window.HeldItem.set(null);   // tugagan narsa qo'lda qolmasin
             render();
         } catch (e) { if (el) $('.inv-body').innerHTML = `<div class="inv-empty">${t('server_unreachable')}</div>`; }
     }

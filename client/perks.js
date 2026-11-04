@@ -5,7 +5,9 @@ const PERK_TABLE = {
     mage: [{ level: 1, id: 'shift' }, { level: 2, id: 'ice' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'heal' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     knight: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'shotgun' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'fly' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     samurai: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'kunai' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'djump' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
-    archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }]
+    archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
+    // OVCHI (pullik): 0 - uzun pichoq, 1 - SHIFT yopishqoq mina, 3 - puflama naycha, 10 - zaharli drotik, 16 - qopqon
+    hunter: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'blowpipe' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'poison' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }, { level: 16, id: 'trap' }]
 };
 // 20, 30, ... 100-darajalarda bittadan, navbat bilan (serverdagi bilan bir xil): 20, 40 ... - stamina; 30, 50 ... - zarar
 Object.keys(PERK_TABLE).forEach((c) => {
@@ -17,10 +19,10 @@ PERK_TABLE.mage.push({ level: 16, id: 'lightning' });
 PERK_TABLE.knight.push({ level: 16, id: 'shieldthrow' });
 PERK_TABLE.samurai.push({ level: 16, id: 'shuriken' });
 PERK_TABLE.archer.push({ level: 16, id: 'triple' });
-const ALT_WEAPON_PERK = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple' };
+const ALT_WEAPON_PERK = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple', hunter: 'blowpipe' };
 // Q bilan uchinchi qurol: mage - chaqmoq, knight - qalqon otish, samurai - shuriken
 const THIRD_WEAPON_PERK = { mage: 'lightning', knight: 'shieldthrow', samurai: 'shuriken' };
-const SPECIAL_PERK = { mage: 'heal', knight: 'fly' };
+const SPECIAL_PERK = { mage: 'heal', knight: 'fly', hunter: 'trap' };
 
 function hasPerkClient(characterType, level, id) {
     return (PERK_TABLE[characterType] || []).some(p => p.id === id && (level || 0) >= p.level);

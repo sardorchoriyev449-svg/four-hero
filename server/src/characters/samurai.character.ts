@@ -2,12 +2,14 @@ import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
 
 export class SamuraiCharacter extends BaseCharacter {
-    // Kunai va shuriken juda tez yog'ilardi (har 0.36 s) - endi kunai ~0.75 s, shuriken yelpig'ichi ~1 s da bir
+    // Ruhiy zarba ~0.75 s, shuriken yelpig'ichi ~1 s da bir (oddiy katana - tez)
     public attackCooldownTicks(player: PlayerState): number {
         return player.weaponMode === 'alt2' ? 33 : player.weaponMode === 'alt' ? 25 : BaseCharacter.ATTACK_COOLDOWN_TICKS;
     }
-    // Samuray: zarba 20 ta HP oladi, ritsar kabi stamina sekin ketadi
+    // Samuray: katana zarbasi stamina sekin oladi; KATANA RUHI (havoni kesib uchadigan zarba) - o'rtacha
     public attackStaminaCost = 8;
+    public static readonly SLASH_STAMINA = 24;   // kuchli zarba - stamina tez tugaydi (4 ta zarbadan keyin dam olish kerak)
+    public attackStamina(player: PlayerState): number { return player.weaponMode === 'alt' ? SamuraiCharacter.SLASH_STAMINA : this.attackStaminaCost; }
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
         // 16-daraja: SHURIKEN YELPIG'ICHI - bir yo'la 3 ta
@@ -20,19 +22,19 @@ export class SamuraiCharacter extends BaseCharacter {
             }
             return;
         }
-        // 3-daraja: Q bilan KUNAI - uzoqqa otiladigan pichoq
+        // 3-daraja: Q bilan KATANA RUHI - katana siltanganda tig'idan havoni kesib uchadigan ruhiy zarba (kunai o'rniga)
         if (player.weaponMode === 'alt') {
             room.bulletIdCounter++;
             room.bullets.push({
                 id: 'bullet_' + room.bulletIdCounter,
                 playerId: player.id,
-                x: player.x + Math.cos(angle) * 18,
-                y: player.y - 4,
-                vx: Math.cos(angle) * 750,
-                vy: Math.sin(angle) * 750,
+                x: player.x + Math.cos(angle) * 24,
+                y: player.y - 2,
+                vx: Math.cos(angle) * 640,
+                vy: Math.sin(angle) * 640,
                 color: player.color,
-                lifetime: 25, // ~560px
-                bulletType: 'kunai',
+                lifetime: 22, // ~470px
+                bulletType: 'slash',
                 justSpawned: true
             });
             return;

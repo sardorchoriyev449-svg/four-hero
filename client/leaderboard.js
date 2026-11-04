@@ -2,9 +2,9 @@
 // Bosh menyudagi "Reyting" tugmasidan ochiladi. Top 50 va o'yinchining o'z o'rni
 (function () {
     let el = null, tab = 'all', reqId = 0;
-    const HEROES = ['knight', 'archer', 'mage', 'samurai'];
-    const ICON = { knight: 'fa-shield-halved', archer: 'fa-bullseye', mage: 'fa-hat-wizard', samurai: 'fa-khanda' };
-    const COLOR = { knight: '#b0bec5', archer: '#81c784', mage: '#ba68c8', samurai: '#ef5350' };
+    const HEROES = ['knight', 'archer', 'mage', 'samurai', 'hunter'];
+    const ICON = { knight: 'fa-shield-halved', archer: 'fa-bullseye', mage: 'fa-hat-wizard', samurai: 'fa-khanda', hunter: 'fa-crosshairs' };
+    const COLOR = { knight: '#b0bec5', archer: '#81c784', mage: '#ba68c8', samurai: '#ef5350', hunter: '#9ccc65' };
     const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     const me = () => (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
@@ -12,6 +12,8 @@
     function heroTag(h) { return `<span class="lb-hero" style="color:${COLOR[h] || '#fff'}"><i class="fa-solid ${ICON[h] || 'fa-user'}"></i>${esc(t('char_' + h))}</span>`; }
     function rowHtml(r, mine) {
         const cls = r.rank <= 3 ? ' lb-r' + r.rank : '';
+        if (tab === 'big') return `<div class="lb-row${mine ? ' me' : ''}"><span class="lb-rank${cls}">${r.rank <= 3 ? '<i class="fa-solid fa-crown"></i> ' : ''}${r.rank}</span>
+            <span class="lb-nick">${esc(r.nick)}</span><span class="lb-hero" style="color:#69f0ae">${r.pct}%</span><span><i class="fa-solid fa-flag"></i> ${fmt(r.m)}</span><span class="lb-xp"><i class="fa-solid fa-skull"></i> ${r.bosses}</span></div>`;
         return `<div class="lb-row${mine ? ' me' : ''}"><span class="lb-rank${cls}">${r.rank <= 3 ? '<i class="fa-solid fa-crown"></i> ' : ''}${r.rank}</span>
             <span class="lb-nick">${esc(r.nick)}</span>${heroTag(r.hero)}<span>${r.level}</span><span class="lb-xp">${fmt(r.xp)}</span></div>`;
     }
@@ -19,7 +21,7 @@
         if (!el) return;
         const id = ++reqId, u = me();
         el.querySelectorAll('.lb-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-        el.querySelector('.lb-note').textContent = t(tab === 'all' ? 'lb_note_all' : 'lb_note_hero');
+        el.querySelector('.lb-note').textContent = t(tab === 'all' ? 'lb_note_all' : tab === 'big' ? 'lb_note_big' : 'lb_note_hero');
         const list = el.querySelector('.lb-list');
         list.innerHTML = `<div class="lb-empty">...</div>`;
         let d = null;
@@ -28,13 +30,16 @@
         } catch (e) { d = null; }
         if (!el || id !== reqId) return;   // boshqa tab tanlangan yoki oyna yopilgan
         if (!d || !d.success) { list.innerHTML = `<div class="lb-empty">${esc(t('server_unreachable'))}</div>`; return; }
-        const hdr = `<div class="lb-row lb-hdr"><span>${t('lb_rank')}</span><span>${t('lb_player')}</span><span class="lb-hero">${t('lb_hero')}</span><span>${t('lb_level')}</span><span class="lb-xp">${t(tab === 'all' ? 'lb_total_xp' : 'lb_xp')}</span></div>`;
+        const hdr = tab === 'big'
+            ? `<div class="lb-row lb-hdr"><span>${t('lb_rank')}</span><span>${t('lb_player')}</span><span class="lb-hero">${t('lb_big_pct')}</span><span>${t('lb_big_dist')}</span><span class="lb-xp">${t('lb_big_bosses')}</span></div>`
+            : `<div class="lb-row lb-hdr"><span>${t('lb_rank')}</span><span>${t('lb_player')}</span><span class="lb-hero">${t('lb_hero')}</span><span>${t('lb_level')}</span><span class="lb-xp">${t(tab === 'all' ? 'lb_total_xp' : 'lb_xp')}</span></div>`;
         const myId = u ? u.id : null;
         list.innerHTML = d.rows.length ? hdr + d.rows.map(r => rowHtml(r, r.id === myId)).join('') : `<div class="lb-empty">${t('lb_empty')}</div>`;
         const meBox = el.querySelector('.lb-me');
         if (!u) meBox.textContent = t('lb_guest');
+        else if (d.me && tab === 'big') meBox.textContent = t('lb_big_your_place').replace('{r}', d.me.rank).replace('{p}', d.me.pct).replace('{m}', fmt(d.me.m)).replace('{b}', d.me.bosses);
         else if (d.me) meBox.textContent = t('lb_your_place').replace('{r}', d.me.rank).replace('{l}', d.me.level).replace('{x}', fmt(d.me.xp));
-        else meBox.textContent = t('lb_not_ranked');
+        else meBox.textContent = t(tab === 'big' ? 'lb_big_not_ranked' : 'lb_not_ranked');
         const mineRow = list.querySelector('.lb-row.me');
         if (mineRow) mineRow.scrollIntoView({ block: 'nearest' });
     }
@@ -48,6 +53,7 @@
             <div class="lb-tabs">
                 <button class="lb-tab" data-tab="all"><i class="fa-solid fa-globe"></i> ${t('lb_all')}</button>
                 ${HEROES.map(h => `<button class="lb-tab" data-tab="${h}"><i class="fa-solid ${ICON[h]}" style="color:${COLOR[h]}"></i> ${esc(t('char_' + h))}</button>`).join('')}
+                <button class="lb-tab" data-tab="big"><i class="fa-solid fa-map" style="color:#69f0ae"></i> ${t('lb_big')}</button>
             </div>
             <div class="lb-note" style="color:#9e98c4; font-size:7px; margin-bottom:8px; line-height:1.6;"></div>
             <div class="lb-list"></div>

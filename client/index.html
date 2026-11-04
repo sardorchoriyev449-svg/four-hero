@@ -256,6 +256,8 @@
             z-index: 40;
         }
         [data-ctl] { position: absolute; box-sizing: border-box; }
+        .touch-use.can-e { background: #ffd54f !important; color: #3b2a00 !important; box-shadow: 0 0 14px rgba(255, 213, 79, 0.9); }
+        .touch-jump { background: rgba(0, 229, 255, 0.35) !important; }
         .touch-joy {
             pointer-events: auto; touch-action: none;
             background: rgba(27, 22, 48, 0.55); border: 4px solid #000;
@@ -399,6 +401,19 @@
         /* ===== DONAT (donate-panel) ===== */
         #donate-panel i.fa-heart { color: #ff5c8a; font-size: 36px; margin-bottom: 10px; display: block; }
         #donate-panel p { color: #ccc; line-height: 1.6; }
+        #donate-panel .donate-card { display: grid; grid-template-columns: 64px 1fr; gap: 10px 14px; align-items: center; text-align: left; background: var(--px-panel-2, #222); padding: 12px; margin: 10px 0 18px; box-shadow: inset -3px -3px 0 rgba(0,0,0,.35); }
+        #donate-panel .donate-hero { width: 64px; height: 48px; image-rendering: pixelated; }
+        #donate-panel .donate-card p { margin: 6px 0 0; font-size: 11px; }
+        #donate-panel .donate-hero-btn { grid-column: 1 / -1; margin: 0; }
+        #donate-panel .donate-sup { width: 64px; text-align: center; }
+        #donate-panel .donate-sup i.fa-heart { margin: 0; font-size: 30px; }
+        #donate-panel .donate-sup-btn { grid-column: 1 / -1; margin: 0; }
+        #donate-panel a { color: #8fd3ff; }
+        #hero-buy-box { text-align: left; background: #2a2416; border: 2px solid #ffca28; padding: 10px 14px; margin: 0 0 14px; }
+        #hero-buy-box .hero-buy-title { color: #ffca28; font-weight: bold; }
+        #hero-buy-box p { margin: 6px 0; color: #ddd; font-size: 12px; }
+        #hero-buy-box .hero-buy-btn { width: 100%; margin: 4px 0 0; background: #ffca28; color: #1a1a1a; }
+        #character-panel.hero-locked .upgrade-points-banner, #character-panel.hero-locked #upgrades-content { display: none; }
 
         /* Lobbi: Tayyor tugmasi */
         #ready-btn.is-ready { background: #2ecc71; }
@@ -1089,6 +1104,7 @@
         #inv-panel .inv-qty { display: flex; align-items: center; gap: 6px; }
         #inv-panel .inv-qty b { min-width: 34px; text-align: center; color: #ffca28; }
         #inv-panel .inv-qty button { padding: 5px 9px; }
+        #inv-panel .inv-hold { background: #ec407a; color: #fff; padding: 5px 10px; }
         #inv-panel .inv-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
         #inv-panel .inv-info { flex: 1; min-width: 160px; color: #b9b3d6; }
         #inv-panel .inv-sell { background: #ffca28; color: #1a1200; }
@@ -1106,6 +1122,7 @@
         .slot.in-voice .slot-name::after { content: '\f130'; font-family: 'Font Awesome 6 Free'; font-weight: 900; margin-left: 6px; color: #69f0ae; font-size: 10px; }
         .slot.speaking .slot-card { box-shadow: 0 0 0 4px #69f0ae, 0 0 18px #69f0ae; }
         /* ADMIN belgisi */
+        .sup-tag { display: inline-block; color: #ff5c8a; font-size: 9px; margin-left: 4px; vertical-align: middle; }
         .admin-tag { display: inline-block; white-space: nowrap; background: #d50000; color: #fff; font-size: 8px; padding: 2px 4px; margin-left: 4px; border: 2px solid #000; vertical-align: middle; letter-spacing: 1px; }
         #pause-menu { position: absolute; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center;
             background: rgba(14, 11, 26, 0.72); line-height: normal; font-family: "Press Start 2P", "Courier New", monospace; }
@@ -1261,7 +1278,7 @@
             #wardrobe .wd-left { width: 100%; display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; }
             #wardrobe .wd-stage { height: 116px; grid-row: span 3; }
             #wardrobe #wd-preview { width: 144px; height: 108px; }
-            #wardrobe .wd-heroes { grid-template-columns: repeat(4, 1fr); grid-column: 1 / -1; }
+            #wardrobe .wd-heroes { grid-template-columns: repeat(5, 1fr); grid-column: 1 / -1; }
             #wardrobe .wd-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
             #wardrobe .wd-hero-icon, #wardrobe .wd-swatch { width: 72px; height: 54px; }
         }
@@ -1356,7 +1373,7 @@
             <p class="link-text" id="show-login-link" data-i18n="have_account">Already have an account? Sign in</p>
         </div>
         <p class="site-blurb" data-i18n="site_blurb">A free co-op pixel action game for up to 4 players. Choose a Knight, Archer, Mage or Samurai, team up with friends and beat giant bosses together.</p>
-        <p class="site-links"><a href="/about.html" data-i18n="link_about">About the game</a> &middot; <a href="/privacy.html" data-i18n="link_privacy">Privacy Policy</a></p>
+        <p class="site-links"><a href="/about.html" data-i18n="link_about">About the game</a> &middot; <a href="/privacy.html" data-i18n="link_privacy">Privacy Policy</a> &middot; <a href="/terms.html" data-i18n="link_terms">Terms</a> &middot; <a href="/refund.html" data-i18n="link_refund">Refunds</a></p>
     </div>
 
     <!-- ===== BOSH MENYU (HUB) ===== -->
@@ -1384,7 +1401,7 @@
         <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
         <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad">Watch an ad</span><span class="ad-amount">+500</span></button>
         <!-- Donat ma'lumotlari tayyor bo'lguncha yashirin (bo'sh "tez orada" oynasi ochilmasin): "hidden" ni olib tashlash kifoya -->
-        <button id="nav-donate-btn" class="hub-btn hidden"><i class="fa-solid fa-heart"></i><span data-i18n="nav_donate">Support the Author</span></button>
+        <button id="nav-donate-btn" class="hub-btn"><i class="fa-solid fa-heart"></i><span data-i18n="nav_donate">Support the Author</span></button>
         <div class="control-scheme-row" style="margin: 16px 0 0;">
             <button class="control-scheme-btn" id="control-pc-btn"><i class="fa-solid fa-desktop"></i> PC</button>
             <button class="control-scheme-btn" id="control-phone-btn"><i class="fa-solid fa-mobile-screen-button"></i> PHONE</button>
@@ -1540,7 +1557,7 @@
         <button class="back-btn" id="donate-back-btn"><i class="fa-solid fa-arrow-left icon"></i><span data-i18n="back_btn">Back</span></button>
         <i class="fa-solid fa-heart"></i>
         <h2 data-i18n="donate_title">Support the Author</h2>
-        <p data-i18n="donate_placeholder">Donation details coming soon. Thanks for wanting to support the game!</p>
+        <div id="donate-content"></div>
     </div>
 
     <!-- ===== LOBBI (xona): chapda "Leave", o'ngda xona kodi (ko'z - yashirish), xarita nomi,
@@ -1587,9 +1604,8 @@
             <div class="maps-body">
                 <div id="level-list"></div>
                 <div class="maps-tabs">
+                    <button class="maps-tab maps-tab-big active" data-tab="big" data-i18n="tab_big">THE WORLD</button>
                     <button class="maps-tab" data-tab="bonus" data-i18n="tab_bonus">BONUS</button>
-                    <button class="maps-tab active" data-tab="s1" data-i18n="tab_season1">SEASON 1</button>
-                    <button class="maps-tab" data-tab="s2" data-i18n="tab_season2">SEASON 2</button>
                 </div>
             </div>
         </div>
@@ -1644,6 +1660,9 @@
     <script src="i18n.js"></script>
     <script src="lobby.js"></script>
     <script src="farmart.js"></script>
+    <script src="bigart.js"></script>
+    <script src="magetalk.js"></script>
+    <script src="bigmap.js"></script>
     <script src="inventory.js"></script>
     <script src="leaderboard.js"></script>
     <script src="daily.js"></script>

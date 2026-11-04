@@ -468,6 +468,8 @@ async function loadMenuStats() {
         if (!data.success || !currentUser) return;
         currentUser.defaultCharacter = data.defaultCharacter;
         currentUser.charXp = data.charXp || currentUser.charXp;
+        currentUser.ownedHeroes = data.ownedHeroes || [];
+        payEnabled = !!data.payEnabled;
         if (typeof data.coins === 'number') {
             currentUser.coins = data.coins;
             coinBalance.innerText = data.coins;
@@ -621,8 +623,50 @@ function openSettings(returnPanel) {
 navSettingsBtn.onclick = () => openSettings(mainMenuPanel);
 document.getElementById('lobby-settings-btn').onclick = () => { setLobbyPopup(null); openSettings(lobbyPanel); };
 navDonateBtn.onclick = () => {
+    renderDonatePanel();
     showPanel(donatePanel);
 };
+// DONAT: Ovchi qahramoni ($5) va Supporter Pack ($5: tanga + belgi) - Paddle orqali
+async function renderDonatePanel() {
+    const box = document.getElementById('donate-content');
+    if (!box || !currentUser) return;
+    const cfg = await getPayConfig();
+    const on = !!(cfg && cfg.enabled), coins = (cfg && cfg.supporterCoins) || 5000;
+    const owned = heroOwned('hunter');
+    box.innerHTML = `<div class="donate-card">
+            <canvas class="donate-hero" width="64" height="48"></canvas>
+            <div><b>${tCharName('hunter')}</b> — $5<p>${t('char_hunter_desc')}</p></div>
+            <button class="donate-hero-btn" ${owned || !on ? 'disabled' : ''}>${owned ? '<i class="fa-solid fa-check"></i> ' + t('hero_owned') : '<i class="fa-solid fa-cart-shopping"></i> ' + t('hero_buy_btn').replace('{p}', '$5')}</button>
+        </div>
+        <div class="donate-card">
+            <div class="donate-sup"><i class="fa-solid fa-heart"></i></div>
+            <div><b>${t('supporter_title')}</b> — $5<p>${t('supporter_desc').replace('{c}', coins)}</p></div>
+            <button class="donate-sup-btn" ${on ? '' : 'disabled'}><i class="fa-solid fa-cart-shopping"></i> ${t('hero_buy_btn').replace('{p}', '$5')}</button>
+        </div>
+        <p class="settings-note">${on ? t('donate_secure') : t('err_pay_off')}</p>
+        <p class="settings-note"><a href="/terms.html" target="_blank">${t('link_terms')}</a> &middot; <a href="/refund.html" target="_blank">${t('link_refund')}</a></p>`;
+    try { drawHero(box.querySelector('.donate-hero').getContext('2d'), 'hunter', '#5d7a3a', null, 0, 0); } catch (e) { }
+    const hb = box.querySelector('.donate-hero-btn'), sb = box.querySelector('.donate-sup-btn');
+    hb.onclick = () => startCheckout('hunter', hb);
+    sb.onclick = () => startCheckout('supporter', sb);
+}
+socket.on('supporterThanks', (d) => {
+    if (!d || !currentUser) return;
+    currentUser.coins = d.coins;
+    currentUser.supporter = true;
+    localStorage.setItem('gameUser', JSON.stringify(currentUser));
+    coinBalance.innerText = d.coins;
+    showTopToast(t('supporter_got').replace('{c}', d.added));
+    try { GameAudio.sfx('coin'); } catch (e) { }
+});
+socket.on('heroUnlocked', (d) => {
+    if (!d || !currentUser) return;
+    currentUser.ownedHeroes = Array.from(new Set([...(currentUser.ownedHeroes || []), d.hero]));
+    localStorage.setItem('gameUser', JSON.stringify(currentUser));
+    showTopToast(t('hero_unlocked').replace('{h}', tCharName(d.hero)));
+    try { GameAudio.sfx('win'); } catch (e) { }
+    if (!characterPanel.classList.contains('hidden')) { renderCharTabs(); renderUpgrades(); }
+});
 settingsBackBtn.onclick = () => {
     // Xonadan ochilgan bo'lsa va hali o'sha xonada bo'lsak - lobbiga qaytamiz
     if (settingsReturnPanel === lobbyPanel && currentRoomId) { showPanel(lobbyPanel); return; }
@@ -995,7 +1039,7 @@ function updateHostControls() {
 
 // Xarita/Chat ko'rsatish-yashirish tugmalari (lobbini toza ko'rinishda saqlash uchun)
 // Xaritalar oynasi bo'limi: 'bonus' | 's1' | 's2'
-let mapsTab = 's1';
+let mapsTab = 'big';   // Season 1/2 bo'limlari olib tashlangan
 function setLobbyPopup(which) {
     const mapOpen = which === 'map' && levelSelectSection.classList.contains('hidden');
     const chatOpen = which === 'chat' && lobbyChatSection.classList.contains('hidden');
@@ -1007,7 +1051,7 @@ function setLobbyPopup(which) {
     if (mapOpen) {
         const cur = roomMaps.find(m => m.id === selectedLevel);
         if (cur) {
-            mapsTab = mapSeasonOf(cur);
+            mapsTab = mapSeasonOf(cur) === 's1' || mapSeasonOf(cur) === 's2' ? 'big' : mapSeasonOf(cur);
             document.querySelectorAll('.maps-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === mapsTab));
             renderLevelList();
         }
@@ -1065,7 +1109,7 @@ document.querySelectorAll('.maps-tab').forEach((b) => {
 });
 
 // Xarita raqami o'z mavsumi ichida: S1 - 1..10, S2 - yana 1 dan; bonus - yulduzcha
-function mapSeasonOf(m) { return m.bonus ? 'bonus' : (m.season || 1) === 2 ? 's2' : 's1'; }
+function mapSeasonOf(m) { return m.big ? 'big' : m.bonus ? 'bonus' : (m.season || 1) === 2 ? 's2' : 's1'; }
 function mapNumberLabel(id) {
     const m = roomMaps.find(x => x.id === id);
     if (!m) return (id + 1) + '. ';
@@ -1085,7 +1129,7 @@ function renderLevelList() {
         return;
     }
     shown.forEach((m) => {
-        const locked = m.bonus ? (!m.shop && !bonusUnlocked) : m.id > unlockedLevel;   // do'kon doim ochiq
+        const locked = m.bonus ? (!m.shop && !bonusUnlocked) : m.id > unlockedLevel;   // do'kon (va Big Map) doim ochiq
         const isSelected = m.id === selectedLevel;
         const item = document.createElement('div');
         item.className = 'level-item' + (isSelected ? ' selected' : '') + (locked ? ' locked' : '') + (isRoomHost ? '' : ' readonly');
@@ -1128,7 +1172,7 @@ function renderPlayerList(data) {
             ? `<span style="color:#ffcc00;"><i class="fa-solid fa-crown"></i> ${t('host_tag')}</span>`
             : (p.isReady ? `<span class="ready-tick"><i class="fa-solid fa-check"></i> ${t('ready_tag')}</span>` : `<span class="ready-tick not-ready-tick"><i class="fa-solid fa-xmark"></i> ${t('not_ready_tag')}</span>`);
         const nameIcon = p.id === socket.id ? '<i class="fa-solid fa-star" style="color:#00ffcc;"></i>' : '<i class="fa-solid fa-user"></i>';
-        li.innerHTML = `${nameIcon} ${name}${p.isAdmin ? ' <span class="admin-tag">ADMIN</span>' : ''}${p.id === socket.id ? t('you_suffix') : ''} [${tCharName(p.characterType).toUpperCase()}] — ${readyTick}`;
+        li.innerHTML = `${nameIcon} ${name}${p.isAdmin ? ' <span class="admin-tag">ADMIN</span>' : ''}${p.supporter ? ' <span class="sup-tag"><i class="fa-solid fa-heart"></i></span>' : ''}${p.id === socket.id ? t('you_suffix') : ''} [${tCharName(p.characterType).toUpperCase()}] — ${readyTick}`;
         playerListUl.appendChild(li);
 
         // O'zimizning "Tayyor" tugmamiz ko'rinishini serverdagi haqiqiy holat bilan sinxronlaymiz
@@ -1181,6 +1225,7 @@ function renderLobbySlots(players) {
             <div class="slot-status ${status[0]}">${status[1].toUpperCase()}</div>`;
         slot.querySelector('.slot-name').appendChild(document.createTextNode((p.nickname || t('guest_name')) + (me ? t('you_suffix') : '')));
         if (p.isAdmin) { const tag = document.createElement('span'); tag.className = 'admin-tag'; tag.textContent = 'ADMIN'; slot.querySelector('.slot-name').appendChild(tag); }
+        if (p.supporter) { const tag = document.createElement('span'); tag.className = 'sup-tag'; tag.title = t('supporter_title'); tag.innerHTML = '<i class="fa-solid fa-heart"></i>'; slot.querySelector('.slot-name').appendChild(tag); }
         // Xo'jayinga: boshqa o'yinchini xonadan chiqarish (KICK)
         if (isRoomHost && !me && !p.isAdmin) {
             const kick = document.createElement('button');
@@ -1565,7 +1610,90 @@ gameoverOkBtn.onclick = () => {
 
 // --- 5. MENING PERSONAJIM: YAXSHILASHLAR (damage/stamina) VA SKINLAR (personajga bog'liq) ---
 
-const CHARACTER_TYPES = ['knight', 'archer', 'mage', 'samurai'];
+const CHARACTER_TYPES = ['knight', 'archer', 'mage', 'samurai', 'hunter'];
+// PULLIK QAHRAMONLAR ($5): sotib olinmaguncha ko'rish mumkin, tanlab bo'lmaydi (server/src/db.ts PREMIUM_HEROES)
+const PREMIUM_HEROES = ['hunter'];
+const heroOwned = (type) => !PREMIUM_HEROES.includes(type) || ((currentUser && currentUser.ownedHeroes) || []).includes(type);
+let payEnabled = false;
+// TO'LOV (Paddle.js): oyna o'yin sahifasi ustida ochiladi; to'lov tasdig'i serverga webhook orqali keladi
+let payCfg = null, paddleLoad = null, payItem = '';
+async function getPayConfig() {
+    if (!payCfg) payCfg = await fetch('/api/pay/config').then(r => r.json()).catch(() => null);
+    return payCfg;
+}
+function loadPaddle(cfg) {
+    if (paddleLoad) return paddleLoad;
+    paddleLoad = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+        s.onload = () => {
+            try {
+                if (cfg.env === 'sandbox') Paddle.Environment.set('sandbox');
+                Paddle.Initialize({ token: cfg.token, eventCallback: onPaddleEvent });
+                resolve();
+            } catch (e) { reject(e); }
+        };
+        s.onerror = () => { paddleLoad = null; reject(new Error('paddle')); };
+        document.head.appendChild(s);
+    });
+    return paddleLoad;
+}
+async function startCheckout(item, btn) {
+    if (!currentUser) return;
+    if (btn) btn.disabled = true;
+    try {
+        const cfg = await getPayConfig();
+        if (!cfg || !cfg.enabled || !cfg.prices[item]) { showTopToast(t('err_pay_off')); return; }
+        if (item === 'hunter' && heroOwned('hunter')) { showTopToast(t('err_hero_owned')); return; }
+        await loadPaddle(cfg);
+        payItem = item;
+        Paddle.Checkout.open({
+            items: [{ priceId: cfg.prices[item], quantity: 1 }],
+            customData: { userId: currentUser.id, item },
+            settings: { displayMode: 'overlay', theme: 'dark', locale: getLang() === 'ru' ? 'ru' : 'en', allowLogout: false }
+        });
+    } catch (e) { showTopToast(t('err_pay_failed')); }
+    finally { if (btn) btn.disabled = false; }
+}
+// To'lov tugadi: webhook bir necha soniyada keladi - qahramon ochilguncha / tanga tushguncha tekshiramiz
+function onPaddleEvent(ev) {
+    if (!ev || ev.name !== 'checkout.completed') return;
+    const item = payItem, coins0 = currentUser ? currentUser.coins : 0;
+    showTopToast(t(item === 'hunter' ? 'pay_thanks_hero' : 'pay_thanks'));
+    let n = 0;
+    const check = async () => {
+        if (!currentUser) return;
+        await refreshMenuStats();
+        if (item === 'hunter' ? heroOwned('hunter') : currentUser.coins > coins0) {
+            if (item === 'hunter') showTopToast(t('hero_unlocked').replace('{h}', tCharName('hunter')));
+            if (!donatePanel.classList.contains('hidden')) renderDonatePanel();
+            return;
+        }
+        if (++n < 15) setTimeout(check, 3000);
+    };
+    setTimeout(check, 2500);
+}
+// Qulflangan qahramon tanlanganda: tavsif ostida narx va "Sotib olish" tugmasi
+function renderHeroBuyBox() {
+    let box = document.getElementById('hero-buy-box');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'hero-buy-box';
+        charDetailsDesc.insertAdjacentElement('afterend', box);
+    }
+    const locked = !heroOwned(selectedCharTab);
+    characterPanel.classList.toggle('hero-locked', locked);
+    box.classList.toggle('hidden', !locked);
+    if (!locked) return;
+    box.innerHTML = `<div class="hero-buy-title"><i class="fa-solid fa-lock"></i> ${t('hero_premium')}</div>
+        <p>${t('hero_buy_note')}</p>
+        <button class="hero-buy-btn"><i class="fa-solid fa-cart-shopping"></i> ${t('hero_buy_btn').replace('{p}', '$5')}</button>
+        ${payEnabled ? '' : `<p class="settings-note">${t('err_pay_off')}</p>`}`;
+    const b = box.querySelector('.hero-buy-btn');
+    b.disabled = !payEnabled;
+    box.insertAdjacentHTML('beforeend', `<p class="settings-note"><a href="/terms.html" target="_blank">${t('link_terms')}</a> &middot; <a href="/refund.html" target="_blank">${t('link_refund')}</a></p>`);
+    b.onclick = () => startCheckout(selectedCharTab, b);
+}
 
 // opts: { locked: bool, lockedType?: string, returnPanel: HTMLElement }
 async function openCharacterScreen(opts) {
@@ -1614,6 +1742,8 @@ async function loadCharacterScreen() {
             currentUser.equippedWeaponSkins = data.equippedWeaponSkins;
             currentUser.ownedCosmetics = data.ownedCosmetics || [];
             currentUser.equippedCosmetics = data.equippedCosmetics || {};
+            currentUser.ownedHeroes = data.ownedHeroes || [];
+            payEnabled = !!data.payEnabled;
             localStorage.setItem('gameUser', JSON.stringify(currentUser));
         }
     } catch (e) { /* tarmoq xatosi bo'lsa, eski ma'lumot bilan ko'rsatamiz */ }
@@ -1633,6 +1763,7 @@ function renderCharTabs() {
         const btn = document.createElement('button');
         btn.className = 'char-tab-btn' + (type === selectedCharTab ? ' active' : '');
         btn.innerText = tCharName(type);
+        if (!heroOwned(type)) btn.insertAdjacentHTML('afterbegin', '<i class="fa-solid fa-lock"></i> ');
         btn.onclick = () => { if (selectedCharTab !== type) selectCharTab(type); };
         charTabsDiv.appendChild(btn);
     });
@@ -1645,6 +1776,8 @@ function selectCharTab(type) {
     renderUpgrades();
     renderShop();
     renderWeaponShop();
+    // Sotib olinmagan pullik qahramon - faqat ko'rish (tanlangan qahramon o'zgarmaydi)
+    if (!heroOwned(type)) return;
     // Keyingi safar ekran ochilganda shu personaj birinchi ko'rsatilishi uchun eslab qolamiz
     currentUser.defaultCharacter = type;
     fetch('/api/character/' + currentUser.id + '/default', {
@@ -1708,6 +1841,7 @@ const UPGRADE_COSTS = [
 ];
 
 function renderUpgrades() {
+    renderHeroBuyBox();
     renderPerks();
     const points = (currentUser.skillPoints && currentUser.skillPoints[selectedCharTab]) || 0;
     skillPointsValue.innerText = points;
@@ -1790,8 +1924,8 @@ function renderUpgrades() {
         upgradesContent.appendChild(row);
     });
 
-    // XP KUCHAYTIRISH: 10 darajagacha; har darajasi - har o'ldirish, boss va xarita uchun +15 XP (narxi 300, 500, 700 ...)
-    const BOOST_MAX = 10;
+    // XP KUCHAYTIRISH: 5 darajagacha; har darajasi - har o'ldirish, boss va xarita uchun +15 XP (narxi 300, 500, 700 ...)
+    const BOOST_MAX = 5, BOOST_LEVELS = [3, 10, 17, 24, 30];   // serverdagi XP_BOOST_LEVELS bilan bir xil
     const boost = Math.min(BOOST_MAX, (currentUser.xpBoost && currentUser.xpBoost[selectedCharTab]) || 0);
     const boostCost = 300 + 200 * boost;
     const brow = document.createElement('div');
@@ -1802,12 +1936,12 @@ function renderUpgrades() {
             <div class="upgrade-dots">${Array.from({ length: BOOST_MAX }, (_, i) => `<span class="upgrade-dot ${i < boost ? 'filled' : ''}"></span>`).join('')}</div>
         </div>`;
     // Boshqa kuchaytirishlar kabi: YO 2 ta ochko (har safar 2), YO tanga (300, 500, 700 ...).
-    // Qahramon darajasiga qarab ochiladi: har 3 darajada +1 (serverdagi xpBoostCapFor bilan bir xil)
-    const boostCap = Math.min(BOOST_MAX, Math.floor(charLevel / 3));
+    // Qahramon darajasiga qarab ochiladi: 3, 10, 17, 24, 30-levellarda (serverdagi xpBoostCapFor bilan bir xil)
+    const boostCap = Math.min(BOOST_MAX, BOOST_LEVELS.filter(l => charLevel >= l).length);
     if (boost >= BOOST_MAX || boost >= boostCap) {
         const mx = document.createElement('button');
         if (boost >= BOOST_MAX) mx.innerText = t('char_maxed');
-        else { brow.classList.add('locked-upgrade'); mx.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('perk_level')} ${3 * (boost + 1)}`; }
+        else { brow.classList.add('locked-upgrade'); mx.innerHTML = `<i class="fa-solid fa-lock"></i> ${t('perk_level')} ${BOOST_LEVELS[boost]}`; }
         mx.disabled = true;
         brow.appendChild(mx);
         upgradesContent.appendChild(brow);

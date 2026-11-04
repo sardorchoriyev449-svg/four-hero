@@ -17,6 +17,7 @@ export abstract class BaseCharacter {
         if (player.attackCooldown > 0) player.attackCooldown--;
         if ((player.shieldCd || 0) > 0) player.shieldCd!--;   // knight: qalqon otish qayta tiklanmoqda
         if ((player.tornadoCd || 0) > 0) player.tornadoCd!--;   // mage: tornado qayta tiklanmoqda
+        if ((player.mineCd || 0) > 0) player.mineCd!--;         // hunter: mina qayta tiklanmoqda
 
         // SHIFT (qobiliyat) ushlab turilsa - BARCHA personajlar uchun stamina ketadi
         if (player.isHoldingAbility) {
@@ -68,6 +69,8 @@ export abstract class BaseCharacter {
     public canAttack(_player: PlayerState): boolean { return true; }
     // Zarbalar orasidagi kutish (tik) - qurolga qarab (masalan, samuray kunai/shurikeni sekinroq)
     public attackCooldownTicks(_player: PlayerState): number { return BaseCharacter.ATTACK_COOLDOWN_TICKS; }
+    // bitta zarbaning stamina narxi (qurol rejimiga qarab o'zgarishi mumkin - samurayning ruhiy zarbasi qimmatroq)
+    public attackStamina(_player: PlayerState): number { return this.attackStaminaCost; }
 
     // Har bir personaj o'zicha hujum qiladi (Abstract funksiyalar)
     abstract handleAttack(player: PlayerState, room: RoomState, angle: number): void;

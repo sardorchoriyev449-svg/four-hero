@@ -103,6 +103,7 @@ export const WEAPON_ITEMS: { [characterType: string]: { [slot: string]: Cosmetic
             { id: 'golden', name: 'Golden Bow', price: 2100 }
         ]
     },
+    hunter: {},
     samurai: {
         katana: [
             { id: 'shinai', name: 'Shinai', price: 250 },

@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import zlib from 'zlib';
 import { monitorEventLoopDelay } from 'perf_hooks';
 import { Server } from 'socket.io';
@@ -12,7 +13,7 @@ import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
-import { MAPS, SEASON_MAP_COUNT, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason } from './maps';
+import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
@@ -29,12 +30,76 @@ const app = express();
 // Render proksi orqasida: haqiqiy mijoz IP si (admin bloklash IP bo'yicha) - X-Forwarded-For dagi oxirgi manzil
 app.set('trust proxy', 1);
 app.use(cors());
+// PADDLE WEBHOOK: imzoni tekshirish uchun xom (o'zgartirilmagan) tana kerak - shuning uchun express.json DAN OLDIN
+app.post('/api/paddle/webhook', express.raw({ type: '*/*', limit: '200kb' }), async (req, res) => {
+    const secret = process.env.PADDLE_WEBHOOK_SECRET;
+    const raw: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+    if (!secret || !verifyPaddleSignature(raw, String(req.get('paddle-signature') || ''), secret)) { res.status(400).send('bad signature'); return; }
+    let ev: any;
+    try { ev = JSON.parse(raw.toString('utf8')); } catch { res.status(400).send('bad json'); return; }
+    try {
+        if (ev && ev.event_type === 'transaction.completed') {
+            const tx = ev.data || {};
+            const userId = tx.custom_data && typeof tx.custom_data.userId === 'string' ? tx.custom_data.userId : '';
+            for (const it of (Array.isArray(tx.items) ? tx.items : [])) {
+                const item = payItemOfPrice(it && it.price && it.price.id);
+                const qty = Math.max(1, Math.min(10, Math.floor(Number(it && it.quantity) || 1)));
+                const payId = String(tx.id) + ':' + item + ':' + qty;   // qaytarishda nima olib qo'yilishini bilish uchun
+                if (item === 'hunter') {
+                    const r = await db.grantHero(userId, 'hunter', payId);
+                    console.log('[TOLOV]', tx.id, 'hunter', userId, !r.success ? 'XATO: noto\'g\'ri foydalanuvchi' : r.already ? '(avval hisoblangan)' : 'berildi');
+                    if (r.success && !r.already) roomManager.notifyHeroBought(userId, 'hunter');
+                } else if (item === 'supporter') {
+                    const r = await db.grantSupporter(userId, qty * SUPPORTER_COINS, payId);
+                    console.log('[TOLOV]', tx.id, 'supporter x' + qty, userId, !r.success ? 'XATO: noto\'g\'ri foydalanuvchi' : r.already ? '(avval hisoblangan)' : 'berildi');
+                    if (r.success && !r.already) roomManager.notifySupporter(userId, r.coins!, qty * SUPPORTER_COINS);
+                } else console.log('[TOLOV]', tx.id, 'noma\'lum narx:', it && it.price && it.price.id);
+            }
+        } else if (ev && (ev.event_type === 'adjustment.created' || ev.event_type === 'adjustment.updated')) {
+            // PUL QAYTARILDI / CHARGEBACK (tasdiqlangan, to'liq): sotib olingan narsa olib qo'yiladi (refund.html dagi qoida)
+            const adj = ev.data || {};
+            if ((adj.action === 'refund' || adj.action === 'chargeback') && adj.status === 'approved' && adj.type !== 'partial' && typeof adj.transaction_id === 'string') {
+                const r = await db.revokePayment(adj.transaction_id, SUPPORTER_COINS);
+                console.log('[TOLOV] qaytarildi', adj.transaction_id, r ? r.userId + ' ' + r.items.join(',') : '(topilmadi yoki avval olingan)');
+                if (r) roomManager.notifyRevoked(r.userId);
+            }
+        }
+        res.json({ received: true });
+    } catch (err) {
+        console.error('Paddle webhook xatosi:', err);
+        res.status(500).send('error');
+    }
+});
 app.use(express.json({ limit: '20kb' }));
 // Buzilgan/juda katta JSON - HTML xato sahifasi (server yo'llari bilan) o'rniga qisqa JSON javob
 app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (!err) { next(); return; }
     res.status(err.status === 413 ? 413 : 400).json({ success: false, message: 'err_bad_request' });
 });
+
+// TO'LOVLAR (Paddle - "merchant of record": kartadan pulni va soliqni o'zi oladi). To'lov oynasi o'yin sahifasida
+// (Paddle.js) ochiladi; server faqat webhook orqali to'lov tasdig'ini oladi. Narx ID lari va ochiq token - sir emas;
+// sandbox (sinov) qiymatlari standart, jonli savdoda Render env orqali almashtiriladi. Webhook siri bo'lmasa - to'lovlar o'chiq
+const PAY = {
+    env: process.env.PADDLE_ENV === 'production' ? 'production' : 'sandbox',
+    token: process.env.PADDLE_CLIENT_TOKEN || 'test_1f08805884b913a64e6d5e4f715',
+    prices: {
+        hunter: process.env.PADDLE_PRICE_HUNTER || 'pri_01m5t206tnaxcht750gd0rqpx4',
+        supporter: process.env.PADDLE_PRICE_SUPPORTER || 'pri_01m5t2dn1gm6degxbkz387b0p5'
+    } as { [item: string]: string }
+};
+const SUPPORTER_COINS = 5000;   // "Supporter Pack" ($5) - har paket uchun
+const payEnabled = () => !!process.env.PADDLE_WEBHOOK_SECRET;
+const payItemOfPrice = (priceId: unknown) => Object.keys(PAY.prices).find(k => PAY.prices[k] === priceId) || '';
+// "Paddle-Signature: ts=...;h1=..." - HMAC-SHA256(ts + ':' + tana), 5 daqiqadan eski imzo qabul qilinmaydi
+function verifyPaddleSignature(raw: Buffer, header: string, secret: string): boolean {
+    const parts = header.split(';').map(p => p.trim().split('='));
+    const ts = (parts.find(p => p[0] === 'ts') || [])[1];
+    const sigs = parts.filter(p => p[0] === 'h1').map(p => p[1] || '');
+    if (!ts || !sigs.length || !(Math.abs(Date.now() / 1000 - Number(ts)) <= 300)) return false;
+    const want = Buffer.from(crypto.createHmac('sha256', secret).update(ts + ':').update(raw).digest('hex'));
+    return sigs.some(sg => { const b = Buffer.from(sg); return b.length === want.length && crypto.timingSafeEqual(b, want); });
+}
 
 // Hisobga tegishli har so'rov (manzilida :userId / :id bor) - login paytida berilgan token bilan
 // keladi (X-Auth-Token). Aks holda boshqa birovning ID sini bilgan har kim uning tangasini sarflardi
@@ -151,7 +216,7 @@ const adminUserView = (u: db.UserRecord) => {
     return { id: u.id, nickname: u.nickname, fullName: u.fullName, coins: u.coins, maps: Math.min(u.unlockedLevel + 1, SEASON_MAP_COUNT),
         levels, banned: !!u.banned, banReason: u.banReason || '', createdAt: u.createdAt || null, online: online ? { room: online.roomName, code: online.roomId } : null,
         mutedUntil: db.isMuted(u.mutedUntil) ? u.mutedUntil : 0, curses: { acid: !!u.cursedAcid, bolt: !!u.cursedBolt },
-        owned: { cosmetics: u.ownedCosmetics || [], skins: u.ownedSkins || {}, weaponSkins: u.ownedWeaponSkins || {} } };
+        owned: { cosmetics: u.ownedCosmetics || [], skins: u.ownedSkins || {}, weaponSkins: u.ownedWeaponSkins || {}, heroes: u.ownedHeroes || [] } };
 };
 // ADMIN AMALLARI JURNALI: har o'zgartiruvchi amal yoziladi (kim - admin va IP)
 const adminWho = (req: express.Request) => 'admin@' + (req.ip || '?');
@@ -281,6 +346,7 @@ app.get('/api/admin/catalog', requireAdmin, (_req, res) => {
         items.push({ value: 'cos|' + c + '.' + slot + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Qurol detali' }))));
     Object.keys(SKIN_CATALOG).forEach(c => SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'skin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Personaj skini' }); }));
     Object.keys(WEAPON_SKIN_CATALOG).forEach(c => WEAPON_SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'wskin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Qurol rangi' }); }));
+    db.PREMIUM_HEROES.forEach(h => items.push({ value: 'hero|' + h, label: h, group: 'Pullik qahramon' }));
     res.json({ success: true, items });
 });
 app.post('/api/admin/users/:uid/gift', requireAdmin, adminRoute(async (req, res) => {
@@ -296,6 +362,11 @@ app.post('/api/admin/users/:uid/gift', requireAdmin, adminRoute(async (req, res)
     } else if ((kind === 'skin' || kind === 'wskin') && isKnownSkin(a, id, kind === 'wskin') && id !== 'default') {
         upd = await db.adminGiftSkin(String(req.params.uid), kind === 'wskin' ? 'weapon' : 'hero', a, id);
         label = (kind === 'wskin' ? 'weapon ' : '') + a + ':' + id;
+    } else if (kind === 'hero' && db.PREMIUM_HEROES.includes(a)) {
+        const r = await db.grantHero(String(req.params.uid), a);
+        upd = r.success ? await db.getUserById(String(req.params.uid)) : null;
+        if (upd) roomManager.notifyHeroBought(upd.id, a);
+        label = 'hero ' + a;
     } else { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
     if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
     roomManager.notifyGift(upd.id);
@@ -649,7 +720,10 @@ app.get('/api/character/:userId', async (req, res) => {
             ownedWeaponSkins: user.ownedWeaponSkins,
             equippedWeaponSkins: user.equippedWeaponSkins,
             ownedCosmetics: user.ownedCosmetics,
-            equippedCosmetics: user.equippedCosmetics
+            equippedCosmetics: user.equippedCosmetics,
+            ownedHeroes: user.ownedHeroes || [],
+            payEnabled: payEnabled(),
+            supporter: !!user.supporter
         });
     } catch (err) {
         res.status(500).json({ success: false, message: 'err_load_data' });
@@ -663,13 +737,18 @@ app.post('/api/character/:userId/default', async (req, res) => {
     try {
         const user = await db.setDefaultCharacter(req.params.userId, characterType);
         if (!user) {
-            res.status(400).json({ success: false, message: 'err_bad_character' });
+            res.status(400).json({ success: false, message: db.PREMIUM_HEROES.includes(characterType) ? 'err_hero_locked' : 'err_bad_character' });
             return;
         }
         res.json({ success: true, defaultCharacter: user.defaultCharacter });
     } catch (err) {
         res.status(500).json({ success: false, message: 'generic_error' });
     }
+});
+
+// TO'LOV SOZLAMALARI (Paddle.js uchun): muhit, ochiq token, narx ID lari
+app.get('/api/pay/config', (_req, res) => {
+    res.json({ success: true, enabled: payEnabled(), env: PAY.env, token: PAY.token, prices: PAY.prices, supporterCoins: SUPPORTER_COINS });
 });
 
 // KO'NIKMA BALLINI SARFLAB, TANLANGAN PERSONAJNING "damage" YOKI "stamina" NI OSHIRISH
@@ -962,9 +1041,9 @@ io.on('connection', (socket) => {
             checkpointReached: [],
             isStarted: false,
             isOver: false,
-            killsToWin: MAPS[0].killsToWin,
+            killsToWin: MAPS[WORLD_MAP].killsToWin,
             unlockedLevel: 0,
-            selectedLevel: 0,
+            selectedLevel: WORLD_MAP,
             isPersistent: isPersistent,
             isPrivate: isPrivate
         };
@@ -1050,9 +1129,9 @@ io.on('connection', (socket) => {
                 isStarted: false,
                 isOver: false,
                 // Ochilgan xaritalar - xo'jayin hisobidan (u kirganda qo'yiladi)
-                killsToWin: MAPS[0].killsToWin,
+                killsToWin: MAPS[WORLD_MAP].killsToWin,
                 unlockedLevel: 0,
-                selectedLevel: 0,
+                selectedLevel: WORLD_MAP,
                 isPersistent: true,
                 isPrivate: record.isPrivate
             };
@@ -1120,6 +1199,15 @@ io.on('connection', (socket) => {
         const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
         if (room && room.isStarted && typeof data.kind === 'string') gameEngine.petAnimal(room, socket.id, data.kind);
     });
+    // BIG MAP: baland joydan yiqilish (klient o'lchaydi) va maxfiy sandiq
+    socket.on('bigFall', (data: { roomId: string, h: number }) => {
+        const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
+        if (room && room.isStarted) gameEngine.bigFall(room, socket.id, Number(data.h));
+    });
+    socket.on('bigChest', (data: { roomId: string, id: number }) => {
+        const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
+        if (room && room.isStarted && Number.isInteger(data.id)) gameEngine.bigChestOpen(room, socket.id, data.id);
+    });
     socket.on('rockTouch', (data: { roomId: string, k: number }) => {
         const room = data && typeof data.roomId === 'string' ? activeRooms[data.roomId] : undefined;
         if (room && room.isStarted && Number.isInteger(data.k)) gameEngine.doorsRockTouch(room, socket.id, data.k);
@@ -1149,6 +1237,26 @@ io.on('connection', (socket) => {
     });
     socket.on('produceSell', (d: { roomId: string, what?: string }) => {
         if (d && typeof d.roomId === 'string') roomManager.produceSell(socket, d.roomId, d.what === 'fish' ? 'fish' : 'crops');
+    });
+    socket.on('bigAct', (d: { roomId: string, act: string, arg?: number, item?: string }) => {
+        const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
+        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'cage', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
+    });
+    socket.on('bigPortal', (d: { roomId: string, loc: string }) => {
+        const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
+        if (room && room.isStarted && typeof d.loc === 'string') gameEngine.bigPortalGo(room, socket.id, d.loc);
+    });
+    socket.on('bigSnow', (roomId: string) => {
+        const room = typeof roomId === 'string' ? activeRooms[roomId] : undefined;
+        if (room && room.isStarted) gameEngine.bigSnow(room, socket.id);
+    });
+    socket.on('bigThrow', (d: { roomId: string, a: number }) => {
+        const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
+        if (room && room.isStarted) gameEngine.bigThrow(room, socket.id, Number(d.a));
+    });
+    socket.on('bigBuy', (d: { roomId: string, item: string }) => {
+        if (!d || typeof d.roomId !== 'string') return;
+        roomManager.bigBuy(socket, d.roomId, d.item).catch(err => console.error('bigBuy xatosi:', err));
     });
     socket.on('shopBuy', (d: { roomId: string, item: string }) => {
         if (!d || typeof d.roomId !== 'string') return;
@@ -1356,4 +1464,5 @@ io.on('connection', (socket) => {
 const PORT = Number(process.env.PORT) || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server professional modda ${PORT}-portda ishlamoqda.`);
+    // Big Map reytingi uchun dunyo uzunligi - oldindan (birinchi reyting ochilganda o'yin qotib qolmasin)
 });

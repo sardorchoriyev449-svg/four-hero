@@ -140,6 +140,7 @@
             const b = document.createElement('button');
             b.className = 'wd-hero-btn' + (type === hero() ? ' active' : '');
             b.innerText = tCharName(type);
+            if (!heroOwned(type)) b.insertAdjacentHTML('afterbegin', '<i class="fa-solid fa-lock"></i> ');
             b.disabled = characterLocked && type !== hero();
             b.onclick = () => { if (type === hero() || characterLocked) return; tryOn = null; selectCharTab(type); render(); };
             ht.appendChild(b);

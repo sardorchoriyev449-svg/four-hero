@@ -4,11 +4,12 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP, CRITTER, PET } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
 import { GameEngine } from './game.engine';
+import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN } from '../bigmap';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
-import { TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE } from '../perks';
+import { TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE, HUNTER } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -16,7 +17,8 @@ const CHARACTER_COLORS: { [key: string]: number } = {
     knight: 0x9e9e9e,   // Kulrang
     archer: 0x7b1fa2,   // Binafsha (siz chizgan sxemaga mos)
     mage: 0x1565c0,     // Ko'k
-    samurai: 0xd32f2f   // Qizil
+    samurai: 0xd32f2f,  // Qizil
+    hunter: 0x5d7a3a    // Ovchi (pullik) - o'rmon yashili
 };
 
 export class RoomManager {
@@ -107,8 +109,8 @@ export class RoomManager {
 
         // Agar hisobi bo'lsa, uning kiygan skinlarini, qurol skinlarini, tanlagan
         // ("default") personajini va yaxshilash darajalarini bazadan olamiz
-        let equippedSkins: { [key: string]: string } = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default' };
-        let equippedWeaponSkins: { [key: string]: string } = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default' };
+        let equippedSkins: { [key: string]: string } = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default', hunter: 'default' };
+        let equippedWeaponSkins: { [key: string]: string } = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default', hunter: 'default' };
         let accountUpgrades: { [key: string]: { damage: number, stamina: number } } = {
             knight: { damage: 0, stamina: 0 }, archer: { damage: 0, stamina: 0 },
             mage: { damage: 0, stamina: 0 }, samurai: { damage: 0, stamina: 0 }
@@ -121,6 +123,7 @@ export class RoomManager {
         let acidCurse = false, boltCurse = false, mutedUntil = 0;
         let xpBoost: { [c: string]: number } = {};
         let petTrust = 0;
+        let ownedHeroes: string[] = [], supporter = false, bigCp = 0, bigCpV = 0, bigSeed = 0, bigVer = 0, bigDoneM = 0, bigOpened: number[] = [], bigKilled: number[] = [], bigGot: number[] = [], bigMapItem = false, bigQuests: { [q: string]: number } = {}, bigKillAt: { [z: string]: number } = {};
         let pet: db.PetData | undefined;
         if (userId !== null) {
             const user = await db.getUserById(userId);
@@ -142,6 +145,11 @@ export class RoomManager {
                 // MUHIM: "Mening personajim" ekranida tanlangan personaj bilan HAR QANDAY
                 // xonada shu personaj sifatida o'ynaydi (endi lobbida alohida tanlanmaydi)
                 characterType = user.defaultCharacter || 'knight';
+                ownedHeroes = user.ownedHeroes || [];
+                supporter = !!user.supporter;
+                bigCp = user.bigCp || 0; bigCpV = user.bigCpV || 0; bigSeed = user.bigSeed || 0; bigVer = user.bigVer || 0; bigDoneM = user.bigDoneM || 0; bigOpened = user.bigOpened || []; bigKilled = user.bigKilled || []; bigGot = user.bigGot || []; bigMapItem = !!user.bigMapItem; bigQuests = { ...(user.bigQuests || {}) }; bigKillAt = { ...(user.bigKillAt || {}) };
+                // pullik qahramon sotib olinmagan bo'lsa (masalan, qaytarib olingan to'lov) - ritsar
+                if (db.PREMIUM_HEROES.includes(characterType) && !ownedHeroes.includes(characterType)) characterType = 'knight';
                 acidCurse = !!user.cursedAcid;
                 boltCurse = !!user.cursedBolt;
                 mutedUntil = user.mutedUntil || 0;
@@ -179,7 +187,7 @@ export class RoomManager {
             userId: userId,
             clientId: typeof clientId === 'string' ? clientId.slice(0, 64) : null,
             isAdmin: !!(socket.data && (socket.data as any).isAdmin),
-            acidCurse, boltCurse, mutedUntil, xpBoost, petTrust, pet,
+            acidCurse, boltCurse, mutedUntil, xpBoost, petTrust, pet, ownedHeroes, supporter, bigCp, bigCpV, bigSeed, bigVer, bigDoneM, bigOpened, bigKilled, bigGot, bigMapItem, bigQuests, bigKillAt, localTest: isLocalTest(socket.handshake?.address),
             nickname: nickname,
             kills: 0,
             skinId: equippedSkins[characterType] || 'default',
@@ -257,6 +265,20 @@ export class RoomManager {
         if (!room || !room.isStarted || !p || p.isDead || this.isLoading(room) || RoomManager.frozen(room)) return;
         const perk = SPECIAL_PERK[p.characterType];
         if (!perk || !hasPerk(p, perk) || (p.specialCooldown || 0) > 0) return;
+        if (p.characterType === 'hunter') {
+            // QOPQON: oyog'i ostiga qo'yiladi (bir vaqtda 2 tagacha), 0.5 s da qurollanadi, 20 s turadi.
+            // Yerda yoki platformada turganda (havoda / chuqur ustida - qo'yilmaydi, qayta tiklanish sarflanmaydi)
+            const feet = p.y + 24, gy = room.big ? bigSurfaceY(room.big, p.x, feet, 200) : surfaceBelow(getMapById(room.selectedLevel), p.x, feet);
+            if (gy === null || gy - feet > 12) return;
+            room.hunterTraps = room.hunterTraps || [];
+            const mine = room.hunterTraps.filter(q => q.owner === p.id);
+            if (mine.length >= HUNTER.trapMax) room.hunterTraps.splice(room.hunterTraps.indexOf(mine[0]), 1);   // eng eskisi olinadi
+            room.hunterSeq = (room.hunterSeq || 0) + 1;
+            room.hunterTraps.push({ id: room.hunterSeq, owner: p.id, x: p.x, y: gy, arm: HUNTER.trapArmTicks, life: HUNTER.trapLifeTicks });
+            p.specialCooldown = Math.round(SPECIAL_COOLDOWN_TICKS * 0.6);
+            this.io.to(roomId).emit('trapPlace', { x: Math.round(p.x), y: Math.round(gy) });
+            return;
+        }
         p.specialTicks = SPECIAL_TICKS;
         p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
     }
@@ -267,14 +289,14 @@ export class RoomManager {
         const host = room.players[room.hostId];
         // Yangi xo'jayin qahramoni 5-darajadan past (yoki mehmon) - arena tanlangan bo'lsa, oddiy xaritaga qaytadi
         if (!room.isStarted && getMapById(room.selectedLevel).bonus && !RoomManager.alwaysOpen(getMapById(room.selectedLevel)) && !this.bonusUnlocked(room)) {
-            room.selectedLevel = Math.min(room.unlockedLevel, SEASON_MAP_COUNT - 1);
+            room.selectedLevel = WORLD_MAP;
             room.killsToWin = getMapById(room.selectedLevel).killsToWin;
         }
         if (!host || typeof host.unlockedLevel !== 'number') return;
         room.unlockedLevel = Math.min(host.unlockedLevel, SEASON_MAP_COUNT - 1);
         // O'yin ketayotganda xarita almashmaydi - faqat lobbida moslanadi
         if (room.isStarted) return;
-        if (freshHost || (room.selectedLevel > room.unlockedLevel && !getMapById(room.selectedLevel).bonus)) room.selectedLevel = room.unlockedLevel;
+        if (freshHost || !getMapById(room.selectedLevel).bonus) room.selectedLevel = WORLD_MAP;   // Season 1/2 olib tashlangan - The World bilan boshlanadi
         room.killsToWin = getMapById(room.selectedLevel).killsToWin;
     }
 
@@ -288,7 +310,7 @@ export class RoomManager {
             unlockedLevel: room.unlockedLevel,
             selectedLevel: room.selectedLevel,
             bonusUnlocked: this.bonusUnlocked(room),
-            maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor, bonus: !!m.bonus, shop: RoomManager.alwaysOpen(m), season: m.season || 1 }))
+            maps: MAPS.map(m => ({ id: m.id, name: m.name, description: m.description, accentColor: m.accentColor, bonus: !!m.bonus, big: !!m.big, shop: RoomManager.alwaysOpen(m), season: m.season || 1 }))
         };
     }
 
@@ -342,6 +364,18 @@ export class RoomManager {
         room.bots.forEach(b => { if (b.targetPlayerId === oldId) b.targetPlayerId = socket.id; });
         room.checkpointReached = room.checkpointReached.map(id => (id === oldId ? socket.id : id));
         if (room.loadingIds) room.loadingIds = room.loadingIds.map(id => (id === oldId ? socket.id : id));
+        // BIG MAP va qobiliyatlar: o'lim taymeri, eng uzoq masofa, kuyish / zahar, qor to'plari, boss nishoni, ovchi mina / qopqoni, tornado
+        const re = (id: string) => (id === oldId ? socket.id : id);
+        if (room.big) {
+            const B = room.big as any;
+            ['dead', 'best', 'fell', 'burn', 'dots', 'pcp', 'pv'].forEach(k => { if (B[k] && oldId in B[k]) { B[k][socket.id] = B[k][oldId]; delete B[k][oldId]; } });
+            room.big.pshots.forEach(s => { s.owner = re(s.owner); });
+            room.big.enemies.forEach(e => { if (e.tgt) e.tgt = re(e.tgt); if (e.poison) e.poison.owner = re(e.poison.owner); });
+            room.big.areas.forEach(a => { if (a.hit) a.hit = a.hit.map(re); });
+        }
+        (room.hunterMines || []).forEach((m: any) => { m.owner = re(m.owner); });
+        (room.hunterTraps || []).forEach((m: any) => { m.owner = re(m.owner); });
+        (room.tornadoes || []).forEach((m: any) => { m.owner = re(m.owner); });
 
         if (staleSocket) staleSocket.disconnect(true);
 
@@ -373,6 +407,7 @@ export class RoomManager {
         if (!(characterType in CHARACTER_COLORS) || !room || room.isStarted) return;
         if (room.players[socket.id]) {
             const player = room.players[socket.id];
+            if (db.PREMIUM_HEROES.includes(characterType) && !(player.ownedHeroes || []).includes(characterType)) return;   // sotib olinmagan
             player.characterType = characterType;
             const skinId = player.equippedSkins[characterType] || 'default';
             player.skinId = skinId;
@@ -388,7 +423,7 @@ export class RoomManager {
             this.updateLobby(roomId);
             // Xo'jayin qahramonini almashtirsa - bonus xarita qulfi o'zgarishi mumkin
             if (room.hostId === socket.id) {
-                if (getMapById(room.selectedLevel).bonus && !RoomManager.alwaysOpen(getMapById(room.selectedLevel)) && !this.bonusUnlocked(room)) room.selectedLevel = Math.min(room.unlockedLevel, SEASON_MAP_COUNT - 1);
+                if (getMapById(room.selectedLevel).bonus && !RoomManager.alwaysOpen(getMapById(room.selectedLevel)) && !this.bonusUnlocked(room)) room.selectedLevel = WORLD_MAP;
                 this.broadcastLevelInfo(roomId);
             }
 
@@ -443,7 +478,8 @@ export class RoomManager {
 
         // Butun son bo'lishi shart (matn/NaN kelsa - tekshiruvlar o'tib ketib, START da xato berardi)
         // Bonus xaritalar doim ochiq; mavsum xaritalari - faqat ochilganlari
-        if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || (levelIndex > room.unlockedLevel && !MAPS[levelIndex].bonus)) return;
+        // Season 1/2 xaritalari olib tashlangan: faqat bonus xaritalar va The World tanlanadi
+        if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= MAPS.length || !MAPS[levelIndex].bonus) return;
         // Bonus (arena) - xo'jayin qahramoni 5-darajaga yetganda ochiladi
         if (MAPS[levelIndex].bonus && !RoomManager.alwaysOpen(MAPS[levelIndex]) && !this.bonusUnlocked(room)) return;
 
@@ -466,7 +502,7 @@ export class RoomManager {
     // Bonus (arena) - xo'jayin qahramoni 5-darajaga yetganda ochiladi
     public static readonly BONUS_UNLOCK_LEVEL = 5;
     // Tinch bonus xaritalar (do'kon, My Farm) - darajadan qat'i nazar doim ochiq
-    public static alwaysOpen(m: { shop?: unknown, myFarm?: unknown }): boolean { return !!m.shop || !!m.myFarm; }
+    public static alwaysOpen(m: { shop?: unknown, myFarm?: unknown, big?: unknown }): boolean { return !!m.shop || !!m.myFarm || !!m.big; }
     private bonusUnlocked(room: RoomState): boolean {
         const host = room.players[room.hostId];
         return !!host && (host.level || 0) >= RoomManager.BONUS_UNLOCK_LEVEL;
@@ -580,7 +616,7 @@ export class RoomManager {
 
         const charLogic = getCharacterLogic(player.characterType);
         if (!charLogic.canAttack(player)) return;
-        if (player.stamina < BaseCharacter.staminaCost(player, charLogic.attackStaminaCost)) {
+        if (player.stamina < BaseCharacter.staminaCost(player, charLogic.attackStamina(player))) {
             const now = Date.now();
             if (now - (player.lastNoStaminaAt || 0) >= 800) {
                 player.lastNoStaminaAt = now;
@@ -589,7 +625,7 @@ export class RoomManager {
             return;
         }
 
-        BaseCharacter.spendStamina(player, charLogic.attackStaminaCost);
+        BaseCharacter.spendStamina(player, charLogic.attackStamina(player));
         player.attackCooldown = charLogic.attackCooldownTicks(player);
 
         charLogic.handleAttack(player, room, player.lastAttackAngle);
@@ -608,6 +644,19 @@ export class RoomManager {
         if (player.stamina <= 0) return; // Stamina tugagan bo'lsa yoqilmaydi
         if (!hasPerk(player, 'shift')) return; // SHIFT qobiliyati 1-darajada ochiladi
 
+        // OVCHI: Shift - YOPISHQOQ MINA (bir martalik): qaragan tomonga otiladi, raqibga yopishib portlaydi; 6 s qayta tiklanadi
+        if (player.characterType === 'hunter') {
+            if ((player.mineCd || 0) > 0) return;
+            if (player.stamina < BaseCharacter.staminaCost(player, HUNTER.mineStamina)) { this.io.to(player.id).emit('noStamina'); return; }
+            BaseCharacter.spendStamina(player, HUNTER.mineStamina);
+            player.mineCd = HUNTER.mineCdTicks;
+            const dir = faceDir || (Math.cos(player.lastAttackAngle || 0) < 0 ? -1 : 1);
+            room.hunterMines = room.hunterMines || [];
+            room.hunterSeq = (room.hunterSeq || 0) + 1;
+            room.hunterMines.push({ id: room.hunterSeq, owner: player.id, x: player.x + dir * 20, y: player.y - 10, vx: dir * HUNTER.mineSpeed, vy: -150, stuck: null, ox: 0, oy: 0, fuse: 0, ground: false });
+            this.io.to(roomId).emit('hunterThrow', { id: player.id, x: Math.round(player.x), y: Math.round(player.y) });
+            return;
+        }
         // SEHRGAR: Shift - TORNADO (bir martalik, bosib turilmaydi): qaragan tomonga yuradi, 20 s qayta tiklanadi
         if (player.characterType === 'mage') {
             if ((player.tornadoCd || 0) > 0) return;
@@ -813,6 +862,33 @@ export class RoomManager {
         if (where) this.io.to(where.socketId).emit('nicknameChanged', { nickname });
     }
     // Admin sovg'a berdi
+    // Pullik qahramon sotib olindi / sovg'a qilindi - onlayn bo'lsa xonadagi ro'yxati darhol yangilanadi
+    public notifyHeroBought(userId: string, hero: string): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (!p) return;
+            p.ownedHeroes = Array.from(new Set([...(p.ownedHeroes || []), hero]));
+            this.io.to(p.id).emit('heroUnlocked', { hero });
+        });
+    }
+    // Supporter Pack to'landi: onlayn bo'lsa - tanga darhol yangilanadi, lobbida belgi chiqadi
+    public notifySupporter(userId: string, coins: number, added: number): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (!p) return;
+            p.supporter = true;
+            this.io.to(p.id).emit('supporterThanks', { coins, added });
+            this.io.to(p.id).emit('coinsUpdated', { amount: added, totalCoins: coins });   // o'yin ichidagi tanga ko'rsatkichi
+            this.updateLobby(room.id);
+        });
+    }
+    // Pul qaytarildi: onlayn bo'lsa - qahramon ro'yxati yangilanadi (o'ynab turgan raund oxirigacha qoladi)
+    public notifyRevoked(userId: string): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (p) p.ownedHeroes = (p.ownedHeroes || []).filter(h => !db.PREMIUM_HEROES.includes(h));
+        });
+    }
     public notifyGift(userId: string): void {
         const where = this.findOnline(userId);
         if (where) this.io.to(where.socketId).emit('adminNotice', { key: 'admin_gift_received' });
@@ -894,6 +970,19 @@ export class RoomManager {
             p.y = spawn.y;
         });
 
+        // BIG MAP: har o'yinda yangi tasodifiy dunyo; xo'jayinning saqlangan checkpointidan boshlanadi
+        if (map.big) {
+            const host = room.players[room.hostId];
+            // DUNYO SAQLANADI: xona egasining dunyosi (seed) davom etadi - oxiriga yetguncha bir xil (sandiq / bosslar ham)
+            let seed = host && host.bigSeed && host.bigVer === BIG_GEN ? host.bigSeed : 0;   // generator yangilangan bo'lsa - yangi dunyo
+            if (!seed) {
+                seed = ((Math.random() * 2 ** 31) >>> 0) || 1;
+                if (host) { host.bigSeed = seed; host.bigVer = BIG_GEN; host.bigCp = -1; host.bigCpV = 3; host.bigDoneM = 0; host.bigOpened = []; host.bigKilled = []; host.bigGot = []; host.bigQuests = {}; host.bigKillAt = {}; if (host.userId) db.setBigWorld(host.userId, seed, BIG_GEN).catch(err => console.error('setBigWorld xatosi:', err)); }
+            }
+            room.big = createBigState(seed, host && host.bigCpV === 3 ? host.bigCp ?? -1 : -1, host ? host.bigOpened || [] : [], host ? host.bigKilled || [] : [], host ? host.bigDoneM || 0 : 0, host ? host.bigGot || [] : [], host ? host.bigKillAt || {} : {});
+            room.big.fast = !!(host && host.localTest);   // test rejimi: dushmanlar / bosslar tezroq qaytadi
+            Object.values(room.players).forEach((p, i) => { const sp = bigSpawnPoint(room.big!, i); p.x = sp.x; p.y = sp.y; p.buffs = {}; p.snowballs = 0; });   // do'kon ta'sirlari - shu o'yin uchun
+        } else room.big = null;
         // Botlar / ilon / qutilar / minalar - xarita turiga qarab
         GameEngine.startRound(room, map);
         room.paused = false;
@@ -980,7 +1069,8 @@ export class RoomManager {
             id: map.id,
             name: map.name,
             mode: map.mode,
-            mapWidth: map.mapWidth,
+            mapWidth: room.big ? room.big.w.width : map.mapWidth,
+            big: room.big ? { ...room.big.w, shop: RoomManager.bigShopDef(), bigShop: BIG_SHOP, zones: room.big.w.zones.map(z => ({ id: z.id, x0: z.x0, x1: z.x1, y0: z.y0, y1: z.y1, boss: z.boss || '', secret: !!z.secret, trig: z.trig, dx: z.dx, dy: z.dy, gp: z.gp })), cp: room.big.cp, got: Object.keys(room.big.got).map(Number) } : null,
             platforms: map.platforms,
             walls: room.walls,
             pits: map.pits || [],
@@ -1251,21 +1341,72 @@ export class RoomManager {
     }
 
     // DO'KON: Eliksir / Chip sotib olish (faqat do'kon xaritasida, peshtaxta yonida, hisobli o'yinchi)
+    // BIG MAP DO'KONI: sarguzasht buyumlari (darhol ishlaydi)
+    private bigBuying = new Set<string>();   // xarid ketayotgan o'yinchilar (ikki marta bosish - ikki marta yechilmasin)
+    public async bigBuy(socket: Socket, roomId: string, item: unknown): Promise<void> {
+        if (this.bigBuying.has(socket.id)) return;
+        this.bigBuying.add(socket.id);
+        try { await this.bigBuyOnce(socket, roomId, item); } finally { this.bigBuying.delete(socket.id); }
+    }
+    private async bigBuyOnce(socket: Socket, roomId: string, item: unknown): Promise<void> {
+        const room = this.activeRooms[roomId], p = room?.players[socket.id];
+        const reply = (d: object) => socket.emit('bigBuyResult', d);
+        if (item === 'bigmap') {   // XARITA: bir marta, butun umr (Big Map qishlog'idagi do'kondan ham olinadi)
+            if (!room || !room.big || !p || !room.isStarted) return;
+            if (!bigShopNear(room.big, p)) { reply({ success: false, item, message: 'shop_too_far' }); return; }
+            await this.sellBigMap(socket, p, reply);
+            return;
+        }
+        const it = BIG_SHOP.find(x => x.id === item);
+        if (!room || !room.big || !p || !it || !room.isStarted) return;
+        if (p.isDead) { reply({ success: false, item, message: 'big_err_dead' }); return; }
+        if (!bigShopNear(room.big, p)) { reply({ success: false, item, message: 'shop_too_far' }); return; }
+        if (p.userId === null) { reply({ success: false, item, message: 'shop_need_account' }); return; }
+        if (it.id === 'phoenix' && p.buffs && p.buffs.phoenix) { reply({ success: false, item, message: 'big_have_phoenix' }); return; }
+        if (it.id === 'armor' && p.buffs && (p.buffs.armorHp || 0) >= ARMOR.max) { reply({ success: false, item, message: 'big_armor_full' }); return; }
+        if (it.id === 'potion' && p.hp >= (p.maxHp || 100)) { reply({ success: false, item, message: 'big_hp_full' }); return; }
+        if (it.id === 'energy' && p.stamina >= (p.maxStamina || 100)) { reply({ success: false, item, message: 'big_energy_full' }); return; }
+        const u = await db.spendCoins(p.userId, it.price);
+        if (!u) { reply({ success: false, item, message: 'err_not_enough_coins' }); return; }
+        const b = p.buffs = p.buffs || {}, now = Date.now();
+        if (it.id === 'potion') p.hp = Math.min(p.maxHp || 100, p.hp + (p.maxHp || 100) * 0.5);
+        else if (it.id === 'energy') p.stamina = p.maxStamina || 100;
+        else if (it.id === 'phoenix') b.phoenix = true;
+        else if (it.id === 'armor') b.armorHp = Math.min(ARMOR.max, (b.armorHp || 0) + ARMOR.add);   // zirh zaxirasi (o'q zararini oladi)
+        else { const k = it.id as 'battery' | 'strength' | 'feather'; b[k] = Math.max(now, b[k] || 0) + it.ms!; }   // qayta olinsa - vaqt qo'shiladi
+        reply({ success: true, item, coins: u.coins });
+        socket.emit('coinsUpdated', { amount: -it.price, totalCoins: u.coins });
+    }
+    // BIG MAP XARITASI: bir marta sotib olinadi - hisobda butun umr saqlanadi
+    private async sellBigMap(socket: Socket, p: PlayerState, reply: (d: object) => void): Promise<void> {
+        if (p.userId === null) { reply({ success: false, item: 'bigmap', message: 'shop_need_account' }); return; }
+        if (p.bigMapItem) { reply({ success: false, item: 'bigmap', message: 'shop_not_needed' }); return; }
+        const price = RoomManager.bigShopDef().prices.bigmap || 600;
+        const t = await db.buyBigMap(p.userId, price);
+        if (!t.success) { if (t.message === 'shop_not_needed') p.bigMapItem = true; reply({ success: false, item: 'bigmap', message: t.message }); return; }
+        p.bigMapItem = true;
+        reply({ success: true, item: 'bigmap', coins: t.coins });
+        socket.emit('coinsUpdated', { amount: -price, totalCoins: t.coins });
+    }
+    // Big Map qishlog'idagi do'kon - Shop xaritasidagi narxlar bilan bir xil
+    public static bigShopDef() { return MAPS.find(m => m.shop && m.mode === 'shop')!.shop!; }
     public async shopBuy(socket: Socket, roomId: string, item: unknown): Promise<void> {
         const room = this.activeRooms[roomId];
         const p = room?.players[socket.id];
         const map = room ? getMapById(room.selectedLevel) : null;
         const reply = (d: object) => socket.emit('shopResult', d);
-        if (!room || !p || !map || !map.shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item) || HOME_ITEMS.some(h => 'home_' + h.id === item) || ['hive', 'mill', 'sprinkler', 'scarecrow', 'greenhouse'].includes(item as string))) return;
-        if (Math.abs(p.x - map.shop.counterX) > map.shop.range + 40) { reply({ success: false, item, message: 'shop_too_far' }); return; }
+        const shop = map ? map.shop || (room && room.big ? RoomManager.bigShopDef() : undefined) : undefined;
+        if (!room || !p || !map || !shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item) || HOME_ITEMS.some(h => 'home_' + h.id === item) || ['hive', 'mill', 'sprinkler', 'scarecrow', 'greenhouse', 'elf', 'rake'].includes(item as string) || MEADOW_DECOR.some(d => 'meadow_' + d.id === item) || item === 'bigmap')) return;
+        if (room.big ? !bigShopNear(room.big, p) : Math.abs(p.x - shop.counterX) > shop.range + 40) { reply({ success: false, item, message: 'shop_too_far' }); return; }
         if (p.userId === null) { reply({ success: false, item, message: 'shop_need_account' }); return; }
+        if (item === 'bigmap') { await this.sellBigMap(socket, p, reply); return; }
         // O'SISH TEZLATGICHLARI: nota uyasi va bahaybat tegirmon (ferma darajasi bilan ochiladi)
         if (item === 'hive' || item === 'mill' || item === 'sprinkler' || item === 'scarecrow' || item === 'greenhouse') {
             const f = await db.getFarm(p.userId);
             if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
             const lv = farmLevel(f.xp);
-            const cur = item === 'mill' ? f.mill : item === 'sprinkler' ? f.sprinklers : item === 'scarecrow' ? f.scarecrows : 0;
-            const def = item === 'hive' ? FARM_HIVE : item === 'greenhouse' ? FARM_GREENHOUSE : item === 'mill' ? FARM_MILL[f.mill]
+            const cur = item === 'mill' ? f.mill : item === 'sprinkler' ? f.sprinklers : item === 'scarecrow' ? f.scarecrows : item === 'hive' ? f.hive : 0;
+            const def = item === 'hive' ? (f.hive < FARM_HIVE.max ? { price: FARM_HIVE.prices[f.hive], level: FARM_HIVE.levels[f.hive] } : null) : item === 'greenhouse' ? FARM_GREENHOUSE : item === 'mill' ? FARM_MILL[f.mill]
                 : item === 'sprinkler' ? (f.sprinklers < FARM_SPRINKLER.max ? FARM_SPRINKLER : null) : (f.scarecrows < FARM_SCARECROW.max ? FARM_SCARECROW : null);
             if (!def) { reply({ success: false, item, message: 'shop_not_needed' }); return; }
             if (lv < def.level) { reply({ success: false, item, message: 'mf_zone_level|' + def.level }); return; }
@@ -1287,9 +1428,58 @@ export class RoomManager {
             this.farmChanged(p.userId);
             return;
         }
+        // GRABL: yaylovda o'zi grядka qazish (ferma darajasi bilan)
+        if (item === 'rake') {
+            const f = await db.getFarm(p.userId);
+            if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
+            if (farmLevel(f.xp) < MEADOW.rake.level) { reply({ success: false, item, message: 'mf_zone_level|' + MEADOW.rake.level }); return; }
+            const t = await db.buyRake(p.userId, MEADOW.rake.price);
+            if (!t.success) { reply({ success: false, item, message: t.message }); return; }
+            reply({ success: true, item, coins: t.coins });
+            socket.emit('coinsUpdated', { amount: -MEADOW.rake.price, totalCoins: t.coins });
+            this.farmChanged(p.userId);
+            return;
+        }
+        // YAYLOV BEZAGI: o'z joyida paydo bo'ladi (keyin fermada E bilan ko'chiriladi)
+        if (typeof item === 'string' && item.startsWith('meadow_')) {
+            const d = MEADOW_DECOR.find(x => 'meadow_' + x.id === item);
+            if (!d) return;
+            const f = await db.getFarm(p.userId);
+            if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
+            if (f.meadow[d.id] !== undefined) { reply({ success: false, item, message: 'shop_not_needed' }); return; }
+            const spot = meadowFreeSpot(f, d.id, d.x);   // band bo'lsa - yonidagi bo'sh joy
+            if (spot === null) { reply({ success: false, item, message: 'mf_meadow_full' }); return; }
+            const t = await db.buyMeadowDecor(p.userId, d.id, d.price, spot);
+            if (!t.success) { reply({ success: false, item, message: t.message }); return; }
+            reply({ success: true, item, coins: t.coins });
+            socket.emit('coinsUpdated', { amount: -d.price, totalCoins: t.coins });
+            this.farmChanged(p.userId);
+            return;
+        }
+        // FERMA ELFI (2 tagacha, ferma darajasi bilan)
+        if (item === 'elf') {
+            const f = await db.getFarm(p.userId);
+            if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
+            if (f.elves.length >= FARM_ELF.max) { reply({ success: false, item, message: 'shop_not_needed' }); return; }
+            if (farmLevel(f.xp) < FARM_ELF.level) { reply({ success: false, item, message: 'mf_zone_level|' + FARM_ELF.level }); return; }
+            const price = FARM_ELF.prices[f.elves.length];
+            const t = await db.buyElf(p.userId, f.elves.length, price);
+            if (!t.success) { reply({ success: false, item, message: t.message }); return; }
+            reply({ success: true, item, coins: t.coins, elves: t.farm!.elves.length });
+            socket.emit('coinsUpdated', { amount: -price, totalCoins: t.coins });
+            this.farmChanged(p.userId);
+            return;
+        }
         if (typeof item === 'string' && item.startsWith('decor_')) {
             const d = FARM_DECOR.find(x => 'decor_' + x.id === item);
             if (!d) return;
+            // Elflar uchun: karta stoli - ikkita elf bo'lsa; basseyn - elflar 300 ta hosil yig'gach
+            if (d.id === 'cards' || d.id === 'pool') {
+                const f = await db.getFarm(p.userId);
+                if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
+                if (d.id === 'cards' && f.elves.length < 2) { reply({ success: false, item, message: 'mf_need_two_elves' }); return; }
+                if (d.id === 'pool' && f.elfTotal < FARM_ELF.poolUnlock) { reply({ success: false, item, message: 'mf_pool_locked|' + f.elfTotal + '/' + FARM_ELF.poolUnlock }); return; }
+            }
             const t = await db.buyDecor(p.userId, d.id, d.price);
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
             reply({ success: true, item, coins: t.coins });
@@ -1298,7 +1488,7 @@ export class RoomManager {
             return;
         }
         if (item === 'fert' || item === 'water') {
-            const price = map.shop.prices[item] || 0;
+            const price = shop.prices[item] || 0;
             const t = await db.buyConsumable(p.userId, item, price);
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
             reply({ success: true, item, coins: t.coins, count: item === 'fert' ? t.farm!.fert : t.farm!.water });
@@ -1306,7 +1496,7 @@ export class RoomManager {
             return;
         }
         if (item === 'rod' || item === 'net') {
-            const price = map.shop.prices[item] || 0;
+            const price = shop.prices[item] || 0;
             const t = await db.buyFishTool(p.userId, item, price);
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
             reply({ success: true, item, coins: t.coins });
@@ -1314,7 +1504,7 @@ export class RoomManager {
             return;
         }
         const kind = item === 'elixir' ? 'acid' : 'bolt';
-        const curePrice = map.shop.prices[item as 'elixir' | 'chip'];
+        const curePrice = shop.prices[item as 'elixir' | 'chip'];
         const r = await db.buyCure(p.userId, kind, curePrice);
         if (!r.success || !r.user) { reply({ success: false, item, message: r.message }); return; }
         if (kind === 'acid') p.acidCurse = false; else p.boltCurse = false;
@@ -1362,6 +1552,7 @@ export class RoomManager {
         });
     }
     private farmBusy = new Set<string>();
+    private mageAt = new Map<string, number>();   // Balot Magi (fermada): suhbat / sovg'a oralig'i
     // Host ekadi / yig'adi / maydon va platforma ochadi / baliq tutadi
     public async farmAct(socket: Socket, roomId: string, action: unknown, k: unknown, arg: unknown): Promise<void> {
         const room = this.activeRooms[roomId];
@@ -1369,7 +1560,7 @@ export class RoomManager {
         const map = room ? getMapById(room.selectedLevel) : null;
         const reply = (d: object) => socket.emit('myFarmResult', { action, ...d });
         if (!room || !p || !map || !map.myFarm || !room.isStarted || !room.myFarm) return;
-        if (!['plant', 'harvest', 'zone', 'dock', 'cast', 'reel', 'water', 'fert', 'orchard', 'orchardCut', 'tree', 'pick', 'orders', 'deliver', 'home', 'chest', 'decorStore'].includes(action as string)) return;
+        if (!['plant', 'harvest', 'zone', 'dock', 'cast', 'reel', 'water', 'fert', 'orchard', 'orchardCut', 'tree', 'pick', 'orders', 'deliver', 'home', 'chest', 'decorStore', 'dig', 'undig', 'meadow', 'mage'].includes(action as string)) return;
         if (room.hostId !== socket.id) { reply({ success: false, message: 'mf_host_only' }); return; }
         if (p.userId === null) { reply({ success: false, message: 'farm_need_account' }); return; }
         const mf = room.myFarm, F = map.myFarm, uid = p.userId;
@@ -1384,8 +1575,31 @@ export class RoomManager {
         this.farmBusy.add(uid);
         try {
             let r: any = null;
+            if (action === 'mage') {
+                // BALOT MAGI fermada yashaydi: suhbat tugadi (+1 simpatiya, 3 s da bir) yoki qo'ldagi narsani sovg'a qilish
+                const a: any = arg && typeof arg === 'object' ? arg : {}, M = fd.mage, now = Date.now();
+                if (!M || !M.home) { reply({ success: false, message: 'err_bad_item' }); return; }
+                const tk = a.kind === 'gift' ? uid : uid + ':talk';   // sovg'a - 1.2 s, suhbat (do'stlik) - 15 s da bir
+                if (now - (this.mageAt.get(tk) || 0) < (a.kind === 'gift' ? 1200 : 15000)) return;
+                this.mageAt.set(tk, now);
+                if (a.kind === 'gift') {
+                    const item = typeof a.item === 'string' ? a.item : '';
+                    const left = await db.farmTakeOne(uid, item);
+                    if (left < 0) { reply({ success: false, message: 'mg_no_item', item }); return; }
+                    if (left > 0) fd.bag[item] = left; else delete fd.bag[item];
+                    const fl = item === 'flower';
+                    M.sym = Math.min(30, M.sym + (fl ? 2 : 1)); if (fl) M.f++;
+                    await db.setBigQuest(uid, 'mage', M.sym); if (fl) await db.setBigQuest(uid, 'magef', Math.min(999, M.f));
+                    reply({ success: true, kind: 'gift', item, left, sym: M.sym, f: M.f });
+                    this.io.to(roomId).emit('mfMageJoy', { item });
+                } else {
+                    M.sym = Math.min(30, M.sym + 1); await db.setBigQuest(uid, 'mage', M.sym);
+                    reply({ success: true, kind: 'talk', sym: M.sym });
+                }
+                return;
+            }
             if (action === 'plant' || action === 'harvest') {
-                if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= FARM_PLOTS * FARM_ZONES || !near(farmPlotX(F, k as number), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
+                if (!RoomManager.plotOk(fd, k) || !near(farmPlotX(F, k as number, fd.beds), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
                 if (action === 'plant') {
                     const crop = F.crops.find(c => c.id === arg);
                     if (!crop) { reply({ success: false, message: 'err_bad_item' }); return; }
@@ -1398,12 +1612,34 @@ export class RoomManager {
                     if (r.success) { reply({ success: true, crop: r.crop, k, n: r.n, golden: r.golden }); this.farmHeroXp(roomId, p.id, r.n * RoomManager.FARM_XP_PER_ITEM); this.dailyProgress(roomId, p.id, 'harvest', r.n || 1); }
                 }
             } else if (action === 'water' || action === 'fert') {
-                if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= FARM_PLOTS * FARM_ZONES || !near(farmPlotX(F, k as number), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
+                if (!RoomManager.plotOk(fd, k) || !near(farmPlotX(F, k as number, fd.beds), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
                 r = action === 'water' ? await db.farmWater(uid, k as number, F.waterPrice) : await db.farmFertilize(uid, k as number);
                 if (r.success) {
                     if (action === 'water') socket.emit('coinsUpdated', { amount: -F.waterPrice, totalCoins: r.coins });
                     reply({ success: true, k }); this.io.to(roomId).emit('mfPlotFx', { k, kind: action });
                 }
+            } else if (action === 'dig') {
+                // GRABL: qahramon turgan joyda yangi grядka (dala ichida, boshqa grядka va bezaklardan uzoqroq)
+                const x = Math.round(p.x), Mw = MEADOW;
+                if (!fd.rake) { reply({ success: false, message: 'mf_need_rake' }); return; }
+                if (x < Mw.fieldX0 || x > Mw.fieldX1) { reply({ success: false, message: 'mf_dig_field' }); return; }
+                if (fd.beds.filter(b => b >= 0).length >= Mw.bedMax) { reply({ success: false, message: 'mf_beds_full' }); return; }
+                if (!meadowSpotFree(fd, x, null)) { reply({ success: false, message: 'mf_dig_close' }); return; }
+                const dg = await db.farmDig(uid, x); r = dg;
+                if (r.success) { reply({ success: true, k: FARM_BEDS_BASE + dg.bed! }); this.io.to(roomId).emit('mfPlotFx', { k: FARM_BEDS_BASE + dg.bed!, kind: 'dig' }); }
+            } else if (action === 'undig') {
+                // YERNI TIKLASH: bo'sh grядka qaytadan tekis yerga aylanadi (xato qazilgan bo'lsa)
+                if (!RoomManager.plotOk(fd, k) || (k as number) < FARM_BEDS_BASE || !near(farmPlotX(F, k as number, fd.beds), F.range)) { reply({ success: false, message: 'farm_too_far' }); return; }
+                if (fd.plots[k as number]) { reply({ success: false, message: 'mf_bed_busy' }); return; }
+                r = await db.farmUndig(uid, (k as number) - FARM_BEDS_BASE);
+                if (r.success) { reply({ success: true }); this.io.to(roomId).emit('mfPlotFx', { k, kind: 'dig' }); }
+            } else if (action === 'meadow') {
+                // YAYLOV BEZAGINI KO'CHIRISH: qahramon turgan joyga qo'yiladi
+                const id = String(k), x = Math.round(p.x);
+                if (fd.meadow[id] === undefined) { reply({ success: false, message: 'err_bad_item' }); return; }
+                if (!meadowSpotFree(fd, x, id)) { reply({ success: false, message: 'mf_place_busy' }); return; }
+                r = await db.meadowPlace(uid, id, x);
+                if (r.success) reply({ success: true, id, x });
             } else if (action === 'orchardCut') {
                 // Daraxtni kesish: joy bo'shaydi, eski daraxt yo'qoladi (yangisini ekish mumkin)
                 if (!Number.isInteger(k) || (k as number) < 0 || (k as number) >= orchardSlotsFor(farmLevel(fd.xp)) || !near(F.orchardX[k as number], 50)) { reply({ success: false, message: 'farm_too_far' }); return; }
@@ -1417,6 +1653,14 @@ export class RoomManager {
                     const slot = HOME_SLOTS.find(s => s.id === a.slot);
                     const item = a.item === null ? null : HOME_ITEMS.find(h => h.id === a.item);
                     if (!slot || item === undefined) { reply({ success: false, message: 'err_bad_item' }); return; }
+                    // UYNI TAHRIRLASH: hali yo'q jihozni shu joyning o'zidan sotib olib qo'yish (do'konga borish shart emas)
+                    if (item && a.buy && !fd.home.owned[item.id]) {
+                        if (item.slot !== slot.type) { reply({ success: false, message: 'home_wrong_slot' }); return; }
+                        if (fd.home.place[slot.id]) { reply({ success: false, message: 'farm_plot_busy' }); return; }
+                        const b = await db.buyHomeItem(uid, item.id, item.price);
+                        if (!b.success) { reply({ success: false, message: b.message }); return; }
+                        socket.emit('coinsUpdated', { amount: -item.price, totalCoins: b.coins });
+                    }
                     r = await db.homePlace(uid, slot.id, item ? item.id : null, (id) => (HOME_ITEMS.find(h => h.id === id) || { slot: '' }).slot === slot.type);
                     if (r.success) reply({ success: true, slot: slot.id, item: item ? item.id : null });
                 } else if (action === 'chest') {
@@ -1530,6 +1774,72 @@ export class RoomManager {
         } finally {
             this.farmBusy.delete(uid);
         }
+    }
+    // Grядka indeksi to'g'rimi: maydonlardagi 36 ta yoki qazilgan yaylov grядkasi
+    public static plotOk(fd: db.FarmData, k: unknown): boolean {
+        return Number.isInteger(k) && (k as number) >= 0 && ((k as number) < FARM_PLOTS * FARM_ZONES || ((fd.beds || [])[(k as number) - FARM_BEDS_BASE] ?? -1) >= 0);
+    }
+    // ELF ISHI: ekish / sug'orish (tanga - xo'jayinnikidan, xuddi o'yinchi qilgandek). Natija - bo'ldimi
+    public async elfWork(roomId: string, i: number, k: number, task: 'plant' | 'water'): Promise<boolean> {
+        const room = this.activeRooms[roomId], mf = room?.myFarm, map = room ? getMapById(room.selectedLevel) : null, F = map && map.myFarm;
+        if (!room || !mf || !mf.farm || !mf.owner || !F) return false;
+        const uid = mf.owner, fd = mf.farm, key = uid + ':' + i;
+        if (this.elfBusy.has(key) || !RoomManager.plotOk(fd, k)) return false;
+        this.elfBusy.add(key);
+        try {
+            let r: any, price = 0, crop = '';
+            if (task === 'plant') {
+                const c = CROPS.find(x => x.id === fd.lastCrop[k]);
+                if (!c || c.level > farmLevel(fd.xp)) return false;
+                price = c.seed; crop = c.id;
+                r = await db.farmPlant(uid, k, c.id, c.seed);
+            } else {
+                price = F.waterPrice;
+                r = await db.farmWater(uid, k, F.waterPrice);
+            }
+            if (!r.success) return false;
+            const lvlBefore = farmLevel(fd.xp);
+            if (task === 'plant') { const x: any = await db.farmAddXp(uid, 1); if (x) r.farm = x.farm; }
+            const cur = this.activeRooms[roomId]?.myFarm;
+            if (cur && cur.owner === uid) cur.farm = r.farm || cur.farm;
+            if (r.farm && farmLevel(r.farm.xp) > lvlBefore) this.io.to(roomId).emit('farmLevelUp', { level: farmLevel(r.farm.xp), cap: farmCapacity(farmLevel(r.farm.xp)) });
+            const host = this.activeRooms[roomId]?.players[this.activeRooms[roomId].hostId];
+            if (host && host.userId === uid) this.io.to(host.id).emit('coinsUpdated', { amount: -price, totalCoins: r.coins });
+            this.io.to(roomId).emit('mfElfWork', { i, k, task, crop });
+            if (task === 'water') this.io.to(roomId).emit('mfPlotFx', { k, kind: 'water' });
+            this.sendMyFarm(roomId);
+            return true;
+        } catch (err) { console.error('elfWork xatosi:', err); return false; }
+        finally { this.elfBusy.delete(key); }
+    }
+    // ELF pishgan ekinni yig'di (oltin hosil, ferma tajribasi) - hosil uydagi YASHIKKA tushadi; elfga ham tajriba
+    private elfBusy = new Set<string>();
+    // inventarda bo'sh joy bormi (ferma darajasi bo'yicha sig'im)
+    public static bagRoom(fd: db.FarmData): boolean {
+        return Object.values(fd.bag).reduce((a, n) => a + n, 0) + fd.fishN < farmCapacity(farmLevel(fd.xp));
+    }
+    public async elfHarvest(roomId: string, i: number, k: number): Promise<boolean> {
+        const room = this.activeRooms[roomId], mf = room?.myFarm, map = room ? getMapById(room.selectedLevel) : null, F = map && map.myFarm;
+        if (!room || !mf || !mf.farm || !mf.owner || !F) return false;
+        const uid = mf.owner, fd = mf.farm, key = uid + ':' + i;
+        if (this.elfBusy.has(key)) return false;
+        const toChest = (fd.chest ? fd.chest.n : 0) < F.chestCap;   // yashik to'lsa - xo'jayin inventariga (sig'im bo'lsa)
+        if (!toChest && !RoomManager.bagRoom(fd)) return false;
+        this.elfBusy.add(key);
+        try {
+            const lvlBefore = farmLevel(fd.xp);
+            const r: any = await db.farmHarvest(uid, k, (pl) => { const c = CROPS.find(x => x.id === pl.c); return !!c && farmGrown(F, pl.t, Date.now(), c.growMs, RoomManager.plotWatered(fd, k, pl), RoomManager.cropSpeed(fd, k)); }, F.goldenChance, toChest ? F.chestCap : undefined);
+            if (!r.success) return false;
+            const g: any = await db.elfGain(uid, i, r.n || 1);
+            const cur = this.activeRooms[roomId]?.myFarm;
+            if (cur && cur.owner === uid) cur.farm = (g.success ? g.farm : r.farm) || cur.farm;
+            const nf = cur && cur.farm;
+            this.io.to(roomId).emit('mfElfHarvest', { i, k, crop: r.crop, n: r.n, golden: r.golden, lvl: nf && nf.elves[i] ? nf.elves[i].lvl : 1 });
+            if (nf && farmLevel(nf.xp) > lvlBefore) this.io.to(roomId).emit('farmLevelUp', { level: farmLevel(nf.xp), cap: farmCapacity(farmLevel(nf.xp)) });
+            this.sendMyFarm(roomId);
+            return true;
+        } catch (err) { console.error('elfHarvest xatosi:', err); return false; }
+        finally { this.elfBusy.delete(key); }
     }
     // O'yin sikli: baliq ilindi / qochib ketdi
     public tickFishing(roomId: string): void {
@@ -1818,12 +2128,12 @@ export class RoomManager {
         if (!p || p.userId === null) { socket.emit('farmBag', { crops: 0, fish: 0, rod: false, net: false }); return; }
         const f = await db.getFarm(p.userId).catch(() => null);
         if (!f) return;
-        socket.emit('farmBag', { crops: Object.values(f.bag).reduce((a, n) => a + n, 0), fish: f.fishN, fishV: f.fishV, rod: f.rod, net: f.net, fert: f.fert, water: f.water, decor: f.decor, home: f.home.owned, hive: f.hive, mill: f.mill, sprinklers: f.sprinklers, scarecrows: f.scarecrows, greenhouse: f.greenhouse, farmLevel: farmLevel(f.xp) });
+        socket.emit('farmBag', { crops: Object.values(f.bag).reduce((a, n) => a + n, 0), fish: f.fishN, fishV: f.fishV, rod: f.rod, net: f.net, fert: f.fert, water: f.water, decor: f.decor, home: f.home.owned, hive: f.hive, mill: f.mill, sprinklers: f.sprinklers, scarecrows: f.scarecrows, greenhouse: f.greenhouse, elves: f.elves.length, elfTotal: f.elfTotal, farmLevel: farmLevel(f.xp), rake: f.rake, meadow: f.meadow });
     }
 
     // XP KUCHAYTIRISH bonusi (hozirgi personajniki): har jang mukofotiga +50 x daraja
     public static xpBoostOf(p: PlayerState): number {
-        return db.XP_BOOST_PER_LEVEL * Math.min(db.XP_BOOST_MAX, Math.max(0, (p.xpBoost || {})[p.characterType] || 0));   // eng ko'pi 10 daraja
+        return db.XP_BOOST_PER_LEVEL * Math.min(db.XP_BOOST_MAX, Math.max(0, (p.xpBoost || {})[p.characterType] || 0));   // eng ko'pi 5 daraja (ko'proq sotib olinganlari ham 5 deb hisoblanadi)
     }
     // boost = true: o'ldirish, boss, xarita o'tish (jang) - kuchaytirish bonusi qo'shiladi; ferma va buyurtmalarda - yo'q
     // KUNLIK VAZIFA hisoblagichi: o'yin hodisasi (o'ldirish, boss, xarita, hosil, baliq, tanga) - bajarilsa o'yinchiga xabar
@@ -1906,7 +2216,8 @@ export class RoomManager {
             weaponColor: p.weaponColor,
             look: p.look || '',
             level: p.level || 0,
-            isAdmin: !!p.isAdmin
+            isAdmin: !!p.isAdmin,
+            supporter: !!p.supporter
         }));
 
         this.io.to(roomId).emit('updateLobbyPlayers', {

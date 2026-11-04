@@ -71,6 +71,24 @@ export const SKIN_CATALOG: { [characterType: string]: SkinInfo[] } = {
         { id: 'prism', name: 'Prism Archer', price: 10000, color: 0xffffff, accent: 0xffffff, fx: 'rainbow', rarity: 'legendary' },
         { id: 'daybreak', name: 'Daybreak Archer', price: 0, color: 0xfff8e1, accent: 0xffab00, fx: 'crown', rarity: 'exclusive', exclusive: true }
     ],
+    hunter: [
+        { id: 'default', name: 'Standard', price: 0, color: 0x5d7a3a, accent: 0x8d6e63 },
+        { id: 'moss', name: 'Moss Hunter', price: 250, color: 0x33691e },
+        { id: 'fox', name: 'Fox Hunter', price: 400, color: 0xe65100, accent: 0xfafafa },
+        { id: 'snow', name: 'Snow Hunter', price: 600, color: 0xeceff1, accent: 0x546e7a },
+        { id: 'night', name: 'Night Stalker', price: 800, color: 0x212121, accent: 0x76ff03 },
+        { id: 'desert', name: 'Desert Hunter', price: 1000, color: 0xd7a35a, accent: 0x6d4c41 },
+        { id: 'wolf', name: 'Wolf Hunter', price: 1300, color: 0x607d8b, accent: 0xb0bec5 },
+        { id: 'swamp', name: 'Swamp Hunter', price: 1600, color: 0x2e4d2e, accent: 0xaed581 },
+        { id: 'tiger', name: 'Tiger Hunter', price: 2000, color: 0xff8f00, accent: 0x212121 },
+        { id: 'royal', name: 'Royal Hunter', price: 2500, color: 0x1b5e20, accent: 0xffd54f },
+        { id: 'crimson', name: 'Crimson Hunter', price: 3000, color: 0x7f0000, accent: 0xffab91 },
+        { id: 'arctic', name: 'Arctic Hunter', price: 3600, color: 0xb3e5fc, accent: 0x0277bd },
+        { id: 'venom', name: 'Venom Hunter', price: 6000, color: 0x1b5e20, accent: 0x76ff03, fx: 'aura', rarity: 'legendary' },
+        { id: 'phantom', name: 'Phantom Hunter', price: 8000, color: 0x263238, accent: 0xb388ff, fx: 'ghost', rarity: 'legendary' },
+        { id: 'golden', name: 'Golden Hunter', price: 10000, color: 0xffd54f, accent: 0x6d4c41, fx: 'sparkle', rarity: 'legendary' },
+        { id: 'daybreak', name: 'Daybreak Hunter', price: 0, color: 0xfff8e1, accent: 0xffab00, fx: 'crown', rarity: 'exclusive', exclusive: true }
+    ],
     mage: [
         { id: 'default', name: 'Standard', price: 0, color: 0x1565c0 },
         { id: 'flame', name: 'Flame Mage', price: 250, color: 0xe64a19 },
@@ -157,6 +175,16 @@ export const WEAPON_SKIN_CATALOG: { [characterType: string]: SkinInfo[] } = {
         { id: 'voltage', name: 'Voltage Arrow', price: 2500, color: 0xffea00, wfx: 'spark', rarity: 'legendary' },
         { id: 'shadow', name: 'Shadow Arrow', price: 3500, color: 0x9c27b0, wfx: 'shadow', rarity: 'legendary' },
         { id: 'celestial', name: 'Celestial Arrow', price: 5000, color: 0xfff59d, wfx: 'star', rarity: 'legendary' }
+    ],
+    hunter: [
+        { id: 'default', name: 'Standard Knife', price: 0, color: 0xcfd8dc },
+        { id: 'crimson', name: 'Crimson Knife', price: 300, color: 0xb71c1c },
+        { id: 'azure', name: 'Azure Knife', price: 600, color: 0x1565c0 },
+        { id: 'inferno', name: 'Inferno Knife', price: 1200, color: 0xff6d00, wfx: 'fire', rarity: 'legendary' },
+        { id: 'frostbite', name: 'Frostbite Knife', price: 1800, color: 0x80d8ff, wfx: 'ice', rarity: 'legendary' },
+        { id: 'voltage', name: 'Voltage Knife', price: 2500, color: 0xffea00, wfx: 'spark', rarity: 'legendary' },
+        { id: 'shadow', name: 'Shadow Knife', price: 3500, color: 0x9c27b0, wfx: 'shadow', rarity: 'legendary' },
+        { id: 'celestial', name: 'Celestial Knife', price: 5000, color: 0xfff59d, wfx: 'star', rarity: 'legendary' }
     ],
     mage: [
         { id: 'default', name: 'Standard Fire', price: 0, color: 0xff7043 },

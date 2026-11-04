@@ -104,6 +104,28 @@ window.Cosmetics = (() => {
             for (let x = 7; x < 16; x++) { const hw = Math.max(0, Math.round((16 - x) / 4)); for (let y = 2 - hw; y <= 2 + hw; y++) put(g, x, y, y < 2 ? 0xeceff1 : 0xb0bec5); }
             return outline(g);
         }
+        if (kind === 'hknife') {
+            // OVCHI PICHOG'I: uzun, uchi qiyshiq kesilgan (clip point) tig', mis ko'ndalang, charm dasta
+            const g = gridNew(26, 7);
+            for (let x = 0; x < 7; x++) for (let y = 2; y < 5; y++) g[y][x] = (x % 2) ? 0x4e342e : 0x6d4c41;
+            for (let y = 2; y < 5; y++) g[y][0] = 0x8d6e63;
+            for (let y = 1; y < 6; y++) g[y][7] = 0xc9975b;
+            for (let x = 8; x < 26; x++) {
+                const top = x < 19 ? 2 : 2 + Math.round((x - 19) / 3.5), bot = x < 22 ? 4 : 4 - Math.round((x - 22) / 2);
+                for (let y = top; y <= bot; y++) put(g, x, y, y === top ? 0x78909c : y === bot ? 0xeceff1 : 0xb0bec5);
+            }
+            for (let x = 9; x < 17; x++) g[3][x] = 0x90a4ae;
+            return outline(g);
+        }
+        if (kind === 'blowpipe') {
+            // PUFLAMA NAYCHA: uzun yog'och naycha, mis halqalar, og'iz tomoni qalinroq
+            const g = gridNew(28, 4);
+            for (let x = 0; x < 28; x++) { g[1][x] = 0x8d6e63; g[2][x] = 0x5d4037; }
+            for (let y = 0; y < 4; y++) { g[y][0] = 0x3e2723; g[y][1] = 0x3e2723; }
+            [6, 14, 22].forEach((x) => { g[1][x] = 0xffca28; g[2][x] = 0xc9975b; });
+            g[1][27] = 0x212121; g[2][27] = 0x212121;
+            return outline(g);
+        }
         if (kind === 'shield') return outline(kiteShield([0x1565c0, 0x1e88e5, 0x42a5f5, 0x90caf9], 0x455a64, 0xffca28, 'diamond'));
         if (kind === 'flash') {
             const g = gridNew(10, 10);
@@ -874,7 +896,9 @@ window.Cosmetics = (() => {
         archer: { kind: 'bow', slot: 'bow', ox: 0.2, hand: [8, 4], angle: 18 },
         mage: { kind: 'staff', slot: 'staff', ox: 0.6, hand: [9, 6], angle: -38 },
         shotgun: { kind: 'shotgun', slot: 'shotgun', ox: 0.3, hand: [9, 6], angle: 0 },
-        kunai: { kind: 'kunai', slot: 'kunai', ox: 0.25, hand: [11, 6], angle: 12 }
+        kunai: { kind: 'kunai', slot: 'kunai', ox: 0.25, hand: [11, 6], angle: 12 },
+        hunter: { kind: 'hknife', slot: 'hknife', ox: 0.15, hand: [9, 8], angle: -40 },
+        blowpipe: { kind: 'blowpipe', slot: 'blowpipe', ox: 0.3, hand: [8, -2], angle: -6 }
     };
 
     // Tayyor (kontur qo'shilgan) rasm: bosh/yuz - { grid, ax, ay }, qurol - { grid, ox, oy }, qalqon - { grid }

@@ -2,7 +2,8 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { config } from 'dotenv';
 import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL, UPGRADE_COSTS, BASE_UPGRADES } from './perks';
-import { PET, CRITTER, PET_SKINS, petXpNeed, petUpCap, petMaxHp, petDamage, petSpitMs, petDashMs, petHealOf } from './maps';
+import { BIG_GEN } from './bigmap';
+import { FARM_ELF, elfLevel, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, meadowSpotFree, PET, CRITTER, PET_SKINS, petXpNeed, petUpCap, petMaxHp, petDamage, petSpitMs, petDashMs, petHealOf } from './maps';
 config({quiet:true})
 // Agar MongoDB'ga ulanib bo'lmasa yoki vaqtincha uzilib qolsa, so'rovlar
 // abadiy "osilib qolmasligi" uchun (aks holda foydalanuvchi cheksiz kutib qolardi)
@@ -13,18 +14,20 @@ mongoose.set('bufferTimeoutMS', 8000);
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/four_heroes';
 
 mongoose.connect(MONGO_URI)
-    .then(() => console.log('MongoDB bilan muvaffaqiyatli ulandi:', MONGO_URI))
+    .then(() => { console.log('MongoDB bilan muvaffaqiyatli ulandi:', MONGO_URI.replace(/\/\/[^@/]+@/, '//***@')); migrateBigLeaderboard().catch(err => console.error('migrateBigLeaderboard xatosi:', err)); })
     .catch((err) => {
         console.error('MongoDB ulanishida xatolik! MongoDB kompyuteringizda ishga tushirilganiga ishonch hosil qiling.');
         console.error(err.message);
     });
 
-const DEFAULT_OWNED_SKINS = { knight: ['default'], samurai: ['default'], archer: ['default'], mage: ['default'] };
-const DEFAULT_EQUIPPED_SKINS = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default' };
-const CHARACTER_TYPES = ['knight', 'archer', 'mage', 'samurai'];
-const DEFAULT_UPGRADES = { knight: { damage: 0, stamina: 0 }, archer: { damage: 0, stamina: 0 }, mage: { damage: 0, stamina: 0 }, samurai: { damage: 0, stamina: 0 } };
-const DEFAULT_SKILL_POINTS = { knight: 0, archer: 0, mage: 0, samurai: 0 };
-const DEFAULT_CREDITED_LEVELS = { knight: [], archer: [], mage: [], samurai: [] };
+const DEFAULT_OWNED_SKINS = { knight: ['default'], samurai: ['default'], archer: ['default'], mage: ['default'], hunter: ['default'] };
+const DEFAULT_EQUIPPED_SKINS = { knight: 'default', samurai: 'default', archer: 'default', mage: 'default', hunter: 'default' };
+const CHARACTER_TYPES = ['knight', 'archer', 'mage', 'samurai', 'hunter'];
+// PULLIK QAHRAMONLAR: sotib olinmaguncha tanlab bo'lmaydi (hunter - $5)
+export const PREMIUM_HEROES = ['hunter'];
+const DEFAULT_UPGRADES = { knight: { damage: 0, stamina: 0 }, archer: { damage: 0, stamina: 0 }, mage: { damage: 0, stamina: 0 }, samurai: { damage: 0, stamina: 0 }, hunter: { damage: 0, stamina: 0 } };
+const DEFAULT_SKILL_POINTS = { knight: 0, archer: 0, mage: 0, samurai: 0, hunter: 0 };
+const DEFAULT_CREDITED_LEVELS = { knight: [], archer: [], mage: [], samurai: [], hunter: [] };
 const MAX_UPGRADE_LEVEL = 5;
 // Kuchaytirish chegarasi qahramon darajasiga qarab: 3-darajada 1 ta, 6-da 3 ta, 9-da 4 ta, 12-da 5 ta (max); undan pastda - yopiq
 const UPGRADE_CAP_STEPS: [number, number][] = [[12, 5], [9, 4], [6, 3], [3, 1]];
@@ -58,7 +61,26 @@ const userSchema = new mongoose.Schema({
     unlockedLevel: { type: Number, required: true, default: 0 },
     xp: { type: Number, required: true, default: 0 },
     // HAR PERSONAJ tajribasi: shu personaj bilan o'tilgan har xarita +10 (daraja imkoniyatlari shundan)
-    charXp: { type: Object, required: true, default: () => ({ knight: 0, archer: 0, mage: 0, samurai: 0 }) },
+    charXp: { type: Object, required: true, default: () => ({ knight: 0, archer: 0, mage: 0, samurai: 0, hunter: 0 }) },
+    ownedHeroes: { type: [String], default: () => [] },   // sotib olingan pullik qahramonlar
+    payments: { type: [String], default: () => [] },      // qabul qilingan to'lovlar ("txn:item:soni") - ikki marta berilmasin
+    supporter: { type: Boolean, default: false },         // "Supporter Pack" sotib olgan - xonada belgisi
+    bigCp: { type: Number, default: 0 },                 // BIG MAP: oxirgi checkpoint (keyingi o'yin shu joydan boshlanadi)
+    bigSeed: { type: Number, default: 0 },               // BIG MAP: saqlangan dunyo (0 - yangisi yaratiladi)
+    bigVer: { type: Number, default: 0 },                //   dunyo generatori versiyasi (mos kelmasa - yangi dunyo)
+    bigDoneM: { type: Number, default: 0 },
+    bigCpV: { type: Number, default: 0 },                //   checkpoint raqami turi (2 - oraliq checkpointlar bilan hisoblangan)              //   dunyo oxiriga yetilgan masofa (m) - shu oxir uchun mukofot berilgan
+    bigOpened: { type: [Number], default: () => [] },    //   shu dunyoda ochilgan sandiqlar
+    bigKilled: { type: [Number], default: () => [] },    //   shu dunyoda o'ldirilgan bosslar (zona raqami)
+    bigGot: { type: [Number], default: () => [] },
+    bigLbVer: { type: Number, default: 0 },
+    bigKillAt: { type: Object, default: () => ({}) },    //   bosslar o'ldirilgan vaqt { zona: ms } - 50 daqiqada qaytadi
+    bigQuests: { type: Object, default: () => ({}) },    //   shu dunyodagi topshiriqlar holati { tooth: 0..3, kids: 0..3 }              //   reyting natijasi qaysi dunyo generatori uchun (eskisi - bir marta tozalanadi)       //   shu dunyoda ochilgan checkpointlar (to'r dunyo: portallar, xarita, o'rganilgan foiz)
+    bigMapItem: { type: Boolean, default: false },       // BIG MAP XARITASI: do'kondan bir marta sotib olinadi - butun umr (bosslar, yo'l ko'rsatkich)
+    bigBestPct: { type: Number, default: 0 },            // BIG MAP REYTINGI: eng ko'p o'tilgan foiz,
+    bigBestM: { type: Number, default: 0 },              //   eng uzoq masofa (m),
+    bigBosses: { type: Number, default: 0 },             //   o'ldirilgan bosslar,
+    bigScore: { type: Number, default: 0 },              //   saralash uchun: foiz (0.1 aniqlik) * 100000 + bosslar
     // DETALLAR: sotib olinganlar ("head:cowboy", "knight.sword:bat") va har personajda kiyilganlari
     // ({ knight: { head: 'cowboy', sword: 'bat' }, ... })
     ownedCosmetics: { type: [String], default: () => [] },
@@ -97,7 +119,13 @@ const userSchema = new mongoose.Schema({
     farmDecor: { type: Object, default: () => ({}) },    // sotib olingan bezaklar: { flowers: true, ... }
     farmDecorOff: { type: Object, default: () => ({}) }, // yashikka olingan (tashqarida ko'rinmaydigan) bezaklar
     daily: { type: Object, default: () => ({}) },        // KUNLIK: { day, quests: [...], lastLogin, streak }
-    farmHive: { type: Boolean, default: false },         // NOTA UYASI (o'sishni tezlatadi)
+    farmElves: { type: [Object], default: () => [] },   // ferma elflari: [{ xp }] (2 tagacha)
+    farmElfTotal: { type: Number, default: 0 },       // elflar jami yig'gan hosil (basseyn shundan ochiladi)
+    farmRake: { type: Boolean, default: false },         // GRABL: yaylovda o'zi grядka qazadi
+    farmBeds: { type: [Number], default: () => [] },     // qazilgan grядkalar joyi (x), 12 tagacha - grядka indeksi 36 + i
+    farmMeadow: { type: Object, default: () => ({}) },   // yaylov bezaklari: { bench: 5300 } (joyi)
+    farmLastCrop: { type: Object, default: () => ({}) }, // har grядkada oxirgi ekilgan ekin (elf qayta ekishi uchun)
+    farmHive: { type: Number, default: 0 },              // NOTA UYALARI soni (0..5; eski hisoblarda true = 1)
     farmMill: { type: Number, default: 0 },              // BAHAYBAT TEGIRMON bosqichi (0..4)
     farmSprinklers: { type: Number, default: 0 },        // avtomatik sug'orgichlar (har biri bitta maydonga)
     farmScarecrows: { type: Number, default: 0 },        // qo'rqinchoqlar (robot qarg'alar qo'nmaydi)
@@ -146,6 +174,11 @@ export interface UserRecord {
     xpBoost: { [character: string]: number };
     petTrust: number;
     pet: PetData;
+    ownedHeroes: string[];
+    supporter: boolean;
+    bigCp: number;
+    bigSeed: number; bigVer: number; bigDoneM: number; bigCpV: number; bigOpened: number[]; bigKilled: number[]; bigGot: number[]; bigQuests: { [q: string]: number }; bigKillAt: { [z: string]: number };
+    bigMapItem: boolean;
 }
 
 // TAJRIBA DARAJASI (eng yuqori - 100): 1-15 darajalar - har keyingisiga kerakli XP ikki baravar
@@ -163,9 +196,9 @@ export function xpLevel(xp: number): number {
     while (level < MAX_LEVEL && x >= xpForLevel(level + 1)) level++;
     return level;
 }
-// XP KUCHAYTIRISH (My Character): har darajasi - har o'ldirish / boss / xarita uchun +15 XP; narxi 300, 500, 700 ...; eng ko'pi 10 daraja
+// XP KUCHAYTIRISH (My Character): har darajasi - har o'ldirish / boss / xarita uchun +15 XP; narxi 300, 500, 700 ...; eng ko'pi 5 daraja (3, 10, 17, 24, 30-levellarda ochiladi)
 export const XP_BOOST_PER_LEVEL = 15;
-export const XP_BOOST_MAX = 10;
+export const XP_BOOST_MAX = 5;
 export function xpBoostCost(level: number): number { return 300 + 200 * Math.max(0, level); }
 export const XP_BOOST_POINTS = 2;   // yoki har safar 2 ta ko'nikma balli (narxi oshmaydi)
 
@@ -208,7 +241,20 @@ function docToUser(doc: any): UserRecord {
         createdAt: doc.createdAt || null,
         xpBoost: doc.xpBoost || {},
         petTrust: Math.max(0, Number(doc.petTrust) || 0),
-        pet: petOf(doc)
+        pet: petOf(doc),
+        ownedHeroes: Array.isArray(doc.ownedHeroes) ? doc.ownedHeroes.filter((h: any) => PREMIUM_HEROES.includes(h)) : [],
+        supporter: !!doc.supporter,
+        bigCp: Math.max(0, Math.floor(Number(doc.bigCp) || 0)),
+        bigSeed: Math.max(0, Math.floor(Number(doc.bigSeed) || 0)),
+        bigVer: Math.max(0, Math.floor(Number(doc.bigVer) || 0)),
+        bigDoneM: Math.max(0, Math.floor(Number(doc.bigDoneM) || 0)),
+        bigCpV: Math.max(0, Math.floor(Number(doc.bigCpV) || 0)),
+        bigOpened: Array.isArray(doc.bigOpened) ? doc.bigOpened.filter((x: any) => Number.isInteger(x)) : [],
+        bigKilled: Array.isArray(doc.bigKilled) ? doc.bigKilled.filter((x: any) => Number.isInteger(x)) : [],
+        bigGot: Array.isArray(doc.bigGot) ? doc.bigGot.filter((x: any) => Number.isInteger(x)) : [],
+        bigKillAt: doc.bigKillAt && typeof doc.bigKillAt === 'object' ? Object.fromEntries(Object.entries(doc.bigKillAt).filter(([k, v]) => /^[0-9]{1,6}$/.test(k) && Number.isFinite(v))) as { [z: string]: number } : {},
+        bigQuests: doc.bigQuests && typeof doc.bigQuests === 'object' ? Object.fromEntries(Object.entries(doc.bigQuests).filter(([k, v]) => /^[a-z]{1,16}$/.test(k) && Number.isInteger(v))) as { [q: string]: number } : {},
+        bigMapItem: !!doc.bigMapItem
     };
 }
 
@@ -381,7 +427,7 @@ export async function petUpgrade(userId: string, kind: string): Promise<{ succes
     if ((doc.petTrust || 0) < CRITTER.trustMax) return { success: false, message: 'err_pet_not_tamed' };
     const pet = petOf(doc), cur = (pet.up as any)[kind] as number;
     if (cur >= PET.upMax) return { success: false, message: 'err_upgrade_max' };
-    if (cur >= petUpCap(pet.lvl)) return { success: false, message: 'err_pet_level|' + (2 * (cur + 1)) };
+    if (cur >= petUpCap(pet.lvl)) return { success: false, message: 'err_pet_level|' + (3 * (cur + 1)) };
     const price = PET.upPrices[cur];
     const filter: any = { _id: userId, coins: { $gte: price } };
     filter['pet.up.' + kind] = cur === 0 ? { $in: [0, null] } : cur;
@@ -391,11 +437,106 @@ export async function petUpgrade(userId: string, kind: string): Promise<{ succes
     if (!upd) return { success: false, message: (doc.coins || 0) < price ? 'err_not_enough_coins' : 'err_server' };
     return { success: true, pet: petOf(upd), coins: upd.coins };
 }
+// BIG MAP dunyosi: yangi seed (0 - tugadi) - checkpoint, sandiqlar va bosslar ham boshidan
+export async function setBigWorld(userId: string, seed: number, ver: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId)) return;
+    await UserModel.updateOne({ _id: userId }, { $set: { bigSeed: seed, bigVer: ver, bigCp: -1, bigCpV: 3, bigDoneM: 0, bigOpened: [], bigKilled: [], bigKillAt: {}, bigGot: [], bigQuests: {}, bigBestM: 0, bigBestPct: 0 } });
+}
+// BIG MAP: boss o'ldirilgan vaqt (qaytish taymeri)
+export async function bigSaveKillAt(userId: string, zone: number, t: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId) || !Number.isInteger(zone) || !Number.isFinite(t)) return;
+    await UserModel.updateOne({ _id: userId }, { $set: { ['bigKillAt.' + zone]: Math.round(t) } });
+}
+// BIG MAP TOPSHIRIG'I: holati (faqat ma'lum topshiriqlar, 0..3)
+export async function setBigQuest(userId: string, q: string, st: number): Promise<void> {
+    const max = q === 'mage' ? 30 : q === 'magef' ? 999 : 3;   // mage - Balot Magi simpatiyasi (0..30), magef - unga berilgan gullar, magehome - fermada yashaydi (1)
+    if (!mongoose.isValidObjectId(userId) || !/^[a-z]{1,16}$/.test(q) || !Number.isInteger(st) || st < 0 || st > max) return;
+    await UserModel.updateOne({ _id: userId }, { $set: { ['bigQuests.' + q]: st } });
+}
+export async function bigSaveDone(userId: string, field: 'bigOpened' | 'bigKilled' | 'bigGot', id: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId) || !Number.isInteger(id)) return;
+    await UserModel.updateOne({ _id: userId }, { $addToSet: { [field]: id } });
+}
+// BIG MAP: dunyo oxiriga yetildi (shu masofa uchun mukofot berildi) - dunyo va checkpoint saqlanib qoladi
+export async function setBigDone(userId: string, endM: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId) || !Number.isFinite(endM) || endM < 0) return;
+    await UserModel.updateOne({ _id: userId }, { $max: { bigDoneM: Math.round(endM) } });
+}
+// BIG MAP checkpoint: oxirgi tekkani (to'r dunyoda - istalgan tomonga) - keyingi o'yin shu joydan
+export async function setBigCp(userId: string, cp: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId) || !Number.isInteger(cp) || cp < 0) return;
+    await UserModel.updateOne({ _id: userId }, { $set: { bigCp: cp, bigCpV: 3 } });
+}
+// eski raqamli checkpointni yangisiga o'girish (bir marta, o'yin boshida)
+export async function setBigCpIndex(userId: string, cp: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId) || !Number.isInteger(cp) || cp < 0) return;
+    await UserModel.updateOne({ _id: userId }, { $set: { bigCp: cp, bigCpV: 2 } });
+}
+// BIG MAP REYTINGI: eng yaxshi natija (faqat oshadi) va bosslar soni; bigScore - saralash kaliti
+const BIG_SCORE = { $set: { bigScore: { $add: [{ $multiply: [{ $round: [{ $multiply: [{ $ifNull: ['$bigBestPct', 0] }, 10] }, 0] }, 100000] }, { $min: [{ $ifNull: ['$bigBosses', 0] }, 99999] }] } } };
+// DUNYO GENERATORI ALMASHGANDA (chiziqli dunyo -> to'r dunyo): eski reyting natijalari bir marta tozalanadi (foiz / joylar boshqa ma'noda)
+export async function migrateBigLeaderboard(): Promise<void> {
+    const r = await UserModel.updateMany({ bigLbVer: { $ne: BIG_GEN } }, { $set: { bigBestM: 0, bigBestPct: 0, bigLbVer: BIG_GEN } });
+    if (r.modifiedCount) { lbCache.delete('big'); console.log('Big Map reytingi yangi dunyo uchun tozalandi:', r.modifiedCount); }
+}
+export async function bigProgress(userId: string, meters: number, pct: number): Promise<void> {
+    if (!mongoose.isValidObjectId(userId) || !Number.isFinite(meters) || !Number.isFinite(pct)) return;
+    await UserModel.updateOne({ _id: userId }, [{ $set: { bigLbVer: BIG_GEN, bigBestM: { $max: [{ $ifNull: ['$bigBestM', 0] }, Math.round(meters)] }, bigBestPct: { $max: [{ $ifNull: ['$bigBestPct', 0] }, Math.max(0, Math.min(100, pct))] } } }, BIG_SCORE], { updatePipeline: true } as any);
+}
+export async function bigBossKill(userId: string): Promise<void> {
+    if (!mongoose.isValidObjectId(userId)) return;
+    await UserModel.updateOne({ _id: userId }, [{ $set: { bigBosses: { $add: [{ $ifNull: ['$bigBosses', 0] }, 1] } } }, BIG_SCORE], { updatePipeline: true } as any);
+}
+// PULLIK QAHRAMON berish (to'lov tasdiqlanganda yoki admin): paymentId bo'lsa - bir to'lov ikki marta hisoblanmaydi
+export async function grantHero(userId: string, hero: string, paymentId?: string): Promise<{ success: boolean, already?: boolean }> {
+    if (!PREMIUM_HEROES.includes(hero) || !mongoose.isValidObjectId(userId)) return { success: false };
+    const filter: any = { _id: userId };
+    const upd: any = { $addToSet: { ownedHeroes: hero } };
+    // qaytarilgan ("refunded:...") to'lov xabari qayta kelsa ham - qayta berilmaydi
+    if (paymentId) { filter.payments = { $nin: [paymentId, 'refunded:' + paymentId] }; upd.$addToSet.payments = paymentId; }
+    const r = await UserModel.updateOne(filter, upd);
+    if (r.matchedCount === 1) return { success: true };
+    // mos kelmadi: yo to'lov avval hisoblangan, yo bunday foydalanuvchi yo'q (webhookda noto'g'ri userId)
+    return (await UserModel.exists({ _id: userId })) ? { success: true, already: true } : { success: false };
+}
+// SUPPORTER PACK: tanga + belgi; paymentId bilan bir to'lov ikki marta hisoblanmaydi
+export async function grantSupporter(userId: string, coins: number, paymentId: string): Promise<{ success: boolean, already?: boolean, coins?: number }> {
+    if (!mongoose.isValidObjectId(userId) || !(coins > 0)) return { success: false };
+    const upd: any = await UserModel.findOneAndUpdate({ _id: userId, payments: { $nin: [paymentId, 'refunded:' + paymentId] } },
+        { $inc: { coins }, $set: { supporter: true }, $addToSet: { payments: paymentId } }, { returnDocument: 'after' }).lean();
+    if (upd) return { success: true, coins: upd.coins };
+    const exists = await UserModel.exists({ _id: userId });
+    return exists ? { success: true, already: true } : { success: false };
+}
+// TO'LOV QAYTARILDI: shu tranzaksiya bilan berilgan narsalar olib qo'yiladi ("txId:item:qty" -> "refunded:txId:item:qty")
+export async function revokePayment(txId: string, coinsPerPack: number): Promise<{ userId: string, items: string[] } | null> {
+    if (!/^[A-Za-z0-9_]+$/.test(txId)) return null;   // Paddle tranzaksiya ID si: txn_...
+    const doc: any = await UserModel.findOne({ payments: { $regex: '^' + txId + ':' } }).lean();
+    if (!doc) return null;
+    const entries: string[] = (doc.payments || []).filter((p: string) => p.startsWith(txId + ':'));
+    const items: string[] = [];
+    for (const e of entries) {
+        const [, item, q] = e.split(':');
+        const r = await UserModel.updateOne({ _id: doc._id, payments: e }, { $set: { 'payments.$': 'refunded:' + e } });
+        if (r.modifiedCount !== 1) continue;   // boshqa xabar allaqachon olib qo'ygan
+        if (PREMIUM_HEROES.includes(item)) {
+            await UserModel.updateOne({ _id: doc._id }, { $pull: { ownedHeroes: item } });
+            await UserModel.updateOne({ _id: doc._id, defaultCharacter: item }, { $set: { defaultCharacter: 'knight' } });
+        } else if (item === 'supporter') {
+            const take = coinsPerPack * Math.max(1, Number(q) || 1);
+            await UserModel.updateOne({ _id: doc._id }, [{ $set: { coins: { $max: [0, { $subtract: ['$coins', take] }] } } }], { updatePipeline: true } as any);
+        }
+        items.push(item);
+    }
+    // boshqa (qaytarilmagan) Supporter to'lovi qolmagan bo'lsa - belgi ham olinadi
+    if (items.includes('supporter')) await UserModel.updateOne({ _id: doc._id, payments: { $not: /^txn_[A-Za-z0-9_]+:supporter:/ } }, { $set: { supporter: false } });
+    return items.length ? { userId: String(doc._id), items } : null;
+}
 // O'YINNI NOLDAN BOSHLASH: akkaunt qoladi (ism, nickname, parol, blok/ovoz holati, kunlik zanjir, reklama limiti),
 // qolgan hamma narsa (tanga, darajalar, skinlar, ferma, ajdarcha, yutuqlar...) - yangi akkauntdagidek. Qiymatlar aniq
 // yoziladi (o'chirilmaydi) - eski saqlangan xonalardan progress "tiklanib" qolmasin
 export async function resetProgress(userId: string): Promise<UserRecord | null> {
-    const KEEP = new Set(['_id', '__v', 'fullName', 'nickname', 'passwordHash', 'createdAt', 'updatedAt', 'banned', 'banReason', 'mutedUntil', 'adLastAt', 'adDay', 'adCount', 'daily']);
+    const KEEP = new Set(['_id', '__v', 'fullName', 'nickname', 'passwordHash', 'createdAt', 'updatedAt', 'banned', 'banReason', 'mutedUntil', 'adLastAt', 'adDay', 'adCount', 'daily', 'ownedHeroes', 'payments', 'supporter']);
     const fresh: any = new UserModel({ fullName: 'x', nickname: 'x', passwordHash: 'x' }).toObject();
     const set: any = {}, unset: any = {};
     Object.keys((userSchema as any).obj).forEach((k) => {
@@ -479,6 +620,24 @@ export async function farmDecorLose(userId: string, id: string): Promise<void> {
 export async function farmItemCount(userId: string, item: string): Promise<number> {
     const doc: any = await UserModel.findById(userId, { farmBag: 1 }).lean();
     return Math.max(0, Number(doc && doc.farmBag && doc.farmBag[item]) || 0);
+}
+// sumkadan bitta narsa (masalan, Balot Magiga sovg'a): qolgan soni, yo'q bo'lsa -1
+export async function farmTakeOne(userId: string, item: string): Promise<number> {
+    if (!mongoose.isValidObjectId(userId) || !/^[a-z]{2,16}$/.test(item)) return -1;
+    const doc: any = await UserModel.findOneAndUpdate({ _id: userId, ['farmBag.' + item]: { $gte: 1 } }, { $inc: { ['farmBag.' + item]: -1 } }, { returnDocument: 'after', projection: { farmBag: 1 } }).lean();
+    return doc ? Math.max(0, Number(doc.farmBag && doc.farmBag[item]) || 0) : -1;
+}
+// BALOT MAGI fermaga ko'chib keladi: o'z arg'imchog'ini olib keladi (yaylovda arg'imchoq bo'lmasa - bo'sh joyga qo'yiladi)
+export async function mageMoveIn(userId: string): Promise<number | null> {
+    if (!mongoose.isValidObjectId(userId)) return null;
+    const f = await getFarm(userId);
+    if (!f) return null;
+    let x: number | null = f.meadow.swing !== undefined ? f.meadow.swing : null;
+    if (x === null) for (let c = MEADOW.x0 + 80; c < MEADOW.x1 - 60 && x === null; c += 20) if (meadowSpotFree(f, c, 'swing')) x = c;
+    const set: any = { 'bigQuests.magehome': 1 };
+    if (x !== null && f.meadow.swing === undefined) set['farmMeadow.swing'] = x;
+    await UserModel.updateOne({ _id: userId }, { $set: set });
+    return x;
 }
 export async function farmItemTake(userId: string, item: string): Promise<boolean> {
     const r = await UserModel.updateOne({ _id: userId, ['farmBag.' + item]: { $gte: 1 } }, { $inc: { ['farmBag.' + item]: -1 } });
@@ -702,7 +861,9 @@ export async function upgradeStat(userId: string, characterType: string, stat: s
 // belgilaydi (odatda foydalanuvchi lobbida shu personajni tanlaganda avtomatik yangilanadi)
 export async function setDefaultCharacter(userId: string, characterType: string): Promise<UserRecord | null> {
     if (!CHARACTER_TYPES.includes(characterType)) return null;
-    const doc = await UserModel.findByIdAndUpdate(userId, { $set: { defaultCharacter: characterType } }, { returnDocument: 'after' });
+    // pullik qahramon - faqat sotib olingan bo'lsa
+    const filter: any = PREMIUM_HEROES.includes(characterType) ? { _id: userId, ownedHeroes: characterType } : { _id: userId };
+    const doc = await UserModel.findOneAndUpdate(filter, { $set: { defaultCharacter: characterType } }, { returnDocument: 'after' });
     return doc ? docToUser(doc) : null;
 }
 
@@ -831,6 +992,21 @@ export async function setCurse(userId: string, kind: 'acid' | 'bolt', on: boolea
     catch (err) { console.error('setCurse xatosi:', err); }
 }
 // DO'KON: davo sotib olish (faqat la'nat bor bo'lsa va tanga yetsa) - bitta atomik amal
+// BIG MAP XARITASI: bir marta (bor bo'lsa - pul olinmaydi)
+export async function buyBigMap(userId: string, price: number): Promise<{ success: boolean, message?: string, coins?: number }> {
+    if (!mongoose.isValidObjectId(userId)) return { success: false, message: 'err_user_not_found' };
+    try {
+        const doc = await UserModel.findOneAndUpdate({ _id: userId, bigMapItem: { $ne: true }, coins: { $gte: price } }, { $inc: { coins: -price }, $set: { bigMapItem: true } }, { returnDocument: 'after' });
+        if (doc) return { success: true, coins: doc.coins };
+        const u: any = await UserModel.findById(userId);
+        if (!u) return { success: false, message: 'err_user_not_found' };
+        if (u.bigMapItem) return { success: false, message: 'shop_not_needed' };
+        return { success: false, message: 'err_not_enough_coins' };
+    } catch (err) {
+        console.error('buyBigMap xatosi:', err);
+        return { success: false, message: 'err_server' };
+    }
+}
 export async function buyCure(userId: string, kind: 'acid' | 'bolt', price: number): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     const field = kind === 'acid' ? 'cursedAcid' : 'cursedBolt';
     try {
@@ -1003,12 +1179,13 @@ export async function claimDailyQuest(userId: string, idx: number): Promise<{ su
 
 // REYTING: umumiy (hamma qahramonlar tajribasi yig'indisi) yoki bitta qahramon bo'yicha. Bloklanganlar va hali
 // tajribasi yo'qlar ko'rinmaydi. Ro'yxat 30 s keshlanadi (bazani har ochilishda yuklamaslik uchun)
-export type LbRow = { rank: number, id: string, nick: string, hero: string, level: number, xp: number };
+export type LbRow = { rank: number, id: string, nick: string, hero: string, level: number, xp: number, pct?: number, m?: number, bosses?: number };
 const lbCache = new Map<string, { at: number, rows: LbRow[] }>();
 const lbScore = (hero: string): any => hero === 'all'
     ? { $add: CHARACTER_TYPES.map(c => ({ $ifNull: ['$charXp.' + c, 0] })) }
     : { $ifNull: ['$charXp.' + hero, 0] };
 export async function getLeaderboard(hero: string, userId: string | null): Promise<{ rows: LbRow[], me: LbRow | null } | null> {
+    if (hero === 'big') return getBigLeaderboard(userId);
     if (hero !== 'all' && !CHARACTER_TYPES.includes(hero)) return null;
     const toRow = (d: any, rank: number): LbRow => {
         const cx = d.charXp || {};
@@ -1048,6 +1225,31 @@ export async function getLeaderboard(hero: string, userId: string | null): Promi
     return { rows: cached.rows, me };
 }
 
+// BIG MAP REYTINGI: o'tilgan foiz, masofa va o'ldirilgan bosslar bo'yicha (30 s kesh)
+async function getBigLeaderboard(userId: string | null): Promise<{ rows: LbRow[], me: LbRow | null }> {
+    const toRow = (d: any, rank: number): LbRow => {
+        const cx = d.charXp || {}, best = CHARACTER_TYPES.reduce((b, c) => ((cx[c] || 0) > (cx[b] || 0) ? c : b), CHARACTER_TYPES[0]);
+        const m = d.bigBestM || 0, pct = Math.min(100, Math.round((d.bigBestPct || 0) * 10) / 10);   // m - ochilgan joylar (checkpoint + boss) soni
+        return { rank, id: String(d._id), nick: d.nickname, hero: best, level: xpLevel(cx[best] || 0), xp: 0, pct, m, bosses: d.bigBosses || 0 };
+    };
+    let cached = lbCache.get('big');
+    if (!cached || Date.now() - cached.at > 30000) {
+        const docs = await UserModel.find({ banned: { $ne: true }, bigBestM: { $gt: 0 } }, { nickname: 1, charXp: 1, bigBestM: 1, bigBestPct: 1, bigBosses: 1 })
+            .sort({ bigBestPct: -1, bigBestM: -1, bigBosses: -1, _id: 1 }).limit(50).lean();
+        cached = { at: Date.now(), rows: docs.map((d: any, i: number) => toRow(d, i + 1)) };
+        lbCache.set('big', cached);
+    }
+    let me: LbRow | null = null;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+        const mine: any = await UserModel.findById(userId, { nickname: 1, charXp: 1, banned: 1, bigBestM: 1, bigBestPct: 1, bigBosses: 1 }).lean();
+        if (mine && !mine.banned && (mine.bigBestM || 0) > 0) {
+            const mp = mine.bigBestPct || 0, mm = mine.bigBestM || 0, mb = mine.bigBosses || 0, base = { banned: { $ne: true }, bigBestM: { $gt: 0 } };
+            const above = await UserModel.countDocuments({ ...base, $or: [{ bigBestPct: { $gt: mp } }, { bigBestPct: mp, bigBestM: { $gt: mm } }, { bigBestPct: mp, bigBestM: mm, bigBosses: { $gt: mb } }] });
+            me = toRow(mine, above + 1);
+        }
+    }
+    return { rows: cached.rows, me };
+}
 // ADMIN: qahramon darajasini belgilash (0..MAX_LEVEL)
 export const HERO_TYPES = CHARACTER_TYPES;
 export async function setHeroLevel(userId: string, heroes: string[], level: number): Promise<UserRecord | null> {
@@ -1072,8 +1274,9 @@ export async function adjustCoins(userId: string, amount: number): Promise<UserR
 }
 
 // XP KUCHAYTIRISH sotib olish: hozirgi daraja o'qilgan bo'lsa va tanga yetsa - bitta atomik yozuv
-export const XP_BOOST_STEP = 3;
-export function xpBoostCapFor(heroLevel: number): number { return Math.min(XP_BOOST_MAX, Math.floor(Math.max(0, heroLevel) / XP_BOOST_STEP)); }
+// XP kuchaytirish darajalari qahramonning shu levellarida ochiladi (5 ta: 3 dan 30 gacha)
+export const XP_BOOST_LEVELS = [3, 10, 17, 24, 30];
+export function xpBoostCapFor(heroLevel: number): number { return Math.min(XP_BOOST_MAX, XP_BOOST_LEVELS.filter(l => heroLevel >= l).length); }
 export async function buyXpBoost(userId: string, characterType: string, payWith: 'coins' | 'points' = 'coins'): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
     if (!CHARACTER_TYPES.includes(characterType)) return { success: false, message: 'err_bad_skill' };
     const pts = 'skillPoints.' + characterType;
@@ -1083,7 +1286,7 @@ export async function buyXpBoost(userId: string, characterType: string, payWith:
         const lvl = Math.max(0, (cur.xpBoost || {})[characterType] || 0), cost = xpBoostCost(lvl);
         if (lvl >= XP_BOOST_MAX) return { success: false, message: 'err_boost_max' };
         // Qahramon darajasiga qarab: har 3 darajada +1 (3 -> 1, 6 -> 2, ... 21 -> 7, 30 -> 10)
-        if (lvl >= xpBoostCapFor(xpLevel(((cur.charXp || {})[characterType]) || 0))) return { success: false, message: 'err_upgrade_locked|' + XP_BOOST_STEP * (lvl + 1) };
+        if (lvl >= xpBoostCapFor(xpLevel(((cur.charXp || {})[characterType]) || 0))) return { success: false, message: 'err_upgrade_locked|' + XP_BOOST_LEVELS[lvl] };
         const field = 'xpBoost.' + characterType;
         const filter: any = { _id: userId, [field]: lvl ? lvl : { $in: [0, null] } }, inc: any = {};
         if (payWith === 'points') {
@@ -1109,12 +1312,15 @@ export interface FarmData {
     tree: { state: string, apples: number, spots: { [i: string]: number } }; lastVisit: number; shroomsLeft: number;
     xp: number; decor: { [id: string]: boolean }; orders: FarmOrder[]; ordersNextAt: number; fishKinds: { [kind: string]: number };
     decorOff: { [id: string]: boolean };
-    hive: boolean; mill: number; sprinklers: number; scarecrows: number; greenhouse: boolean;
+    hive: number; mill: number; sprinklers: number; scarecrows: number; greenhouse: boolean;
+    elves: { xp: number, lvl: number }[]; elfTotal: number;
     home: { owned: { [id: string]: boolean }, place: { [slot: string]: string } };
     chest: { bag: { [c: string]: number }, fishKinds: { [kind: string]: number }, fishN: number, fishV: number, n: number };
+    rake: boolean; beds: number[]; meadow: { [id: string]: number }; lastCrop: { [k: string]: string };
+    mage: { home: boolean, sym: number, f: number };   // Balot Magi: fermada yashaydimi, simpatiya, berilgan gullar
 }
 export type FarmOrder = { id: string, items: { [key: string]: number }, coins: number, xp: number, until: number };
-const FARM_N = 36;   // 6 maydon x 6 grядka
+const FARM_N = FARM_BEDS_BASE + MEADOW.bedMax;   // 6 maydon x 6 grядka + yaylovdagi 12 ta grabl grядkasi
 const plotsOf = (doc: any): FarmPlot[] => {
     const raw = (doc && doc.farmPlots) || {};
     const out: FarmPlot[] = [];
@@ -1146,10 +1352,17 @@ const farmOf = (doc: any): FarmData => ({
     xp: Math.max(0, doc.farmXp || 0), decor: doc.farmDecor || {}, orders: Array.isArray(doc.farmOrders) ? doc.farmOrders : [], ordersNextAt: doc.ordersNextAt || 0,
     fishKinds: fishOf(doc).reduce((m: { [k: string]: number }, f) => { m[f.f] = (m[f.f] || 0) + 1; return m; }, {}),
     decorOff: doc.farmDecorOff || {},
-    hive: !!doc.farmHive, mill: Math.max(0, Math.min(4, doc.farmMill || 0)),
+    hive: doc.farmHive === true ? 1 : Math.max(0, Math.min(5, Number(doc.farmHive) || 0)), mill: Math.max(0, Math.min(4, doc.farmMill || 0)),
     sprinklers: Math.max(0, Math.min(6, doc.farmSprinklers || 0)), scarecrows: Math.max(0, Math.min(6, doc.farmScarecrows || 0)), greenhouse: !!doc.farmGreenhouse,
     home: homeOf(doc),
-    chest: chestOf(doc)
+    chest: chestOf(doc),
+    elves: (Array.isArray(doc.farmElves) ? doc.farmElves : []).slice(0, FARM_ELF.max).map((e: any) => { const xp = Math.max(0, Number(e && e.xp) || 0); return { xp, lvl: elfLevel(xp) }; }),
+    elfTotal: Math.max(0, Number(doc.farmElfTotal) || 0),
+    rake: !!doc.farmRake,
+    beds: (Array.isArray(doc.farmBeds) ? doc.farmBeds : []).map((x: any) => Number.isFinite(x) && x >= 0 ? x : -1).slice(0, MEADOW.bedMax),   // -1: tekislangan (bo'sh o'rin)
+    meadow: Object.fromEntries(Object.entries(doc.farmMeadow || {}).filter(([id, x]) => MEADOW_DECOR.some(d => d.id === id) && Number.isFinite(x as number))) as { [id: string]: number },
+    lastCrop: Object.fromEntries(Object.entries(doc.farmLastCrop || {}).filter(([, c]) => typeof c === 'string')) as { [k: string]: string },
+    mage: { home: !!(doc.bigQuests && doc.bigQuests.magehome), sym: Math.max(0, Math.min(30, Number(doc.bigQuests && doc.bigQuests.mage) || 0)), f: Math.max(0, Number(doc.bigQuests && doc.bigQuests.magef) || 0) }
 });
 const homeOf = (doc: any) => {
     const h = (doc && doc.farmHome) || {}, owned: { [id: string]: boolean } = {}, place: { [slot: string]: string } = {};
@@ -1170,7 +1383,7 @@ const chestOf = (doc: any) => {
 };
 const FARM_FIELDS = { farmPlots: 1, farmBag: 1, farmZones: 1, farmDock: 1, fishRod: 1, fishNet: 1, netAt: 1, fishBag: 1, coins: 1,
     rodUses: 1, netUses: 1, fertN: 1, waterN: 1, farmOrchard: 1, treeState: 1, treeApples: 1, treeSpots: 1, lastVisit: 1, shroomsLeft: 1,
-    farmXp: 1, farmDecor: 1, farmOrders: 1, ordersNextAt: 1, farmDecorOff: 1, farmHome: 1, farmChest: 1, farmHive: 1, farmMill: 1, farmSprinklers: 1, farmScarecrows: 1, farmGreenhouse: 1 };
+    farmXp: 1, farmDecor: 1, farmOrders: 1, ordersNextAt: 1, farmDecorOff: 1, farmHome: 1, farmChest: 1, farmHive: 1, farmMill: 1, farmSprinklers: 1, farmScarecrows: 1, farmGreenhouse: 1, farmElves: 1, farmElfTotal: 1, farmRake: 1, farmBeds: 1, farmMeadow: 1, farmLastCrop: 1, bigQuests: 1 };
 export async function getFarm(userId: string): Promise<FarmData | null> {
     const doc: any = await UserModel.findById(userId, FARM_FIELDS).lean();
     return doc ? farmOf(doc) : null;
@@ -1187,30 +1400,32 @@ const noMoney = async (userId: string) => {
 type FarmResult = { success: boolean, message?: string, farm?: FarmData, coins?: number };
 // EKISH: grядka bo'sh, maydoni ochilgan va tanga yetsa - urug' puli olinadi
 export async function farmPlant(userId: string, i: number, crop: string, price: number): Promise<FarmResult> {
-    const zone = Math.floor(i / 6);
+    const zone = Math.floor(i / 6), bed = i >= FARM_BEDS_BASE ? i - FARM_BEDS_BASE : -1;
     const filter: any = { coins: { $gte: price }, ['farmPlots.' + i]: null };
-    if (zone > 0) filter.farmZones = { $gte: zone };
-    const r = await farmUpdate(userId, filter, { $inc: { coins: -price }, $set: { ['farmPlots.' + i]: { c: crop, t: Date.now() } } });
+    if (bed >= 0) filter['farmBeds.' + bed] = { $gte: 0 };   // yaylov grядkasi - qazilgan bo'lsa
+    else if (zone > 0) filter.farmZones = { $gte: zone };
+    const r = await farmUpdate(userId, filter, { $inc: { coins: -price }, $set: { ['farmPlots.' + i]: { c: crop, t: Date.now() }, ['farmLastCrop.' + i]: crop } });
     if (r) return { success: true, ...r };
     const cur = await getFarm(userId);
     if (!cur) return { success: false, message: 'err_user_not_found' };
-    if (zone > cur.zones) return { success: false, message: 'mf_zone_locked' };
+    if (bed >= 0 ? !(cur.beds[bed] >= 0) : zone > cur.zones) return { success: false, message: 'mf_zone_locked' };
     if (cur.plots[i]) return { success: false, message: 'farm_plot_busy' };
     return { success: false, message: 'err_not_enough_coins' };
 }
 // YIG'ISH: faqat pishgan bo'lsa (server vaqti va yomg'ir jadvali bo'yicha) - hosil savatga
-export async function farmHarvest(userId: string, i: number, ripe: (p: { c: string, t: number, w?: number }) => boolean, goldenChance: number):
+export async function farmHarvest(userId: string, i: number, ripe: (p: { c: string, t: number, w?: number }) => boolean, goldenChance: number, chestCap?: number):
     Promise<FarmResult & { crop?: string, n?: number, golden?: boolean }> {
     const cur = await getFarm(userId);
     if (!cur) return { success: false, message: 'err_user_not_found' };
     const p = cur.plots[i];
     if (!p) return { success: false, message: 'farm_plot_empty' };
     if (!ripe(p)) return { success: false, message: 'farm_not_ripe' };
+    if (chestCap !== undefined && cur.chest.n >= chestCap) return { success: false, message: 'chest_full' };   // elf: yashik to'lgan
     // O'g'itli: 2 ta hosil, ba'zan "oltin" - 5 ta
     const golden = !!p.f && Math.random() < goldenChance;
     const n = golden ? 5 : p.f ? 2 : 1;
     const r = await farmUpdate(userId, { ['farmPlots.' + i + '.c']: p.c, ['farmPlots.' + i + '.t']: p.t },
-        { $set: { ['farmPlots.' + i]: null }, $inc: { ['farmBag.' + p.c]: n, farmXp: 2 * n } });
+        { $set: { ['farmPlots.' + i]: null }, $inc: { [(chestCap !== undefined ? 'farmChest.bag.' : 'farmBag.') + p.c]: n, farmXp: 2 * n } });
     return r ? { success: true, crop: p.c, n, golden, ...r } : { success: false, message: 'farm_plot_empty' };
 }
 // SUG'ORISH (bepul, har ekishga bir marta): shundan keyin grядka 1.5x tez o'sadi
@@ -1500,15 +1715,73 @@ export async function decorStore(userId: string, id: string, stored: boolean): P
 // O'SISH TEZLATGICHLARI: nota uyasi (bir marta) va tegirmon (keyingi bosqich, ketma-ket)
 export async function buyFarmBooster(userId: string, what: 'hive' | 'mill' | 'greenhouse' | 'sprinkler' | 'scarecrow', price: number, curMill: number): Promise<FarmResult> {
     // Bir martalik (uya, issiqxona) yoki sanaladigan (tegirmon bosqichi, sug'orgich, qo'rqinchoq - joriy son o'zgarmagan bo'lsa +1)
-    const flag: any = { hive: 'farmHive', greenhouse: 'farmGreenhouse' }, cnt: any = { mill: 'farmMill', sprinkler: 'farmSprinklers', scarecrow: 'farmScarecrows' };
-    const filter: any = flag[what] ? { [flag[what]]: { $ne: true } } : { [cnt[what]]: curMill ? curMill : { $in: [0, null] } };
+    const flag: any = { greenhouse: 'farmGreenhouse' }, cnt: any = { hive: 'farmHive', mill: 'farmMill', sprinkler: 'farmSprinklers', scarecrow: 'farmScarecrows' };
+    // uya: eski hisoblarda true (=1) saqlangan bo'lishi mumkin
+    const filter: any = flag[what] ? { [flag[what]]: { $ne: true } }
+        : what === 'hive' && curMill === 1 ? { farmHive: { $in: [1, true] } } : { [cnt[what]]: curMill ? curMill : { $in: [0, null, false] } };
     const set: any = flag[what] ? { [flag[what]]: true } : { [cnt[what]]: curMill + 1 };
     const r = await farmUpdate(userId, { coins: { $gte: price }, ...filter }, { $inc: { coins: -price }, $set: set });
     if (r) return { success: true, ...r };
     const cur = await getFarm(userId);
-    if (cur && ((what === 'hive' && cur.hive) || (what === 'greenhouse' && cur.greenhouse) || (what === 'mill' && cur.mill !== curMill)
+    if (cur && ((what === 'hive' && cur.hive !== curMill) || (what === 'greenhouse' && cur.greenhouse) || (what === 'mill' && cur.mill !== curMill)
         || (what === 'sprinkler' && cur.sprinklers !== curMill) || (what === 'scarecrow' && cur.scarecrows !== curMill))) return { success: false, message: 'shop_not_needed' };
     return { success: false, message: await noMoney(userId) };
+}
+// ELF sotib olish (2 tagacha): joriy soni o'zgarmagan bo'lsa qo'shiladi
+export async function buyElf(userId: string, have: number, price: number): Promise<FarmResult> {
+    const sizeF: any = have === 0 ? { $or: [{ farmElves: { $exists: false } }, { farmElves: { $size: 0 } }] } : { farmElves: { $size: have } };
+    const r = await farmUpdate(userId, { coins: { $gte: price }, ...sizeF }, { $inc: { coins: -price }, $push: { farmElves: { xp: 0 } } });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    if (cur && cur.elves.length !== have) return { success: false, message: 'shop_not_needed' };
+    return { success: false, message: await noMoney(userId) };
+}
+// Elf hosil yig'di: unga tajriba, elflarning jami hosili
+export async function elfGain(userId: string, i: number, n: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { ['farmElves.' + i]: { $exists: true } }, { $inc: { ['farmElves.' + i + '.xp']: n, farmElfTotal: n } });
+    return r ? { success: true, ...r } : { success: false, message: 'err_server' };
+}
+// FERMA TAJRIBASI (elf ekkanda va h.k.)
+export async function farmAddXp(userId: string, xp: number): Promise<{ farm: FarmData, coins: number } | null> {
+    return farmUpdate(userId, {}, { $inc: { farmXp: xp } });
+}
+// GRABL (bir marta) va yaylovdagi grядka qazish
+export async function buyRake(userId: string, price: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { coins: { $gte: price }, farmRake: { $ne: true } }, { $inc: { coins: -price }, $set: { farmRake: true } });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    if (cur && cur.rake) return { success: false, message: 'shop_not_needed' };
+    return { success: false, message: await noMoney(userId) };
+}
+// qazish: avval tekislangan (-1) o'rin qayta ishlatiladi, bo'lmasa - oxiriga qo'shiladi. bed - grядka o'rni (0..11)
+export async function farmDig(userId: string, x: number): Promise<FarmResult & { bed?: number }> {
+    const cur = await getFarm(userId);
+    if (!cur) return { success: false, message: 'err_user_not_found' };
+    const hole = cur.beds.indexOf(-1);
+    const r = hole >= 0
+        ? await farmUpdate(userId, { farmRake: true, ['farmBeds.' + hole]: { $lt: 0 } }, { $set: { ['farmBeds.' + hole]: Math.round(x) } })
+        : await farmUpdate(userId, { farmRake: true, ['farmBeds.' + (MEADOW.bedMax - 1)]: { $exists: false } }, { $push: { farmBeds: Math.round(x) } });
+    return r ? { success: true, bed: hole >= 0 ? hole : r.farm.beds.length - 1, ...r } : { success: false, message: 'mf_beds_full' };
+}
+// YERNI TIKLASH: bo'sh (ekinsiz) grядka tekislanadi - o'rni -1 bo'lib qoladi (boshqa grядkalar indeksi o'zgarmasin)
+export async function farmUndig(userId: string, bed: number): Promise<FarmResult> {
+    const i = FARM_BEDS_BASE + bed;
+    const r = await farmUpdate(userId, { ['farmBeds.' + bed]: { $gte: 0 }, ['farmPlots.' + i]: null }, { $set: { ['farmBeds.' + bed]: -1 }, $unset: { ['farmLastCrop.' + i]: 1 } });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    return { success: false, message: cur && cur.plots[i] ? 'mf_bed_busy' : 'farm_too_far' };
+}
+// YAYLOV BEZAGI: sotib olish (o'z joyida paydo bo'ladi) va ko'chirish
+export async function buyMeadowDecor(userId: string, id: string, price: number, x: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { coins: { $gte: price }, ['farmMeadow.' + id]: { $exists: false } }, { $inc: { coins: -price }, $set: { ['farmMeadow.' + id]: x } });
+    if (r) return { success: true, ...r };
+    const cur = await getFarm(userId);
+    if (cur && cur.meadow[id] !== undefined) return { success: false, message: 'shop_not_needed' };
+    return { success: false, message: await noMoney(userId) };
+}
+export async function meadowPlace(userId: string, id: string, x: number): Promise<FarmResult> {
+    const r = await farmUpdate(userId, { ['farmMeadow.' + id]: { $exists: true } }, { $set: { ['farmMeadow.' + id]: Math.round(x) } });
+    return r ? { success: true, ...r } : { success: false, message: 'err_bad_item' };
 }
 // BEZAK sotib olish (bir marta)
 export async function buyDecor(userId: string, id: string, price: number): Promise<FarmResult> {

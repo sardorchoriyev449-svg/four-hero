@@ -18,13 +18,18 @@ export type PerkId =
     | 'lightning'   // mage 16: Q - zanjirli chaqmoq (3-qurol)
     | 'shieldthrow' // knight 16: Q - qalqon otish (3-qurol, 10 s qayta tiklanadi)
     | 'shuriken'    // samurai 16: Q - 3 ta shuriken yelpig'ichi (3-qurol)
-    | 'triple';     // archer 16: Q - uchtalik o'q
+    | 'triple'      // archer 16: Q - uchtalik o'q
+    | 'blowpipe'    // hunter 3: Q - pichoq / puflama naycha (drotik)
+    | 'poison'      // hunter 10: drotik zaharli (1 s dan keyin jon keta boshlaydi)
+    | 'trap';       // hunter 16: R - yerga qopqon (tushgan raqib qimirlay olmaydi, qalqon yordam bermaydi)
 
 export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] } = {
     mage: [{ level: 1, id: 'shift' }, { level: 2, id: 'ice' }, { level: 3, id: 'stam5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'heal' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     knight: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'shotgun' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'fly' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     samurai: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'kunai' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'djump' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
-    archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }]
+    archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
+    // OVCHI (pullik): 0 - uzun pichoq, 1 - SHIFT yopishqoq mina, 3 - puflama naycha, 10 - zaharli drotik, 16 - qopqon
+    hunter: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'blowpipe' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'poison' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }, { level: 16, id: 'trap' }]
 };
 
 // 16-DARAJA: har personajga yangi qurol (Q bilan almashtiriladi)
@@ -38,7 +43,7 @@ Object.keys(PERK_TABLE).forEach((c) => {
 });
 
 // Q bilan almashadigan ikkinchi qurol (personaj bo'yicha)
-export const ALT_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple' };
+export const ALT_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple', hunter: 'blowpipe' };
 // Q bilan uchinchi qurol (16-daraja): mage - chaqmoq, knight - qalqon otish, samurai - shuriken
 export const THIRD_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'lightning', knight: 'shieldthrow', samurai: 'shuriken' };
 export const SHIELD_THROW_COOLDOWN_TICKS = 333;   // ~10 s
@@ -51,7 +56,15 @@ export function weaponModesOf(p: PlayerState): ('main' | 'alt' | 'alt2')[] {
     return modes;
 }
 // R bilan ishlaydigan maxsus qobiliyat
-export const SPECIAL_PERK: { [character: string]: PerkId } = { mage: 'heal', knight: 'fly' };
+export const SPECIAL_PERK: { [character: string]: PerkId } = { mage: 'heal', knight: 'fly', hunter: 'trap' };
+// OVCHI: pichoq, drotik, zahar, yopishqoq mina (SHIFT), qopqon (R)
+export const HUNTER = {
+    knifeSpeed: 420, knifeLife: 6, knifeDamage: 28, knifeCdTicks: 17,          // pichoq ~120 px ga yetadi, ~0.5 s da bir
+    dartSpeed: 950, dartLife: 30, dartDamage: 12, dartCdTicks: 15,             // drotik ~850 px
+    poisonDelayTicks: 33, poisonTicks: 133, poisonDps: 7,                      // 1 s dan keyin 4 s davomida ~7 HP/s
+    mineCdTicks: 200, mineStamina: 18, mineSpeed: 560, mineFuseTicks: 40, mineGroundFuseTicks: 70, mineRadius: 95, mineDamage: 60,
+    trapDamage: 40, trapHoldTicks: 100, trapLifeTicks: 667, trapArmTicks: 15, trapMax: 2
+};
 export const SPECIAL_TICKS = 67;          // ~2s
 // SEHRGAR SHIFT - TORNADO: qaragan tomonga 3 s yuradi, yo'lidagi dushmanlarga zarar; 20 s qayta tiklanadi
 export const TORNADO = { cdTicks: 667, lifeTicks: 100, speed: 200, halfW: 60, height: 180, pulseTicks: 13, damage: 22, stamina: 20, pull: 2.5 };

@@ -64,7 +64,7 @@ export function startAdminBot(roomManager: RoomManager): void {
         '/unban &lt;login&gt; - blokdan chiqarish',
         '/coins &lt;login&gt; &lt;son&gt; - tanga berish (manfiy - ayirish)',
         `/maps &lt;login&gt; &lt;son|all&gt; - xaritalarni ochish (son: nechta xarita ochiq bo'lsin, 1-${SEASON_MAP_COUNT}; all - hammasi)`,
-        `/level &lt;login&gt; &lt;knight|archer|mage|samurai|all&gt; &lt;0-${db.MAX_LEVEL}&gt; - qahramon darajasi (eng yuqori - ${db.MAX_LEVEL}: hamma imkoniyatlar ochiq)`
+        `/level &lt;login&gt; &lt;knight|archer|mage|samurai|hunter|all&gt; &lt;0-${db.MAX_LEVEL}&gt; - qahramon darajasi (eng yuqori - ${db.MAX_LEVEL}: hamma imkoniyatlar ochiq)`
     ].join('\n');
 
     function userCard(u: db.UserRecord): string {
@@ -178,7 +178,7 @@ export function startAdminBot(roomManager: RoomManager): void {
             const heroes = hero === 'all' ? db.HERO_TYPES : db.HERO_TYPES.includes(hero) ? [hero] : [];
             if (!args[0] || !heroes.length || !Number.isInteger(level) || level < 0 || level > db.MAX_LEVEL) {
                 await send(chatId, `Masalan: /level sardor knight 10  yoki  /level sardor all ${db.MAX_LEVEL}\n` +
-                    `Qahramon: knight, archer, mage, samurai yoki all. Daraja: 0-${db.MAX_LEVEL} (${db.MAX_LEVEL} - eng yuqori, hamma imkoniyatlar ochiq; undan yuqorisi hech narsa bermaydi)`);
+                    `Qahramon: knight, archer, mage, samurai, hunter yoki all. Daraja: 0-${db.MAX_LEVEL} (${db.MAX_LEVEL} - eng yuqori, hamma imkoniyatlar ochiq; undan yuqorisi hech narsa bermaydi)`);
                 return;
             }
             const u = await findOne(chatId, args[0]);

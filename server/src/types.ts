@@ -1,4 +1,15 @@
 export interface PlayerState {
+    mineCd?: number;               // ovchi: yopishqoq mina qayta tiklanishi (tik)
+    ownedHeroes?: string[];        // sotib olingan (pullik) qahramonlar
+    bigCp?: number;                // BIG MAP: saqlangan checkpoint
+    bigMapItem?: boolean;
+    bigQuests?: { [q: string]: number };
+    bigKillAt?: { [z: string]: number };   // BIG MAP: boss o'ldirilgan vaqt (ms) - 50 daqiqada qaytadi
+    localTest?: boolean;                   // test rejimi (localhost) - Big Map'da dushmanlar tezroq qaytadi   // BIG MAP topshiriqlari (0..3)   // BIG MAP xaritasi sotib olingan (butun umr)
+    bigSeed?: number; bigVer?: number; bigDoneM?: number; bigCpV?: number; bigOpened?: number[]; bigKilled?: number[]; bigGot?: number[];   // BIG MAP: saqlangan dunyo, ochilgan sandiqlar, o'ldirilgan bosslar; bigCpV 2 - checkpoint raqami oraliq checkpointlar bilan
+    // BIG MAP do'koni ta'sirlari: tugash vaqti (Date.now ms); phoenix - keyingi o'limda joyida tiriladi
+    buffs?: { battery?: number, armorHp?: number, strength?: number, feather?: number, phoenix?: boolean };
+    snowballs?: number; snowCd?: number;   // BIG MAP qor bazasi: qo'ldagi qor to'plari va otish kutishi (tik)
     petTrust?: number;             // Pushistik bilan do'stlik (0..10, akkauntda saqlanadi); 10 - doimiy hamroh
     pet?: import('./db').PetData;  // hamroh Pushistik (daraja, jon, kuchaytirishlar); petDirtyAt - bazaga yozish navbati
     petDirtyAt?: number;
@@ -11,6 +22,7 @@ export interface PlayerState {
     id: string;
     mutedUntil?: number;          // admin chat taqiqi (ms; -1 - doimiy)
     xpBoost?: { [character: string]: number };   // XP kuchaytirish darajalari (hisobdan)
+    supporter?: boolean;          // "Supporter Pack" olgan - lobbida belgi
     isAdmin?: boolean;            // admin panel orqali kirgan - lobbida va o'yinda "ADMIN" belgisi
     x: number;
     y: number;
@@ -81,6 +93,9 @@ export interface BotState {
     retargetTimer?: number;        // shuncha tikdan keyin raqib qayta ko'rib chiqiladi (botlar o'yinchilar orasida bo'linsin)
     isBlocking: boolean;           // Vaqti-vaqti bilan qalqon ko'tarib himoyalanadi (shu payt zarar yemaydi)
     blockTimer: number;            // Qalqon holati necha tik davom etishini/yo'qligini boshqaradi
+    blockCd?: number;              // qalqon tushgandan keyin qayta ko'tarilguncha qolgan tiklar
+    poison?: { delay: number, t: number, owner: string } | null;   // ovchi drotigi zahari
+    trapped?: number;              // ovchi qopqoniga tushgan (tik): qimirlamaydi, qalqon ko'tarolmaydi
     isAttacking: boolean;          // Klientga qilich zarbasi animatsiyasini ko'rsatish uchun (qisqa muddatli belgi)
     attackAnimTimer: number;
     facingLeft: boolean;           // Qaysi tomonga qarab turganini (qilich/qalqon yo'nalishi uchun)
@@ -201,7 +216,8 @@ export interface BulletState {
     vy: number;
     color: number;
     lifetime: number;
-    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'lightning' | 'shield' | 'shuriken' | 'tornado' | 'acid' | 'petbite';
+    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'slash' | 'lightning' | 'shield' | 'shuriken' | 'tornado' | 'acid' | 'petbite' | 'knife' | 'dart' | 'blast';
+    poison?: boolean;     // ovchining zaharli drotigi
     dmg?: number;         // qat'iy zarar (hamroh Pushistikning kislotasi / zarbasi) - egasining kuchaytirishlari qo'shilmaydi
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
@@ -215,6 +231,7 @@ export interface CrateState {
     x: number;
     y: number;
     hp: number;
+    s?: number;   // o'lchami (Big Map: har xil), yo'q - CRATE_SIZE
 }
 
 // Quti sinsa chiqadigan tanga - yoniga borib E bosilsa olinadi
@@ -222,6 +239,7 @@ export interface CoinState {
     id: string;
     x: number;
     y: number;
+    v?: number;   // necha tanga (Big Map qutisi: 1-10), yo'q - CRATE_COINS
 }
 
 // Yo'ldagi mina: ustidan o'tgan qahramonni portlab, jonining 20% ini oladi
@@ -283,6 +301,11 @@ export interface SnakeState {
 }
 
 export interface RoomState {
+    // OVCHI: yopishqoq minalar (uchadi -> raqibga yopishadi yoki yerga tushadi -> portlaydi) va qopqonlar
+    hunterMines?: { id: number, owner: string, x: number, y: number, vx: number, vy: number, stuck: string | null, stuckBig?: number, ox: number, oy: number, fuse: number, ground: boolean }[];
+    hunterTraps?: { id: number, owner: string, x: number, y: number, arm: number, life: number }[];
+    hunterSeq?: number;
+    big?: import('./bigmap').BigState | null;   // BIG MAP holati
     // Yoqimtoy maxluqcha (barcha xaritalarda): fly - uchib o'tish, in - qo'nish, sit - o'tiradi, eat - yeydi, out - uchib ketadi
     critter?: { phase: 'fly' | 'in' | 'sit' | 'eat' | 'out', x: number, y: number, face: number, t: number, dur: number,
         x0: number, y0: number, x1: number, y1: number, alarm: number, wish: string, scared: boolean,
@@ -343,6 +366,10 @@ export interface RoomState {
             plot?: number, phase?: 'in' | 'eat' | 'out', eatAt?: number,
             air?: boolean, vx?: number, vy?: number, jumpCd?: number, hopFromY?: number, hopToY?: number, hopH?: number }[],
         nextCrowAt?: number,
+        // Ferma elflari: st - walk (ishga), harvest, hai, flee (uyga qochadi), inside (uyda: act - hide/read/sleep), cards, swim, mat, fetch, idle
+        elves?: { x: number, face: number, st: string, act: string, tx: number, t: number, plot: number, busy: boolean, haiCd: number, calmAt: number, idx: number, task?: 'harvest' | 'plant' | 'water' }[],
+        elfSkip?: { [k: number]: number },   // elf ishi bo'lmagan grядka (tanga yetmadi) - shu vaqtgacha tegmaydi
+        elfThrowAt?: number,
         // Robot it (bezak sotib olingan bo'lsa): fermani himoya qiladi
         dog?: { x: number, y: number, face: number, vx: number, vy: number, air: boolean, biteAt: number, bite: number, jumpCd: number, hp: number, hurt: number } | null,   // biteAt - keyingi tishlashgacha tiklar
         nextRaidAt: number, raidKind: string | null, safeUntil: { [pid: string]: number },
