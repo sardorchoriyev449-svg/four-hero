@@ -168,10 +168,11 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     lizard:    { hp: 130, spd: 140, dmg: 16, w: 84, h: 56, jump: 540, reach: 64, atkMs: 900,  coins: 9 },   // bahaybat: tik turganda o'yinchidan ikki barobar baland                                  // tirnoqli kaltakesak
     bigtree:   { hp: 4200, spd: 0,  dmg: 26, w: 170, h: 300, jump: 0, reach: 0, atkMs: 9999, coins: 260, boss: true, armor: 0.15 },
     zvfarm:    { hp: 15,  spd: 0,   dmg: 0,  w: 10, h: 10, jump: 0, reach: 0, atkMs: 9999, coins: 420, boss: true, secret: true },
-    tknife:    { hp: 90,  spd: 135, dmg: 12, w: 28, h: 46, jump: 560, reach: 38, atkMs: 850,  coins: 6, guard: [0.35, 1200, 2400] },
-    tarcher:   { hp: 75,  spd: 95,  dmg: 9,  w: 28, h: 46, jump: 520, reach: 0,  atkMs: 0,    coins: 7, shot: { spd: 460, cdMs: 1900, dmg: 11 }, guard: [0.35, 1200, 2400] },
-    tbrute:    { hp: 300, spd: 75,  dmg: 24, w: 40, h: 58, jump: 470, reach: 54, atkMs: 1400, coins: 14, armor: 0.25, guard: [0.45, 1600, 2600] },
-    darkelf:   { hp: 110, spd: 85,  dmg: 15, w: 30, h: 52, jump: 0,   reach: 0,  atkMs: 0,    coins: 10, fly: true, shot: { spd: 330, cdMs: 2200, dmg: 15 } },   // havoda muallaq turadi, to'g'ri uchadigan qora sehr
+    // ELF QIROLLIGI (birinchi lokatsiya): jonlari ~30% kamaytirildi - yangi o'yinchilarga juda uzoq cho'zilardi
+    tknife:    { hp: 65,  spd: 135, dmg: 12, w: 28, h: 46, jump: 560, reach: 38, atkMs: 850,  coins: 6, guard: [0.35, 1200, 2400] },
+    tarcher:   { hp: 55,  spd: 95,  dmg: 9,  w: 28, h: 46, jump: 520, reach: 0,  atkMs: 0,    coins: 7, shot: { spd: 460, cdMs: 1900, dmg: 11 }, guard: [0.35, 1200, 2400] },
+    tbrute:    { hp: 210, spd: 75,  dmg: 24, w: 40, h: 58, jump: 470, reach: 54, atkMs: 1400, coins: 14, armor: 0.15, guard: [0.45, 1600, 2600] },
+    darkelf:   { hp: 80,  spd: 85,  dmg: 15, w: 30, h: 52, jump: 0,   reach: 0,  atkMs: 0,    coins: 10, fly: true, shot: { spd: 330, cdMs: 2200, dmg: 15 } },   // havoda muallaq turadi, to'g'ri uchadigan qora sehr
     rsnake:    { hp: 3200, spd: 0,  dmg: 30, w: 220, h: 190, jump: 0, reach: 0, atkMs: 0, coins: 300, boss: true },   // S1 ROBOT ILON (g'orda): tana - bosh (o'q faqat boshiga tegadi)
     sambo:     { hp: 3000, spd: 150, dmg: 30, w: 66, h: 108, jump: 720, reach: 70, atkMs: 1100, coins: 330, boss: true, secret: true, armor: 0.2 },   // SAMBOCHI ELF: ushlab "na progib" tashlaydi, ustiga sakraydi, tosh otadi
     // SEASON XARITALARIDAN MEHMONLAR (rasmlari o'sha xaritalardagi bilan bir xil)
@@ -973,7 +974,7 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
 }
 
 // ===== O'YIN HOLATI (server) =====
-export interface BigEnemy { id: number; k: string; x: number; y: number; vx: number; vy: number; hp: number; mx: number; f: number; st: string; t: number;
+export interface BigEnemy { np?: number; id: number; k: string; x: number; y: number; vx: number; vy: number; hp: number; mx: number; f: number; st: string; t: number;
     tgt: string | null; lost: number; hx: number; hy: number; cd: number; atk: number; flash: number; zone: number; ground: boolean; move?: string; mt?: number;
     lvx?: number; jcd?: number; mi?: number; p2?: boolean; stun?: number; poison?: { delay: number, t: number, dps: number, owner: string };
     nl?: boolean;   // pog'onalardan o'tib ketadi (maxfiy xona bossi doim polda - pog'onalar o'yinchiga qochish joyi)
@@ -1122,6 +1123,16 @@ export const pRect = (p: PlayerState) => ({ x: p.x - 12, y: p.y - 24, w: 24, h: 
 export const eRect = (e: BigEnemy, d: EnemyDef) => ({ x: e.x - d.w / 2, y: e.y - d.h, w: d.w, h: d.h });
 export const overlap = (a: { x: number, y: number, w: number, h: number }, b: { x: number, y: number, w: number, h: number }) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
+// BOSS JONI O'YINCHILAR SONIGA QARAB: 1 o'yinchi - asl jon, 2 - 2 barobar ... (ko'pi bilan 4). Faqat oshadi (kimdir chiqib ketsa - kamaymaydi).
+// Ferma boshqaruvchisi (joni = zombilar soni) va xokkey darvozasi - hisobga olinmaydi
+export const BOSS_HP_MAX_PLAYERS = 4;
+export function bossScale(e: BigEnemy, nPlayers: number): void {
+    if (!ENEMIES[e.k] || !ENEMIES[e.k].boss || e.k === 'zvfarm' || e.k === 'hgoal') return;
+    const n = Math.max(1, Math.min(BOSS_HP_MAX_PLAYERS, nPlayers)), was = e.np || 1;
+    if (n <= was && e.np) return;
+    const k = n / was;
+    e.hp = Math.round(e.hp * k); e.mx = Math.round(e.mx * k); e.np = n;
+}
 export function spawnEnemy(S: BigState, k: string, x: number, y: number, zone: number): BigEnemy {
     const d = ENEMIES[k];
     const e: BigEnemy = { id: ++S.seq, k, x, y, vx: 0, vy: 0, hp: d.hp, mx: d.hp, f: -1, st: d.lurk ? 'lurk' : 'idle', t: 0, tgt: null, lost: 0, hx: x, hy: y, cd: 30 + Math.floor(Math.random() * 40), atk: 0, flash: 0, zone, ground: !d.fly };
@@ -1279,12 +1290,14 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
         z.spawns.forEach(sp => {
             const e = spawnEnemy(S, sp.k, sp.x, sp.y, z.id);
             if (!camp) { e.st = 'chase'; e.tgt = nearest(alive, e)?.id || null; }
+            bossScale(e, players.length);
         });
         if (!camp && z.boss !== 'bogcrab') ctx.emit(z.boss ? 'bigBoss' : 'bigAmbush', { z: z.id, k: z.boss || '', secret: !!z.secret, pts: z.spawns.map(s => [Math.round(s.x), Math.round(s.y)]) });
     });
     // DUSHMANLAR
     for (let i = S.enemies.length - 1; i >= 0; i--) {
         const e = S.enemies[i], d = ENEMIES[e.k];
+        if (e.np && players.length > e.np) bossScale(e, players.length);   // jang paytida yangi o'yinchi qo'shildi - boss joni ham oshadi
         if (e.flash > 0) e.flash--;
         if (e.cd > 0) e.cd--;
         if (e.jcd) e.jcd--;
@@ -1629,6 +1642,19 @@ export function bigFindEnemy(S: BigState, rect: { x: number, y: number, w: numbe
     return S.enemies.find(e => !e.hide && overlap(rect, eRect(e, ENEMIES[e.k]))) || S.enemies.find(e => !e.hide && overlap(rect, hitRect(e, ENEMIES[e.k]))) || null;
 }
 export function bigEnemyById(S: BigState, id: number): BigEnemy | null { return S.enemies.find(e => e.id === id) || null; }
+// eng yaqin ko'rinib turgan dushman markazi (ovchi minasini avtomatik nishonga olish): yashiringan / niqobdagi (mimik) - yo'q
+export function bigNearestEnemy(S: BigState, x: number, y: number, rx: number, ry: number, skip: { x: number, y: number }[] = []): { x: number, y: number } | null {
+    let best: { x: number, y: number } | null = null, bd = Infinity;
+    for (const e of S.enemies) {
+        if (e.hide || e.st === 'lurk' || e.hp <= 0) continue;
+        const d = ENEMIES[e.k], cx = e.x, cy = e.y - d.h / 2;
+        if (skip.some(q => q.x === cx && q.y === cy)) continue;   // allaqachon tanlangan
+        if (Math.abs(cx - x) > rx || Math.abs(cy - y) > ry) continue;
+        const dist = Math.hypot(cx - x, cy - y);
+        if (dist < bd) { bd = dist; best = { x: cx, y: cy }; }
+    }
+    return best;
+}
 export function bigBlast(S: BigState, room: RoomState, x: number, y: number, r: number, damage: number, owner: PlayerState | null, ctx: BigCtx): void {
     S.enemies.filter(e => !e.hide && Math.hypot(e.x - x, (e.y - ENEMIES[e.k].h / 2) - y) <= r + ENEMIES[e.k].w / 2).forEach(e => damageEnemy(S, room, e, damage, owner, ctx));
 }

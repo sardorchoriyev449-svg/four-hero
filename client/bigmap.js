@@ -1794,7 +1794,14 @@ window.BigMap = (function () {
             }));
             // o'yinchilar
             const others = X.others ? X.others() : [];
-            others.forEach(o => { if (!o || o.x === undefined) return; const [x, y] = toS(o.x, o.y); g.fillStyle = '#fff'; g.fillRect(x - 2, y - 2, 4, 4); });
+            // boshqa o'yinchilar: qahramon rangidagi katta belgi (qora-oq hoshiya) va nomi; o'lik - kulrang
+            others.forEach(o => {
+                if (!o || !o.active || o.x === undefined) return;
+                const [x, y] = toS(o.x, o.y); if (x < -30 || x > 790 || y < -30 || y > 430) return;
+                const col = o.isDead ? '#9e9e9e' : '#' + (o.mapCol === undefined ? 0xffffff : o.mapCol).toString(16).padStart(6, '0');
+                g.fillStyle = '#000'; g.fillRect(x - 6, y - 6, 12, 12); g.fillStyle = '#fff'; g.fillRect(x - 5, y - 5, 10, 10); g.fillStyle = col; g.fillRect(x - 3, y - 3, 6, 6);
+                if (o.nick) { g.font = '7px "Press Start 2P",monospace'; g.textAlign = 'center'; g.fillStyle = '#000'; g.fillText(o.nick, x + 1, y - 9); g.fillStyle = '#e1f5fe'; g.fillText(o.nick, x, y - 10); g.textAlign = 'left'; }
+            });
             const h = X.hero();
             if (h) { const [x, y] = toS(h.x, h.y); const on = Math.floor(Date.now() / 300) % 2; g.fillStyle = '#000'; g.fillRect(x - 5, y - 5, 10, 10); g.fillStyle = on ? '#ffeb3b' : '#ff9800'; g.fillRect(x - 4, y - 4, 8, 8); }
             // nishon

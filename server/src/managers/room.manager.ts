@@ -6,7 +6,7 @@ import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '..
 import { lookString } from '../cosmetics';
 import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
 import { GameEngine } from './game.engine';
-import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN } from '../bigmap';
+import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN, bigNearestEnemy } from '../bigmap';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
 import { TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE, HUNTER } from '../perks';
@@ -650,10 +650,31 @@ export class RoomManager {
             if (player.stamina < BaseCharacter.staminaCost(player, HUNTER.mineStamina)) { this.io.to(player.id).emit('noStamina'); return; }
             BaseCharacter.spendStamina(player, HUNTER.mineStamina);
             player.mineCd = HUNTER.mineCdTicks;
-            const dir = faceDir || (Math.cos(player.lastAttackAngle || 0) < 0 ? -1 : 1);
+            const dir0 = faceDir || (Math.cos(player.lastAttackAngle || 0) < 0 ? -1 : 1);
+            // AVTO-NISHON: yaqin atrofdagi eng yaqin dushmanlarga (oddiy botlar va katta dunyo dushmanlari) - mina unga tushadigan yoy bilan otiladi;
+            // 4-darajadan (mine2) - birdaniga 2 ta: ikki eng yaqin dushmanga (bittasi bo'lsa - ikkalasi unga). Hech kim yo'q - qaragan tomonga
+            const RX = 560, RY = 300, px = player.x, py = player.y - 10, G = 700;   // G - minaning tortishish kuchi (game.engine bilan bir xil)
+            const cand: { x: number, y: number, d: number }[] = [];
+            (room.bots || []).forEach((b) => { if (b.hp > 0 && Math.abs(b.x - px) <= RX && Math.abs(b.y - py) <= RY) cand.push({ x: b.x, y: b.y, d: Math.hypot(b.x - px, b.y - py) }); });
+            if (room.big) {
+                let e = bigNearestEnemy(room.big, px, py, RX, RY); const taken: { x: number, y: number }[] = [];
+                for (let k = 0; k < 2 && e; k++) { cand.push({ x: e.x, y: e.y, d: Math.hypot(e.x - px, e.y - py) }); taken.push(e); e = bigNearestEnemy(room.big, px, py, RX, RY, taken); }
+            }
+            cand.sort((p1, p2) => p1.d - p2.d);
+            const n = hasPerk(player, 'mine2') ? 2 : 1;
             room.hunterMines = room.hunterMines || [];
-            room.hunterSeq = (room.hunterSeq || 0) + 1;
-            room.hunterMines.push({ id: room.hunterSeq, owner: player.id, x: player.x + dir * 20, y: player.y - 10, vx: dir * HUNTER.mineSpeed, vy: -150, stuck: null, ox: 0, oy: 0, fuse: 0, ground: false });
+            for (let k = 0; k < n; k++) {
+                const tg = cand.length ? cand[Math.min(k, cand.length - 1)] : null;
+                let dir = dir0, vx = dir * HUNTER.mineSpeed * (k ? 0.7 : 1), vy = k ? -260 : -150;   // nishonsiz: ikkinchisi yaqinroqqa va balandroq
+                if (tg) {
+                    if (Math.abs(tg.x - px) > 6) dir = tg.x < px ? -1 : 1;
+                    const dx = tg.x - (px + dir * 20) + (k && cand.length < 2 ? dir * 18 : 0), dy = tg.y - py;   // bitta nishonga ikkinchisi - biroz nariroqqa
+                    const T = Math.max(0.3, Math.min(1, Math.abs(dx) / HUNTER.mineSpeed)) + k * 0.06;   // uchish vaqti - masofaga qarab
+                    vx = dx / T; vy = Math.max(-950, (dy - 0.5 * G * T * T) / T);
+                }
+                room.hunterSeq = (room.hunterSeq || 0) + 1;
+                room.hunterMines.push({ id: room.hunterSeq, owner: player.id, x: player.x + dir * 20, y: player.y - 10, vx, vy, stuck: null, ox: 0, oy: 0, fuse: 0, ground: false });
+            }
             this.io.to(roomId).emit('hunterThrow', { id: player.id, x: Math.round(player.x), y: Math.round(player.y) });
             return;
         }

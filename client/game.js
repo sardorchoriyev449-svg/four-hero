@@ -3,6 +3,14 @@ let otherPlayers = {};
 let enemyBots = {}; 
 let bulletSprites = {}; 
 let cursors;
+// SAKRASH: ↑ / W / Space. Chat yoki boshqa yozish maydonida turganda Space hisoblanmaydi (bo'sh joy yozilganda qahramon sakramasin)
+const typingNow = () => { const a = document.activeElement; return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable); };
+const spaceJump = () => !!(cursors && cursors.space && cursors.space.isDown) && !typingNow();
+// o'yin paytida Space fokusdagi HTML tugmani (masalan, oldin bosilgan "Start") qayta bosib yubormasin
+document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || typingNow() || typeof currentCharacter === 'undefined' || !currentCharacter) return;
+    const a = document.activeElement; if (a && a.tagName === 'BUTTON') { e.preventDefault(); a.blur(); }
+}, true);
 let platforms;
 let botGroup;
 let lastDirection = 'right';
@@ -5999,7 +6007,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const speed = 230 * (c.isDead ? 1 : (c.speedMultiplier || 1));
         const L = cursors.left.isDown || K.addKey('A').isDown || touchState.left;
         const Rr = cursors.right.isDown || K.addKey('D').isDown || touchState.right;
-        const U = cursors.up.isDown || K.addKey('W').isDown || touchState.jump;
+        const U = cursors.up.isDown || K.addKey('W').isDown || spaceJump() || touchState.jump;
         const Dn = cursors.down.isDown || K.addKey('S').isDown || touchState.down;
         let vx = dialog ? 0 : (L ? -speed : Rr ? speed : 0), vy = dialog ? 0 : (U ? -speed : Dn ? speed : 0);
         // Bulutlar va yon chegaralar: keyingi fizika qadamida chegaradan oshib ketmasin (oldindan to'xtatiladi)
@@ -12037,6 +12045,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 otherPlayers[id].hasJet = !!pData.jet;
                 otherPlayers[id].kills = pData.kills || 0;
                 otherPlayers[id].nick = pData.nickname || '';
+                otherPlayers[id].mapCol = (Number(pData.color) || 0xffffff) % 0x1000000;   // xaritadagi belgisi - qahramon rangida
                 setHeroLook(otherPlayers[id], pData.look);
                 otherPlayers[id].skinFx = pData.skinFx || '';
                 if (isApples) {
@@ -13132,7 +13141,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (isBig && window.BigMap && !currentCharacter.isDead) {
             const kb = this.input.keyboard;
             const keys = { left: cursors.left.isDown || kb.addKey('A').isDown || touchState.left, right: cursors.right.isDown || kb.addKey('D').isDown || touchState.right,
-                jump: cursors.up.isDown || kb.addKey('W').isDown || touchState.jump };
+                jump: cursors.up.isDown || kb.addKey('W').isDown || spaceJump() || touchState.jump };
             if (BigMap.vineControl(this, keys, Math.min(0.05, this.game.loop.delta / 1000))) {
                 if (keys.left) lastDirection = 'left'; else if (keys.right) lastDirection = 'right';
                 if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: currentCharacter.x, y: currentCharacter.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y }); }
@@ -13194,7 +13203,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (isGrounded) lastGroundedAt = this.time.now;
             else if (this.time.now - lastGroundedAt < 120 && currentCharacter.body.velocity.y >= 0) isGrounded = true;
         }
-        const jumpDown = !(dialog && (!dialog.opts.free || dialog.cho)) && this.time.now >= rootUntil && (cursors.up.isDown || this.input.keyboard.addKey('W').isDown || touchState.jump);   // erkin suhbatda variantlar ochiq paytda ↑/W - tanlash
+        const jumpDown = !(dialog && (!dialog.opts.free || dialog.cho)) && this.time.now >= rootUntil && (cursors.up.isDown || this.input.keyboard.addKey('W').isDown || spaceJump() || touchState.jump);   // erkin suhbatda variantlar ochiq paytda ↑/W - tanlash
         const jumpPressed = jumpDown && !jumpWasDown;
         jumpWasDown = jumpDown;
         const c = currentCharacter;

@@ -5,6 +5,7 @@ import { PlayerState } from './types';
 
 export type PerkId =
     'shift'     // SHIFT qobiliyati ochiladi
+    | 'mine2'   // hunter: SHIFT - birdaniga 2 ta mina (ikki eng yaqin dushmanga)
     | 'stam5'   // maksimal stamina +5
     | 'dmg5'    // har zarba/o'q +5 zarar
     | 'ice'     // mage: muz sharlari (Q - olov/muz almashtirish)
@@ -29,7 +30,7 @@ export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] 
     samurai: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'kunai' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'djump' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     archer: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'stam5' }, { level: 4, id: 'firearrow' }, { level: 4, id: 'dmg5' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'invis2' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }],
     // OVCHI (pullik): 0 - uzun pichoq, 1 - SHIFT yopishqoq mina, 3 - puflama naycha, 10 - zaharli drotik, 16 - qopqon
-    hunter: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'blowpipe' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'poison' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }, { level: 16, id: 'trap' }]
+    hunter: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'blowpipe' }, { level: 4, id: 'mine2' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'poison' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }, { level: 16, id: 'trap' }]
 };
 
 // 16-DARAJA: har personajga yangi qurol (Q bilan almashtiriladi)
