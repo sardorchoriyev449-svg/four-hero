@@ -9,10 +9,11 @@ export class SamuraiCharacter extends BaseCharacter {
     // Samuray: katana zarbasi stamina sekin oladi; KATANA RUHI (havoni kesib uchadigan zarba) - o'rtacha
     public attackStaminaCost = 8;
     public static readonly SLASH_STAMINA = 24;   // kuchli zarba - stamina tez tugaydi (4 ta zarbadan keyin dam olish kerak)
-    public attackStamina(player: PlayerState): number { return player.weaponMode === 'alt' ? SamuraiCharacter.SLASH_STAMINA : this.attackStaminaCost; }
+    public static readonly DARTS_STAMINA = 22;   // 16-daraja: 3 ta uchburchak drotik birdaniga - stamina ko'p oladi
+    public attackStamina(player: PlayerState): number { return player.weaponMode === 'alt' ? SamuraiCharacter.SLASH_STAMINA : player.weaponMode === 'alt2' ? SamuraiCharacter.DARTS_STAMINA : this.attackStaminaCost; }
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
-        // 16-daraja: SHURIKEN YELPIG'ICHI - bir yo'la 3 ta
+        // 16-daraja: UCHBURCHAK DROTIKLAR - bir yo'la 3 ta, yelpig'ich bo'lib (22 stamina)
         if (player.weaponMode === 'alt2') {
             for (let k = -1; k <= 1; k++) {
                 const a = angle + k * 0.2;

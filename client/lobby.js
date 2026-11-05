@@ -1911,8 +1911,7 @@ function renderUpgrades() {
             byCoins.title = t('upgrade_pay_coins').replace('{n}', cost.coins);
             byCoins.disabled = (currentUser.coins || 0) < cost.coins;
             byCoins.onclick = () => withBusy(byCoins, () => upgradeStat(stat.key, 'coins'));
-            pay.appendChild(byPoints);
-            pay.appendChild(byCoins);
+            pay.appendChild(byCoins);   // ko'nikma ballari olib tashlandi - faqat tanga
             row.appendChild(pay);
         }
 
@@ -1955,19 +1954,11 @@ function renderUpgrades() {
     bbtn.title = t('upgrade_pay_coins').replace('{n}', boostCost);
     bbtn.disabled = (currentUser.coins || 0) < boostCost;
     bbtn.onclick = () => withBusy(bbtn, () => buyXpBoost('coins'));
-    bpay.appendChild(bpts);
-    bpay.appendChild(bbtn);
+    bpay.appendChild(bbtn);   // ball bilan to'lash olib tashlandi
     brow.appendChild(bpay);
     upgradesContent.appendChild(brow);
     }
 
-    if (points <= 0) {
-        const note = document.createElement('p');
-        note.className = 'settings-note';
-        note.style.textAlign = 'center';
-        note.innerText = t('char_no_points');
-        upgradesContent.appendChild(note);
-    }
 }
 
 async function buyXpBoost(payWith = 'coins') {

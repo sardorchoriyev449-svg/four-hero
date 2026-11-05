@@ -962,7 +962,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const cdMs = c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 990 : c.characterType === 'samurai' && c.weaponMode === 'alt' ? 750
             : c.characterType === 'hunter' ? (c.weaponMode === 'alt' ? 450 : 510) : 360;
         if (now - ATK_PREDICT.last < cdMs) return;                      // server cooldown (attackCooldownTicks)
-        if ((c.stamina || 0) < (c.characterType === 'samurai' && c.weaponMode === 'alt' ? 24 : (ATK_COST[c.characterType] || 10)) * 0.5) return;   // ruhiy zarba - 24 stamina
+        if ((c.stamina || 0) < (c.characterType === 'samurai' && c.weaponMode === 'alt' ? 24 : c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 22 : (ATK_COST[c.characterType] || 10)) * 0.5) return;   // ruhiy zarba - 24, uchburchak drotiklar - 22 stamina
         const bt = predictedAttackType(c);
         if (!bt) return;
         ATK_PREDICT.last = now; ATK_PREDICT.at = now; ATK_PREDICT.pending = true;
@@ -1015,7 +1015,7 @@ function launchGame(socket, roomId, mapData, continued) {
             else if (bt === 'dart' && hasPerkClient('hunter', c.level, 'poison')) sp.setTint(0x76ff03);
             else if (bt === 'arrow' && me && me.weaponColor && !tex.startsWith('cos_')) sp.setTint(me.weaponColor);
             else if (bt === 'fireball' && me && me.weaponColor) sp.setTint(me.weaponColor);
-            if (bt === 'shield') sp.spin = 22; else if (bt === 'shuriken') sp.spin = 30;
+            if (bt === 'shield') sp.spin = 22; else if (bt === 'shuriken') sp.setFlipX(false).setRotation(a);   // uchburchak drotik - uchish yo'nalishiga qarab
             if (bt === 'slash') { sp.slash = true; sp.setAlpha(1).setScale(1.35); if (me && me.weaponColor) sp.setTint(me.weaponColor); }
             sp.ex = { x: x0, y: y0, vx: Math.cos(a) * spec[0], vy: Math.sin(a) * spec[0], t: performance.now() };
             sp.predicted = true;
@@ -10142,12 +10142,14 @@ function launchGame(socket, roomId, mapData, continued) {
             g.lineStyle(1, 0xffffff, 1); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath();
             g.generateTexture('projectile_lightning', 38, 12); g.destroy();
         }
+        // SAMURAY 16-daraja: UCHBURCHAK DROTIK (o'ngga qaragan uchi; uchish yo'nalishiga burilib uchadi)
         if (!this.textures.exists('projectile_shuriken')) {
-            const grid = gridNew(11, 11);
-            for (let k = 0; k < 11; k++) { grid[5][k] = 0x90a4ae; grid[k][5] = 0x90a4ae; }
-            [[4, 4], [6, 6], [4, 6], [6, 4]].forEach(([x, y]) => { grid[y][x] = 0xcfd8dc; });
-            [[5, 1], [9, 5], [5, 9], [1, 5]].forEach(([x, y]) => { grid[y][x] = 0xeceff1; });
-            grid[5][5] = 0x37474f;
+            const grid = gridNew(13, 9);
+            for (let x = 0; x < 13; x++) {
+                const h = Math.round((12 - x) * 4 / 12);   // chapda keng (4), o'ngda - o'tkir uch
+                for (let y = 4 - h; y <= 4 + h; y++) grid[y][x] = y < 4 ? 0xcfd8dc : y === 4 ? 0xeceff1 : 0x78909c;   // tepa - yorug', o'rta - yaltiroq qirra, past - soya
+            }
+            grid[3][1] = 0xb71c1c; grid[4][0] = 0xd32f2f; grid[5][1] = 0xb71c1c;   // orqasida qizil lenta
             gridToTexture(this, 'projectile_shuriken', gridOutline(grid, 0x0a0a0a), 2);
         }
         // 5. Standart o'q (Agar kerak bo'lib qolsa)
@@ -12330,7 +12332,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     }
                     if (predicted && (isMeleeType || bData.bulletType === 'knife')) bSprite.setVisible(false);   // zarba izi allaqachon chizilgan
                     const bt = bData.bulletType;
-                    if (bt === 'shuriken') bSprite.spin = 30;
+                    if (bt === 'shuriken') { bSprite.spin = 0; bSprite.setFlipX(false).setRotation(Math.atan2(bData.vy, bData.vx)); }   // uchburchak drotik - aylanmaydi, uchi oldinda
                     if (bt === 'slash') { bSprite.slash = true; bSprite.setAlpha(1).setScale(1.35); }
                     bulletSprites[bData.id] = bSprite;
                     if (predicted) return;
