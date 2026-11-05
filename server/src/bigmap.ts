@@ -690,6 +690,11 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
             const w = n.w, top = isle(x, y, w, K.groundK, loc, 'mid', R.int(180, 230)), g = top.y, cx = Math.round(x + w / 2);
             [[x + 120, 'deadtree'], [x + 260, 'bush'], [x + w - 120, 'deadtree'], [x + w - 420, 'bush']].forEach(([px, pk]) => prop(px as number, g, pk as string));
             prop(cx + 120, g, 'bloodpool'); prop(cx + 290, g, 'elfvictim'); prop(cx + 420, g, 'elfhand'); prop(cx - 200, g, 'bloodpool'); prop(cx - 160, g, 'elfhalf');
+            // POG'ONALAR (boshqa boss maydonlaridek): kislota va olovdan qochish uchun uch qavat; o'ngdagisi qafasdan chaproqda
+            // (tasodifiy son ishlatilmaydi - saqlangan dunyolar siljimaydi)
+            plat(x + 260, g - 90, 160, 16, 'ledge'); plat(x + w - 480, g - 90, 160, 16, 'ledge');
+            plat(x + 470, g - 180, 140, 16, 'ledge'); plat(x + w - 640, g - 180, 140, 16, 'ledge');
+            plat(cx - 100, g - 270, 200, 16, 'ledge');
             const z = zone(x + 100, x + w - 100, g - 560, g + 60, loc, 'ground', 'boss', { boss: L.bosses[0] });
             prop(x + w - 230, g, 'kidcage'); W.cages.push({ x: x + w - 230, y: g, zone: z.id });
             rest(top, true, x + 50); rest(top, true, x + w - 50);

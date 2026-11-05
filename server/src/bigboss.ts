@@ -80,7 +80,7 @@ export const MOVES: { [name: string]: MoveDef } = {
         ms: 1100, start: (c) => { c.ctx.emit('bigWind', { id: c.e.id }); c.e.trail = c.e.x; if (c.arg === 'roll') c.e.spin = true; c.e.ph = c.arg === 'roll' ? T(1500) : T(1100); },
         tick: (c) => {
             const { e, d } = c;
-            if (overlap(c) && (e.ccd || 0) <= c.S.tick) { BM.hurtBig(c.p, d.dmg, c.ctx); knock(c, c.p, 420, -260); e.ccd = c.S.tick + T(600); }
+            if (overlap(c) && ahead(c) && (e.ccd || 0) <= c.S.tick) { BM.hurtBig(c.p, d.dmg, c.ctx); knock(c, c.p, 420, -260); e.ccd = c.S.tick + T(600); }
             // olovli it: orqasida yonib turadigan iz
             if (c.arg === 'fire' && Math.abs(e.x - (e.trail || e.x)) > 60 && e.ground) { e.trail = e.x; ar(c, { k: 'patch:fire', x: e.x - 30, y: e.y - 30, w: 60, h: 32, t: T(2600), dmg: 6, every: T(400), fx: 'burn', dk: 'ground' }); }
             return e.f * d.spd * (c.arg === 'roll' ? 2.3 : 1.9);
@@ -230,7 +230,7 @@ export const MOVES: { [name: string]: MoveDef } = {
         tick: (c) => {
             const { e, d, z } = c;
             if (e.ph! > 0) { e.ph!--; return 0; }
-            if (overlap(c) && (e.ccd || 0) <= c.S.tick) { BM.hurtBig(c.p, Math.round(d.dmg * 1.2), c.ctx); knock(c, c.p, 650, -380); e.ccd = c.S.tick + T(700); }
+            if (overlap(c) && ahead(c) && (e.ccd || 0) <= c.S.tick) { BM.hurtBig(c.p, Math.round(d.dmg * 1.2), c.ctx); knock(c, c.p, 650, -380); e.ccd = c.S.tick + T(700); }
             if (z && ((e.f < 0 && e.x <= z.x0 + 20) || (e.f > 0 && e.x >= z.x1 - 20))) {
                 e.daze = T(2200); e.vuln = c.S.tick + T(2200); e.mt = 0;
                 say(c, 'dizzy'); c.ctx.emit('bigBossMove', { id: e.id, m: 'quake', x: Math.round(e.x), y: Math.round(e.y) });
@@ -484,6 +484,8 @@ function spit(c: Ctx, k: string, patch: string, fx: string): void {
 }
 function inArena(c: Ctx, q: PlayerState): boolean { const z = c.z; return !z || (q.x > z.x0 - 80 && q.x < z.x1 + 80 && feetOf(q) >= z.y0 - 40 && feetOf(q) <= z.y1 + 80); }
 const overlap = (c: Ctx) => BM.overlap(BM.eRect(c.e, c.d), BM.pRect(c.p));
+// o'yinchi boss harakat qilayotgan tomonda (oldida)mi - orqasida / yonidan tegib qolgan o'yinchiga yugurish zarbasi tegmaydi
+const ahead = (c: Ctx) => (c.p.x - c.e.x) * c.e.f > -c.d.w * 0.25;
 function knock(c: Ctx, q: PlayerState, vx: number, vy: number): void { safeKnock(c.S, c.z, q, Math.sign((q.x - c.e.x) || 1) * vx, vy, c.ctx); }
 // UZOQQA ULOQTIRISH: maydon chetida turgan o'yinchini jarga otib yubormaslik (chetdan tashqariga - kuchsiz)
 export function safeKnock(S: BM.BigState, z: BM.BigZone | undefined, q: PlayerState, vx: number, vy: number, ctx: BM.BigCtx): void {
@@ -545,7 +547,7 @@ export function bossAI(S: BM.BigState, e: BM.BigEnemy, d: BM.EnemyDef, p: Player
         const def = MOVES[(e.move || '').split(':')[0]];
         const v = def && def.tick ? def.tick({ ...c, arg: (e.move || '').split(':')[1] || '' }) : undefined;
         if (v !== undefined) vx = v;
-        if ((name === 'leap' || name === 'pounce' || name === 'bellyflop' || name === 'ceiling') && !e.ground && !e.hide && overlap(c) && (e.ccd || 0) <= S.tick) { BM.hurtBig(p, d.dmg, ctx); e.ccd = S.tick + T(600); }
+        if ((name === 'leap' || name === 'pounce' || name === 'bellyflop' || name === 'ceiling') && !e.ground && !e.hide && (e.vy || 0) > 0 && overlap(c) && (e.ccd || 0) <= S.tick) { BM.hurtBig(p, d.dmg, ctx); e.ccd = S.tick + T(600); }
         if (e.mt! <= 0) { e.move = 'walk'; e.spin = false; e.goX = undefined; e.hide = undefined; e.bst = undefined; e.mt = T((rage ? 1000 : 1550) + Math.random() * (rage ? 450 : 700)); }
     }
     // jang maydonidan chiqib ketmaydi
@@ -827,13 +829,12 @@ function gorillaAI(c: SP): void {
     if (!e.bst) { e.bst = 'idle'; e.ph = T(1000); e.move = ''; }
     const inA = c.alive.filter(q => inZ(z, q));
     const where = (q: PlayerState) => feetOf(q) < fl - 30 ? 'plat' : Math.abs(q.x - e.x) < G.nearRange ? 'near' : 'far';
-    // TEGSA: qattiq otib yuboradi (nafas olayotganda - yo'q)
+    // TEGSA: zarar yo'q - faqat nari itaradi (ichida turib qolmasin); zarar - faqat hujumlarida
     if (e.bst !== 'rest') inA.forEach((q) => {
         const cc = e.cc || (e.cc = {});
         if ((cc[q.id] || 0) > S.tick) return;
         if (Math.abs(q.x - e.x) < d.w / 2 + 6 && feetOf(q) > e.y - d.h + 10 && q.y - 24 < e.y) {
-            BM.hurtBig(q, G.contactDmg, c.ctx);
-            safeKnock(S, z, q, Math.sign((q.x - e.x) || 1) * G.contactSpeed, -380, c.ctx);
+            safeKnock(S, z, q, Math.sign((q.x - e.x) || 1) * 420, -260, c.ctx);
             cc[q.id] = S.tick + T(1000);
         }
     });
@@ -1097,8 +1098,7 @@ function rsnakeAI(c: SP): void {
         if (rel > 20 || (q.x - z.dx!) * dir > 0 === false) return;
         const cc = e.cc || (e.cc = {});
         if ((cc[q.id] || 0) > S.tick) return;
-        cc[q.id] = S.tick + T(900);
-        BM.hurtBig(q, K.contactDmg, c.ctx);
+        cc[q.id] = S.tick + T(900);   // tegsa - zarar yo'q (zarar - olov va minalarda), faqat itaradi
         if (rel < -60) c.ctx.knock(q, dir * 760, -560);   // boshi ustidan oshirib tashlaydi
         else safeKnock(S, z, q, dir * 620, -380, c.ctx);
     });
@@ -1135,11 +1135,14 @@ export function bossPre(S: BM.BigState, e: BM.BigEnemy, alive: PlayerState[], ct
 // o'yinchi uning boshi ustidan aylanib, ORQASIDAGI yerga boshi bilan uriladi (aylanish yo'li - klientda, shu vaqt ichida)
 export const SUPLEX_MS = 1200;
 MOVES.grab = {
-    ms: 2200, start: (c) => { c.e.bst = 'dash'; c.e.ph = T(1300); c.e.aimX = undefined; say(c, 'grab'); },
+    ms: 2600, start: (c) => { c.e.bst = 'wind'; c.e.ph = T(400); c.e.aimX = undefined; c.e.f = c.p.x < c.e.x ? -1 : 1; say(c, 'grab'); c.ctx.emit('bigWind', { id: c.e.id }); },
     tick: (c) => {
         const e = c.e;
+        if (e.bst === 'wind') { if (--e.ph! <= 0) { e.bst = 'dash'; e.ph = T(1300); } return 0; }   // ogohlantirish: joyida turadi
         if (e.bst === 'dash') {
-            if (BM.overlap({ x: e.x - c.d.w / 2 - 14, y: e.y - c.d.h, w: c.d.w + 28, h: c.d.h }, BM.pRect(c.p)) && !c.p.isDead) {
+            // faqat yugurish yo'nalishidagi (oldidagi) o'yinchi ushlanadi - orqasidan / yonidan tegib qolgan - yo'q
+            const front = e.f > 0 ? { x: e.x, y: e.y - c.d.h, w: c.d.w / 2 + 14, h: c.d.h } : { x: e.x - c.d.w / 2 - 14, y: e.y - c.d.h, w: c.d.w / 2 + 14, h: c.d.h };
+            if (BM.overlap(front, BM.pRect(c.p)) && !c.p.isDead) {
                 e.bst = 'hold'; e.ph = T(SUPLEX_MS); e.tgt = c.p.id; e.mt = Math.max(e.mt!, T(SUPLEX_MS + 900));   // harakat suplex o'rtasida tugab qolmasin
                 c.ctx.emitTo(c.p.id, 'bigHeld', { id: e.id, ms: SUPLEX_MS });
                 say(c, 'hold');
@@ -1222,11 +1225,11 @@ function santaAI(c: SP): void {
         if (e.ground) { e.fy = e.y; e.bst = 'idle'; e.ph = T(900); e.move = ''; c.ctx.emit('bigBossMove', { id: e.id, m: 'quake', x: Math.round(e.x), y: Math.round(e.y), big: 1 }); }
         return;
     }
-    // TEGSA - nari itaradi (nafas olayotganda - yo'q)
+    // TEGSA - zarar yo'q, faqat nari itaradi (nafas olayotganda - yo'q)
     if (e.bst !== 'rest') inA.forEach((q) => {
         const cc = e.cc || (e.cc = {});
         if ((cc[q.id] || 0) > S.tick || Math.abs(q.x - e.x) > d.w / 2 + 4 || feetOf(q) < e.y - d.h + 10 || q.y - 24 > e.y) return;
-        BM.hurtBig(q, K.contactDmg, c.ctx); safeKnock(S, z, q, Math.sign((q.x - e.x) || 1) * 700, -340, c.ctx); cc[q.id] = S.tick + T(900);
+        safeKnock(S, z, q, Math.sign((q.x - e.x) || 1) * 420, -260, c.ctx); cc[q.id] = S.tick + T(900);
     });
     let vx = 0;
     if (!inA.length) { e.bst = 'idle'; e.ph = T(800); e.move = ''; BM.moveEnemy(S, e, d, 0, null, c.dt); return; }

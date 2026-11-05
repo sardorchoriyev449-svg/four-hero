@@ -1075,7 +1075,7 @@ window.BigMap = (function () {
             if (o.k === 'sambo') {   // kadrlar: 0 turish, 1/2 qadam, 3 otilish, 4-6 suplex (ko'tarish -> egilish -> ko'prik), 7 sakrash, 8/9 tosh
                 if (o.bs !== o.pbs) { o.pbs = o.bs; o.bsAt = now; }
                 const el = now - (o.bsAt || now), SM = 1200;
-                fr = o.bs === 'dash' ? 3 : o.bs === 'hold' ? (el < SM * 0.3 ? 4 : el < SM * 0.62 ? 5 : 6) : o.bs === 'throw' ? (el < 420 ? 6 : 5)
+                fr = o.bs === 'dash' ? 3 : o.bs === 'wind' ? (Math.floor(now / 100) % 2 ? 3 : 0) : o.bs === 'hold' ? (el < SM * 0.3 ? 4 : el < SM * 0.62 ? 5 : 6) : o.bs === 'throw' ? (el < 420 ? 6 : 5)
                     : o.bs === 'lift' ? 8 : o.bs === 'toss' ? 9 : o.j ? 7 : wind ? 9 : moving ? [1, 0, 2, 0][Math.floor(now / 130) % 4] : 0;   // wind - musht
             }
             const bob = moving && NOWALK[o.k] && !o.b ? -Math.abs(Math.sin(now / 95)) * 3 : 0;
