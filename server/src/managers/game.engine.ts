@@ -1015,8 +1015,11 @@ export class GameEngine {
             const isTornado = bullet.bulletType === 'tornado';
             const isBlast = bullet.bulletType === 'blast';
             const isSlash = bullet.bulletType === 'slash';   // katana ruhi - baland yoy (tik turgan o'roq)
-            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? 26 : bullet.bulletType === 'acid' ? 16 : 10;
-            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? 50 : bullet.bulletType === 'acid' ? 16 : 10;
+            // MAYDA TEZ O'QLAR (kamon o'qi, drotik, kunai, shuriken): 10x10 juda tor edi - dushman rasmi qutisidan kengroq va klientda ~100 ms kechikib
+            // ko'rinadi, shu sabab ko'zga tekkan o'q ba'zan "o'tib ketardi". Teginish qutisi kattaroq (ayniqsa balandligi - sakrayotgan dushmanlarga ham tegsin)
+            const isSmallFast = bullet.bulletType === 'arrow' || bullet.bulletType === 'dart' || bullet.bulletType === 'kunai' || bullet.bulletType === 'shuriken';
+            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? 26 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
+            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? 50 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
             // Oldingi tekshirilgan joydan hozirgi joygacha (supurib o'tgan yo'l) - hech narsa "sakrab" o'tilmaydi
             const fx = bullet.sx ?? bullet.x, fy = bullet.sy ?? bullet.y;
             const hitX = Math.min(fx, bullet.x) - hitW / 2;

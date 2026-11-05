@@ -21,9 +21,14 @@ export const bigCpClosed = (w: BigWorld, i: number): boolean => { const c = w.cp
 // QAYTA TIKLANISH: tozalangan lager - 20 daqiqada, o'ldirilgan boss - 50 daqiqada (test rejimida - tezroq); qaytgan boss uchun mukofot - 30%
 // LOKATSIYA KUCHI (Elf -> O'rmon -> Qor -> Botqoq -> Yer osti): oddiy dushman joni [eng kam, eng ko'p] (kuchsizi - pastida, kuchlisi - tepasida),
 // har zarbasi; asosiy boss joni (g'or / osmon / maxfiy bosslar - 1.5 barobar), boss zarbasi - kamida oddiynikidan +5
-export const LOC_POWER: { [loc: string]: { hp: [number, number], dmg: number, boss: number } } = {
-    elf: { hp: [150, 230], dmg: 25, boss: 1600 }, forest: { hp: [200, 260], dmg: 30, boss: 1800 }, snow: { hp: [250, 310], dmg: 35, boss: 2000 },
-    swamp: { hp: [300, 360], dmg: 40, boss: 2200 }, lava: { hp: [350, 410], dmg: 45, boss: 2400 } };
+// lvl - TAVSIYA ETILGAN qahramon darajasi (klient lokatsiyaga kirganda ko'rsatadi). Yangi o'yinchi (0-daraja, 100 jon, ~20 zarar) Elfda:
+// oddiy dushmanni 4-7 zarbada o'ldiradi, dushman uni ~9 zarbada o'ldiradi; keyingi lokatsiyalarda tavsiya darajasida ham shunga yaqin
+export const LOC_POWER: { [loc: string]: { hp: [number, number], dmg: number, boss: number, lvl: number } } = {
+    // oddiy dushmanlar joni butun dunyoda 100-250 oralig'ida (har lokatsiyada kuchsizi - pastida, kuchlisi - tepasida)
+    elf: { hp: [100, 140], dmg: 12, boss: 1200, lvl: 0 }, forest: { hp: [130, 170], dmg: 16, boss: 1500, lvl: 5 }, snow: { hp: [160, 200], dmg: 20, boss: 1800, lvl: 10 },
+    swamp: { hp: [190, 230], dmg: 25, boss: 2100, lvl: 15 }, lava: { hp: [210, 250], dmg: 30, boss: 2400, lvl: 20 } };
+// DARAJA HIMOYASI: har qahramon darajasi dushman zararini kamaytiradi (0 - 100%, 10 - 80%, 20 - 67%, 40 - 50%; 60-darajadan keyin o'smaydi)
+export const bigLevelDefense = (level: number): number => 1 / (1 + 0.025 * Math.max(0, Math.min(60, level || 0)));
 export const SIDE_BOSS = 1.5;
 // dushman paydo bo'lganda: joni va zarba koeffitsienti (dk) - lokatsiyasiga qarab (o'qlari / olovi / ildizlari ham shu koeffitsient bilan)
 function powerUp(S: BigState, e: BigEnemy, d: EnemyDef): void {
@@ -284,6 +289,7 @@ export interface BigWorld {
     portals: { loc: string, x: number, y: number, cp: number }[];   // har lokatsiya boshidagi katta portal: ochilgan lokatsiyalar orasida teleport
     gates: { x: number, y: number, loc: string }[];   // yopiq lokatsiyaga olib boradigan zinapoya-yo'l uchidagi to'siq (y - yer sathi)
     closed: string[];   // vaqtincha yopiq lokatsiyalar (klient: portal, xarita)
+    locLvl: { [loc: string]: number };   // tavsiya etilgan qahramon darajasi (klient lokatsiya bannerida)
     cages: { x: number, y: number, zone: number }[];               // semiz elf o'tlog'idagi qafas (ona elfning bolalari) - boss yengilgach ochiladi
 }
 // Tasodif (seed bilan - bitta o'yinda hamma uchun bir xil)
@@ -297,7 +303,7 @@ const TOPH = 40;   // orol tepasining qalinligi (to'liq to'qnashuv)
 export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorld {
     const R = rng(seed), B = BIG;
     const W: BigWorld = { seed, width: 0, top: B.top, bottom: NET.bottom, endX: 0, startCp: 0,
-        gates: [], closed: BIG_CLOSED.slice(), locs: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
+        gates: [], closed: BIG_CLOSED.slice(), locLvl: Object.fromEntries(Object.entries(LOC_POWER).map(([k, v]) => [k, v.lvl])), locs: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
     let zid = 0, nid = 0, cid = 0, iid = 0;
     let crabRoom: { bog: BigWorld["bogs"][number], plats: BigPlat[], zone: BigZone, room: [number, number, number] } | null = null;   // Balot Krabi - oxirida yer yuzasidagi botqoq yo'lga ko'chiriladi
     const plat = (x: number, y: number, w: number, h: number, k: string) => { const p = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), k }; W.plats.push(p); return p; };
@@ -1386,6 +1392,7 @@ export function nearest(list: PlayerState[], e: { x: number, y: number }): Playe
 export function hurtBig(p: PlayerState, dmg: number, ctx: BigCtx, kind: 'shot' | 'hit' | 'ground' = 'hit'): void {
     const shield = p.characterType === 'knight' && p.isHoldingAbility;
     dmg *= ctx.dmgK || 1;   // lokatsiya kuchi: shu paytda urayotgan dushman koeffitsienti
+    dmg *= bigLevelDefense(p.level || 0);   // qahramon darajasi - himoya
     let d = shield ? dmg * 0.25 : dmg;
     const b = p.buffs;
     if (kind === 'shot' && b && (b.armorHp || 0) > 0) {

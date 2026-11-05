@@ -701,7 +701,8 @@ window.BigMap = (function () {
         // LOKATSIYA nomi - yangisiga kirganda katta yozuv
         if (hero) {
             const loc = locAt(hero.x, hero.y);
-            if (loc !== O.locShown) { O.locShown = loc; banner(t('big_loc_' + loc), { elf: '#ffe082', forest: '#b9f6ca', snow: '#b3e5fc', lava: '#ff9e80', swamp: '#c5e1a5' }[loc] || '#ffe082'); if (loc === 'lava' || loc === 'swamp') showToast(t('big_' + loc + '_hint')); }
+            if (loc !== O.locShown) { O.locShown = loc; const rec = W.locLvl && W.locLvl[loc], hl = (hero && hero.level) || 0, low = rec > hl;   // tavsiya darajasi: past bo'lsa - qizil
+                banner(t('big_loc_' + loc) + (rec ? '\n' + t('big_loc_rec').replace('{n}', rec) : ''), low ? '#ff8a80' : ({ elf: '#ffe082', forest: '#b9f6ca', snow: '#b3e5fc', lava: '#ff9e80', swamp: '#c5e1a5' }[loc] || '#ffe082')); if (loc === 'lava' || loc === 'swamp') showToast(t('big_' + loc + '_hint')); }
             // HUD: lokatsiya, butun dunyoning necha foizi o'rganilgan (checkpointlar + bosslar), qavat
             const ex = O.ex || 0;
             O.hudDist.setText(t('big_loc_' + loc) + ' · ' + t('big_explored').replace('{p}', ex) + ' · ' + t('big_layer_' + layerAt(hero.y, hero.x)));
