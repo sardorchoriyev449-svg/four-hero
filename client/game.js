@@ -3527,6 +3527,46 @@ function launchGame(socket, roomId, mapData, continued) {
         [[6, 6], [85, 6], [6, 15], [85, 15]].forEach(([x, y]) => { g[y][x] = 0x5d4037; });
         return gridOutline(g, 0x000000);
     }
+    // Do'kon jihozlari: bochka (temir halqalar), yashik, qop, devor tokchasi
+    function shopBarrelGrid() {
+        const W = 20, H = 26, g = gridNew(W, H), cx = (W - 1) / 2, IRON = [0x263238, 0x455a64, 0x78909c, 0xb0bec5];
+        for (let y = 0; y < H; y++) {
+            const hw = 7.6 + 2.2 * Math.sin(Math.PI * y / (H - 1));
+            for (let x = 0; x < W; x++) {
+                const dx = Math.abs(x - cx); if (dx > hw) continue;
+                const v = 0.92 - (x - cx + hw) / (2 * hw) * 0.65;
+                g[y][x] = (y === 3 || y === 4 || y === 21 || y === 22 || y === 12) ? shade(v + 0.1, x, y, IRON) : (Math.round(x - cx + 10) % 4 === 0 ? WOOD[0] : shade(v, x, y, WOOD));
+            }
+        }
+        for (let x = 3; x < W - 3; x++) { g[0][x] = 0x3e2723; g[1][x] = WOOD[1]; }
+        return gridOutline(g, 0x000000);
+    }
+    function shopCrateGrid() {
+        const W = 24, H = 16, g = gridNew(W, H);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+            const fr = x < 2 || x >= W - 2 || y < 2 || y >= H - 2;
+            g[y][x] = fr ? shade(0.85 - y / 40, x, y, WOOD) : (y % 4 === 1 ? 0x3e2723 : shade(0.6 - y / 40 + (x % 7 === 0 ? -0.1 : 0), x, y, WOOD));
+        }
+        for (let k = 0; k < W - 4; k++) { const y = 2 + Math.round(k * (H - 5) / (W - 5)); if (y < H - 2) { g[y][2 + k] = WOOD[3]; if (y + 1 < H - 2) g[y + 1][2 + k] = WOOD[1]; } }
+        [[1, 1], [W - 2, 1], [1, H - 2], [W - 2, H - 2]].forEach(([x, y]) => { g[y][x] = 0x90a4ae; });
+        return gridOutline(g, 0x000000);
+    }
+    function shopSackGrid() {
+        const W = 18, H = 20, g = gridNew(W, H), cx = (W - 1) / 2, B = [0x8d6e63, 0xa1887f, 0xbcaaa4, 0xd7ccc8];
+        for (let y = 0; y < H; y++) {
+            const hw = y < 3 ? 2.5 + y * 0.6 : y < 5 ? 2.5 : Math.min(8.4, 3 + (y - 4) * 1.6);
+            for (let x = 0; x < W; x++) { const dx = Math.abs(x - cx); if (dx <= hw) g[y][x] = shade(0.95 - (x - cx + hw) / (2 * hw) * 0.6 - y / 80, x, y, B); }
+        }
+        for (let x = 5; x < 13; x++) { g[4][x] = 0x5d4037; }
+        gridRect(g, 6, 11, 6, 4, 0x6d4c41); gridRect(g, 7, 12, 4, 2, 0x43a047);   // urug' belgisi
+        return gridOutline(g, 0x000000);
+    }
+    function shopWallShelfGrid() {
+        const W = 60, g = gridNew(W, 7);
+        for (let x = 0; x < W; x++) { g[0][x] = WOOD[3]; g[1][x] = WOOD[2]; g[2][x] = WOOD[1]; }
+        [4, W - 6].forEach((bx) => { for (let y = 3; y < 7; y++) for (let x = bx; x < bx + 3 - (y - 3) / 2; x++) g[y][Math.floor(x)] = WOOD[0]; });
+        return gridOutline(g, 0x000000);
+    }
     function buildShopScene(scene) {
         const S = map.shop;
         const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
@@ -3537,34 +3577,82 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_shop_sign', shopSignGrid(), 2);
         mk('px_vend_counter', vendCounterGrid(), 2);
         mk('px_vend_elf', vendElfGrid(), 2);
-        // Devor (taxtalar), tepada to'sin, pastda plintus, pol
-        scene.add.tileSprite(0, 0, 800, 570, 'px_shop_plank').setOrigin(0, 0).setDepth(-3);
+        const A = window.FarmArt;
+        mk('px_shop_barrel', shopBarrelGrid(), 2);
+        mk('px_shop_crate', shopCrateGrid(), 2);
+        mk('px_shop_sack', shopSackGrid(), 2);
+        mk('px_shop_wshelf', shopWallShelfGrid(), 2);
+        if (A) {
+            ['plant', 'pot', 'painting', 'hangplant', 'table'].forEach((id) => mk('px_shop_h_' + id, A.homeGrid(id), 2));
+            ['apple', 'carrot', 'pumpkin', 'corn', 'tomato', 'strawberry', 'watermelon'].forEach((id) => mk('px_shop_c_' + id, A.cropGrid(id, 2), 2));
+            ['perch', 'carp'].forEach((id) => mk('px_shop_f_' + id, A.fishGrid(id), 2));
+            mk('px_shop_water', A.waterGrid(), 2); mk('px_shop_fert', A.fertGrid(), 2); mk('px_shop_elixir', A.elixirGrid(), 2);
+            mk('px_shop_net', A.netGrid(), 2); mk('px_shop_coin', A.coinGrid(), 2); mk('px_shop_flowers', A.flowersGrid(), 2); mk('px_shop_dog', A.dogGrid(0), 2);
+            if (A.rodGrid) mk('px_shop_rod', A.rodGrid(), 3);
+        }
+        // Xona ixcham: kamera 1.5x yaqin (qahramon katta ko'rinadi), faqat pastki 400 px (shift 200..600) ko'rinadi,
+        // gorizontal - qahramonni kuzatadi. HUD (scrollFactor 0) alohida UI kamerada - kattalashmaydi
+        const TOP = 200, FL = 570;
+        scene.add.tileSprite(0, TOP, 800, FL - TOP, 'px_shop_plank').setOrigin(0, 0).setDepth(-3);
         const tr = scene.add.graphics();
-        tr.fillStyle(0x000000, 1); tr.fillRect(0, 0, 800, 22); tr.fillStyle(WOOD[0], 1); tr.fillRect(0, 0, 800, 18); tr.fillStyle(WOOD[1], 1); tr.fillRect(0, 14, 800, 4);
-        for (let x = 30; x < 800; x += 120) { tr.fillStyle(0x000000, 1); tr.fillRect(x - 2, 0, 16, 570); tr.fillStyle(WOOD[0], 1); tr.fillRect(x, 0, 12, 570); tr.fillStyle(WOOD[1], 1); tr.fillRect(x, 0, 2, 570); }
+        for (let x = 30; x < 800; x += 120) { tr.fillStyle(0x000000, 1); tr.fillRect(x - 2, TOP, 16, FL - TOP); tr.fillStyle(WOOD[0], 1); tr.fillRect(x, TOP, 12, FL - TOP); tr.fillStyle(WOOD[1], 1); tr.fillRect(x, TOP, 2, FL - TOP); }
+        tr.fillStyle(0x000000, 1); tr.fillRect(0, TOP, 800, 24); tr.fillStyle(WOOD[0], 1); tr.fillRect(0, TOP, 800, 20); tr.fillStyle(WOOD[1], 1); tr.fillRect(0, TOP + 15, 800, 4);
+        for (let x = 60; x < 800; x += 120) { tr.fillStyle(0x3e2723, 1); tr.fillRect(x, TOP + 4, 4, 4); }   // to'sin mixlari
         tr.fillStyle(0x000000, 1); tr.fillRect(0, 548, 800, 22); tr.fillStyle(WOOD[0], 1); tr.fillRect(0, 552, 800, 16); tr.fillStyle(WOOD[2], 1); tr.fillRect(0, 552, 800, 2);
         // Osma chiroqlar
-        [[200, 0xffca28], [660, 0xffca28]].forEach(([lx, c]) => {
-            tr.fillStyle(0x000000, 1); tr.fillRect(lx - 1, 18, 2, 50); tr.fillRect(lx - 14, 66, 28, 12);
-            tr.fillStyle(0x37474f, 1); tr.fillRect(lx - 12, 68, 24, 8); tr.fillStyle(c, 1); tr.fillRect(lx - 6, 78, 12, 6);
+        const LAMPS = [270, 680];
+        LAMPS.forEach((lx) => {
+            tr.fillStyle(0x000000, 1); tr.fillRect(lx - 1, TOP + 20, 2, 30); tr.fillRect(lx - 14, TOP + 48, 28, 12);
+            tr.fillStyle(0x37474f, 1); tr.fillRect(lx - 12, TOP + 50, 24, 8); tr.fillStyle(0xffca28, 1); tr.fillRect(lx - 6, TOP + 60, 12, 6);
         });
-        bakeGraphics(scene, tr, 0, 0, 800, 570, -2.9);
-        scene.add.tileSprite(0, 570, 800, 30, 'px_shop_floor').setOrigin(0, 0).setDepth(1);
-        scene.add.image(56, 86, 'px_shop_window').setOrigin(0, 0).setDepth(-2.8);
-        scene.add.image(298, 120, 'px_shop_shelves').setOrigin(0, 0).setDepth(-2.8);
+        bakeGraphics(scene, tr, 0, TOP, 800, FL - TOP, -2.9);
+        LAMPS.forEach((lx) => [64, 44, 26].forEach((r) => scene.add.circle(lx, TOP + 66, r, 0xffe082, 0.035).setDepth(-2.65).setBlendMode(Phaser.BlendModes.ADD)));   // yumshoq nur
+        scene.add.tileSprite(0, FL, 800, 30, 'px_shop_floor').setOrigin(0, 0).setDepth(1);
+        // tagi (yerga) qo'yiladigan rasm: x - markaz, y - pastki chet
+        const put = (key, x, y, d, ang) => scene.textures.exists(key) ? scene.add.image(x, y, key).setOrigin(0.5, 1).setDepth(d).setRotation(ang || 0) : null;
+        // DEVOR: deraza, uning tagida tokcha; qarmoqlar va to'r; rasm; o'ngda tokcha; osma gullar
+        scene.add.image(44, 282, 'px_shop_window').setOrigin(0, 0).setDepth(-2.8);
+        put('px_shop_wshelf', 122, 446, -2.78); put('px_shop_water', 80, 434, -2.75); put('px_shop_h_pot', 122, 434, -2.75); put('px_shop_fert', 164, 434, -2.75);
+        put('px_shop_rod', 236, 360, -2.78); put('px_shop_rod', 256, 368, -2.77); put('px_shop_net', 282, 420, -2.76);
+        put('px_shop_h_painting', 664, 344, -2.8);
+        put('px_shop_wshelf', 740, 446, -2.78); put('px_shop_h_pot', 702, 434, -2.75); put('px_shop_elixir', 740, 434, -2.75); put('px_shop_water', 776, 434, -2.75);
+        put('px_shop_h_hangplant', 122, TOP + 76, -2.7); put('px_shop_h_hangplant', 760, TOP + 76, -2.7);
+        scene.add.image(320, 286, 'px_shop_shelves').setOrigin(0, 0).setDepth(-2.8);
         ensureGrowTextures(scene);   // do'kon kartalaridagi tegirmon / uya rasmlari
-        scene.add.image(S.counterX, 30, 'px_shop_sign').setOrigin(0.5, 0).setDepth(-2.7);
-        scene.add.text(S.counterX, 54, t('shop_sign'), { fontFamily: PIXEL_FONT, fontSize: '16px', color: '#3e2723' }).setOrigin(0.5).setDepth(-2.6);
-        // Sotuvchi elf peshtaxta ortida, peshtaxta oldinda
+        scene.add.image(S.counterX, TOP + 28, 'px_shop_sign').setOrigin(0.5, 0).setDepth(-2.7);
+        scene.add.text(S.counterX, TOP + 52, t('shop_sign'), { fontFamily: PIXEL_FONT, fontSize: '16px', color: '#3e2723' }).setOrigin(0.5).setDepth(-2.6);
+        // POL (chapda): bochkalar (olma, sabzi), yashiklar (qovoq, makkajo'xori), qop, katta gul
+        put('px_shop_c_apple', 32, 532, -2.36); put('px_shop_c_apple', 50, 528, -2.36); put('px_shop_barrel', 40, FL + 1, -2.3);
+        put('px_shop_c_carrot', 80, 530, -2.36); put('px_shop_c_carrot', 96, 532, -2.36); put('px_shop_barrel', 88, FL + 1, -2.3);
+        put('px_shop_crate', 150, FL + 1, -2.3);
+        put('px_shop_c_pumpkin', 146, 516, -2.36); put('px_shop_c_corn', 166, 514, -2.36); put('px_shop_crate', 156, FL - 35, -2.3);
+        put('px_shop_sack', 206, FL + 1, -2.3); put('px_shop_fert', 236, FL + 1, -2.28);
+        put('px_shop_h_plant', 296, FL + 1, -2.3);
+        // PESHTAXTA: sotuvchi elf ortida; ustida eliksir, tangalar, gullar
         scene.add.image(S.counterX + 6, 412, 'px_vend_elf').setOrigin(0.5, 0).setDepth(-2.5);
         scene.add.image(S.counterX - 126, 492, 'px_vend_counter').setOrigin(0, 0).setDepth(-2.4);
+        put('px_shop_elixir', S.counterX - 98, 500, -2.38); put('px_shop_coin', S.counterX - 62, 500, -2.38); put('px_shop_coin', S.counterX - 54, 494, -2.37);
+        put('px_shop_flowers', S.counterX + 88, 500, -2.38);
+        // POL (o'ngda): uxlayotgan it, stol ustida ekinlar, baliq bochkasi
+        put('px_shop_dog', 618, FL + 1, -2.25);
+        put('px_shop_h_table', 678, FL + 1, -2.3); put('px_shop_c_tomato', 662, 532, -2.28); put('px_shop_c_strawberry', 694, 532, -2.28); put('px_shop_c_watermelon', 678, 528, -2.29);
+        [['px_shop_f_perch', 740, 506, -1.25], ['px_shop_f_carp', 756, 504, -1.85]].forEach(([k, x, y, r]) => { if (scene.textures.exists(k)) scene.add.image(x, y, k).setDepth(-2.36).setRotation(r); });
+        put('px_shop_barrel', 748, FL + 1, -2.3);
         const hint = scene.add.text(S.counterX, 536, '[E]', { fontFamily: '"Courier New", monospace', fontSize: '18px', fontStyle: 'bold', color: '#ffff00', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(5).setVisible(false);
+        const cam = scene.cameras.main, ui = scene.cameras.add(0, 0, 800, 600);
+        cam.setBounds(0, TOP, 800, 600 - TOP).setZoom(1.5).setRoundPixels(true);
+        cam.centerOn(270, 400);
+        // har kadrda: ekranga bog'langan obyektlar (HUD) - faqat UI kamerada, qolganlari - faqat asosiy kamerada
+        scene.events.on('postupdate', () => {
+            const m = cam.id, u = ui.id, L = scene.children.list;
+            for (let i = 0; i < L.length; i++) { const o = L[i]; o.cameraFilter = (o.scrollFactorX === 0 && o.scrollFactorY === 0) ? m : u; }
+        });
         scene.events.on('update', () => {
             if (!currentCharacter || !hint.active) return;
+            if (cam._follow !== currentCharacter) cam.startFollow(currentCharacter, true, 0.15, 0.15);
             hint.setVisible(Math.abs(currentCharacter.x - S.counterX) <= S.range && !shopPanel);
             if (shopPanel && Math.abs(currentCharacter.x - S.counterX) > S.range + 30) closeShopPanel();
         });
-        scene.cameras.main.setBounds(0, 0, 800, 600);
     }
     function closeShopPanel() { if (shopPanel) { shopPanel.remove(); shopPanel = null; } }
     function toggleShopPanel() {
@@ -3710,7 +3798,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 ${S.prices.elf ? sec('shop_sec_elves') + elfCards() : ''}
                 ${S.farmUp ? sec('shop_sec_grow') + growCards() : ''}
                 ${S.prices.home_chest ? sec('shop_sec_home') : ''}
-                ${['chest', 'table', 'chair', 'armchair', 'sofa', 'bed', 'shelf', 'fireplace', 'pot', 'plant', 'rug', 'painting', 'lamp'].filter(id => S.prices['home_' + id]).map(homeCard).join('')}
+                ${(map.myFarm && map.myFarm.homeItems ? map.myFarm.homeItems.map(h => h.id) : Object.keys(S.prices).filter(k => k.startsWith('home_')).map(k => k.slice(5))).filter(id => S.prices['home_' + id]).map(homeCard).join('')}
             </div>
             <div class="shop-msg" id="shop-msg"></div>
             <button class="shop-close">${t('shop_close')}</button>

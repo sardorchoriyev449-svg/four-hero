@@ -2,7 +2,7 @@
 // Bosh menyudan ("Inventar") va o'yin ichidan (I tugmasi / o'ng yuqoridagi sumka) ochiladi.
 // Keraksizini tanlab sotish mumkin - bozordagi narxda (ekin - meva elfi narxi, baliq - o'z narxi)
 (function () {
-    let el = null, inv = null, tab = 'all', selCrops = {}, selFish = new Set(), focusCrop = null, busy = false;
+    let el = null, inv = null, tab = 'all', selCrops = {}, selFish = new Set(), focusCrop = null, busy = false, mode = 'items';   // mode: 'items' - inventar, 'shop' - mebel do'koni
     // QO'LDAGI NARSA: tanlangan hosil qahramon qo'lida ko'rinadi (masalan, Balot Magiga gul berish uchun)
     // akkauntga bog'langan (boshqa akkaunt bilan kirilsa - qo'l bo'sh); o'yin boshida sumkada borligi tekshiriladi
     let held = null, heldFor = null, checking = false;
@@ -39,6 +39,9 @@
             <img src="${icon}" alt="">${badge !== '' ? `<span class="inv-badge">${badge}</span>` : ''}${sub ? `<span class="inv-sub">${sub}</span>` : ''}</button>`;
     }
     function render() {
+        if (mode === 'shop') { renderShop(); return; }
+        el.classList.remove('inv-shop-mode');
+        { const sb = $('.inv-shop'); if (sb) sb.innerHTML = '<i class="fa-solid fa-couch"></i> ' + t('inv_furniture'); }
         if (!el) return;
         const body = $('.inv-body');
         if (!inv) { body.innerHTML = `<div class="inv-empty">...</div>`; return; }
@@ -120,6 +123,45 @@
         $('.inv-clear').disabled = !tot.n;
         const anything = Object.keys(inv.crops).length || inv.fish.length;
         $('.inv-sell-all').disabled = !anything || busy;
+    }
+    // MEBEL DO'KONI (inventar ichida): uy jihozlari - rasmi, nomi, narxi; sotib olingani - "bor". Uyda E bilan bo'sh joyga qo'yiladi
+    function renderShop() {
+        el.classList.add('inv-shop-mode');
+        const sb = $('.inv-shop'); if (sb) sb.innerHTML = '<i class="fa-solid fa-arrow-left"></i> ' + t('inv_back_items');
+        const body = $('.inv-body'), A = window.FarmArt, H = inv && inv.home;
+        if (!H || !A) { body.innerHTML = `<div class="inv-empty">${t('inv_loading')}</div>`; return; }
+        const coins = (currentUser && currentUser.coins) || 0, SLOT = { floor: 'home_slot_floor', wall: 'home_slot_wall', ceil: 'home_slot_ceil', rug: 'home_slot_rug' };
+        body.innerHTML = `<div class="inv-shop-hint">${t('inv_furniture_hint')}</div><div class="inv-shop-grid">` + H.items.map((h) => {
+            const own = !!H.owned[h.id], esc2 = (x) => String(x).replace(/[<>&"]/g, '');
+            return `<div class="inv-shop-card${own ? ' own' : ''}"><img src="${A.homeIcon(h.id)}" alt=""><b>${esc2(t('home_' + h.id))}</b>
+                <span class="inv-muted">${esc2(t(SLOT[h.slot] || 'home_slot_floor'))}</span>
+                ${own ? `<span class="inv-own"><i class="fa-solid fa-check"></i> ${t('shop_owned')}</span>`
+                    : `<button class="inv-buy" data-id="${h.id}" ${coins < h.price || busy ? 'disabled' : ''}><i class="fa-solid fa-coins"></i> ${h.price}</button>`}</div>`;
+        }).join('') + '</div>';
+        body.querySelectorAll('.inv-buy').forEach((b) => { b.onclick = () => buyHome(b.dataset.id); });
+        $('.inv-detail').innerHTML = '';
+        $('.inv-info').textContent = '';
+    }
+    function buyHome(id) {
+        const H = inv && inv.home, def = H && H.items.find(x => x.id === id);
+        if (!def || busy) return;
+        pxConfirm(t('inv_buy_q').replace('{i}', t('home_' + id)).replace('{c}', def.price), async () => {
+            busy = true; render();
+            try {
+                const d = await fetch('/api/inventory/' + currentUser.id + '/home-buy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item: id }) }).then(r => r.json());
+                if (d.success) {
+                    if (window.GameAudio) GameAudio.sfx('coin');
+                    currentUser.coins = d.coins; inv.coins = d.coins;
+                    try { localStorage.setItem('gameUser', JSON.stringify(currentUser)); } catch (e) { }
+                    ['coin-balance', 'character-coin-balance'].forEach((x) => { const n = document.getElementById(x); if (n) n.innerText = d.coins; });
+                    const cc = $('.inv-coins'); if (cc) cc.innerText = d.coins;
+                    if (d.owned) inv.home.owned = d.owned; else inv.home.owned[id] = true;
+                    if (typeof showTopToast === 'function') showTopToast(t('inv_bought_home').replace('{i}', t('home_' + id)));
+                } else pxAlert(t(d.message) !== d.message ? t(d.message) : tMsg(d.message));
+            } catch (e) { pxAlert(t('server_unreachable')); }
+            busy = false;
+            if (el) render();
+        });
     }
     function onSlot(b) {
         if (b.dataset.tool) { if (typeof showTopToast === 'function') showTopToast(t('inv_not_for_sale')); return; }
@@ -205,7 +247,7 @@
             <div class="inv-tabs">${['all', 'crops', 'fish', 'tools'].map(k => `<button class="inv-tab" data-tab="${k}">${t('inv_tab_' + k)}</button>`).join('')}</div>
             <div class="inv-body"></div>
             <div class="inv-detail"></div>
-            <div class="inv-foot"><span class="inv-info"></span>
+            <div class="inv-foot"><button class="inv-shop"><i class="fa-solid fa-couch"></i> ${t('inv_furniture')}</button><span class="inv-info"></span>
                 <button class="inv-clear">${t('inv_clear')}</button>
                 <button class="inv-sell-all">${t('inv_sell_all')}</button>
                 <button class="inv-sell"><i class="fa-solid fa-coins"></i> ${t('inv_sell')}</button></div>
@@ -216,9 +258,10 @@
         $('.inv-clear').onclick = () => { selCrops = {}; selFish = new Set(); focusCrop = null; render(); };
         $('.inv-sell').onclick = () => sell(false);
         $('.inv-sell-all').onclick = () => sell(true);
+        $('.inv-shop').onclick = () => { mode = mode === 'shop' ? 'items' : 'shop'; render(); };
         document.body.appendChild(el);
         window.addEventListener('keydown', onKey, true);
-        inv = null; selCrops = {}; selFish = new Set(); focusCrop = null;
+        inv = null; selCrops = {}; selFish = new Set(); focusCrop = null; mode = 'items';
         render();
         load();
     }

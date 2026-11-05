@@ -13,7 +13,7 @@ import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
-import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason } from './maps';
+import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
@@ -465,9 +465,10 @@ app.get('/api/inventory/:userId', async (req, res) => {
     try {
         const inv = await db.getInventory(req.params.userId);
         if (!inv) { res.json({ success: false, message: 'err_user_not_found' }); return; }
-        const level = farmLevel(inv.farmXp);
+        const level = farmLevel(inv.farmXp), farm = await db.getFarm(req.params.userId);
         res.json({ success: true, ...inv, prices: RoomManager.cropPrices(), offer: dailyOffer(Date.now()), farmLevel: level, cap: farmCapacity(level),
-            levelXp: [farmLevelXp(level), farmLevelXp(Math.min(level + 1, 10))] });
+            levelXp: [farmLevelXp(level), farmLevelXp(Math.min(level + 1, 10))],
+            home: { items: HOME_ITEMS, owned: farm ? farm.home.owned : {} } });   // uy jihozlari katalogi (inventardagi "Mebel" bo'limi)
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 app.post('/api/inventory/:userId/sell', async (req, res) => {
@@ -483,6 +484,17 @@ app.post('/api/inventory/:userId/sell', async (req, res) => {
         let xp = 0;
         if (r.success) { roomManager.farmChanged(req.params.userId); db.bumpStat({ farmCoins: r.earned || 0 }); xp = await roomManager.saleHeroXp(req.params.userId, r.earned || 0); }
         res.json({ ...r, xp });
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+
+// UY JIHOZINI SOTIB OLISH (inventardagi "Mebel" bo'limi - fermaga borish shart emas): bir marta; uyda E bilan joyga qo'yiladi
+app.post('/api/inventory/:userId/home-buy', async (req, res) => {
+    try {
+        const id = String((req.body && req.body.item) || ''), def = HOME_ITEMS.find(h => h.id === id);
+        if (!def) { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
+        const r = await db.buyHomeItem(req.params.userId, def.id, def.price);
+        if (r.success) roomManager.farmChanged(req.params.userId);
+        res.json(r.success ? { success: true, item: def.id, coins: r.coins, owned: r.farm ? r.farm.home.owned : undefined } : r);
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 

@@ -149,13 +149,18 @@ export const HOME_ITEMS: { id: string, slot: HomeSlotType, price: number }[] = [
     { id: 'bed', slot: 'floor', price: 200 }, { id: 'shelf', slot: 'floor', price: 150 },
     { id: 'fireplace', slot: 'floor', price: 250 },
     { id: 'pot', slot: 'floor', price: 50 }, { id: 'plant', slot: 'floor', price: 70 },
-    { id: 'rug', slot: 'rug', price: 80 }, { id: 'painting', slot: 'wall', price: 100 }, { id: 'lamp', slot: 'ceil', price: 90 }
+    { id: 'rug', slot: 'rug', price: 80 }, { id: 'painting', slot: 'wall', price: 100 }, { id: 'lamp', slot: 'ceil', price: 90 },
+    // yangi jihozlar (rasmlari - client/farmart.js homeGrids)
+    { id: 'wardrobe', slot: 'floor', price: 260 }, { id: 'dresser', slot: 'floor', price: 200 }, { id: 'clock', slot: 'floor', price: 320 },
+    { id: 'piano', slot: 'floor', price: 600 }, { id: 'aquarium', slot: 'floor', price: 450 }, { id: 'armor', slot: 'floor', price: 400 },
+    { id: 'mirror', slot: 'wall', price: 120 }, { id: 'window', slot: 'wall', price: 140 }, { id: 'trophy', slot: 'wall', price: 220 },
+    { id: 'chandelier', slot: 'ceil', price: 350 }, { id: 'hangplant', slot: 'ceil', price: 90 }, { id: 'rugblue', slot: 'rug', price: 110 }
 ];
 // Uy ichidagi joylar (uy ichi 1600 kenglik - ikki xona; eski 12 ta joy o'z o'rnida, ikkinchi xonada yana 13 ta)
-export const HOME_W = 1600;
+export const HOME_W = 2000;   // uch xona (har 800 da ustun): 2000 - uchinchi xona ham (ko'p jihoz sig'sin)
 export const HOME_SLOTS: { id: string, type: HomeSlotType, x: number }[] = [
     { id: 'f0', type: 'floor', x: 170 }, { id: 'f1', type: 'floor', x: 290 }, { id: 'f2', type: 'floor', x: 410 },
-    { id: 'f3', type: 'floor', x: 530 }, { id: 'f4', type: 'floor', x: 650 }, { id: 'f5', type: 'floor', x: 745 },
+    { id: 'f3', type: 'floor', x: 530 }, { id: 'f4', type: 'floor', x: 650 }, { id: 'f5', type: 'floor', x: 770 },
     { id: 'w0', type: 'wall', x: 230 }, { id: 'w1', type: 'wall', x: 470 }, { id: 'w2', type: 'wall', x: 700 },
     { id: 'c0', type: 'ceil', x: 350 }, { id: 'c1', type: 'ceil', x: 590 },
     { id: 'r0', type: 'rug', x: 440 },
@@ -163,7 +168,11 @@ export const HOME_SLOTS: { id: string, type: HomeSlotType, x: number }[] = [
     { id: 'f9', type: 'floor', x: 1230 }, { id: 'f10', type: 'floor', x: 1350 }, { id: 'f11', type: 'floor', x: 1470 },
     { id: 'w3', type: 'wall', x: 950 }, { id: 'w4', type: 'wall', x: 1190 }, { id: 'w5', type: 'wall', x: 1430 },
     { id: 'c2', type: 'ceil', x: 1000 }, { id: 'c3', type: 'ceil', x: 1300 },
-    { id: 'r1', type: 'rug', x: 1180 }
+    { id: 'r1', type: 'rug', x: 1180 },
+    // uchinchi xona (1600-2000): yangi jihozlar uchun yana joylar
+    { id: 'f12', type: 'floor', x: 1590 }, { id: 'f13', type: 'floor', x: 1710 }, { id: 'f14', type: 'floor', x: 1830 }, { id: 'f15', type: 'floor', x: 1950 },
+    { id: 'w6', type: 'wall', x: 1650 }, { id: 'w7', type: 'wall', x: 1890 },
+    { id: 'c4', type: 'ceil', x: 1770 }
 ];
 export const CHEST_CAP = 300;     // yashikka shuncha narsa sig'adi (hosil + baliq)
 // BAXAYBAT DARAXT: 400 tangaga ochiladi, "moviy suv" quyilgach ko'k olmalar o'sadi (shoxlarda - platformalardan
