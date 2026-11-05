@@ -3738,14 +3738,17 @@ function launchGame(socket, roomId, mapData, continued) {
                 pOwn ? t('shop_owned') : pLock ? t('mf_pool_locked').replace('{0}', tot + '/300') : t('shop_for_farm'), !pOwn, S.prices.decor_pool, pOwn || pLock);
             return elf + cards + pool;
         };
-        const homeCard = (id) => `
-            <div class="shop-card shop-tool">
+        // uy jihozi: bir necha marta sotib olinadi (uydagi joylar sonigacha) - nechtasi borligi yoziladi
+        const homeCard = (id) => {
+            const n = Number(home[id]) || (home[id] === true ? 1 : 0), max = (S.farmUp && S.farmUp.homeMax && S.farmUp.homeMax[id]) || 1, full = n >= max;
+            return `<div class="shop-card shop-tool">
                 <div class="shop-icon"><img class="shop-pxicon" src="${A.homeIcon(id)}" alt="" style="max-width:64px"></div>
                 <div class="shop-name">${t('home_' + id)}</div>
                 <div class="shop-desc">${t('home_' + id + '_desc')}</div>
-                <div class="shop-status ${home[id] ? '' : 'need'}">${home[id] ? t('shop_owned') : t('shop_for_house')}</div>
-                <button class="shop-buy" data-item="home_${id}" ${home[id] ? 'disabled' : ''}>${coin} ${S.prices['home_' + id]}</button>
+                <div class="shop-status ${n ? '' : 'need'}">${full ? t('home_max_short').replace('{m}', max) : n ? t('shop_have_n').replace('{n}', n) : t('shop_for_house')}</div>
+                <button class="shop-buy" data-item="home_${id}" ${full ? 'disabled' : ''}>${coin} ${S.prices['home_' + id]}</button>
             </div>`;
+        };
         const card = (item, icon, name, desc, need) => `
             <div class="shop-card">
                 <div class="shop-icon">${icon}</div>
@@ -3841,10 +3844,10 @@ function launchGame(socket, roomId, mapData, continued) {
             }
             if (typeof d.item === 'string' && d.item.startsWith('home_')) {
                 const id = d.item.slice(5);
-                mfBag = Object.assign(mfBag || {}, { home: Object.assign((mfBag && mfBag.home) || {}, { [id]: true }) });
+                const H0 = (mfBag && mfBag.home) || {};
+                mfBag = Object.assign(mfBag || {}, { home: Object.assign(H0, { [id]: d.n || (Number(H0[id]) || 0) + 1 }) });
                 if (typeof showTopToast === 'function') showTopToast(t('shop_bought_home').replace('{d}', t('home_' + id)));
-                const st = shopPanel && shopPanel.querySelector(`.shop-buy[data-item="${d.item}"]`);
-                if (st) { st.disabled = true; st.parentElement.querySelector('.shop-status').textContent = t('shop_owned'); st.parentElement.querySelector('.shop-status').classList.remove('need'); }
+                reopenShopKeepScroll();   // nechtasi bor / max - yangilansin
                 return;
             }
             if (typeof d.item === 'string' && d.item.startsWith('decor_')) {
@@ -5655,8 +5658,8 @@ function launchGame(socket, roomId, mapData, continued) {
             const cur = H.cand[H.pick];
             if (H.x < 110) { H.carry = null; return; }
             if (!cur) { mfToast('house_carry_spot'); return; }
-            socket.emit('farmAct', { roomId, action: 'home', arg: { slot: cur.sl.id, item: H.carry } });
-            H.carry = null; return;
+            socket.emit('farmAct', { roomId, action: 'home', arg: { slot: cur.sl.id, item: H.carry, from: H.carryFrom || null } });
+            H.carry = null; H.carryFrom = null; return;
         }
         if (H.x < 110) { mfExitHouse(); return; }
         const cur = H.cand[H.pick];
@@ -5666,12 +5669,14 @@ function launchGame(socket, roomId, mapData, continued) {
         openHomeSlotPanel(cur);
     }
     const mfHomeType = (id) => ((map.myFarm.homeItems || []).find(h => h.id === id) || { slot: '' }).slot;
-    function homeItemCard(id, btn, act, extra) {
+    function homeItemCard(id, btn, act, extra, btn2, act2) {
         const A = window.FarmArt;
         return `<div class="shop-card mf-card"><img class="mf-icon" src="${A.homeIcon(id)}" alt="" style="height:auto;max-width:96px">
             <div class="shop-name">${t('home_' + id)}</div><div class="shop-desc">${extra || t('home_' + id + '_desc')}</div>
-            <button class="shop-buy" data-act="${act}" data-item="${id}">${btn}</button></div>`;
+            <button class="shop-buy" data-act="${act}" data-item="${id}">${btn}</button>${btn2 ? `<button class="shop-buy" data-act="${act2}" data-item="${id}" style="margin-top:4px">${btn2}</button>` : ''}</div>`;
     }
+    // jihoz nechtagacha sotib olinadi: yashik - 1; qolganlari - uydagi shu turdagi joylar soni
+    const mfHomeMax = (id) => id === 'chest' ? 1 : (map.myFarm.homeSlots || []).filter(s => s.type === mfHomeType(id)).length || 1;
     // Joy: bo'sh bo'lsa - shu joyga mos (sotib olingan) jihozlar; band bo'lsa - olib qo'yish
     // UYNI TAHRIRLASH: band joy - ko'chirish / olib qo'yish; bo'sh joy - bor jihozni qo'yish yoki yangisini shu yerning o'zidan sotib olib qo'yish
     function openHomeSlotPanel(cur) {
@@ -5680,15 +5685,18 @@ function launchGame(socket, roomId, mapData, continued) {
         let body;
         if (cur.item) body = homeItemCard(cur.item, '<i class="fa-solid fa-arrows-left-right"></i> ' + t('home_move'), 'move', t('home_move_desc')) + homeItemCard(cur.item, t('home_remove'), 'remove');
         else body = all.length ? all.map(h => {
-            if (!owned[h.id]) return homeItemCard(h.id, `<img class="px-coin" src="${A.icon('coin')}" alt=""> ${h.price}`, 'buy', t('home_buy_place') + (coins < h.price ? ' - ' + t('err_not_enough_coins') : ''));
-            const where = Object.keys(place).find(k => place[k] === h.id);
-            return homeItemCard(h.id, where ? t('home_move_here') : t('home_place'), 'place', where ? t('home_placed_elsewhere') : '');
+            // bo'sh nusxa bor - qo'yish; hammasi uyda - shu yerga ko'chirish yoki yana bittasini sotib olib qo'yish
+            const n = Number(owned[h.id]) || (owned[h.id] === true ? 1 : 0), used = Object.values(place).filter(x => x === h.id).length;
+            const buyBtn = `<img class="px-coin" src="${A.icon('coin')}" alt=""> ${h.price}`, canBuy = n < mfHomeMax(h.id);
+            if (!n) return homeItemCard(h.id, buyBtn, 'buy', t('home_buy_place') + (coins < h.price ? ' - ' + t('err_not_enough_coins') : ''));
+            if (n > used) return homeItemCard(h.id, t('home_place'), 'place', t('home_spare_n').replace('{n}', n - used));
+            return homeItemCard(h.id, t('home_move_here'), 'place', t('home_placed_elsewhere'), canBuy ? t('home_buy_more') + ' ' + buyBtn : '', 'buy');
         }).join('') : `<div class="shop-desc" style="flex:1 1 100%">${t('home_none_owned').replace('{s}', t('home_slot_' + cur.sl.type))}</div>`;
         const el = mfPanelEl('home', 0, t(cur.item ? 'home_' + cur.item : 'home_slot_' + cur.sl.type), body);
         if (!el) return;
         el.querySelectorAll('.shop-buy').forEach((b) => { b.onclick = () => {
             const act = b.dataset.act;
-            if (act === 'move') { closeMfPanel(); if (mfHouse) { mfHouse.carry = cur.item; mfHouse.pick = 0; } sfx('pop'); return; }
+            if (act === 'move') { closeMfPanel(); if (mfHouse) { mfHouse.carry = cur.item; mfHouse.carryFrom = cur.sl.id; mfHouse.pick = 0; } sfx('pop'); return; }
             el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; });
             socket.emit('farmAct', { roomId, action: 'home', arg: { slot: cur.sl.id, item: act === 'remove' ? null : b.dataset.item, buy: act === 'buy' } });
         }; });
@@ -5736,7 +5744,7 @@ function launchGame(socket, roomId, mapData, continued) {
             // ko'chirish (ichidagi narsalar yashik bilan birga - alohida saqlanadi)
             const mv = document.createElement('button');
             mv.className = 'shop-close chest-remove'; mv.textContent = t('home_move');
-            mv.onclick = () => { closeMfPanel(); if (mfHouse) { mfHouse.carry = 'chest'; mfHouse.pick = 0; } sfx('pop'); };
+            mv.onclick = () => { closeMfPanel(); if (mfHouse) { const c0 = mfHouse.cand[mfHouse.pick]; mfHouse.carry = 'chest'; mfHouse.carryFrom = c0 && c0.item === 'chest' ? c0.sl.id : null; mfHouse.pick = 0; } sfx('pop'); };
             box.insertBefore(mv, rm);
         }
     }

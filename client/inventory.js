@@ -124,44 +124,66 @@
         const anything = Object.keys(inv.crops).length || inv.fish.length;
         $('.inv-sell-all').disabled = !anything || busy;
     }
-    // MEBEL DO'KONI (inventar ichida): uy jihozlari - rasmi, nomi, narxi; sotib olingani - "bor". Uyda E bilan bo'sh joyga qo'yiladi
+    // MEBEL DO'KONI (inventar ichida): uy jihozlari - rasmi, nomi, narxi, nechtasi bor. Bir necha marta sotib olish mumkin
+    // (uydagi mos joylar sonigacha); keraksizini 90% narxda qayta sotish. Uyda E bilan bo'sh joyga qo'yiladi
     function renderShop() {
         el.classList.add('inv-shop-mode');
         const sb = $('.inv-shop'); if (sb) sb.innerHTML = '<i class="fa-solid fa-arrow-left"></i> ' + t('inv_back_items');
         const body = $('.inv-body'), A = window.FarmArt, H = inv && inv.home;
         if (!H || !A) { body.innerHTML = `<div class="inv-empty">${t('inv_loading')}</div>`; return; }
         const coins = (currentUser && currentUser.coins) || 0, SLOT = { floor: 'home_slot_floor', wall: 'home_slot_wall', ceil: 'home_slot_ceil', rug: 'home_slot_rug' };
+        const placed = (id) => Object.values(H.place || {}).filter(x => x === id).length;
         body.innerHTML = `<div class="inv-shop-hint">${t('inv_furniture_hint')}</div><div class="inv-shop-grid">` + H.items.map((h) => {
-            const own = !!H.owned[h.id], esc2 = (x) => String(x).replace(/[<>&"]/g, '');
-            return `<div class="inv-shop-card${own ? ' own' : ''}"><img src="${A.homeIcon(h.id)}" alt=""><b>${esc2(t('home_' + h.id))}</b>
+            const n = Number(H.owned[h.id]) || (H.owned[h.id] === true ? 1 : 0), max = h.max || 1, full = n >= max, esc2 = (x) => String(x).replace(/[<>&"]/g, '');
+            const pl = placed(h.id), sell = h.sell || Math.floor(h.price * 0.9);
+            return `<div class="inv-shop-card${n ? ' own' : ''}"><img src="${A.homeIcon(h.id)}" alt=""><b>${esc2(t('home_' + h.id))}</b>
                 <span class="inv-muted">${esc2(t(SLOT[h.slot] || 'home_slot_floor'))}</span>
-                ${own ? `<span class="inv-own"><i class="fa-solid fa-check"></i> ${t('shop_owned')}</span>`
-                    : `<button class="inv-buy" data-id="${h.id}" ${coins < h.price || busy ? 'disabled' : ''}><i class="fa-solid fa-coins"></i> ${h.price}</button>`}</div>`;
+                ${n ? `<span class="inv-own"><i class="fa-solid fa-check"></i> ${t('inv_have_n').replace('{n}', n).replace('{p}', pl)}</span>` : ''}
+                ${full ? `<span class="inv-muted">${t('home_max_short').replace('{m}', max)}</span>`
+                    : `<button class="inv-buy" data-id="${h.id}" ${coins < h.price || busy ? 'disabled' : ''}><i class="fa-solid fa-coins"></i> ${h.price}</button>`}
+                ${n ? `<button class="inv-sell-home" data-id="${h.id}" ${busy ? 'disabled' : ''}>${t('inv_sell_home').replace('{c}', sell)}</button>` : ''}</div>`;
         }).join('') + '</div>';
         body.querySelectorAll('.inv-buy').forEach((b) => { b.onclick = () => buyHome(b.dataset.id); });
+        body.querySelectorAll('.inv-sell-home').forEach((b) => { b.onclick = () => sellHome(b.dataset.id); });
         $('.inv-detail').innerHTML = '';
         $('.inv-info').textContent = '';
+    }
+    // sotib olish / sotish javobi: tangalar va jihozlar ro'yxati yangilanadi
+    function homeApply(d) {
+        if (window.GameAudio) GameAudio.sfx('coin');
+        currentUser.coins = d.coins; inv.coins = d.coins;
+        try { localStorage.setItem('gameUser', JSON.stringify(currentUser)); } catch (e) { }
+        ['coin-balance', 'character-coin-balance'].forEach((x) => { const n = document.getElementById(x); if (n) n.innerText = d.coins; });
+        const cc = $('.inv-coins'); if (cc) cc.innerText = d.coins;
+        if (d.owned) inv.home.owned = d.owned;
+        if (d.place) inv.home.place = d.place;
+    }
+    function homeReq(kind, id, onOk) {
+        return async () => {
+            busy = true; render();
+            try {
+                const d = await fetch('/api/inventory/' + currentUser.id + '/home-' + kind, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item: id }) }).then(r => r.json());
+                if (d.success) { homeApply(d); onOk(d); }
+                else pxAlert(t(d.message) !== d.message ? t(d.message) : tMsg(d.message));
+            } catch (e) { pxAlert(t('server_unreachable')); }
+            busy = false;
+            if (el) render();
+        };
     }
     function buyHome(id) {
         const H = inv && inv.home, def = H && H.items.find(x => x.id === id);
         if (!def || busy) return;
-        pxConfirm(t('inv_buy_q').replace('{i}', t('home_' + id)).replace('{c}', def.price), async () => {
-            busy = true; render();
-            try {
-                const d = await fetch('/api/inventory/' + currentUser.id + '/home-buy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item: id }) }).then(r => r.json());
-                if (d.success) {
-                    if (window.GameAudio) GameAudio.sfx('coin');
-                    currentUser.coins = d.coins; inv.coins = d.coins;
-                    try { localStorage.setItem('gameUser', JSON.stringify(currentUser)); } catch (e) { }
-                    ['coin-balance', 'character-coin-balance'].forEach((x) => { const n = document.getElementById(x); if (n) n.innerText = d.coins; });
-                    const cc = $('.inv-coins'); if (cc) cc.innerText = d.coins;
-                    if (d.owned) inv.home.owned = d.owned; else inv.home.owned[id] = true;
-                    if (typeof showTopToast === 'function') showTopToast(t('inv_bought_home').replace('{i}', t('home_' + id)));
-                } else pxAlert(t(d.message) !== d.message ? t(d.message) : tMsg(d.message));
-            } catch (e) { pxAlert(t('server_unreachable')); }
-            busy = false;
-            if (el) render();
-        });
+        pxConfirm(t('inv_buy_q').replace('{i}', t('home_' + id)).replace('{c}', def.price), homeReq('buy', id, () => {
+            if (typeof showTopToast === 'function') showTopToast(t('inv_bought_home').replace('{i}', t('home_' + id)));
+        }));
+    }
+    function sellHome(id) {
+        const H = inv && inv.home, def = H && H.items.find(x => x.id === id);
+        if (!def || busy) return;
+        const n = Number(H.owned[id]) || 0, pl = Object.values(H.place || {}).filter(x => x === id).length, sell = def.sell || Math.floor(def.price * 0.9);
+        pxConfirm(t('inv_sell_home_q').replace('{i}', t('home_' + id)).replace('{c}', sell) + (pl >= n ? ' ' + t('inv_sell_home_placed') : ''), homeReq('sell', id, (d) => {
+            if (typeof showTopToast === 'function') showTopToast(t('inv_sold_home').replace('{i}', t('home_' + id)).replace('{c}', d.refund || sell));
+        }));
     }
     function onSlot(b) {
         if (b.dataset.tool) { if (typeof showTopToast === 'function') showTopToast(t('inv_not_for_sale')); return; }

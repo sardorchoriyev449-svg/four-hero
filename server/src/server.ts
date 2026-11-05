@@ -13,7 +13,7 @@ import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
-import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS } from './maps';
+import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS, homeMax, homeSellPrice } from './maps';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
@@ -468,7 +468,7 @@ app.get('/api/inventory/:userId', async (req, res) => {
         const level = farmLevel(inv.farmXp), farm = await db.getFarm(req.params.userId);
         res.json({ success: true, ...inv, prices: RoomManager.cropPrices(), offer: dailyOffer(Date.now()), farmLevel: level, cap: farmCapacity(level),
             levelXp: [farmLevelXp(level), farmLevelXp(Math.min(level + 1, 10))],
-            home: { items: HOME_ITEMS, owned: farm ? farm.home.owned : {} } });   // uy jihozlari katalogi (inventardagi "Mebel" bo'limi)
+            home: { items: HOME_ITEMS.map(h => ({ ...h, max: homeMax(h.id), sell: homeSellPrice(h.price) })), owned: farm ? farm.home.owned : {}, place: farm ? farm.home.place : {} } });   // uy jihozlari katalogi (inventardagi "Mebel" bo'limi)
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 app.post('/api/inventory/:userId/sell', async (req, res) => {
@@ -487,14 +487,25 @@ app.post('/api/inventory/:userId/sell', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 
-// UY JIHOZINI SOTIB OLISH (inventardagi "Mebel" bo'limi - fermaga borish shart emas): bir marta; uyda E bilan joyga qo'yiladi
+// UY JIHOZINI SOTIB OLISH (inventardagi "Mebel" bo'limi - fermaga borish shart emas): bir nechta (uydagi joylar sonigacha);
+// uyda E bilan joyga qo'yiladi
 app.post('/api/inventory/:userId/home-buy', async (req, res) => {
     try {
         const id = String((req.body && req.body.item) || ''), def = HOME_ITEMS.find(h => h.id === id);
         if (!def) { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
-        const r = await db.buyHomeItem(req.params.userId, def.id, def.price);
+        const r = await db.buyHomeItem(req.params.userId, def.id, def.price, homeMax(def.id));
         if (r.success) roomManager.farmChanged(req.params.userId);
-        res.json(r.success ? { success: true, item: def.id, coins: r.coins, owned: r.farm ? r.farm.home.owned : undefined } : r);
+        res.json(r.success ? { success: true, item: def.id, coins: r.coins, owned: r.farm ? r.farm.home.owned : undefined, place: r.farm ? r.farm.home.place : undefined } : r);
+    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
+});
+// KERAKSIZ JIHOZNI QAYTA SOTISH: narxning 90% i qaytadi (hammasi uyda tursa - bittasi uydan olinadi)
+app.post('/api/inventory/:userId/home-sell', async (req, res) => {
+    try {
+        const id = String((req.body && req.body.item) || ''), def = HOME_ITEMS.find(h => h.id === id);
+        if (!def) { res.status(400).json({ success: false, message: 'err_bad_item' }); return; }
+        const r = await db.sellHomeItem(req.params.userId, def.id, homeSellPrice(def.price));
+        if (r.success) roomManager.farmChanged(req.params.userId);
+        res.json(r.success ? { success: true, item: def.id, coins: r.coins, refund: r.refund, owned: r.farm ? r.farm.home.owned : undefined, place: r.farm ? r.farm.home.place : undefined } : r);
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 

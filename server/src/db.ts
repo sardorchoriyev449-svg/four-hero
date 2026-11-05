@@ -1320,7 +1320,7 @@ export interface FarmData {
     decorOff: { [id: string]: boolean };
     hive: number; mill: number; sprinklers: number; scarecrows: number; greenhouse: boolean;
     elves: { xp: number, lvl: number }[]; elfTotal: number;
-    home: { owned: { [id: string]: boolean }, place: { [slot: string]: string } };
+    home: { owned: { [id: string]: number }, place: { [slot: string]: string } };
     chest: { bag: { [c: string]: number }, fishKinds: { [kind: string]: number }, fishN: number, fishV: number, n: number };
     rake: boolean; beds: number[]; meadow: { [id: string]: number }; lastCrop: { [k: string]: string };
     mage: { home: boolean, sym: number, f: number };   // Balot Magi: fermada yashaydimi, simpatiya, berilgan gullar
@@ -1370,10 +1370,12 @@ const farmOf = (doc: any): FarmData => ({
     lastCrop: Object.fromEntries(Object.entries(doc.farmLastCrop || {}).filter(([, c]) => typeof c === 'string')) as { [k: string]: string },
     mage: { home: !!(doc.bigQuests && doc.bigQuests.magehome), sym: Math.max(0, Math.min(30, Number(doc.bigQuests && doc.bigQuests.mage) || 0)), f: Math.max(0, Number(doc.bigQuests && doc.bigQuests.magef) || 0) }
 });
+// owned: { id: nechta } (eski yozuv - true = 1 ta); bir jihoz uyda shu sonidan ko'p joyda turmaydi
+const homeCount = (v: any): number => v === true ? 1 : Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
 const homeOf = (doc: any) => {
-    const h = (doc && doc.farmHome) || {}, owned: { [id: string]: boolean } = {}, place: { [slot: string]: string } = {};
-    Object.keys(h.owned || {}).forEach(k => { if (h.owned[k] === true) owned[k] = true; });
-    Object.keys(h.place || {}).forEach(k => { if (typeof h.place[k] === 'string' && owned[h.place[k]]) place[k] = h.place[k]; });
+    const h = (doc && doc.farmHome) || {}, owned: { [id: string]: number } = {}, place: { [slot: string]: string } = {}, used: { [id: string]: number } = {};
+    Object.keys(h.owned || {}).forEach(k => { const n = homeCount(h.owned[k]); if (n) owned[k] = n; });
+    Object.keys(h.place || {}).forEach(k => { const it = h.place[k]; if (typeof it === 'string' && (used[it] || 0) < (owned[it] || 0)) { place[k] = it; used[it] = (used[it] || 0) + 1; } });
     return { owned, place };
 };
 const chestFishOf = (doc: any): FishItem[] => (Array.isArray(doc && doc.farmChest && doc.farmChest.fish) ? doc.farmChest.fish : [])
@@ -1653,17 +1655,45 @@ export async function orchardCut(userId: string, slot: number): Promise<FarmResu
     const r = await farmUpdate(userId, { ['farmOrchard.' + slot + '.c']: { $type: 'string' } }, { $set: { ['farmOrchard.' + slot]: null } });
     return r ? { success: true, ...r } : { success: false, message: 'farm_plot_empty' };
 }
-// FERMER UYI: jihoz sotib olish (bir marta) va joylashtirish / olib qo'yish
-export async function buyHomeItem(userId: string, id: string, price: number): Promise<FarmResult> {
-    const r = await farmUpdate(userId, { coins: { $gte: price }, ['farmHome.owned.' + id]: { $ne: true } },
-        { $inc: { coins: -price }, $set: { ['farmHome.owned.' + id]: true } });
-    if (r) return { success: true, ...r };
-    const cur = await getFarm(userId);
-    if (cur && cur.home.owned[id]) return { success: false, message: 'shop_not_needed' };
-    return { success: false, message: await noMoney(userId) };
+// FERMER UYI: jihoz sotib olish (max tagacha - bir nechta), qayta sotish (90%), joylashtirish / olib qo'yish
+const homeRaw = async (userId: string) => { const d: any = await UserModel.findById(userId, { farmHome: 1 }).lean(); return d ? ((d.farmHome && d.farmHome.owned) || {}) : null; };
+export async function buyHomeItem(userId: string, id: string, price: number, max: number): Promise<FarmResult & { n?: number }> {
+    for (let k = 0; k < 3; k++) {   // bir vaqtda ikki so'rov bo'lsa - qayta urinadi (eski qiymat bo'yicha filtr)
+        const raw = await homeRaw(userId);
+        if (!raw) return { success: false, message: 'err_user_not_found' };
+        const n = homeCount(raw[id]);
+        if (n >= max) return { success: false, message: 'home_max' };
+        const r = await farmUpdate(userId, { coins: { $gte: price }, ['farmHome.owned.' + id]: raw[id] === undefined ? { $exists: false } : raw[id] },
+            { $inc: { coins: -price }, $set: { ['farmHome.owned.' + id]: n + 1 } });
+        if (r) return { success: true, ...r, n: n + 1 };
+        const c: any = await UserModel.findById(userId, { coins: 1 }).lean();
+        if (!c || (c.coins || 0) < price) return { success: false, message: await noMoney(userId) };
+    }
+    return { success: false, message: 'err_server' };
+}
+// Qayta sotish: bo'sh (joylashtirilmagan) nusxa bo'lsa - o'sha; hammasi uyda tursa - bittasi uydan olinadi
+export async function sellHomeItem(userId: string, id: string, refund: number): Promise<FarmResult & { n?: number, refund?: number }> {
+    for (let k = 0; k < 3; k++) {
+        const raw = await homeRaw(userId), cur = await getFarm(userId);
+        if (!raw || !cur) return { success: false, message: 'err_user_not_found' };
+        const n = homeCount(raw[id]);
+        if (!n) return { success: false, message: 'home_not_owned' };
+        const slots = Object.keys(cur.home.place).filter(s => cur.home.place[s] === id);
+        const filter: any = { ['farmHome.owned.' + id]: raw[id] }, upd: any = { $inc: { coins: refund } }, unset: any = {};
+        if (slots.length >= n) {
+            const slot = slots[slots.length - 1];
+            if (id === 'chest' && cur.chest.n > 0) return { success: false, message: 'home_chest_not_empty' };
+            filter['farmHome.place.' + slot] = id; unset['farmHome.place.' + slot] = 1;
+        }
+        if (n > 1) upd.$set = { ['farmHome.owned.' + id]: n - 1 }; else unset['farmHome.owned.' + id] = 1;
+        if (Object.keys(unset).length) upd.$unset = unset;
+        const r = await farmUpdate(userId, filter, upd);
+        if (r) return { success: true, ...r, n: n - 1, refund };
+    }
+    return { success: false, message: 'err_server' };
 }
 // item = null - joyni bo'shatish. Jihoz bitta joyda turadi (boshqa joyda bo'lsa - ko'chiriladi)
-export async function homePlace(userId: string, slot: string, item: string | null, fits: (item: string) => boolean): Promise<FarmResult> {
+export async function homePlace(userId: string, slot: string, item: string | null, fits: (item: string) => boolean, from?: string | null): Promise<FarmResult> {
     const cur = await getFarm(userId);
     if (!cur) return { success: false, message: 'err_server' };
     const now = cur.home.place[slot] || null;
@@ -1677,7 +1707,10 @@ export async function homePlace(userId: string, slot: string, item: string | nul
     if (!fits(item)) return { success: false, message: 'home_wrong_slot' };
     if (now) return { success: false, message: 'farm_plot_busy' };
     const set: any = { ['farmHome.place.' + slot]: item }, unset: any = {};
-    const old = Object.keys(cur.home.place).find(k => cur.home.place[k] === item);
+    // bo'sh nusxasi bor - shunchaki qo'yiladi; hammasi uyda tursa - bittasi (oxirgisi) shu yerga ko'chiriladi
+    const olds = Object.keys(cur.home.place).filter(k => cur.home.place[k] === item);
+    // qahramon ko'chirayotgan nusxa (from) - aynan o'sha joydan olinadi
+    const old = from && olds.includes(from) ? from : olds.length >= (cur.home.owned[item] || 0) ? olds[olds.length - 1] : undefined;
     if (old) unset['farmHome.place.' + old] = 1;   // boshqa joydan ko'chiriladi
     const filter: any = { ['farmHome.place.' + slot]: { $exists: false } };
     if (old) filter['farmHome.place.' + old] = item;

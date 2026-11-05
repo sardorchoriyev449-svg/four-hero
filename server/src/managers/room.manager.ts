@@ -4,7 +4,7 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, homeMax, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
 import { GameEngine } from './game.engine';
 import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN, bigNearestEnemy } from '../bigmap';
 import * as db from '../db';
@@ -1438,13 +1438,13 @@ export class RoomManager {
             this.farmChanged(p.userId);
             return;
         }
-        // Fermer uyi jihozlari (bir marta): uyga kirib joylashtiriladi
+        // Fermer uyi jihozlari (bir nechta - uydagi joylar sonigacha): uyga kirib joylashtiriladi
         if (typeof item === 'string' && item.startsWith('home_')) {
             const h = HOME_ITEMS.find(x => 'home_' + x.id === item);
             if (!h) return;
-            const t = await db.buyHomeItem(p.userId, h.id, h.price);
+            const t = await db.buyHomeItem(p.userId, h.id, h.price, homeMax(h.id));
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
-            reply({ success: true, item, coins: t.coins });
+            reply({ success: true, item, coins: t.coins, n: t.n });
             socket.emit('coinsUpdated', { amount: -h.price, totalCoins: t.coins });
             this.farmChanged(p.userId);
             return;
@@ -1675,14 +1675,15 @@ export class RoomManager {
                     const item = a.item === null ? null : HOME_ITEMS.find(h => h.id === a.item);
                     if (!slot || item === undefined) { reply({ success: false, message: 'err_bad_item' }); return; }
                     // UYNI TAHRIRLASH: hali yo'q jihozni shu joyning o'zidan sotib olib qo'yish (do'konga borish shart emas)
-                    if (item && a.buy && !fd.home.owned[item.id]) {
+                    const spare = item ? (fd.home.owned[item.id] || 0) - Object.values(fd.home.place).filter(x => x === item.id).length : 0;
+                    if (item && a.buy && spare <= 0) {   // bo'sh nusxa yo'q - yana bittasini sotib olib qo'yadi
                         if (item.slot !== slot.type) { reply({ success: false, message: 'home_wrong_slot' }); return; }
                         if (fd.home.place[slot.id]) { reply({ success: false, message: 'farm_plot_busy' }); return; }
-                        const b = await db.buyHomeItem(uid, item.id, item.price);
+                        const b = await db.buyHomeItem(uid, item.id, item.price, homeMax(item.id));
                         if (!b.success) { reply({ success: false, message: b.message }); return; }
                         socket.emit('coinsUpdated', { amount: -item.price, totalCoins: b.coins });
                     }
-                    r = await db.homePlace(uid, slot.id, item ? item.id : null, (id) => (HOME_ITEMS.find(h => h.id === id) || { slot: '' }).slot === slot.type);
+                    r = await db.homePlace(uid, slot.id, item ? item.id : null, (id) => (HOME_ITEMS.find(h => h.id === id) || { slot: '' }).slot === slot.type, typeof a.from === 'string' && HOME_SLOTS.some(s => s.id === a.from) ? a.from : null);
                     if (r.success) reply({ success: true, slot: slot.id, item: item ? item.id : null });
                 } else if (action === 'chest') {
                     const key = typeof a.key === 'string' ? a.key.slice(0, 30) : '', n = Number(a.n);

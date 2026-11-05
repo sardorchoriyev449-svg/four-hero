@@ -174,6 +174,14 @@ export const HOME_SLOTS: { id: string, type: HomeSlotType, x: number }[] = [
     { id: 'w6', type: 'wall', x: 1650 }, { id: 'w7', type: 'wall', x: 1890 },
     { id: 'c4', type: 'ceil', x: 1770 }
 ];
+// Jihozni bir necha marta sotib olish mumkin (uydagi mos joylar sonigacha); yashik - bitta (ombor).
+// Keraksiz jihozni qayta sotish - narxning 90% i
+export const HOME_SELL_BACK = 0.9;
+export function homeMax(id: string): number {
+    const d = HOME_ITEMS.find(h => h.id === id);
+    return !d ? 0 : d.id === 'chest' ? 1 : HOME_SLOTS.filter(s => s.type === d.slot).length;
+}
+export const homeSellPrice = (price: number): number => Math.floor(price * HOME_SELL_BACK);
 export const CHEST_CAP = 300;     // yashikka shuncha narsa sig'adi (hosil + baliq)
 // BAXAYBAT DARAXT: 400 tangaga ochiladi, "moviy suv" quyilgach ko'k olmalar o'sadi (shoxlarda - platformalardan
 // sakrab teriladi). 100 ta terilganda daraxt og'zini ochadi - BOSS jangi. Yengilgach yana quriydi (yana moviy suv kerak)
@@ -1831,7 +1839,8 @@ MAPS.push({
         decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250, decor_pethouse: 1500, decor_cards: 1200, decor_pool: 4000, elf: 1500, rake: MEADOW.rake.price,
         ...Object.fromEntries(MEADOW_DECOR.map(d => ['meadow_' + d.id, d.price])),
         ...Object.fromEntries(HOME_ITEMS.map(h => ['home_' + h.id, h.price])), hive: FARM_HIVE.price },
-        farmUp: { rake: MEADOW.rake, hive: FARM_HIVE, mill: FARM_MILL, sprinkler: FARM_SPRINKLER, scarecrow: FARM_SCARECROW, greenhouse: FARM_GREENHOUSE } },
+        farmUp: { rake: MEADOW.rake, hive: FARM_HIVE, mill: FARM_MILL, sprinkler: FARM_SPRINKLER, scarecrow: FARM_SCARECROW, greenhouse: FARM_GREENHOUSE,
+            homeMax: Object.fromEntries(HOME_ITEMS.map(h => [h.id, homeMax(h.id)])) } },   // jihoz - nechtagacha sotib olinadi
     playerSpawns: [
         { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }, { x: 210, y: 500 }
     ],
