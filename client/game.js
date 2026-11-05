@@ -3614,7 +3614,7 @@ function launchGame(socket, roomId, mapData, continued) {
             const hv = U.hive, hn = Number(mfBag && mfBag.hive) || 0, hmax = hv.max || 1, hFull = hn >= hmax;
             const hLvl = hv.levels ? hv.levels[Math.min(hn, hmax - 1)] : hv.level, hPrice = hv.prices ? hv.prices[Math.min(hn, hmax - 1)] : hv.price, hLock = !hFull && fl < hLvl;
             const hiveCard = card2('hive', img('px_note_hive'), t('item_hive') + ' ' + hn + '/' + hmax, t('item_hive_desc').replace('{p}', Math.round((hn ? hv.more || hv.boost : hv.boost) * 100)),
-                hFull ? t('shop_owned') : hLock ? t('mf_need_level').replace('{l}', hLvl) : t('shop_for_farm'), !hFull, hFull ? '-' : hPrice, hFull || hLock);
+                hFull ? t('shop_owned') : hLock ? t('mf_need_level_now').replace('{n}', hn + 1).replace('{l}', hLvl).replace('{c}', fl) : t('shop_for_farm'), !hFull, hFull ? '-' : hPrice, hFull || hLock);
             const nx = U.mill[ml], mLock = nx && fl < nx.level;
             const millCard = card2('mill', img('px_mill_tower'), t('item_mill') + (ml ? ' ' + ml + '/' + U.mill.length : ''),
                 nx ? t('item_mill_desc').replace('{n}', ml + 1).replace('{p}', Math.round(nx.boost * 100)) : t('item_mill_max'),
@@ -10590,7 +10590,7 @@ function launchGame(socket, roomId, mapData, continued) {
         if (!this.textures.exists('emote_fist')) gridToTexture(this, 'emote_fist', fistGrid(), 2);
         if (!this.textures.exists('emote_palm')) gridToTexture(this, 'emote_palm', palmGrid(), 2);
         const sendEmote = (id = 1) => {
-            if (!currentCharacter || dialog || this.time.now - lastEmoteAt < 1500 || Date.now() - choicePickedAt < 400) return;
+            if (!currentCharacter || dialog || typingNow() || this.time.now - lastEmoteAt < 1500 || Date.now() - choicePickedAt < 400) return;
             lastEmoteAt = this.time.now;
             socket.emit('emote', { roomId: roomId, id });
         };
@@ -11055,7 +11055,7 @@ function launchGame(socket, roomId, mapData, continued) {
             const im = this.add.image(x, 548, key).setDepth(4.5);
             this.tweens.add({ targets: im, y: 500, alpha: 0, duration: 800, ease: 'Quad.Out', onComplete: () => im.destroy() });
             sfxAt('pop', x, 0.5);
-            if (d.golden) bubble(x, 486, '+' + d.n, '#ffd54f');
+            bubble(x, 486, '+' + (d.n || 1) + ' ' + t(d.to === 'chest' ? 'elf_to_chest' : 'elf_to_bag'), d.golden ? '#ffd54f' : '#e8f5e9');   // qayerga: uydagi yashikka / inventarga
         });
         socket.on('mfElfThrow', (d) => {
             const O = mfObj, cr = crObj;
@@ -13207,12 +13207,12 @@ function launchGame(socket, roomId, mapData, continued) {
         const jumpPressed = jumpDown && !jumpWasDown;
         jumpWasDown = jumpDown;
         const c = currentCharacter;
-        // KNIGHT 10-daraja: uchuvchi etik (R) - 2 soniya gravitatsiyasiz, W/S bilan tepaga-pastga
+        // KNIGHT 10-daraja: uchuvchi etik (R, 2 soniya): W / ↑ / Space BOSIB TURILSA - tepaga uchadi; qo'yib yuborilsa - oddiy tushadi; S - tezroq pastga
         const flying = c.characterType === 'knight' && c.special && !c.isDead;
         if (flying) {
-            c.body.setAllowGravity(false);
             const down = !(dialog && (!dialog.opts.free || dialog.cho)) && (cursors.down.isDown || this.input.keyboard.addKey('S').isDown);   // dialog / variant tanlash paytida - pastga uchmaydi
-            c.setVelocityY(jumpDown ? -230 : down ? 230 : 0);
+            if (jumpDown) { c.body.setAllowGravity(false); c.setVelocityY(-230); }
+            else { c.body.setAllowGravity(true); if (down && c.body.velocity.y < 330) c.setVelocityY(330); }
         } else if (wasFlying) {
             c.body.setAllowGravity(true);
         }

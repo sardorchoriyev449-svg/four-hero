@@ -2567,7 +2567,7 @@ export class GameEngine {
         const host = room.players[room.hostId], pet = host && host.pet && (host.petTrust || 0) >= 10 ? host.pet : null;
         const dragonHome = !!pet && !!pet.home && !pet.resting;
         // YASHIK ham, inventar ham to'lgan bo'lsa - hosil yig'ilmaydi va sug'orilmaydi (faqat ekiladi)
-        const full = (fd.chest ? fd.chest.n : 0) >= F.chestCap && !RoomManager.bagRoom(fd), beds = fd.beds || [], lastCrop = fd.lastCrop || {};
+        const full = (!RoomManager.chestPlaced(fd) || (fd.chest ? fd.chest.n : 0) >= F.chestCap) && !RoomManager.bagRoom(fd), beds = fd.beds || [], lastCrop = fd.lastCrop || {};
         const skip = mf.elfSkip || (mf.elfSkip = {});
         const taken = (k: number) => mf.elves!.some(e => e.plot === k) || (skip[k] || 0) > now;
         const open = (k: number) => k < FARM_BEDS_BASE ? Math.floor(k / 6) <= fd.zones : (beds[k - FARM_BEDS_BASE] ?? -1) >= 0;

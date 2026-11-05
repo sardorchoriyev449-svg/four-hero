@@ -78,7 +78,7 @@
             const have = inv.crops[focusCrop], n = selCrops[focusCrop] || 0, price = cropPrice(focusCrop);
             html = `<div class="inv-line"><img src="${art().cropIcon(focusCrop)}" alt=""><b>${t('crop_' + focusCrop)}</b> ×${have}
                 <span class="inv-muted">${t('inv_each').replace('{c}', price)}</span>
-                <span class="inv-qty"><button data-q="-1">-</button><b>${n}</b><button data-q="1">+</button><button data-q="all">${t('inv_all')}</button></span>
+                <span class="inv-qty"><button data-q="-1">-</button><input class="inv-qty-in" type="number" inputmode="numeric" min="0" max="${have}" step="1" value="${n}" aria-label="${t('inv_sell')}"><button data-q="1">+</button><button data-q="all">${t('inv_all')}</button></span>
                 <button class="inv-hold">${held === focusCrop ? t('inv_unhold') : t('inv_hold')}</button></div>`;
         }
         const tot = selTotal();
@@ -97,6 +97,24 @@
             if (n) selCrops[focusCrop] = n; else delete selCrops[focusCrop];
             render();
         }; });
+        // SONNI QO'LDA YOZISH: yozilayotganda - faqat jami (fokus yo'qolmasin), Enter / maydondan chiqqanda - butun oyna
+        const qin = $('.inv-qty-in');
+        if (qin) {
+            const apply = (redraw) => {
+                const have = inv.crops[focusCrop] || 0, v = Math.floor(Number(qin.value));
+                const n = Number.isFinite(v) ? Math.max(0, Math.min(have, v)) : 0;
+                if (n) selCrops[focusCrop] = n; else delete selCrops[focusCrop];
+                if (redraw) setTimeout(render, 0); else totals();   // qayta chizish - maydon fokusdan chiqib bo'lgach (blur paytida o'chirilsa - brauzer xatosi)
+            };
+            qin.oninput = () => apply(false);
+            qin.onchange = () => apply(true);
+            qin.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { qin.blur(); } };   // o'yin tugmalari (raqamlar - emotsiya) ishlamasin
+            qin.onfocus = () => qin.select();
+        }
+        totals();
+    }
+    function totals() {
+        const tot = selTotal(), info = $('.inv-info');
         info.textContent = tot.n ? t('inv_selected').replace('{n}', tot.n).replace('{c}', tot.c) : t('inv_hint');
         $('.inv-sell').disabled = !tot.n || busy;
         $('.inv-clear').disabled = !tot.n;

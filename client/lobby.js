@@ -879,7 +879,7 @@ async function fetchMySavedRoom() {
             <h3><i class="fa-solid fa-door-open"></i> ${escapeHtml(r.name)}</h3>
             <p class="saved-room-meta">
                 <span class="room-code-tag">[${r.roomCode}]</span> &middot;
-                ${t('saved_room_map_progress')}: ${tMapName(roomMaps.length ? Math.min(r.unlockedLevel, Math.max(0, roomMaps.filter(m => !m.bonus).length - 1)) : r.unlockedLevel)}
+                ${t('saved_room_world')} &middot; ${t('big_explored').replace('{p}', r.worldPct || 0)}
                 ${r.isPrivate ? ' &middot; <i class="fa-solid fa-lock"></i> ' + t('visibility_private') : ''}
             </p>
         `;

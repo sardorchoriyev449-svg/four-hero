@@ -1839,12 +1839,15 @@ export class RoomManager {
     public static bagRoom(fd: db.FarmData): boolean {
         return Object.values(fd.bag).reduce((a, n) => a + n, 0) + fd.fishN < farmCapacity(farmLevel(fd.xp));
     }
+    // uyda yashik turibdimi (sotib olingan va biror joyga qo'yilgan)
+    public static chestPlaced(fd: { home?: { place?: { [slot: string]: string } } }): boolean { return !!fd.home && Object.values(fd.home.place || {}).includes('chest'); }
     public async elfHarvest(roomId: string, i: number, k: number): Promise<boolean> {
         const room = this.activeRooms[roomId], mf = room?.myFarm, map = room ? getMapById(room.selectedLevel) : null, F = map && map.myFarm;
         if (!room || !mf || !mf.farm || !mf.owner || !F) return false;
         const uid = mf.owner, fd = mf.farm, key = uid + ':' + i;
         if (this.elfBusy.has(key)) return false;
-        const toChest = (fd.chest ? fd.chest.n : 0) < F.chestCap;   // yashik to'lsa - xo'jayin inventariga (sig'im bo'lsa)
+        // uydagi yashikka (yashik UYGA QO'YILGAN va to'lmagan bo'lsa); yashik yo'q / to'lgan - xo'jayin inventariga (sig'im bo'lsa)
+        const toChest = RoomManager.chestPlaced(fd) && (fd.chest ? fd.chest.n : 0) < F.chestCap;
         if (!toChest && !RoomManager.bagRoom(fd)) return false;
         this.elfBusy.add(key);
         try {
@@ -1855,7 +1858,7 @@ export class RoomManager {
             const cur = this.activeRooms[roomId]?.myFarm;
             if (cur && cur.owner === uid) cur.farm = (g.success ? g.farm : r.farm) || cur.farm;
             const nf = cur && cur.farm;
-            this.io.to(roomId).emit('mfElfHarvest', { i, k, crop: r.crop, n: r.n, golden: r.golden, lvl: nf && nf.elves[i] ? nf.elves[i].lvl : 1 });
+            this.io.to(roomId).emit('mfElfHarvest', { i, k, crop: r.crop, n: r.n, golden: r.golden, lvl: nf && nf.elves[i] ? nf.elves[i].lvl : 1, to: toChest ? 'chest' : 'bag' });
             if (nf && farmLevel(nf.xp) > lvlBefore) this.io.to(roomId).emit('farmLevelUp', { level: farmLevel(nf.xp), cap: farmCapacity(farmLevel(nf.xp)) });
             this.sendMyFarm(roomId);
             return true;

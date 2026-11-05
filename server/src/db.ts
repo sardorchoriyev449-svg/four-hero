@@ -479,6 +479,12 @@ export async function migrateBigLeaderboard(): Promise<void> {
     const r = await UserModel.updateMany({ bigLbVer: { $ne: BIG_GEN } }, { $set: { bigBestM: 0, bigBestPct: 0, bigLbVer: BIG_GEN } });
     if (r.modifiedCount) { lbCache.delete('big'); console.log('Big Map reytingi yangi dunyo uchun tozalandi:', r.modifiedCount); }
 }
+// THE WORLD: xo'jayinning o'rganilgan foizi (joriy dunyo versiyasida; eski versiya - 0)
+export async function getBigPct(userId: string): Promise<number> {
+    if (!mongoose.isValidObjectId(userId)) return 0;
+    const d: any = await UserModel.findById(userId, { bigBestPct: 1, bigLbVer: 1 }).lean();
+    return d && d.bigLbVer === BIG_GEN ? Math.min(100, Math.round((d.bigBestPct || 0) * 10) / 10) : 0;
+}
 export async function bigProgress(userId: string, meters: number, pct: number): Promise<void> {
     if (!mongoose.isValidObjectId(userId) || !Number.isFinite(meters) || !Number.isFinite(pct)) return;
     await UserModel.updateOne({ _id: userId }, [{ $set: { bigLbVer: BIG_GEN, bigBestM: { $max: [{ $ifNull: ['$bigBestM', 0] }, Math.round(meters)] }, bigBestPct: { $max: [{ $ifNull: ['$bigBestPct', 0] }, Math.max(0, Math.min(100, pct))] } } }, BIG_SCORE], { updatePipeline: true } as any);

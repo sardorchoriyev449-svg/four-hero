@@ -687,6 +687,7 @@ app.get('/api/my-rooms/:userId/latest', async (req, res) => {
         if (room) {
             const user = await db.getUserById(req.params.userId);
             if (user) room.unlockedLevel = Math.max(room.unlockedLevel || 0, user.unlockedLevel || 0);
+            (room as any).worldPct = await db.getBigPct(req.params.userId);   // asosiy xarita - The World: o'rganilgan foiz (mavsum xaritasi nomi emas)
         }
         res.json({ success: true, room });
     } catch (err) {
