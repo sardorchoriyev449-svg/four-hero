@@ -32,7 +32,11 @@ const Ads = (() => {
 
     function fillBanner(railId, slot) {
         const rail = document.getElementById(railId);
-        if (!rail || !slot) return;
+        if (!rail || !slot) return true;
+        // Banner ko'rinmayotgan bo'lsa (telefon, tor oyna, o'yin paytida) reklama SO'RALMAYDI: hech kim ko'rmaydigan
+        // reklama statistikani tushiradi va AdSense qoidalariga ham zid - ko'ringan paytda yuklanadi
+        rail.classList.remove('hidden');
+        if (!rail.offsetWidth) return false;
         rail.innerHTML = '';
         const ins = document.createElement('ins');
         ins.className = 'adsbygoogle';
@@ -41,8 +45,8 @@ const Ads = (() => {
         ins.setAttribute('data-ad-slot', slot);
         if (cfg.test) ins.setAttribute('data-adtest', 'on');
         rail.appendChild(ins);
-        rail.classList.remove('hidden');
         try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) { }
+        return true;
     }
 
     function setCoins(coins) {
@@ -140,10 +144,14 @@ const Ads = (() => {
         loadScript();
         // Bannerlar faqat hisobga kirgandan keyin (menyu/lobbi) yuklanadi: login ekranida mazmun yo'q -
         // Google qoidasi bo'yicha mazmunsiz ekranda reklama ko'rsatish mumkin emas
+        let leftDone = false, rightDone = false;
         const fillWhenIn = () => {
-            if (!currentUser) { setTimeout(fillWhenIn, 1000); return; }
-            fillBanner('ad-rail-left', cfg.slotLeft);
-            fillBanner('ad-rail-right', cfg.slotRight);
+            if (currentUser) {
+                leftDone = leftDone || fillBanner('ad-rail-left', cfg.slotLeft);
+                rightDone = rightDone || fillBanner('ad-rail-right', cfg.slotRight);
+                if (leftDone && rightDone) return;
+            }
+            setTimeout(fillWhenIn, 1000);
         };
         fillWhenIn();
         if (cfg.reward) {
