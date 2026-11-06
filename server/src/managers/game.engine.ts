@@ -1,10 +1,12 @@
+import { rollFish, farmCapacity as fcap_, farmLevel as flvl_ } from '../maps';
+const FISH_ROD_USES = 20;   // My Farm bilan bir xil (toolUses)
 import * as db from '../db';
 import { Server } from 'socket.io';
 import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bigRqTalk, bigRqSync, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
 import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
@@ -5706,6 +5708,8 @@ export class GameEngine {
         if (act === 'quest') bigQuestTalk(S, p, arg, ctx);
         else if (act === 'rq') bigRqTalk(S, p, arg, ctx);
         else if (act === 'rqsync') bigRqSync(S, p, ctx);
+        else if (act === 'fishcast') this.bigFishCast(room, S, p, arg, ctx).catch(err => console.error('bigFishCast xatosi:', err));
+        else if (act === 'fishreel') this.bigFishReel(room, S, p, item, ctx).catch(err => console.error('bigFishReel xatosi:', err));
         else if (act === 'cage') bigCage(S, p, ctx);
         else if (act === 'trigger') bigTrigger(S, p, room, ctx);
         else if (act === 'mage') bigMageTalk(S, p, arg, ctx);   // Balot Magi bilan suhbat tugadi - simpatiya
@@ -5713,6 +5717,37 @@ export class GameEngine {
         else if (act === 'mageinvite') bigMageInvite(S, p, arg, ctx);    // fermaga birga yashashga taklif
         else if (act === 'talk') { const z = S.w.zones.find(q => q.id === arg && q.boss === 'fatelf'); if (z && Math.abs(p.x - (z.x0 + z.x1) / 2) < 900 && Math.abs(p.y - (z.y0 + z.y1) / 2) < 600) S.talkReq[arg] = true; }
         else if (act === 'talkdone') { if (S.talkDone[arg]) S.talkDone[arg][playerId] = true; }
+    }
+    // KO'LDA BALIQ TUTISH: qarmoq (do'kondan) va inventarda joy kerak; baliq inventarga tushadi
+    private async bigFishCast(room: RoomState, S: BigState, p: PlayerState, pondId: number, ctx: BigCtx): Promise<void> {
+        if (!pondNear(S, p, pondId) || (S.fishers && S.fishers[p.id])) return;
+        const err = (m: string, c?: number) => ctx.emitTo(p.id, 'bigFish', { st: 'err', err: m, cap: c });
+        if (!p.userId) { err('farm_need_account'); return; }
+        const f = await db.getFarm(p.userId);
+        if (!f) { err('err_server'); return; }
+        const cap = fcap_(flvl_(f.xp)), used = Object.values(f.bag).reduce((a, n) => a + n, 0) + f.fishN;
+        if (used >= cap) { err('inv_full', cap); return; }
+        if (!f.rod) { err('big_fish_need_rod'); return; }
+        if (S.fishers && S.fishers[p.id]) return;
+        const use = await db.toolUse(p.userId, 'rod', FISH_ROD_USES);
+        bigFishStart(S, p, pondId, rollFish(false), ctx);
+        if (use.broken) ctx.emitTo(p.id, 'bigFish', { st: 'broken' });
+        this.roomManager.farmChanged(p.userId);
+    }
+    private async bigFishReel(room: RoomState, S: BigState, p: PlayerState, zoneName: string, ctx: BigCtx): Promise<void> {
+        const fi = S.fishers && S.fishers[p.id];
+        if (!fi || fi.st !== 'bite' || !p.userId) return;
+        delete S.fishers![p.id];
+        const k = zoneName === 'green' ? 1 : zoneName === 'yellow' ? 0.7 : 0;
+        if (!k) { ctx.emitTo(p.id, 'bigFish', { st: 'gone' }); return; }
+        const pond = S.w.ponds.find(q => q.id === fi.pond), value = Math.max(1, Math.round(fi.fish.value * k)), golden = fi.fish.id === 'goldfish';
+        const r = await db.farmAddFish(p.userId, [{ ...fi.fish, value }], golden ? 15 : 3);
+        if (!r.success) { ctx.emitTo(p.id, 'bigFish', { st: 'err', err: r.message }); return; }
+        ctx.emitTo(p.id, 'bigFish', { st: 'caught', fish: { ...fi.fish, value } });
+        this.roomManager.farmChanged(p.userId);
+        this.roomManager.dailyProgress(room.id, p.id, 'fish', 1);
+        if (golden) this.roomManager.grantAchievement(room.id, p.id, 'goldfish', 50).catch(e => console.error('goldfish ach xatosi:', e));
+        if (pond) bigRqFish(S, p, pond.loc, ctx);
     }
     // PORTAL: ochilgan lokatsiyaga ko'chish
     public bigPortalGo(room: RoomState, playerId: string, loc: string): void {

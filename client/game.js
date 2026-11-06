@@ -12589,6 +12589,7 @@ function launchGame(socket, roomId, mapData, continued) {
     // suhbat, bozor, o'rmon yo'li, g'or yo'li va gorilla yengilgandan keyin - sokin ohang
     function musicMode() {
         if (dialog || isStory) return 'calm';
+        if (isBig) return window.BigMap && BigMap.inBattle && BigMap.inBattle() ? 'action' : 'calm';   // The World: jang musiqasi faqat jangda
         if (isForest) return (forestTriggered && botsKilled < (currentCharacter ? currentCharacter.killsToWin : 1)) ? 'action' : 'calm';
         if (isArena) return 'action';
         if (isGFlower) return gfState && gfState.state !== 'sleep' ? 'action' : 'calm';

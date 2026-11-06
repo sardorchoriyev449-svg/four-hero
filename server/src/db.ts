@@ -150,7 +150,7 @@ const userSchema = new mongoose.Schema({
 const UserModel = mongoose.model('User', userSchema);
 
 // lager topshirig'i (bazadan): shakli to'g'ri bo'lmasa - yo'q
-const rqFromDoc = (q: any): RandQuest | null => (q && typeof q === 'object' && Number.isFinite(q.seed) && typeof q.loc === 'string' && ['killk', 'killn', 'item'].includes(q.t) && Number.isInteger(q.n) && Number.isInteger(q.got) && Number.isFinite(q.coins) && Number.isFinite(q.xp) ? q as RandQuest : null);
+const rqFromDoc = (q: any): RandQuest | null => (q && typeof q === 'object' && Number.isFinite(q.seed) && typeof q.loc === 'string' && ['killk', 'killn', 'item', 'fish'].includes(q.t) && Number.isInteger(q.n) && Number.isInteger(q.got) && Number.isFinite(q.coins) && Number.isFinite(q.xp) ? q as RandQuest : null);
 export interface UserRecord {
     id: string;
     fullName: string;

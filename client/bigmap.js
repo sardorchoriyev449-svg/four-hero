@@ -213,8 +213,9 @@ window.BigMap = (function () {
         });
         on('bigQuest', (d) => { if (d) onQuest(scene, d); });
         // LAGER TOPSHIRIQLARI: buyum rasmlari, topshiriq holati serverdan
-        rqTextures(scene); O.rq = null; O.rqImgs = new Map();
+        rqTextures(scene); O.rq = null; O.rqImgs = new Map(); O.fish = null; O.reel = null; O.fishG = scene.add.graphics().setDepth(3.5);
         on('bigRQ', (d) => { if (d) onRq(scene, d); });
+        on('bigFish', (d) => { if (d) onFish(scene, d); });
         X.socket.emit('bigAct', { roomId: X.roomId(), act: 'rqsync', arg: 0 });
         on('bigTalk', (d) => { if (d) onTalk(scene, d); });
         on('bigTalkEnd', (d) => { if (d && O.talkZone === d.zone && X.dialogOpen && X.dialogOpen() && X.closeDialog) { X.closeDialog(); O.talkZone = null; } });
@@ -518,6 +519,20 @@ window.BigMap = (function () {
             const deep = scene.add.rectangle(sx, l.y + 42, ex - sx, 48, 0x0e2620, 0.96).setOrigin(0, 0).setDepth(3.05);
             O.waters.add(ts); ch.objs.push(ts, deep);
         });
+        // BALIQ KO'LI: orol ustidagi sayoz suv (qahramon suv ustida turadi) va nomi
+        (W.ponds || []).forEach((l) => {
+            if (l.x < x0 || l.x >= x1 || !inRow(l.y)) return;
+            const ts = scene.add.tileSprite(l.x, l.y - 3, l.w, 16, 'bm_lake').setOrigin(0, 0).setDepth(-0.4).setAlpha(0.95);
+            ts.setTint(l.loc === 'snow' ? 0xcdeeff : l.loc === 'swamp' ? 0x8fbf8a : 0x7fc8ff);
+            ts.baseX = 0;
+            const name = scene.add.text(l.x + l.w / 2, l.y - 62, t('big_lake_' + l.loc), { fontFamily: FONT, fontSize: '8px', color: '#b3e5fc', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3);
+            O.waters.add(ts); ch.objs.push(ts, name);
+        });
+        // O'RMON nomi
+        (W.groves || []).forEach((l) => {
+            if (l.x < x0 || l.x >= x1 || !inRow(l.y)) return;
+            ch.objs.push(scene.add.text(l.x + l.w / 2, l.y - 120, t('big_grove_' + l.loc), { fontFamily: FONT, fontSize: '8px', color: '#c5e1a5', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
+        });
         // 4) sandiqlar
         W.chests.forEach((q) => {
             if (q.x < x0 || q.x >= x1 || !inRow(q.y)) return;
@@ -759,6 +774,7 @@ window.BigMap = (function () {
         const ea = !ch && !sh && !po && !pl && nearElfAct(hero);
         if (ea) O.hint.setVisible(true).setText(ea.hint).setPosition(ea.x, ea.y + Math.sin(now / 200) * 3);
         drawQuests(scene, now);
+        drawFishing(scene, now);
         if (shopOpen() && !sh) closeShop();
         if (portalMenuOpen() && !po) closePortalMenu();
     }
@@ -918,7 +934,7 @@ window.BigMap = (function () {
                 o.img.setAlpha(0); O.scene.tweens.add({ targets: o.img, alpha: 1, duration: 250 });
                 O.enemies.set(e.id, o);
             }
-            Object.assign(o, { tx: e.x, ty: e.y, f: e.f, hp: e.hp, mx: e.mx, a: e.a, fl: e.fl, m: e.m, l: e.l, r: e.r, s: e.s, pz: e.pz, b: e.b, u: e.u, sd: e.sd, v: e.v, sp: e.sp, pa: e.pa, lf: e.lf, j: e.j, bs: e.bs, hx: e.hx, iv: e.iv });
+            Object.assign(o, { ch: e.ch, tx: e.x, ty: e.y, f: e.f, hp: e.hp, mx: e.mx, a: e.a, fl: e.fl, m: e.m, l: e.l, r: e.r, s: e.s, pz: e.pz, b: e.b, u: e.u, sd: e.sd, v: e.v, sp: e.sp, pa: e.pa, lf: e.lf, j: e.j, bs: e.bs, hx: e.hx, iv: e.iv });
         });
         [...O.enemies.keys()].forEach((id) => { if (!seen.has(id)) { const o = O.enemies.get(id); o.img.destroy(); o.bar.destroy(); if (o.chute) o.chute.destroy(); (o.ghosts || []).forEach(g => g.destroy()); (o.extra || []).forEach(g => g.destroy()); O.enemies.delete(id); } });
         // HUJUM MAYDONLARI (ogohlantirish -> faol): ko'rinishi drawAreas() da
@@ -1774,7 +1790,7 @@ window.BigMap = (function () {
             W.isles.forEach((I) => { if (I.x + I.w < vx0 || I.x > vx1) return; g.fillStyle = (LOC_FG[locAt(I.x, I.y)] || '#aaa') + '55'; I.r.forEach(q => { const [x, y] = toS(q[0], q[1]); g.fillRect(x, y, Math.max(1, q[2] * V.s), Math.max(1, q[3] * V.s)); }); });
             W.plats.forEach((p) => { if (p.x + p.w < vx0 || p.x > vx1 || p.k === 'scloud') return; const [x, y] = toS(p.x, p.y); g.fillStyle = LOC_FG[locAt(p.x, p.y)] || '#aaa'; g.fillRect(x, y, Math.max(1, p.w * V.s), Math.max(2, Math.min(4, p.h * V.s))); });
             const pool = (list, col) => (list || []).forEach(l => { const [x, y] = toS(l.x, l.y); g.fillStyle = col; g.fillRect(x, y, Math.max(2, l.w * V.s), Math.max(3, 30 * V.s)); });
-            pool(W.lakes, '#29b6f6'); pool(W.lavas, '#ff7a1a'); pool(W.bogs, '#6d8f3a');
+            pool(W.lakes, '#29b6f6'); pool(W.lavas, '#ff7a1a'); pool(W.bogs, '#6d8f3a'); pool(W.ponds, '#4fc3f7'); pool(W.groves, '#43a047');
             // qishloq do'konlari, checkpointlar, portallar
             (W.shops || []).forEach(s => { const [x, y] = toS(s.x, s.y); g.fillStyle = '#ffd54f'; g.fillRect(x - 3, y - 9, 6, 6); });
             W.cps.forEach((c, i) => { const [x, y] = toS(c.x, c.y); if (x < -10 || x > 770) return; const on = O.got.has(i); g.fillStyle = '#000'; g.fillRect(x - 1, y - 12, 2, 12); g.fillStyle = on ? '#69f0ae' : '#9e9e9e'; g.fillRect(x + 1, y - 12, 5, 4); });
@@ -1983,6 +1999,10 @@ window.BigMap = (function () {
             R(7, 2, 7, 4, 0x000000); R(8, 3, 5, 2, 0xff8f00); R(6, 1, 2, 2, 0x000000); R(6, 5, 2, 2, 0x000000); R(7, 2, 1, 1, 0xffb300); R(7, 5, 1, 1, 0xffb300); R(12, 3, 1, 1, 0x000000);
             R(9, 6, 3, 2, 0x4fc3f7);
         });
+        mk('rq_berry', 11, 10, (R) => {   // yovvoyi rezavor (buta)
+            R(0, 3, 11, 7, 0x1b5e20); R(1, 2, 9, 7, 0x2e7d32); R(2, 1, 7, 2, 0x43a047);
+            [[2, 4], [6, 3], [4, 6], [8, 6]].forEach(([x, y]) => { R(x, y, 2, 2, 0x4a0072); R(x, y, 1, 1, 0xce93d8); });
+        });
         mk('rq_crystal', 9, 13, (R) => {   // muz kristali
             R(3, 0, 3, 1, 0x01579b); R(2, 1, 5, 2, 0x01579b); R(1, 3, 7, 6, 0x01579b); R(2, 9, 5, 2, 0x01579b); R(3, 11, 3, 2, 0x01579b);
             R(3, 1, 3, 2, 0x81d4fa); R(2, 3, 5, 6, 0x4fc3f7); R(3, 9, 3, 2, 0x29b6f6); R(3, 3, 2, 4, 0xe1f5fe);
@@ -1993,12 +2013,14 @@ window.BigMap = (function () {
         });
     }
     const rqGoal = (q) => q.t === 'killk' ? t('rq_g_killk').replace('{n}', q.n).replace('{k}', t('big_e_' + q.k))
-        : q.t === 'killn' ? t('rq_g_killn').replace('{n}', q.n).replace('{l}', t('big_loc_' + q.loc)) : t('rq_g_' + q.k).replace('{n}', q.n);
+        : q.t === 'killn' ? t('rq_g_killn').replace('{n}', q.n).replace('{l}', t('big_loc_' + q.loc))
+        : q.t === 'fish' ? t('rq_g_lake').replace('{n}', q.n).replace('{l}', t('big_lake_' + q.loc)) : t('rq_g_' + q.k).replace('{n}', q.n).replace('{l}', t('big_grove_' + q.loc));
     // nishon: bajarilgan bo'lsa - razvedkachi; buyum bo'lsa - eng yaqin joy
     function rqTarget(q) {
         const h = X.hero(), hx = h ? h.x : 0, hy = h ? h.y : 0, near = (a, f) => a.slice().sort((p, r) => Math.hypot(f(p)[0] - hx, f(p)[1] - hy) - Math.hypot(f(r)[0] - hx, f(r)[1] - hy))[0];
         if (q.got >= q.n) { const n = near(W.npcs.filter(o => o.rq && o.loc === q.loc), o => [o.x, o.y]); return n ? { x: n.x, y: n.y } : null; }
         if (q.t === 'item' && q.spots && q.spots.length) { const s = near(q.spots, o => o); return { x: s[0], y: s[1] }; }
+        if (q.t === 'fish') { const l = (W.ponds || []).find(o => o.loc === q.loc); return l ? { x: l.x + l.w / 2, y: l.y } : null; }
         return null;
     }
     function rqTrack(q) {
@@ -2022,11 +2044,70 @@ window.BigMap = (function () {
         const tg = q && rqTarget(q);
         if (tg && hasMap()) { O.wp = { x: tg.x, y: tg.y, label: t('rq_title') }; O.wpArrived = false; saveWp(); }
     }
+    // ===== KO'LDA BALIQ TUTISH: qarmoq tashlash -> kutish -> tishladi (yashilda E) =====
+    function reelStop(send) {
+        const r = O.reel; if (!r) return;
+        O.reel = null;
+        const z = r.zones.find(([a, b]) => r.pos >= a && r.pos <= b) || [0, 0, 'red'];
+        [r.g, r.title, r.marker].forEach(o => o.destroy());
+        if (send) X.socket.emit('bigAct', { roomId: X.roomId(), act: 'fishreel', arg: 0, item: z[2] });
+    }
+    function reelStart(scene, fish) {
+        reelStop(false);
+        const gold = fish.id === 'goldfish', green = gold ? 0.035 : Math.max(0.06, 0.13 - fish.kg * 0.006), yellow = gold ? 0.12 : 0.15;
+        const zones = [[0, 0.5 - green - yellow, 'red'], [0.5 - green - yellow, 0.5 - green, 'yellow'], [0.5 - green, 0.5 + green, 'green'], [0.5 + green, 0.5 + green + yellow, 'yellow'], [0.5 + green + yellow, 1, 'red']];
+        const g = scene.add.graphics().setScrollFactor(0).setDepth(1500), Bx = 240, By = 190, BW = 320, BH = 26;
+        g.fillStyle(0x0a0a0a, 1); g.fillRect(Bx - 10, By - 40, BW + 20, BH + 62); g.fillStyle(0x1b1630, 1); g.fillRect(Bx - 6, By - 36, BW + 12, BH + 54); g.fillStyle(0x0a0a0a, 1); g.fillRect(Bx - 2, By - 2, BW + 4, BH + 4);
+        const COL = { red: [0xc62828, 0xe53935], yellow: [0xf9a825, 0xfdd835], green: [0x2e7d32, 0x66bb6a] };
+        zones.forEach(([a, b, k]) => { g.fillStyle(COL[k][0], 1); g.fillRect(Bx + Math.round(a * BW), By, Math.round((b - a) * BW), BH); g.fillStyle(COL[k][1], 1); g.fillRect(Bx + Math.round(a * BW), By, Math.round((b - a) * BW), 6); });
+        const title = scene.add.text(400, By - 22, t(gold ? 'mf_reel_gold' : 'mf_reel_title'), { fontFamily: FONT, fontSize: '10px', color: gold ? '#ffd54f' : '#ffeb3b' }).setOrigin(0.5).setScrollFactor(0).setDepth(1501);
+        const marker = scene.add.rectangle(Bx, By + BH / 2, 6, BH + 12, 0xffffff).setStrokeStyle(2, 0x000000).setScrollFactor(0).setDepth(1502);
+        O.reel = { g, title, marker, zones, Bx, BW, pos: 0, dir: 1, speed: gold ? 2.1 : 0.75 + fish.kg * 0.09 };
+        X.sfx('banner');
+    }
+    function onFish(scene, d) {
+        if (d.st === 'wait') { O.fish = { pond: d.pond, bite: false }; X.sfx('whoosh', 0.6); showToast(t('big_fish_wait')); return; }
+        if (d.st === 'bite') { if (O.fish) O.fish.bite = true; reelStart(scene, d.fish); return; }
+        if (d.st === 'broken') { showToast(t('big_fish_broken')); return; }
+        reelStop(false); O.fish = null;
+        if (d.st === 'gone') showToast(t('mf_fish_escaped'));
+        else if (d.st === 'caught') { X.sfx('coin'); showToast(t('big_fish_got').replace('{f}', t('fish_' + d.fish.id)).replace('{k}', d.fish.kg).replace('{v}', d.fish.value)); }
+        else if (d.st === 'err') { X.sfx('block', 0.5); showToast(String(t(d.err)).replace('{c}', d.cap || '')); }
+    }
+    // har kadr: qarmoq chizig'i va tortish chizig'i
+    function drawFishing(scene, now) {
+        const g = O.fishG; g.clear();
+        const h = X.hero(), f = O.fish, l = f && (W.ponds || []).find(o => o.id === f.pond);
+        if (f && l && h) {
+            const tx = Math.max(l.x + 12, Math.min(l.x + l.w - 12, h.x + (h.flipX ? -90 : 90))), ty = l.y + 2 + (f.bite ? Math.sin(now / 40) * 3 : Math.sin(now / 300) * 1.5);
+            g.lineStyle(1, 0xffffff, 0.8); g.lineBetween(h.x + (h.flipX ? -14 : 14), h.y - 22, tx, ty);
+            g.fillStyle(0x000000, 1); g.fillRect(tx - 3, ty - 4, 6, 8); g.fillStyle(0xff5252, 1); g.fillRect(tx - 2, ty - 3, 4, 3); g.fillStyle(0xffffff, 1); g.fillRect(tx - 2, ty, 4, 3);
+        }
+        const r = O.reel;
+        if (r) {
+            const dt = Math.min(0.05, scene.game.loop.delta / 1000);
+            r.pos += r.dir * r.speed * dt;
+            if (r.pos >= 1) { r.pos = 1; r.dir = -1; } else if (r.pos <= 0) { r.pos = 0; r.dir = 1; }
+            r.marker.x = r.Bx + r.pos * r.BW;
+        }
+    }
+    // MUSIQA: jang - dushman quvayapti (yaqinda), boss maydonida yoki yaqinda zarar oldi; boshqa payt sokin
+    function inBattle() {
+        if (!O || !O.enemies) return false;
+        const h = X.hero();
+        if (!h || h.isDead) return false;
+        const now = O.scene.time.now;
+        if (O.hpPrev !== undefined && h.hp < O.hpPrev) O.fightUntil = now + 6000;
+        O.hpPrev = h.hp;
+        if ((O.arenas || []).some(a => h.x > a.x0 - 100 && h.x < a.x1 + 100 && h.y > a.y0 - 200 && h.y < a.y1 + 100)) O.fightUntil = now + 4000;
+        for (const e of O.enemies.values()) if (e.ch && Math.abs(e.x - h.x) < 560 && Math.abs(e.y - h.y) < 320) { O.fightUntil = now + 4000; break; }
+        return now < (O.fightUntil || 0);
+    }
     function onRq(scene, d) {
         O.rq = d.q || null;
         rqRefresh(scene);
         const talk = (lines) => { if (X.dialog) X.dialog(lines.map(text => ({ who: 'elf', text })), null, { elfName: t('rq_name'), elfFace: 'px_elf_face' }); };
-        if (d.ev === 'accept') { talk([line('rq_intro_' + d.q.loc), rqGoal(d.q) + ' ' + t('rq_reward').replace('{c}', d.q.coins)]); showToast(t('rq_toast_accept')); rqSetWp(d.q); }
+        if (d.ev === 'accept') { talk([line('rq_intro_' + d.q.loc), rqGoal(d.q) + ' ' + t('rq_reward').replace('{c}', d.q.coins) + (d.q.t === 'fish' ? ' ' + t('rq_need_rod') : '')]); showToast(t('rq_toast_accept')); rqSetWp(d.q); }
         else if (d.ev === 'wait') { const q = d.q; talk([q.got >= q.n ? t('rq_other').replace('{l}', t('big_loc_' + q.loc)) : line('rq_wait') + ' ' + rqGoal(q) + ' ' + q.got + '/' + q.n]); }
         else if (d.ev === 'got') { X.sfx('coin', 0.6); showToast(rqGoal(d.q) + ' ' + d.q.got + '/' + d.q.n); if (d.q.t === 'item') rqSetWp(d.q); }
         else if (d.ev === 'ready') { X.sfx('coin'); showToast(t('rq_toast_ready').replace('{l}', t('big_loc_' + d.q.loc))); rqSetWp(d.q); }
@@ -2082,6 +2163,9 @@ window.BigMap = (function () {
         const feet = hero.y + 24;
         const n = W.npcs.find(o => (o.q || o.rq) && Math.abs(hero.x - o.x) < 90 && Math.abs(feet - o.y) < 70);
         if (n) return { act: n.rq ? 'rq' : 'quest', arg: n.id, x: n.x, y: n.y - 70, hint: t('bq_hint_talk') };
+        // BALIQ KO'LI: E - qarmoq tashlash (qarmoq suvda bo'lsa - qayta tashlanmaydi)
+        const pd = (W.ponds || []).find(o => hero.x > o.x - 70 && hero.x < o.x + o.w + 70 && Math.abs(feet - o.y) < 70);
+        if (pd && !O.fish) return { act: 'fishcast', arg: pd.id, x: Math.max(pd.x, Math.min(pd.x + pd.w, hero.x)), y: pd.y - 90, hint: t('big_fish_hint') };
         const c = (W.cages || []).find(o => Math.abs(hero.x - o.x) < 100 && Math.abs(feet - o.y) < 80);
         if (c) return { act: 'cage', arg: 0, x: c.x, y: c.y - 104, hint: t('bq_hint_cage') };
         const z = W.zones.find(o => o.trig === 'e' && Math.abs(hero.x - o.dx) < 160 && Math.abs(feet - o.dy) < 110);
@@ -2543,6 +2627,7 @@ window.BigMap = (function () {
     }
     function interact(dry) {
         if (!O || !W) return false;
+        if (O.reel) { if (!dry) reelStop(true); return true; }   // baliq tortish: E - to'xtatish
         const pl = nearPile(X.hero());
         if (pl && !nearChest(X.hero()) && !nearShop(X.hero()) && !nearPortal(X.hero())) { if (!dry) X.socket.emit('bigSnow', X.roomId()); return true; }
         const c = nearChest(X.hero());
@@ -2558,5 +2643,5 @@ window.BigMap = (function () {
     function onVine() { return !!(O && O.vine); }
     // yiqilish o'lchovini qayta boshlash (qahramon boshqa yo'l bilan ko'chirilganda)
     function resetFall() { if (O) { O.fall.y = null; O.fall.air = false; } }
-    return { mapIcon, debugArenas: () => (O ? O.arenas.map(a => a.k + ':' + (a.x0) + '-' + a.x1 + (O.locked === a.id ? ':locked' : '')) : []), debugEnemies: () => (O ? [...O.enemies.values()].filter(o => o.img && o.img.visible).map(o => o.k + ':' + Math.round(o.img.displayHeight) + 'x' + Math.round(o.img.displayWidth) + (o.img.texture ? '@' + o.img.texture.key : '')) : []), heldFace: () => (O && O.held ? O.held.face : null), debugMapView: () => O && O.mapView, debugSetWp: (x, y) => { if (O) { O.wp = { x, y }; } }, debugGuide: () => (O && O.guideTxt && O.guideTxt.visible ? O.guideTxt.text + ' @' + Math.round(O.guideTxt.x) + ',' + Math.round(O.guideTxt.y) : ''), create, update, state, interact, vineControl, onVine, destroy, resetFall, adjustMove, active: () => !!O, debugEnemies: () => (O ? O.enemies.values() : []) };
+    return { mapIcon, debugReel: () => (O && O.reel ? O.reel.pos : undefined), debugArenas: () => (O ? O.arenas.map(a => a.k + ':' + (a.x0) + '-' + a.x1 + (O.locked === a.id ? ':locked' : '')) : []), debugEnemies: () => (O ? [...O.enemies.values()].filter(o => o.img && o.img.visible).map(o => o.k + ':' + Math.round(o.img.displayHeight) + 'x' + Math.round(o.img.displayWidth) + (o.img.texture ? '@' + o.img.texture.key : '')) : []), heldFace: () => (O && O.held ? O.held.face : null), debugMapView: () => O && O.mapView, debugSetWp: (x, y) => { if (O) { O.wp = { x, y }; } }, debugGuide: () => (O && O.guideTxt && O.guideTxt.visible ? O.guideTxt.text + ' @' + Math.round(O.guideTxt.x) + ',' + Math.round(O.guideTxt.y) : ''), inBattle, create, update, state, interact, vineControl, onVine, destroy, resetFall, adjustMove, active: () => !!O, debugEnemies: () => (O ? O.enemies.values() : []) };
 })();

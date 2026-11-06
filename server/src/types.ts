@@ -1,5 +1,5 @@
-// LAGER TOPSHIRIG'I: killk - aniq dushmandan n ta, killn - lokatsiyada istalgan n ta dushman, item - n ta buyum yig'ish (spots - qolgan joylar)
-export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item'; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; }
+// LAGER TOPSHIRIG'I: killk - aniq dushmandan n ta, killn - lokatsiyada istalgan n ta dushman, item - o'rmondan n ta buyum (spots - qolgan joylar), fish - lokatsiya ko'lidan n ta baliq
+export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item' | 'fish'; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; }
 export interface PlayerState {
     mineCd?: number;               // ovchi: yopishqoq mina qayta tiklanishi (tik)
     ownedHeroes?: string[];        // sotib olingan (pullik) qahramonlar
