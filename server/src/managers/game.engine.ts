@@ -4,7 +4,7 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { bigRqTalk, bigRqSync, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
 import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
@@ -220,13 +220,16 @@ export class GameEngine {
 
                 // ENTER/SICHQONCHA ushlab turilgan bo'lsa - avtomatik otish
                 // (stamina va cooldown yetarli bo'lgandagina zarba beriladi)
-                if (player.isHoldingAttack) {
+                // (attackBuffered - qisqa bosish cooldown tugashidan sal oldin kelgan: tugma qo'yib yuborilgan bo'lsa ham bir marta otiladi)
+                if (player.isHoldingAttack || player.attackBuffered) {
                     if (player.attackCooldown <= 0 && charLogic.canAttack(player) && player.stamina >= BaseCharacter.staminaCost(player, charLogic.attackStamina(player))) {
                         BaseCharacter.spendStamina(player, charLogic.attackStamina(player));
                         player.attackCooldown = charLogic.attackCooldownTicks(player);   // bosib turganda ham qurolning o'z oralig'i (avval umumiy 12 tik - kunai / shuriken tezroq otilardi)
+                        player.attackBuffered = false;
                         charLogic.handleAttack(player, room, player.lastAttackAngle);
-                    } else if (player.attackCooldown <= 0 && charLogic.canAttack(player)) {
-                        this.signalNoStamina(player);
+                    } else if (player.attackCooldown <= 0) {
+                        if (player.isHoldingAttack && charLogic.canAttack(player)) this.signalNoStamina(player);
+                        player.attackBuffered = false;
                     }
                 }
             });
@@ -346,7 +349,7 @@ export class GameEngine {
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
                     weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,
-                    level: p.level || 0, maxStamina: p.maxStamina || 100, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
+                    level: p.level || 0, maxStamina: p.maxStamina || 100, sl: p.staminaLevel || 0, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03), mineCd: Math.ceil((p.mineCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0, reloadSec: Math.ceil((p.reloadTicks || 0) * this.TICK_SECONDS),
@@ -1017,9 +1020,11 @@ export class GameEngine {
             const isSlash = bullet.bulletType === 'slash';   // katana ruhi - baland yoy (tik turgan o'roq)
             // MAYDA TEZ O'QLAR (kamon o'qi, drotik, kunai, shuriken): 10x10 juda tor edi - dushman rasmi qutisidan kengroq va klientda ~100 ms kechikib
             // ko'rinadi, shu sabab ko'zga tekkan o'q ba'zan "o'tib ketardi". Teginish qutisi kattaroq (ayniqsa balandligi - sakrayotgan dushmanlarga ham tegsin)
-            const isSmallFast = bullet.bulletType === 'arrow' || bullet.bulletType === 'dart' || bullet.bulletType === 'kunai' || bullet.bulletType === 'shuriken';
-            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? 26 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
-            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? 50 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
+            const isSmallFast = bullet.bulletType === 'arrow' || bullet.bulletType === 'dart' || bullet.bulletType === 'kunai' || bullet.bulletType === 'shuriken'
+                || bullet.bulletType === 'fireball' || bullet.bulletType === 'ice' || bullet.bulletType === 'lightning' || bullet.bulletType === 'shield';   // sehr va qalqon ham (10x10 - rasmidan ancha tor edi)
+            // katana ruhi: ekrandagi rasm 40x78 (30x58 x 1.35) - quti ham shunday (avval 26x50: rasm tekkan dushmanga zarba tegmasdi)
+            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? 40 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
+            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? 78 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
             // Oldingi tekshirilgan joydan hozirgi joygacha (supurib o'tgan yo'l) - hech narsa "sakrab" o'tilmaydi
             const fx = bullet.sx ?? bullet.x, fy = bullet.sy ?? bullet.y;
             const hitX = Math.min(fx, bullet.x) - hitW / 2;
@@ -5656,6 +5661,7 @@ export class GameEngine {
             // dunyo egalari: shu dunyoni (seed) saqlagan o'yinchilar - odatda xona egasi
             saveCp: (p, cp) => { if (!this.bigOwner(roomId, p)) return; p.bigCp = cp; if (p.userId) db.setBigCp(p.userId, cp).catch(err => console.error('setBigCp xatosi:', err)); },
             saveQuest: (p, q, st) => { if (p.userId) db.setBigQuest(p.userId, q, st).catch(err => console.error('setBigQuest xatosi:', err)); },
+            saveRQ: (p, q) => { if (p.userId) db.setBigRQ(p.userId, q).catch(err => console.error('setBigRQ xatosi:', err)); },
             takeItem: (p, item, cb) => { if (!p.userId) { cb(-1); return; } db.farmTakeOne(p.userId, item).then(cb).catch((err) => { console.error('farmTakeOne xatosi:', err); cb(-1); }); },
             mageHome: (p) => { if (p.userId) db.mageMoveIn(p.userId).catch(err => console.error('mageMoveIn xatosi:', err)); },
             curse: (p) => this.curse(p, 'acid'),
@@ -5697,6 +5703,8 @@ export class GameEngine {
         if (!S || !p) return;
         const ctx = this.bigCtx(room.id);
         if (act === 'quest') bigQuestTalk(S, p, arg, ctx);
+        else if (act === 'rq') bigRqTalk(S, p, arg, ctx);
+        else if (act === 'rqsync') bigRqSync(S, p, ctx);
         else if (act === 'cage') bigCage(S, p, ctx);
         else if (act === 'trigger') bigTrigger(S, p, room, ctx);
         else if (act === 'mage') bigMageTalk(S, p, arg, ctx);   // Balot Magi bilan suhbat tugadi - simpatiya

@@ -136,7 +136,7 @@
         // Qahramon tanlash (xonadan ochilganda - qulflangan: faqat o'sha qahramon)
         const ht = el.querySelector('.wd-heroes');
         ht.innerHTML = '';
-        CHARACTER_TYPES.forEach((type) => {
+        CHARACTER_TYPES.filter(heroOwned).forEach((type) => {
             const b = document.createElement('button');
             b.className = 'wd-hero-btn' + (type === hero() ? ' active' : '');
             b.innerText = tCharName(type);

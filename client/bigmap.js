@@ -212,6 +212,10 @@ window.BigMap = (function () {
             if (d.k === 'rsnake') { const dir = o && o.f < 0 ? -1 : 1; for (let k = 0; k < 10; k++) scene.time.delayedCall(k * 140, () => { if (!O) return; const x = d.x - dir * k * 70; puff(x, d.y - 80, 0xff7a1a, 16); puff(x, d.y - 80, 0x78909c, 10); X.sfxAt('boom', x, 0.7); scene.cameras.main.shake(160, 0.01); }); }
         });
         on('bigQuest', (d) => { if (d) onQuest(scene, d); });
+        // LAGER TOPSHIRIQLARI: buyum rasmlari, topshiriq holati serverdan
+        rqTextures(scene); O.rq = null; O.rqImgs = new Map();
+        on('bigRQ', (d) => { if (d) onRq(scene, d); });
+        X.socket.emit('bigAct', { roomId: X.roomId(), act: 'rqsync', arg: 0 });
         on('bigTalk', (d) => { if (d) onTalk(scene, d); });
         on('bigTalkEnd', (d) => { if (d && O.talkZone === d.zone && X.dialogOpen && X.dialogOpen() && X.closeDialog) { X.closeDialog(); O.talkZone = null; } });
         // SAMBOCHI USHLADI (ms - suplex davomiyligi); ms 0 - yerga urdi, qo'yib yubordi
@@ -277,6 +281,8 @@ window.BigMap = (function () {
         O.bfFront = false;
         on('bigBlock', (d) => {
             if (!d) return; puff(d.x, d.y, 0x80d8ff, 6); X.sfxAt('block', d.x, 0.6);
+            // qalqon to'sdi: o'yinchi ko'rsin - o'q "tegmay ketdi" deb o'ylamasin
+            if (d.k !== 'hockey') { const bt = scene.add.text(d.x, d.y - 8, t('big_blocked'), { fontFamily: FONT, fontSize: '8px', color: '#80d8ff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(5); scene.tweens.add({ targets: bt, y: d.y - 34, alpha: 0, duration: 550, onComplete: () => bt.destroy() }); }
             if (d.k === 'hockey' && scene.time.now > (O.hkToast || 0)) { O.hkToast = scene.time.now + 5000; showToast(t('big_hk_goal')); }   // klyushka qaytardi - darvozaga otish kerak
         });
         // ALTER QOR BOBO: kimdir archa oldida sovg'asini oldi (hamma olsa - jang)
@@ -870,7 +876,7 @@ window.BigMap = (function () {
             // qahramonga salom
             if (hero && !hero.isDead && Math.abs(hero.x - o.x) < 70 && Math.abs(hero.y + 24 - n.y) < 60 && now > o.greetAt && now > o.talkUntil) {
                 o.greetAt = now + 15000; o.f = hero.x > o.x ? 1 : -1;
-                say(o, line(n.fix ? 'big_shop_greet' : 'big_greet_' + n.loc), now, 2600);
+                say(o, line(n.rq ? 'big_rq_greet' : n.fix ? 'big_shop_greet' : 'big_greet_' + n.loc), now, 2600);
             }
         });
         // SUHBAT: yaqin turgan ikki NPC navbatma-navbat gapiradi
@@ -1960,6 +1966,72 @@ window.BigMap = (function () {
     // ===== ELF QIROLLIGI: suhbatlar, topshiriqlar, qafas, ilon ini =====
     const OWN_TELL = { sambo: 1, gorilla: 1, bigtree: 1, santa: 1, bigfoot: 1, hockey: 1, bigflower: 1, swampmage: 1, bogcrab: 1 };   // hujum paytida to'q sariq rangga bo'yalmaydigan bosslar (sambochi terisi, tosh gorilla, daraxt)
     const THIEF = { tknife: 1, tarcher: 1, tbrute: 1, hspear: 1, hknives: 1, hshield: 1 };   // o'g'rilar va o'rmon ovchilari - bir xil kadr tartibi
+    // ===== LAGER TOPSHIRIQLARI (tasodifiy) =====
+    function rqTextures(scene) {
+        const mk = (key, W, H, draw) => {
+            if (scene.textures.exists(key)) return;
+            const g = scene.add.graphics(), R = (x, y, w, h, c) => { g.fillStyle(c, 1); g.fillRect(x * 3, y * 3, w * 3, h * 3); };
+            draw(R); g.generateTexture(key, W * 3, H * 3); g.destroy();
+        };
+        mk('rq_apple', 9, 11, (R) => {   // sariq olma
+            R(1, 4, 7, 6, 0x5d4300); R(0, 5, 9, 4, 0x5d4300); R(2, 10, 5, 1, 0x5d4300); R(2, 3, 2, 1, 0x5d4300); R(5, 3, 2, 1, 0x5d4300);
+            R(1, 5, 7, 4, 0xffd54f); R(2, 4, 5, 6, 0xffd54f); R(5, 6, 3, 3, 0xf9a825); R(2, 5, 2, 2, 0xfff59d);
+            R(4, 1, 1, 3, 0x4e342e); R(5, 0, 3, 2, 0x43a047);
+        });
+        mk('rq_fish', 20, 12, (R) => {   // ko'lmak va sakrayotgan baliq
+            R(1, 8, 18, 4, 0x01315c); R(2, 8, 16, 3, 0x0288d1); R(4, 9, 6, 1, 0x4fc3f7); R(12, 10, 4, 1, 0x4fc3f7);
+            R(7, 2, 7, 4, 0x000000); R(8, 3, 5, 2, 0xff8f00); R(6, 1, 2, 2, 0x000000); R(6, 5, 2, 2, 0x000000); R(7, 2, 1, 1, 0xffb300); R(7, 5, 1, 1, 0xffb300); R(12, 3, 1, 1, 0x000000);
+            R(9, 6, 3, 2, 0x4fc3f7);
+        });
+        mk('rq_crystal', 9, 13, (R) => {   // muz kristali
+            R(3, 0, 3, 1, 0x01579b); R(2, 1, 5, 2, 0x01579b); R(1, 3, 7, 6, 0x01579b); R(2, 9, 5, 2, 0x01579b); R(3, 11, 3, 2, 0x01579b);
+            R(3, 1, 3, 2, 0x81d4fa); R(2, 3, 5, 6, 0x4fc3f7); R(3, 9, 3, 2, 0x29b6f6); R(3, 3, 2, 4, 0xe1f5fe);
+        });
+        mk('rq_lily', 13, 9, (R) => {   // botqoq nilufari
+            R(0, 6, 13, 3, 0x1b5e20); R(1, 6, 11, 2, 0x43a047);
+            R(5, 0, 3, 2, 0x880e4f); R(3, 2, 7, 4, 0x880e4f); R(6, 1, 1, 1, 0xf48fb1); R(4, 3, 5, 2, 0xf06292); R(5, 2, 3, 3, 0xf48fb1); R(6, 3, 1, 1, 0xfff59d);
+        });
+    }
+    const rqGoal = (q) => q.t === 'killk' ? t('rq_g_killk').replace('{n}', q.n).replace('{k}', t('big_e_' + q.k))
+        : q.t === 'killn' ? t('rq_g_killn').replace('{n}', q.n).replace('{l}', t('big_loc_' + q.loc)) : t('rq_g_' + q.k).replace('{n}', q.n);
+    // nishon: bajarilgan bo'lsa - razvedkachi; buyum bo'lsa - eng yaqin joy
+    function rqTarget(q) {
+        const h = X.hero(), hx = h ? h.x : 0, hy = h ? h.y : 0, near = (a, f) => a.slice().sort((p, r) => Math.hypot(f(p)[0] - hx, f(p)[1] - hy) - Math.hypot(f(r)[0] - hx, f(r)[1] - hy))[0];
+        if (q.got >= q.n) { const n = near(W.npcs.filter(o => o.rq && o.loc === q.loc), o => [o.x, o.y]); return n ? { x: n.x, y: n.y } : null; }
+        if (q.t === 'item' && q.spots && q.spots.length) { const s = near(q.spots, o => o); return { x: s[0], y: s[1] }; }
+        return null;
+    }
+    function rqTrack(q) {
+        const done = q.got >= q.n, h = X.hero(), tg = rqTarget(q);
+        let dir = '';
+        if (tg && h) { const dx = tg.x - h.x, dy = tg.y - (h.y + 24), m = Math.round(Math.hypot(dx, dy) / 10); dir = '  ' + (Math.abs(dy) > Math.abs(dx) ? (dy < 0 ? '^' : 'v') : dx > 0 ? '>' : '<') + ' ' + m + t('rq_m'); }
+        return (done ? '✔ ' + t('rq_track_done') : '• ' + rqGoal(q) + ' ' + q.got + '/' + q.n) + dir;
+    }
+    function rqRefresh(scene) {
+        const q = O.rq, spots = q && q.t === 'item' && q.spots ? q.spots : [], want = new Set(spots.map(s => s[0] + ':' + s[1]));
+        O.rqImgs.forEach((im, k) => { if (!want.has(k)) { if (q) puff(im.x, im.y - 14, 0xffd54f, 10); im.destroy(); O.rqImgs.delete(k); } });
+        spots.forEach((s) => {
+            const k = s[0] + ':' + s[1];
+            if (O.rqImgs.has(k)) return;
+            const im = scene.add.image(s[0], s[1] + 1, 'rq_' + q.k).setOrigin(0.5, 1).setDepth(3.4);
+            if (q.k !== 'fish') scene.tweens.add({ targets: im, y: s[1] - 5, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+            O.rqImgs.set(k, im);
+        });
+    }
+    function rqSetWp(q) {
+        const tg = q && rqTarget(q);
+        if (tg && hasMap()) { O.wp = { x: tg.x, y: tg.y, label: t('rq_title') }; O.wpArrived = false; saveWp(); }
+    }
+    function onRq(scene, d) {
+        O.rq = d.q || null;
+        rqRefresh(scene);
+        const talk = (lines) => { if (X.dialog) X.dialog(lines.map(text => ({ who: 'elf', text })), null, { elfName: t('rq_name'), elfFace: 'px_elf_face' }); };
+        if (d.ev === 'accept') { talk([line('rq_intro_' + d.q.loc), rqGoal(d.q) + ' ' + t('rq_reward').replace('{c}', d.q.coins)]); showToast(t('rq_toast_accept')); rqSetWp(d.q); }
+        else if (d.ev === 'wait') { const q = d.q; talk([q.got >= q.n ? t('rq_other').replace('{l}', t('big_loc_' + q.loc)) : line('rq_wait') + ' ' + rqGoal(q) + ' ' + q.got + '/' + q.n]); }
+        else if (d.ev === 'got') { X.sfx('coin', 0.6); showToast(rqGoal(d.q) + ' ' + d.q.got + '/' + d.q.n); if (d.q.t === 'item') rqSetWp(d.q); }
+        else if (d.ev === 'ready') { X.sfx('coin'); showToast(t('rq_toast_ready').replace('{l}', t('big_loc_' + d.q.loc))); rqSetWp(d.q); }
+        else if (d.ev === 'done') { talk([line('rq_thanks')]); X.sfx('win'); showToast(t('rq_toast_done').replace('{c}', d.coins).replace('{x}', d.xp)); }
+    }
     function questLines(q, ev) {
         const L = (keys, who = 'elf') => keys.map(k => ({ who, text: t(k) }));
         if (q === 'tooth') {
@@ -2008,8 +2080,8 @@ window.BigMap = (function () {
     function nearElfAct(hero) {
         if (!hero || hero.isDead) return null;
         const feet = hero.y + 24;
-        const n = W.npcs.find(o => o.q && Math.abs(hero.x - o.x) < 90 && Math.abs(feet - o.y) < 70);
-        if (n) return { act: 'quest', arg: n.id, x: n.x, y: n.y - 70, hint: t('bq_hint_talk') };
+        const n = W.npcs.find(o => (o.q || o.rq) && Math.abs(hero.x - o.x) < 90 && Math.abs(feet - o.y) < 70);
+        if (n) return { act: n.rq ? 'rq' : 'quest', arg: n.id, x: n.x, y: n.y - 70, hint: t('bq_hint_talk') };
         const c = (W.cages || []).find(o => Math.abs(hero.x - o.x) < 100 && Math.abs(feet - o.y) < 80);
         if (c) return { act: 'cage', arg: 0, x: c.x, y: c.y - 104, hint: t('bq_hint_cage') };
         const z = W.zones.find(o => o.trig === 'e' && Math.abs(hero.x - o.dx) < 160 && Math.abs(feet - o.dy) < 110);
@@ -2037,11 +2109,13 @@ window.BigMap = (function () {
     function drawQuests(scene, now) {
         const qs = (O.myBuffs && O.myBuffs.q) || {}, lines = [];
         ['tooth', 'kids'].forEach((q) => { const st = qs[q] || 0; if (st === 1 || st === 2) lines.push((st === 2 ? '✔ ' : '• ') + t('bq_track_' + q + '_' + st)); });
+        if (O.rq) lines.push(rqTrack(O.rq));
         O.qTxt.setText(lines.length ? t('bq_quests') + '\n' + lines.join('\n') : '').setVisible(lines.length > 0);
         const g = O.qMarkG; g.clear();
         W.npcs.forEach((n) => {
-            if (!n.q || Math.abs(n.x - (scene.cameras.main.scrollX + 400)) > 700 || Math.abs(n.y - (scene.cameras.main.scrollY + 300)) > 500) return;
-            const st = qs[n.q] || 0, mark = st === 0 ? '!' : st === 2 ? '?' : '';
+            if ((!n.q && !n.rq) || Math.abs(n.x - (scene.cameras.main.scrollX + 400)) > 700 || Math.abs(n.y - (scene.cameras.main.scrollY + 300)) > 500) return;
+            // razvedkachi: topshiriq yo'q - "!", bajarilgan va shu lokatsiya - "?"
+            const st = n.rq ? (!O.rq ? 0 : O.rq.got >= O.rq.n && O.rq.loc === n.loc ? 2 : 1) : (qs[n.q] || 0), mark = st === 0 ? '!' : st === 2 ? '?' : '';
             let im = O.qMarks.get(n.id);
             if (!im) { im = scene.add.text(n.x, n.y - 78, '', { fontFamily: FONT, fontSize: '16px', color: '#ffeb3b', stroke: '#000', strokeThickness: 5 }).setOrigin(0.5).setDepth(3.6); O.qMarks.set(n.id, im); }
             const o = O.npcs.get(n.id);

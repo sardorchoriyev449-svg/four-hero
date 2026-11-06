@@ -1754,7 +1754,8 @@ function renderCharTabs() {
     charLockedNote.classList.add('hidden');
     charTabsDiv.classList.remove('hidden');
     charTabsDiv.innerHTML = '';
-    CHARACTER_TYPES.forEach((type) => {
+    // Pullik qahramon hozircha sotilmaydi: faqat egasiga ko'rinadi (admin sovg'a qilgan / oldin olgan)
+    CHARACTER_TYPES.filter(heroOwned).forEach((type) => {
         const btn = document.createElement('button');
         btn.className = 'char-tab-btn' + (type === selectedCharTab ? ' active' : '');
         btn.innerText = tCharName(type);

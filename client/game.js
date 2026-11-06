@@ -14,6 +14,7 @@ document.addEventListener('keydown', (e) => {
 let platforms;
 let botGroup;
 let lastDirection = 'right';
+let attackHeldDir = null;   // hujum tugmasi bosib turilgan bo'lsa - o'sha paytdagi yo'nalish (burilsa serverga yangi yo'nalish yuboriladi)
 let phaserGame = null; // Joriy Phaser o'yin nusxasi (raundlar orasida tozalanadi)
 let touchState = { left: false, right: false, jump: false, down: false }; // PHONE rejimidagi virtual tugmalar holati (down - osmondagi jangda pastga)
 // PHONE tugmalarining amallari: { nomi: [bosilganda, qo'yib yuborilganda] } - har raundda create() yangilaydi
@@ -399,7 +400,7 @@ function stopGame() {
     otherPlayers = {};
     enemyBots = {};
     bulletSprites = {};
-    lastDirection = 'right';
+    lastDirection = 'right'; attackHeldDir = null;
     if (window.resetTouchControls) window.resetTouchControls();
     touchActions = {};
     touchInteractCheck = null;
@@ -962,7 +963,8 @@ function launchGame(socket, roomId, mapData, continued) {
         const cdMs = c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 990 : c.characterType === 'samurai' && c.weaponMode === 'alt' ? 750
             : c.characterType === 'hunter' ? (c.weaponMode === 'alt' ? 450 : 510) : 360;
         if (now - ATK_PREDICT.last < cdMs) return;                      // server cooldown (attackCooldownTicks)
-        if ((c.stamina || 0) < (c.characterType === 'samurai' && c.weaponMode === 'alt' ? 24 : c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 22 : (ATK_COST[c.characterType] || 10)) * 0.5) return;   // ruhiy zarba - 24, uchburchak drotiklar - 22 stamina
+        // Stamina: server bilan AYNAN bir xil narx (har kuchaytirish -10%). Avval yarmi yetarli deb chizilardi - server otmagan "arvoh o'q" dushman ustidan o'tib ketardi
+        if ((c.stamina || 0) < (c.characterType === 'samurai' && c.weaponMode === 'alt' ? 24 : c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 22 : (ATK_COST[c.characterType] || 10)) * (1 - Math.min(5, c.staminaLevel || 0) * 0.1)) return;   // ruhiy zarba - 24, uchburchak drotiklar - 22 stamina
         const bt = predictedAttackType(c);
         if (!bt) return;
         ATK_PREDICT.last = now; ATK_PREDICT.at = now; ATK_PREDICT.pending = true;
@@ -1023,12 +1025,17 @@ function launchGame(socket, roomId, mapData, continued) {
             ATK_PREDICT.sprites.push(sp);
         });
         // Server javob bermasa (masalan, stamina yetmadi) - bashorat o'qi o'zi so'nadi
-        scene.time.delayedCall(700, () => ATK_PREDICT.sprites.forEach(p => {
-            if (p && p.active && performance.now() - p.ex.t >= 650) scene.tweens.add({ targets: p, alpha: 0, duration: 120, onComplete: () => p.destroy() });
+        scene.time.delayedCall(400, () => ATK_PREDICT.sprites.forEach(p => {
+            if (p && p.active && performance.now() - p.ex.t >= 380) scene.tweens.add({ targets: p, alpha: 0, duration: 120, onComplete: () => p.destroy() });
         }));
     }
     // Bashorat o'qlarini harakatlantirish (update() da har kadrda)
     function movePredictedShots() {
+        // Hujum tugmasi bosib turilganda burildi: keyingi o'qlar yangi tomonga (avval server eski tomonga otaverardi)
+        if (attackHeldDir && attackHeldDir !== lastDirection && !isSky && currentCharacter && !currentCharacter.isDead) {
+            attackHeldDir = lastDirection;
+            socket.emit('startAttackInRoom', { roomId, angle: lastDirection === 'right' ? 0 : Math.PI });
+        }
         const now = performance.now();
         ATK_PREDICT.sprites = ATK_PREDICT.sprites.filter(p => p && p.active);
         ATK_PREDICT.sprites.forEach(p => {
@@ -2478,8 +2485,8 @@ function launchGame(socket, roomId, mapData, continued) {
             const ARM = 0x9be7ff, ARM_D = 0x4f8fb8, EDGE = 0x0b1d33;
             for (let i = 0; i <= 12; i++) {
                 const x = 18 + i, y = 13 + lift + Math.round(i * 0.7);
-                set(x, y - 1, i < 2 ? 0xc62828 : ARM);
-                set(x, y, i < 2 ? 0x8e0000 : ARM);
+                set(x, y - 1, i < 2 ? 0x0288d1 : ARM);
+                set(x, y, i < 2 ? 0x0277bd : ARM);
                 set(x, y + 1, ARM_D);
                 set(x, y + 2, EDGE);                                  // tagidagi chiziq - qorindan ajralib tursin
             }
@@ -2493,7 +2500,7 @@ function launchGame(socket, roomId, mapData, continued) {
             rect(27, 18, 3, 6, FE_TUNIC[0]); rect(25, 17 + lift, 3, 3, FE_SKIN[1]);
             rect(3, 17, 3, 7, FE_TUNIC[0]); rect(5, 14 + lift, 3, 3, FE_SKIN[1]); rect(8, 13 + lift, 3, 2, FE_SKIN[1]);
             // Og'zidan qorniga qon tomchilari
-            [[16, 15], [17, 17], [15, 19], [18, 22]].forEach(([x, y], i) => { if (i < 3 || lift) set(x, y + (i ? lift : 0), 0xb71c1c); });
+            [[16, 15], [17, 17], [15, 19], [18, 22]].forEach(([x, y], i) => { if (i < 3 || lift) set(x, y + (i ? lift : 0), 0x0288d1); });
         } else if (pose === 'spit' || pose === 'charge') {
             rect(0, 17, 3, 7, FE_TUNIC[0]); rect(0, 15, 3, 2, FE_SKIN[1]);
             rect(31, 17, 3, 7, FE_TUNIC[0]); rect(31, 15, 3, 2, FE_SKIN[1]);
@@ -2508,11 +2515,11 @@ function launchGame(socket, roomId, mapData, continued) {
         const g = elfGrid(false, false);
         const set = (x, y, c) => { if (g[y] && g[y][x] !== undefined) g[y][x] = c; };
         // (kontur qo'shilgan grid - koordinatalar +1)
-        for (let y = 7; y < 13; y++) for (let x = 10; x < 15; x++) set(x, y, (x + y) % 3 ? 0x5d0000 : 0x2b0000);
+        for (let y = 7; y < 13; y++) for (let x = 10; x < 15; x++) set(x, y, (x + y) % 3 ? 0x01579b : 0x012a4a);
         set(11, 9, 0xeeeeee); set(12, 10, 0xeeeeee);
         [[7, 8], [9, 8], [8, 9], [7, 10], [9, 10]].forEach(([x, y]) => set(x, y, 0x0d1b3e));
         for (let y = 14; y < 21; y++) for (let x = 14; x < 17; x++) set(x, y, null);
-        set(14, 14, 0xc62828); set(14, 15, 0x8e0000);
+        set(14, 14, 0x0288d1); set(14, 15, 0x0277bd);
         return g;
     }
     // Gorillaning toshlar ostidan chiqib qolgan qo'li: bilagi uyum ichiga kirib ketgan, kafti yerga
@@ -2612,8 +2619,8 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         // Yeyilayotgan elf: yerda hushsiz yotibdi, atrofida qon dog'i
         const blood = scene.add.graphics().setDepth(1.4);
-        blood.fillStyle(0x5d0000, 0.85); blood.fillEllipse(fd.victimX, 571, 120, 10);
-        blood.fillStyle(0x8e0000, 0.9); blood.fillEllipse(fd.victimX - 20, 571, 50, 6);
+        blood.fillStyle(0x01579b, 0.85); blood.fillEllipse(fd.victimX, 571, 120, 10);
+        blood.fillStyle(0x0277bd, 0.9); blood.fillEllipse(fd.victimX - 20, 571, 50, 6);
         // Yonboshlab yotibdi (boshi semiz elf tomonda); rasm 60x84 - 90 gradusga burilgach balandligi 60
         scene.add.image(fd.victimX, 540, 'px_fe_victim').setAngle(-90).setDepth(1.5);
         // Semiz elf
@@ -8201,7 +8208,7 @@ function launchGame(socket, roomId, mapData, continued) {
         for (let x = 3; x <= 9; x++) set(x, 13, 0x3a0000);
         [3, 5, 7, 9].forEach(x => set(x, 12, 0xfafafa));
         [4, 6, 8].forEach(x => set(x, 14, 0xfafafa));
-        [[4, 15], [4, 16], [7, 15], [7, 16], [7, 17], [5, 15]].forEach(([x, y]) => set(x, y, 0xc62828));
+        [[4, 15], [4, 16], [7, 15], [7, 16], [7, 17], [5, 15]].forEach(([x, y]) => set(x, y, 0x0288d1));
         return gridOutline(g, 0x0a0a0a);
     }
     // ZOMBI-SABZAVOTLAR (o'ngga qaragan): kind 0 - sabzi, 1 - qovoq, 2 - karam. Yovuz yuz (qizil ko'zlar,
@@ -8250,7 +8257,7 @@ function launchGame(socket, roomId, mapData, continued) {
             [5, 7, 9].forEach(x => set(x, faceY + 2, 0xfafafa));
             [6, 8, 10].forEach(x => set(x, faceY + 4, 0xfafafa));
         }
-        set(9, faceY + 5, 0xc62828);   // og'iz chetidan sharbat/qon tomadi
+        set(9, faceY + 5, 0x0288d1);   // og'iz chetidan sharbat/qon tomadi
         // Barg-qo'llar: oldinga cho'zilgan (hujumda - tepaga)
         const armY = kind === 0 ? 11 : 12;
         for (let k = 0; k < 4; k++) {
@@ -8438,7 +8445,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // Og'zidan tomchilab qon oqadi
         scene.time.addEvent({ delay: 260, loop: true, callback: () => {
             if (!c.active) return;
-            const d = scene.add.rectangle(c.x - 6 + Phaser.Math.Between(-2, 2), c.y - 2, 3, 4, 0xc62828).setDepth(3.15);
+            const d = scene.add.rectangle(c.x - 6 + Phaser.Math.Between(-2, 2), c.y - 2, 3, 4, 0x0288d1).setDepth(3.15);
             scene.tweens.add({ targets: d, y: 568, alpha: 0.4, duration: 420, onComplete: () => d.destroy() });
         } });
     }
@@ -10601,6 +10608,7 @@ function launchGame(socket, roomId, mapData, continued) {
         window.onblur = () => {
             if (!currentCharacter) return;
             socket.emit('stopAbilityInRoom', roomId);
+            attackHeldDir = null;
             socket.emit('stopAttackInRoom', roomId);
             if (window.resetTouchControls) window.resetTouchControls();
         };
@@ -10610,9 +10618,11 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!currentCharacter || pauseMenuOpen || mfHouse) return;
             let angle = isSky ? skyAim(null) : (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
+            attackHeldDir = lastDirection;
             if (!isSky) predictAttack(this, angle);
         });
         this.input.keyboard.on('keyup-ENTER', () => {
+            attackHeldDir = null;
             if (!currentCharacter) return;
             socket.emit('stopAttackInRoom', roomId);
         });
@@ -10626,9 +10636,11 @@ function launchGame(socket, roomId, mapData, continued) {
             if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
             let angle = isSky ? skyAim(pointer) : (lastDirection === 'right') ? 0 : Math.PI;
             socket.emit('startAttackInRoom', { roomId: roomId, angle: angle });
+            attackHeldDir = lastDirection;
             if (!isSky) predictAttack(this, angle);
         });
         this.input.on('pointerup', () => {
+            attackHeldDir = null;
             if (!currentCharacter) return;
             if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
             socket.emit('stopAttackInRoom', roomId);
@@ -10653,11 +10665,13 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (dialog) { advanceDialog(); hitWasE = true; return; }
                     const ang = attackAngle();
                     socket.emit('startAttackInRoom', { roomId, angle: ang });
+                    attackHeldDir = lastDirection;
                     if (!isSky) predictAttack(this, ang);
                     skyTouchAtk = true;
                 },
                 () => {
                     if (hitWasE) { hitWasE = false; return; }
+                    attackHeldDir = null;
                     skyTouchAtk = false;
                     if (currentCharacter) socket.emit('stopAttackInRoom', roomId);
                 }
@@ -12044,6 +12058,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.hp = myData.hp;
                 currentCharacter.maxHp = myData.maxHp || 100;
                 currentCharacter.stamina = myData.stamina;
+                currentCharacter.staminaLevel = myData.sl || 0;
                 currentCharacter.weaponColor = myData.weaponColor;
                 currentCharacter.weaponFx = myData.weaponFx || '';
                 currentCharacter.kills = myData.kills;

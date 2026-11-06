@@ -2,7 +2,7 @@
 // Bosh menyudagi "Reyting" tugmasidan ochiladi. Top 50 va o'yinchining o'z o'rni
 (function () {
     let el = null, tab = 'all', reqId = 0;
-    const HEROES = ['knight', 'archer', 'mage', 'samurai', 'hunter'];
+    const HEROES = ['knight', 'archer', 'mage', 'samurai'];   // Ovchi hozircha yashirin
     const ICON = { knight: 'fa-shield-halved', archer: 'fa-bullseye', mage: 'fa-hat-wizard', samurai: 'fa-khanda', hunter: 'fa-crosshairs' };
     const COLOR = { knight: '#b0bec5', archer: '#81c784', mage: '#ba68c8', samurai: '#ef5350', hunter: '#9ccc65' };
     const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

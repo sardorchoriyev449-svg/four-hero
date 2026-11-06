@@ -1,3 +1,4 @@
+import type { RandQuest } from './types';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { config } from 'dotenv';
@@ -75,6 +76,7 @@ const userSchema = new mongoose.Schema({
     bigGot: { type: [Number], default: () => [] },
     bigLbVer: { type: Number, default: 0 },
     bigKillAt: { type: Object, default: () => ({}) },    //   bosslar o'ldirilgan vaqt { zona: ms } - 50 daqiqada qaytadi
+    bigRQ: { type: Object, default: null },              // lager topshirig'i (tasodifiy, bitta faol)
     bigQuests: { type: Object, default: () => ({}) },    //   shu dunyodagi topshiriqlar holati { tooth: 0..3, kids: 0..3 }              //   reyting natijasi qaysi dunyo generatori uchun (eskisi - bir marta tozalanadi)       //   shu dunyoda ochilgan checkpointlar (to'r dunyo: portallar, xarita, o'rganilgan foiz)
     bigMapItem: { type: Boolean, default: false },       // BIG MAP XARITASI: do'kondan bir marta sotib olinadi - butun umr (bosslar, yo'l ko'rsatkich)
     bigBestPct: { type: Number, default: 0 },            // BIG MAP REYTINGI: eng ko'p o'tilgan foiz,
@@ -147,6 +149,8 @@ const userSchema = new mongoose.Schema({
 
 const UserModel = mongoose.model('User', userSchema);
 
+// lager topshirig'i (bazadan): shakli to'g'ri bo'lmasa - yo'q
+const rqFromDoc = (q: any): RandQuest | null => (q && typeof q === 'object' && Number.isFinite(q.seed) && typeof q.loc === 'string' && ['killk', 'killn', 'item'].includes(q.t) && Number.isInteger(q.n) && Number.isInteger(q.got) && Number.isFinite(q.coins) && Number.isFinite(q.xp) ? q as RandQuest : null);
 export interface UserRecord {
     id: string;
     fullName: string;
@@ -177,7 +181,7 @@ export interface UserRecord {
     ownedHeroes: string[];
     supporter: boolean;
     bigCp: number;
-    bigSeed: number; bigVer: number; bigDoneM: number; bigCpV: number; bigOpened: number[]; bigKilled: number[]; bigGot: number[]; bigQuests: { [q: string]: number }; bigKillAt: { [z: string]: number };
+    bigSeed: number; bigVer: number; bigDoneM: number; bigCpV: number; bigOpened: number[]; bigKilled: number[]; bigGot: number[]; bigRQ: RandQuest | null; bigQuests: { [q: string]: number }; bigKillAt: { [z: string]: number };
     bigMapItem: boolean;
 }
 
@@ -253,6 +257,7 @@ function docToUser(doc: any): UserRecord {
         bigKilled: Array.isArray(doc.bigKilled) ? doc.bigKilled.filter((x: any) => Number.isInteger(x)) : [],
         bigGot: Array.isArray(doc.bigGot) ? doc.bigGot.filter((x: any) => Number.isInteger(x)) : [],
         bigKillAt: doc.bigKillAt && typeof doc.bigKillAt === 'object' ? Object.fromEntries(Object.entries(doc.bigKillAt).filter(([k, v]) => /^[0-9]{1,6}$/.test(k) && Number.isFinite(v))) as { [z: string]: number } : {},
+        bigRQ: rqFromDoc(doc.bigRQ),
         bigQuests: doc.bigQuests && typeof doc.bigQuests === 'object' ? Object.fromEntries(Object.entries(doc.bigQuests).filter(([k, v]) => /^[a-z]{1,16}$/.test(k) && Number.isInteger(v))) as { [q: string]: number } : {},
         bigMapItem: !!doc.bigMapItem
     };
@@ -440,7 +445,7 @@ export async function petUpgrade(userId: string, kind: string): Promise<{ succes
 // BIG MAP dunyosi: yangi seed (0 - tugadi) - checkpoint, sandiqlar va bosslar ham boshidan
 export async function setBigWorld(userId: string, seed: number, ver: number): Promise<void> {
     if (!mongoose.isValidObjectId(userId)) return;
-    await UserModel.updateOne({ _id: userId }, { $set: { bigSeed: seed, bigVer: ver, bigCp: -1, bigCpV: 3, bigDoneM: 0, bigOpened: [], bigKilled: [], bigKillAt: {}, bigGot: [], bigQuests: {}, bigBestM: 0, bigBestPct: 0 } });
+    await UserModel.updateOne({ _id: userId }, { $set: { bigSeed: seed, bigVer: ver, bigCp: -1, bigCpV: 3, bigDoneM: 0, bigOpened: [], bigKilled: [], bigKillAt: {}, bigGot: [], bigQuests: {}, bigRQ: null, bigBestM: 0, bigBestPct: 0 } });
 }
 // BIG MAP: boss o'ldirilgan vaqt (qaytish taymeri)
 export async function bigSaveKillAt(userId: string, zone: number, t: number): Promise<void> {
@@ -448,6 +453,10 @@ export async function bigSaveKillAt(userId: string, zone: number, t: number): Pr
     await UserModel.updateOne({ _id: userId }, { $set: { ['bigKillAt.' + zone]: Math.round(t) } });
 }
 // BIG MAP TOPSHIRIG'I: holati (faqat ma'lum topshiriqlar, 0..3)
+export async function setBigRQ(userId: string, q: RandQuest | null): Promise<void> {
+    if (!mongoose.isValidObjectId(userId)) return;
+    await UserModel.updateOne({ _id: userId }, { $set: { bigRQ: q } });
+}
 export async function setBigQuest(userId: string, q: string, st: number): Promise<void> {
     const max = q === 'mage' ? 30 : q === 'magef' ? 999 : 3;   // mage - Balot Magi simpatiyasi (0..30), magef - unga berilgan gullar, magehome - fermada yashaydi (1)
     if (!mongoose.isValidObjectId(userId) || !/^[a-z]{1,16}$/.test(q) || !Number.isInteger(st) || st < 0 || st > max) return;

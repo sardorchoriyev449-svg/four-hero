@@ -6,7 +6,7 @@
 // (oldindan turadi, har qadamda emas), maxfiy sandiqlar. Har 250 m da checkpoint (hisobga saqlanadi).
 // 30 metrdan baland joydan yiqilsa - jonning yarmi ketadi, 60 metrdan - o'lim (klient qo'nishda o'lchaydi). Dushmanlar o'yinchini tepaga/pastga quvadi,
 // 15 m dan uzoqlashib ko'zdan yo'qolsa - izini yo'qotadi.
-import { PlayerState, RoomState } from './types';
+import { PlayerState, RoomState, RandQuest } from './types';
 import { bossAI, updateAreas, updateShots, SETPIECE, CREATURE, bossPre } from './bigboss';
 
 export const BIG_GEN = 10;
@@ -169,14 +169,14 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     // O'RMON: ovchilar va kaltakesak; bosslar - bahaybat daraxt, zombi-sabzavot fermasi (boshqaruvchi: ko'rinmas, joni = qolgan zombilar)
     hspear:    { hp: 80,  spd: 95,  dmg: 9,  w: 28, h: 48, jump: 520, reach: 0,  atkMs: 0,    coins: 7, shot: { spd: 560, cdMs: 2300, dmg: 14, arc: true } },   // nayzachi: uzoqdan nayza otadi
     hknives:   { hp: 95,  spd: 150, dmg: 8,  w: 28, h: 48, jump: 580, reach: 40, atkMs: 600,  coins: 7 },                                  // ikki pichoqli: tez-tez tilib uradi
-    hshield:   { hp: 240, spd: 80,  dmg: 18, w: 34, h: 54, jump: 480, reach: 50, atkMs: 1200, coins: 12, armor: 0.2, guard: [0.5, 1500, 2400] },   // qalqon-qilichli
+    hshield:   { hp: 240, spd: 80,  dmg: 18, w: 34, h: 54, jump: 480, reach: 50, atkMs: 1200, coins: 12, armor: 0.2, guard: [0.3, 900, 3200] },   // qalqon-qilichli
     lizard:    { hp: 130, spd: 140, dmg: 16, w: 84, h: 56, jump: 540, reach: 64, atkMs: 900,  coins: 9 },   // bahaybat: tik turganda o'yinchidan ikki barobar baland                                  // tirnoqli kaltakesak
     bigtree:   { hp: 4200, spd: 0,  dmg: 26, w: 170, h: 300, jump: 0, reach: 0, atkMs: 9999, coins: 260, boss: true, armor: 0.15 },
     zvfarm:    { hp: 15,  spd: 0,   dmg: 0,  w: 10, h: 10, jump: 0, reach: 0, atkMs: 9999, coins: 420, boss: true, secret: true },
     // ELF QIROLLIGI (birinchi lokatsiya): jonlari ~30% kamaytirildi - yangi o'yinchilarga juda uzoq cho'zilardi
-    tknife:    { hp: 65,  spd: 135, dmg: 12, w: 28, h: 46, jump: 560, reach: 38, atkMs: 850,  coins: 6, guard: [0.35, 1200, 2400] },
-    tarcher:   { hp: 55,  spd: 95,  dmg: 9,  w: 28, h: 46, jump: 520, reach: 0,  atkMs: 0,    coins: 7, shot: { spd: 460, cdMs: 1900, dmg: 11 }, guard: [0.35, 1200, 2400] },
-    tbrute:    { hp: 210, spd: 75,  dmg: 24, w: 40, h: 58, jump: 470, reach: 54, atkMs: 1400, coins: 14, armor: 0.15, guard: [0.45, 1600, 2600] },
+    tknife:    { hp: 65,  spd: 135, dmg: 12, w: 28, h: 46, jump: 560, reach: 38, atkMs: 850,  coins: 6, guard: [0.2, 700, 3400] },
+    tarcher:   { hp: 55,  spd: 95,  dmg: 9,  w: 28, h: 46, jump: 520, reach: 0,  atkMs: 0,    coins: 7, shot: { spd: 460, cdMs: 1900, dmg: 11 }, guard: [0.2, 700, 3400] },
+    tbrute:    { hp: 210, spd: 75,  dmg: 24, w: 40, h: 58, jump: 470, reach: 54, atkMs: 1400, coins: 14, armor: 0.15, guard: [0.3, 900, 3200] },
     darkelf:   { hp: 80,  spd: 85,  dmg: 15, w: 30, h: 52, jump: 0,   reach: 0,  atkMs: 0,    coins: 10, fly: true, shot: { spd: 330, cdMs: 2200, dmg: 15 } },   // havoda muallaq turadi, to'g'ri uchadigan qora sehr
     rsnake:    { hp: 3200, spd: 0,  dmg: 30, w: 220, h: 190, jump: 0, reach: 0, atkMs: 0, coins: 300, boss: true },   // S1 ROBOT ILON (g'orda): tana - bosh (o'q faqat boshiga tegadi)
     sambo:     { hp: 3000, spd: 150, dmg: 30, w: 66, h: 108, jump: 720, reach: 70, atkMs: 1100, coins: 330, boss: true, secret: true, armor: 0.2 },   // SAMBOCHI ELF: ushlab "na progib" tashlaydi, ustiga sakraydi, tosh otadi
@@ -275,7 +275,7 @@ export interface BigWorld {
     vines: { id: number, x: number, y: number, len: number }[];
     cps: { x: number, y: number, extra?: number }[];   // extra - oraliq checkpoint (eski saqlangan raqamlarni o'girish uchun)
     villages: { x0: number, x1: number, y: number, loc: string }[];
-    npcs: { id: number, x: number, y: number, t: string, loc: string, v: number, fix?: number, q?: string }[];   // q - topshiriq beradi
+    npcs: { id: number, x: number, y: number, t: string, loc: string, v: number, fix?: number, q?: string, rq?: number }[];   // q - topshiriq beradi, rq - lager topshirig'i (tasodifiy)
     piles: { x: number, y: number }[];                       // qor uyumlari (qor bazasi): E - qor to'plari olinadi
     shops: { x: number, y: number, loc: string }[];          // qishloqdagi do'kon (Shop xaritasidagi narsalar sotiladi)
     crates: { x: number, y: number, s?: number }[];          // sindiriladigan qutilar (s - o'lchami; ba'zilaridan 1-10 tanga chiqadi)
@@ -981,6 +981,13 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
     // uchuvchi dushman tosh ichida paydo bo'lmasin - bo'sh havogacha tepaga suriladi (tasodifsiz, saqlangan dunyolar o'zgarmaydi)
     const solid = (x: number, y: number) => W.isles.some(is => is.r.some(r => !r[4] && x > r[0] - 16 && x < r[0] + r[2] + 16 && y > r[1] - 24 && y < r[1] + r[3] + 16));
     W.zones.forEach(z => z.spawns.forEach((sp) => { if (!ENEMIES[sp.k] || !ENEMIES[sp.k].fly) return; for (let k = 0; k < 20 && solid(sp.x, sp.y - 10); k++) sp.y -= 40; }));
+    // LAGER TOPSHIRIQLARI: har lokatsiyada ikkita lager chetida razvedkachi (eng oxirida va tasodifsiz - saqlangan dunyolar siljimaydi, NPC raqamlari o'zgarmaydi)
+    BIG_LOCS.filter(l => !BIG_CLOSED.includes(l.id) && W.locs.some(o => o.id === l.id)).forEach((l) => {
+        const cs = W.zones.filter(z => z.kind === 'camp' && z.loc === l.id).sort((a, b) => (a.layer === 'ground' ? 0 : 1) - (b.layer === 'ground' ? 0 : 1) || a.x0 - b.x0);
+        const pick = cs.length > 2 ? [cs[0], cs[cs.length - 1].layer === 'ground' ? cs[cs.length - 1] : cs[1]] : cs;
+        pick.forEach(z => W.npcs.push({ id: ++nid, x: z.x0 - 8, y: z.y0 + 320, t: l.npcs[0], loc: l.id, v: -1, fix: 1, rq: 1 }));
+        if (!pick.length) W.villages.filter(v => v.loc === l.id).slice(0, 1).forEach(v => W.npcs.push({ id: ++nid, x: v.x1 - 70, y: v.y, t: l.npcs[0], loc: l.id, v: -1, fix: 1, rq: 1 }));
+    });
     return W;
 }
 
@@ -1052,6 +1059,7 @@ export interface BigCtx {
     saveCp(p: PlayerState, cp: number): void;      // o'yinchining oxirgi tekkan checkpointi (keyingi o'yin shu joydan)
     saveGot(cp: number): void;                     // dunyo egasiga: checkpoint ochildi
     saveQuest(p: PlayerState, q: string, st: number): void;   // topshiriq holati (hisobda)
+    saveRQ?(p: PlayerState, q: RandQuest | null): void;       // lager topshirig'i (hisobda)
     takeItem?(p: PlayerState, item: string, cb: (left: number) => void): void;   // sumkadan bitta narsa (-1 - yo'q)
     mageHome?(p: PlayerState): void;               // Balot Magi o'yinchining fermasiga ko'chadi
     curse(p: PlayerState): void;                   // semiz elf so'lagi: jon o'zi tiklanmaydi (do'kondagi Eliksir bilan tuzaladi)
@@ -1203,6 +1211,7 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
             resetAhead(S, alive);
         }
     });
+    if (S.tick % 5 === 0) alive.forEach(p => rqPick(S, p, ctx));
     // O'YINCHI TEZLIGI (pozitsiyani klient yuboradi): bosslar yugurayotgan o'yinchiga oldindan mo'ljal oladi
     alive.forEach((p) => {
         const o = S.pv[p.id];
@@ -1610,7 +1619,7 @@ export function damageEnemy(S: BigState, room: RoomState, e: BigEnemy, damage: n
         Object.values(room.players).forEach(q => { ctx.reward(q, coins, xp); if (first) ctx.bossKill(q); if (ctx.daily) ctx.daily(q, 'bosses', 1); });
         if (first) { ctx.saveKill(e.zone); bigProgressAll(S, Object.values(room.players), ctx); }
         bigQuestBoss(S, room, e.k, ctx);
-    } else if (owner) { ctx.reward(owner, d.coins, killXp(d), true); if (ctx.daily) ctx.daily(owner, 'kills', 1); }
+    } else if (owner) { ctx.reward(owner, d.coins, killXp(d), true); if (ctx.daily) ctx.daily(owner, 'kills', 1); if (!e.life) rqKill(S, owner, e, ctx); }
 }
 // O'yinchi o'qi dushmanga tegdimi (engine o'q tsiklidan): tegsa - true
 // fx - o'q turi ta'siri: ice - muzlatadi, poison - zahar (asta jon oladi), chain - zanjirli chaqmoq (yana 2 ta dushmanga, 60%)
@@ -1719,6 +1728,83 @@ export function bigQuestTalk(S: BigState, p: PlayerState, npcId: number, ctx: Bi
     else if (st === 2) { qs[q] = 3; ev = 'done'; ctx.saveQuest(p, q, 3); ctx.reward(p, Q.coins, Q.xp); }
     else if (st === 3) ev = 'thanks';
     ctx.emitTo(p.id, 'bigQuest', { q, st: qs[q], ev, npc: n.id });
+}
+// ===== LAGER TOPSHIRIQLARI (tasodifiy): razvedkachi beradi, bajarilgach o'sha lokatsiyaning istalgan razvedkachisiga topshiriladi =====
+// Mukofot lokatsiya qiyinligiga qarab. item: Elf - sariq olma, O'rmon - ko'ldan baliq, Qor - muz kristali, Botqoq - nilufar
+export const RQ = {
+    mult: { elf: 1, forest: 1.4, snow: 1.8, swamp: 2.2 } as { [l: string]: number },
+    item: { elf: 'apple', forest: 'fish', snow: 'crystal', swamp: 'lily' } as { [l: string]: string },
+    killk: { n: [3, 6], coins: 14 }, killn: { n: [6, 12], coins: 9 }, itemq: { n: [3, 5], coins: 16 },
+    range: 7000, pickX: 44, pickY: 70
+};
+const rint = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+const rqCoins = (per: number, n: number, loc: string) => Math.round(per * n * (RQ.mult[loc] || 1) / 5) * 5;
+// oddiy dushmanlar (lagerlarda uchraydi): yashiringan mimiklar va bosslar - yo'q
+const rqKinds = (S: BigState, loc: string) => [...new Set(S.w.zones.filter(z => z.loc === loc && z.kind === 'camp').flatMap(z => z.spawns.map(s => s.k)))].filter(k => ENEMIES[k] && !ENEMIES[k].boss && !ENEMIES[k].lurk);
+// buyum joylari: razvedkachi yaqinidagi orollar (boss maydonlari va o'yiq orollar - yo'q), har orolda bittadan
+function rqSpots(S: BigState, n: { x: number, loc: string }, count: number): number[][] {
+    const bossZ = S.w.zones.filter(z => z.boss);
+    const isles = S.w.isles.filter(I => I.loc === n.loc && I.w >= 160 && !I.hole && Math.abs(I.x + I.w / 2 - n.x) < RQ.range && !bossZ.some(z => I.x < z.x1 && I.x + I.w > z.x0 && I.y > z.y0 && I.y < z.y1 + 80))
+        .sort((a, b) => Math.abs(a.x + a.w / 2 - n.x) - Math.abs(b.x + b.w / 2 - n.x)).slice(0, Math.max(count * 3, 8));
+    for (let i = isles.length - 1; i > 0; i--) { const j = rint(0, i); [isles[i], isles[j]] = [isles[j], isles[i]]; }
+    // orol usti teshikli bo'lishi mumkin: buyum aniq platforma ustiga qo'yiladi (eng kengi)
+    const out: number[][] = [];
+    for (const I of isles) {
+        if (out.length >= count) break;
+        const p = S.w.plats.filter(q => Math.abs(q.y - I.y) < 2 && q.x < I.x + I.w && q.x + q.w > I.x && q.w >= 120).sort((a, b) => b.w - a.w)[0];
+        if (p) out.push([Math.round(p.x + 40 + Math.random() * (p.w - 80)), p.y]);
+    }
+    return out;
+}
+function rqMake(S: BigState, n: { id: number, x: number, loc: string }): RandQuest {
+    const base = { seed: S.w.seed, loc: n.loc, npc: n.id, got: 0 }, kinds = rqKinds(S, n.loc), roll = Math.random();
+    const xpOf = (c: number) => Math.round(c / 2);
+    if (roll < 0.4) {
+        const cnt = rint(RQ.itemq.n[0], RQ.itemq.n[1]), spots = rqSpots(S, n, cnt);
+        if (spots.length >= 2) { const c = rqCoins(RQ.itemq.coins, spots.length, n.loc); return { ...base, t: 'item', k: RQ.item[n.loc], n: spots.length, coins: c, xp: xpOf(c), spots }; }
+    }
+    if (roll < 0.75 && kinds.length) { const cnt = rint(RQ.killk.n[0], RQ.killk.n[1]), c = rqCoins(RQ.killk.coins, cnt, n.loc); return { ...base, t: 'killk', k: kinds[rint(0, kinds.length - 1)], n: cnt, coins: c, xp: xpOf(c) }; }
+    const cnt = rint(RQ.killn.n[0], RQ.killn.n[1]), c = rqCoins(RQ.killn.coins, cnt, n.loc);
+    return { ...base, t: 'killn', n: cnt, coins: c, xp: xpOf(c) };
+}
+const rqOf = (S: BigState, p: PlayerState) => (p.bigRQ && p.bigRQ.seed === S.w.seed ? p.bigRQ : null);   // boshqa dunyodagi topshiriq hisobga olinmaydi
+export function bigRqSync(S: BigState, p: PlayerState, ctx: BigCtx): void { ctx.emitTo(p.id, 'bigRQ', { ev: 'sync', q: rqOf(S, p) }); }
+export function bigRqTalk(S: BigState, p: PlayerState, npcId: number, ctx: BigCtx): void {
+    const n = S.w.npcs.find(o => o.id === npcId && o.rq);
+    if (!n || p.isDead || Math.abs(p.x - n.x) > 130 || Math.abs(p.y + 24 - n.y) > 90) return;
+    const q = rqOf(S, p);
+    if (!q) {
+        const nq = rqMake(S, n);
+        p.bigRQ = nq; if (ctx.saveRQ) ctx.saveRQ(p, nq);
+        ctx.emitTo(p.id, 'bigRQ', { ev: 'accept', q: nq, npc: n.id });
+        return;
+    }
+    if (q.got >= q.n && q.loc === n.loc) {
+        p.bigRQ = null; if (ctx.saveRQ) ctx.saveRQ(p, null);
+        ctx.reward(p, q.coins, q.xp);
+        ctx.emitTo(p.id, 'bigRQ', { ev: 'done', q: null, coins: q.coins, xp: q.xp, npc: n.id });
+        return;
+    }
+    ctx.emitTo(p.id, 'bigRQ', { ev: 'wait', q, npc: n.id });
+}
+function rqProgress(p: PlayerState, q: RandQuest, ctx: BigCtx): void {
+    if (ctx.saveRQ) ctx.saveRQ(p, q);
+    ctx.emitTo(p.id, 'bigRQ', { ev: q.got >= q.n ? 'ready' : 'got', q });
+}
+function rqKill(S: BigState, owner: PlayerState, e: BigEnemy, ctx: BigCtx): void {
+    const q = rqOf(S, owner);
+    if (!q || q.t === 'item' || q.got >= q.n) return;
+    if (q.t === 'killk' && q.k !== e.k) return;
+    const z = S.w.zones.find(o => o.id === e.zone);
+    if (!z || z.loc !== q.loc) return;
+    q.got++; rqProgress(owner, q, ctx);
+}
+function rqPick(S: BigState, p: PlayerState, ctx: BigCtx): void {
+    const q = rqOf(S, p);
+    if (!q || q.t !== 'item' || !q.spots || !q.spots.length) return;
+    const i = q.spots.findIndex(s => Math.abs(p.x - s[0]) < RQ.pickX && Math.abs(p.y + 24 - s[1]) < RQ.pickY);
+    if (i < 0) return;
+    q.spots.splice(i, 1); q.got++; rqProgress(p, q, ctx);
 }
 // robot ilon o'ldi: tishini olish topshirig'i bor hamma o'yinchida - tish olindi
 export function bigQuestBoss(S: BigState, room: RoomState, k: string, ctx: BigCtx): void {

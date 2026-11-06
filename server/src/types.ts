@@ -1,9 +1,12 @@
+// LAGER TOPSHIRIG'I: killk - aniq dushmandan n ta, killn - lokatsiyada istalgan n ta dushman, item - n ta buyum yig'ish (spots - qolgan joylar)
+export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item'; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; }
 export interface PlayerState {
     mineCd?: number;               // ovchi: yopishqoq mina qayta tiklanishi (tik)
     ownedHeroes?: string[];        // sotib olingan (pullik) qahramonlar
     bigCp?: number;                // BIG MAP: saqlangan checkpoint
     bigMapItem?: boolean;
     bigQuests?: { [q: string]: number };
+    bigRQ?: RandQuest | null;     // lager topshirig'i (tasodifiy): bitta faol
     bigKillAt?: { [z: string]: number };   // BIG MAP: boss o'ldirilgan vaqt (ms) - 50 daqiqada qaytadi
     localTest?: boolean;                   // test rejimi (localhost) - Big Map'da dushmanlar tezroq qaytadi   // BIG MAP topshiriqlari (0..3)   // BIG MAP xaritasi sotib olingan (butun umr)
     bigSeed?: number; bigVer?: number; bigDoneM?: number; bigCpV?: number; bigOpened?: number[]; bigKilled?: number[]; bigGot?: number[];   // BIG MAP: saqlangan dunyo, ochilgan sandiqlar, o'ldirilgan bosslar; bigCpV 2 - checkpoint raqami oraliq checkpointlar bilan
@@ -33,6 +36,7 @@ export interface PlayerState {
     speedMultiplier: number;
     stamina: number;              // 0-100: hujum va qobiliyat uchun sarflanadigan energiya
     attackCooldown: number;       // Hujumlar orasidagi eng qisqa vaqt (spam qilishning oldini oladi)
+    attackBuffered?: boolean;      // bosish cooldown tugashidan sal oldin keldi - tugashi bilan bir marta otiladi
     staminaRegenDelay: number;    // Ushlab turish tugagach, tiklanish boshlanguncha kutish (tikda)
     isHoldingAbility: boolean;    // Barcha personajlar uchun: SHIFT bosib turilganda true
     isHoldingAttack: boolean;     // Barcha personajlar uchun: ENTER/sichqoncha bosib turilganda true

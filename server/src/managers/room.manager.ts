@@ -123,6 +123,7 @@ export class RoomManager {
         let acidCurse = false, boltCurse = false, mutedUntil = 0;
         let xpBoost: { [c: string]: number } = {};
         let petTrust = 0;
+        let bigRQ: any = null;
         let ownedHeroes: string[] = [], supporter = false, bigCp = 0, bigCpV = 0, bigSeed = 0, bigVer = 0, bigDoneM = 0, bigOpened: number[] = [], bigKilled: number[] = [], bigGot: number[] = [], bigMapItem = false, bigQuests: { [q: string]: number } = {}, bigKillAt: { [z: string]: number } = {};
         let pet: db.PetData | undefined;
         if (userId !== null) {
@@ -147,7 +148,7 @@ export class RoomManager {
                 characterType = user.defaultCharacter || 'knight';
                 ownedHeroes = user.ownedHeroes || [];
                 supporter = !!user.supporter;
-                bigCp = user.bigCp || 0; bigCpV = user.bigCpV || 0; bigSeed = user.bigSeed || 0; bigVer = user.bigVer || 0; bigDoneM = user.bigDoneM || 0; bigOpened = user.bigOpened || []; bigKilled = user.bigKilled || []; bigGot = user.bigGot || []; bigMapItem = !!user.bigMapItem; bigQuests = { ...(user.bigQuests || {}) }; bigKillAt = { ...(user.bigKillAt || {}) };
+                bigCp = user.bigCp || 0; bigCpV = user.bigCpV || 0; bigSeed = user.bigSeed || 0; bigVer = user.bigVer || 0; bigDoneM = user.bigDoneM || 0; bigOpened = user.bigOpened || []; bigKilled = user.bigKilled || []; bigGot = user.bigGot || []; bigMapItem = !!user.bigMapItem; bigQuests = { ...(user.bigQuests || {}) }; bigRQ = user.bigRQ || null; bigKillAt = { ...(user.bigKillAt || {}) };
                 // pullik qahramon sotib olinmagan bo'lsa (masalan, qaytarib olingan to'lov) - ritsar
                 if (db.PREMIUM_HEROES.includes(characterType) && !ownedHeroes.includes(characterType)) characterType = 'knight';
                 acidCurse = !!user.cursedAcid;
@@ -187,7 +188,7 @@ export class RoomManager {
             userId: userId,
             clientId: typeof clientId === 'string' ? clientId.slice(0, 64) : null,
             isAdmin: !!(socket.data && (socket.data as any).isAdmin),
-            acidCurse, boltCurse, mutedUntil, xpBoost, petTrust, pet, ownedHeroes, supporter, bigCp, bigCpV, bigSeed, bigVer, bigDoneM, bigOpened, bigKilled, bigGot, bigMapItem, bigQuests, bigKillAt, localTest: isLocalTest(socket.handshake?.address),
+            acidCurse, boltCurse, mutedUntil, xpBoost, petTrust, pet, ownedHeroes, supporter, bigCp, bigCpV, bigSeed, bigVer, bigDoneM, bigOpened, bigKilled, bigGot, bigMapItem, bigQuests, bigRQ, bigKillAt, localTest: isLocalTest(socket.handshake?.address),
             nickname: nickname,
             kills: 0,
             skinId: equippedSkins[characterType] || 'default',
@@ -609,10 +610,13 @@ export class RoomManager {
         player.isHoldingAttack = false;
     }
 
+    public static readonly ATTACK_BUFFER_TICKS = 7;   // ~210 ms
     // Haqiqiy zarbani berish (stamina va cooldown yetarli bo'lsagina)
     // Bu funksiya ham darhol bosilganda, ham har tikda (auto-fire) chaqiriladi
     public tryFireAttack(player: PlayerState, room: RoomState): void {
-        if (player.attackCooldown > 0) return;
+        // Cooldown tugashiga oz qolgan bo'lsa - bosish eslab qolinadi (engine o'zi otadi): tarmoq tebranishi tufayli bosish
+        // ~20-50 ms oldin yetib kelsa ham zarba yo'qolmasin (klient uni allaqachon chizgan - "arvoh o'q" bo'lib qolardi)
+        if (player.attackCooldown > 0) { if (player.attackCooldown <= RoomManager.ATTACK_BUFFER_TICKS) player.attackBuffered = true; return; }
 
         const charLogic = getCharacterLogic(player.characterType);
         if (!charLogic.canAttack(player)) return;
@@ -627,6 +631,7 @@ export class RoomManager {
 
         BaseCharacter.spendStamina(player, charLogic.attackStamina(player));
         player.attackCooldown = charLogic.attackCooldownTicks(player);
+        player.attackBuffered = false;
 
         charLogic.handleAttack(player, room, player.lastAttackAngle);
         room.flushNow = true;   // yangi o'q keyingi tikdayoq klientga ketsin (2 tik kutmasdan)

@@ -350,15 +350,15 @@ window.BigArt = (function () {
     // har biri: [kenglik, balandlik, P, chizish]; o'rnatilishi - pastki markazdan
     const PROPS = {
         // ELF QIROLLIGI: semiz elf o'tlog'i (qon dog'i, uzilgan qo'l, yarim oyog'i qolgan elf), bolalar qafasi, robot ilon ini
-        bloodpool: [30, 4, 3, (a) => { a.e(15, 2, 14.5, 1.8, [0x3a0006, 0x5d0000, 0x8e0000], 0.05); a.e(8, 2, 5, 1.2, [0x8e0000, 0xb71c1c]); a.p(22, 1, 0xd50000); a.p(4, 3, 0x5d0000); }, null],
-        elfhand: [12, 6, 3, (a) => { a.e(6, 4.5, 6, 1.4, [0x5d0000, 0x8e0000], 0.05); a.s(1, 2, 6, 2, [0x2b6f9e, 0x4fa3d1, 0x81d4fa]); a.r(7, 1, 3, 1, 0x81d4fa); a.r(7, 3, 3, 1, 0x4fa3d1); a.p(10, 1, 0x81d4fa); a.p(10, 3, 0x81d4fa); a.r(0, 2, 2, 2, 0xb71c1c); a.p(0, 1, 0xd50000); }],
+        bloodpool: [30, 4, 3, (a) => { a.e(15, 2, 14.5, 1.8, [0x01315c, 0x01579b, 0x0277bd], 0.05); a.e(8, 2, 5, 1.2, [0x0277bd, 0x0288d1]); a.p(22, 1, 0x29b6f6); a.p(4, 3, 0x01579b); }, null],
+        elfhand: [12, 6, 3, (a) => { a.e(6, 4.5, 6, 1.4, [0x01579b, 0x0277bd], 0.05); a.s(1, 2, 6, 2, [0x2b6f9e, 0x4fa3d1, 0x81d4fa]); a.r(7, 1, 3, 1, 0x81d4fa); a.r(7, 3, 3, 1, 0x4fa3d1); a.p(10, 1, 0x81d4fa); a.p(10, 3, 0x81d4fa); a.r(0, 2, 2, 2, 0x0288d1); a.p(0, 1, 0x29b6f6); }],
         elfhalf: [22, 14, 3, (a) => {
-            a.e(11, 12, 11, 1.8, [0x3a0006, 0x5d0000, 0x8e0000]);
+            a.e(11, 12, 11, 1.8, [0x01315c, 0x01579b, 0x0277bd]);
             a.s(3, 7, 10, 5, [0x1b5e20, 0x2e7d32, 0x43a047]); a.r(3, 7, 10, 1, 0x66bb6a);                       // tanasi (yashil kamzul)
-            a.s(13, 6, 5, 5, [0x2b6f9e, 0x4fa3d1, 0x81d4fa]); a.r(14, 7, 1, 1, 0x0d1b3e); a.r(16, 7, 1, 1, 0x0d1b3e); a.p(15, 9, 0x5d0000);   // boshi
+            a.s(13, 6, 5, 5, [0x2b6f9e, 0x4fa3d1, 0x81d4fa]); a.r(14, 7, 1, 1, 0x0d1b3e); a.r(16, 7, 1, 1, 0x0d1b3e); a.p(15, 9, 0x01579b);   // boshi
             a.s(17, 3, 5, 4, [0x2e7d32, 0x388e3c, 0xffeb3b]); a.p(21, 3, 0xffeb3b);                           // qalpoq (tushib qolgan)
-            a.s(0, 9, 4, 2, [0x4e342e, 0x5d4037]); a.r(0, 8, 2, 4, 0xb71c1c); a.p(1, 7, 0xd50000);             // yarim oyoq - qonli
-            [[5, 6], [9, 5], [6, 11], [12, 4]].forEach(([x, y]) => a.p(x, y, 0xb71c1c));
+            a.s(0, 9, 4, 2, [0x4e342e, 0x5d4037]); a.r(0, 8, 2, 4, 0x0288d1); a.p(1, 7, 0x29b6f6);             // yarim oyoq - qonli
+            [[5, 6], [9, 5], [6, 11], [12, 4]].forEach(([x, y]) => a.p(x, y, 0x0288d1));
         }],
         kidcage: [26, 30, 3, (a) => {
             a.s(1, 26, 24, 4, C.wood); a.s(1, 0, 24, 3, C.wood, 0.05); a.r(1, 3, 24, 1, C.iron[1]);
