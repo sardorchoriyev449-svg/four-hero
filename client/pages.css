@@ -28,10 +28,18 @@ th { background: var(--panel); }
 .card h3 { color: var(--gold); }
 .maps li { margin-bottom: 6px; }
 .tag { font: 8px "Press Start 2P", monospace; background: #b71c1c; color: #fff; padding: 3px 5px; vertical-align: middle; }
+.card.link { display: block; color: var(--text); text-decoration: none; }
+.card.link:hover { box-shadow: inset 0 0 0 2px var(--accent); }
+.shot { margin: 16px 0 20px; }
+.shot img { display: block; width: 100%; height: auto; border: 3px solid #000; image-rendering: pixelated; }
+.shot figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.more { margin-top: 30px; }
 .foot { text-align: center; padding: 20px 16px 28px; color: var(--muted); border-top: 3px solid var(--edge); font-size: 14px; }
 .foot div { margin-top: 6px; }
 @media (max-width: 520px) {
     h1 { font-size: 15px; }
     h2 { font-size: 12px; }
     .lead { font-size: 16px; }
+    table { display: block; overflow-x: auto; }   /* keng jadval sahifani kengaytirmasin - o'zi suriladi */
+    .top nav a { padding: 8px 8px; font-size: 9px; }
 }

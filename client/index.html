@@ -142,6 +142,18 @@
         .level-reward-toast.out { opacity: 0; transform: translate(-50%, -20px); }
         @keyframes lr-in { from { transform: translate(-50%, -30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         @media (max-width: 520px) { .level-reward-toast { font-size: 10px; padding: 10px 12px; } }
+        /* OCHIQ MA'LUMOT: kirish oynasi ostida, faqat hisobga kirmaganda */
+        #site-info { display: none; }
+        body:has(#auth-panel:not(.hidden)) { flex-wrap: wrap; align-content: flex-start; }
+        body:has(#auth-panel:not(.hidden)) #auth-panel { margin-top: 0; margin-bottom: 0; }
+        body:has(#auth-panel:not(.hidden)) #site-info { display: block; flex: 0 0 100%; max-width: 760px; margin: 24px auto 16px; padding: 16px 20px 20px; box-sizing: border-box; background: rgba(20,16,38,.94); border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a; text-align: left; font-size: 16px; line-height: 1.65; color: #f3f0ff; }
+        #site-info p, #site-info li, #site-info a, #site-info figcaption { font-family: 'Segoe UI', Tahoma, Verdana, sans-serif; }
+        #site-info h1 { font: 16px/1.6 "Press Start 2P", monospace; color: #ffca28; text-shadow: 2px 2px 0 #000; margin: 8px 0 12px; }
+        #site-info h2 { font: 12px/1.6 "Press Start 2P", monospace; color: #00ffcc; margin: 24px 0 8px; }
+        #site-info figure { margin: 12px 0; }
+        #site-info img { display: block; width: 100%; height: auto; border: 3px solid #000; image-rendering: pixelated; }
+        #site-info figcaption { color: #b9b3d6; font-size: 14px; margin-top: 6px; }
+        #site-info a { color: #00ffcc; }
         .site-blurb { color: #b9b3d6; font-size: 13px; line-height: 1.6; margin: 14px 0 6px; }
         .site-links { font-size: 12px; margin: 6px 0 0; color: #9a93b8; }
         .site-links a { color: #00ffcc; }
@@ -1389,9 +1401,32 @@
             <p id="register-error" class="error-text"></p>
             <p class="link-text" id="show-login-link" data-i18n="have_account">Already have an account? Sign in</p>
         </div>
-        <p class="site-blurb" data-i18n="site_blurb">A free co-op pixel action game for up to 4 players. Choose a Knight, Archer, Mage or Samurai, team up with friends and beat giant bosses together.</p>
-        <p class="site-links"><a href="/about.html" data-i18n="link_about">About the game</a> &middot; <a href="/privacy.html" data-i18n="link_privacy">Privacy Policy</a> &middot; <a href="/terms.html" data-i18n="link_terms">Terms</a> &middot; <a href="/refund.html" data-i18n="link_refund">Refunds</a> &middot; <a href="/about.html#pricing" data-i18n="link_pricing">Pricing</a> &middot; <a href="mailto:sardorchoriyev449@gmail.com" data-i18n="link_contact">Contact</a></p>
+        <p class="site-blurb" data-i18n="site_blurb">A free co-op pixel action game for up to 4 players. Team up with friends, explore a huge world of floating islands and beat giant bosses together.</p>
+        <p class="site-links"><a href="/about.html" data-i18n="link_about">About the game</a> &middot; <a href="/guides.html" data-i18n="link_guides">Guides</a> &middot; <a href="/privacy.html" data-i18n="link_privacy">Privacy Policy</a> &middot; <a href="/terms.html" data-i18n="link_terms">Terms</a> &middot; <a href="/refund.html" data-i18n="link_refund">Refunds</a> &middot; <a href="/about.html#pricing" data-i18n="link_pricing">Pricing</a> &middot; <a href="mailto:sardorchoriyev449@gmail.com" data-i18n="link_contact">Contact</a></p>
     </div>
+
+    <!-- OCHIQ MA'LUMOT (hisobsiz ham ko'rinadi; faqat kirish ekranida) -->
+    <section id="site-info">
+        <h1 data-i18n="si_h1">A free co-op pixel adventure in your browser</h1>
+        <p data-i18n="si_p1">4 Heroes is a side-scrolling action game for one to four players. There is nothing to install: create an account, open a room and send the code to your friends. You can play on a computer or a phone.</p>
+        <figure><img src="/public/guide/world-elf.webp" alt="The Elf Kingdom castle and market on a floating island" width="1280" height="720" loading="lazy"><figcaption data-i18n="si_c1">The Elf Kingdom, where every adventure begins.</figcaption></figure>
+        <h2 data-i18n="si_h2">Explore The World</h2>
+        <p data-i18n="si_p2">The World is a huge map of floating islands. Cross the Elf Kingdom, the Forest, the Snow Base and the misty Swamp. Each location has its own enemies, villages and shops, and hidden rooms to discover.</p>
+        <figure><img src="/public/guide/world-snow.webp" alt="A Snow Base village with igloos and a shop" width="1280" height="720" loading="lazy"><figcaption data-i18n="si_c2">A village at the Snow Base. Mind the slippery ice.</figcaption></figure>
+        <h2 data-i18n="si_h3">Beat giant bosses together</h2>
+        <p data-i18n="si_p3">Each boss is a puzzle with its own attacks and weak spot. Boss health grows with the size of your team, so the fights stay challenging whether you play alone or with three friends.</p>
+        <figure><img src="/public/guide/boss-bigfoot.webp" alt="The giant Robo Bigfoot boss in a snowy arena" width="1280" height="720" loading="lazy"><figcaption data-i18n="si_c3">Robo Bigfoot: only its face can be hurt, so climb the ledges.</figcaption></figure>
+        <h2 data-i18n="si_h4">Five heroes, and your own farm</h2>
+        <p data-i18n="si_p4">Play as a Knight, Archer, Mage, Samurai or Hunter. Each hero levels up separately and unlocks new weapons and skills. Between fights, grow crops, go fishing, hire elf helpers and furnish your farmhouse.</p>
+        <h2 data-i18n="si_h5">Guides</h2>
+        <ul>
+            <li><a href="/guide-beginners.html" data-i18n="si_g1">Beginner's guide</a></li>
+            <li><a href="/guide-heroes.html" data-i18n="si_g2">Heroes and levels</a></li>
+            <li><a href="/guide-world.html" data-i18n="si_g3">The World: locations and enemies</a></li>
+            <li><a href="/guide-bosses.html" data-i18n="si_g4">Boss guide</a></li>
+            <li><a href="/guide-farm.html" data-i18n="si_g5">My Farm: crops, fishing and upgrades</a></li>
+        </ul>
+    </section>
 
     <!-- ===== BOSH MENYU (HUB) ===== -->
     <div id="main-menu-panel" class="panel hidden">
@@ -1416,7 +1451,7 @@
         <button id="nav-leaderboard-btn" class="hub-btn"><i class="fa-solid fa-trophy"></i><span data-i18n="nav_leaderboard">Leaderboard</span></button>
         <button id="nav-pet-btn" class="hub-btn"><i class="fa-solid fa-dragon"></i><span data-i18n="nav_pet">Dragonet</span></button>
         <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
-        <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad">Watch an ad</span><span class="ad-amount">+500</span></button>
+        <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad"></span><span class="ad-amount"></span></button>
         <!-- Donat ma'lumotlari tayyor bo'lguncha yashirin (bo'sh "tez orada" oynasi ochilmasin): "hidden" ni olib tashlash kifoya -->
         <button id="nav-donate-btn" class="hub-btn"><i class="fa-solid fa-crown"></i><span data-i18n="nav_donate">Premium</span></button>
         <div class="control-scheme-row" style="margin: 16px 0 0;">

@@ -2,6 +2,12 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url><loc>https://4heroes.xyz/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
     <url><loc>https://4heroes.xyz/about.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+    <url><loc>https://4heroes.xyz/guides.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+    <url><loc>https://4heroes.xyz/guide-beginners.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+    <url><loc>https://4heroes.xyz/guide-heroes.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+    <url><loc>https://4heroes.xyz/guide-world.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+    <url><loc>https://4heroes.xyz/guide-bosses.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+    <url><loc>https://4heroes.xyz/guide-farm.html</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
     <url><loc>https://4heroes.xyz/privacy.html</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
     <url><loc>https://4heroes.xyz/terms.html</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
     <url><loc>https://4heroes.xyz/refund.html</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
