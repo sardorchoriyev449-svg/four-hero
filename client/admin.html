@@ -138,6 +138,16 @@
     .maint-state.on { background: var(--gold); color: #3e2a00; }
     .maint-state.off { background: var(--green); color: #06341c; }
     .log-act { color: var(--accent); }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 10px 0 14px; }
+    .info-grid div { background: var(--bg); border: 2px solid var(--edge); padding: 8px; }
+    .info-grid b { display: block; color: var(--gold); margin-bottom: 5px; font-size: 11px; }
+    .info-grid span { color: var(--muted); font-size: 8px; }
+    .status-list { margin-bottom: 12px; }
+    .status-list div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 2px solid var(--edge); }
+    .status-list span { color: var(--muted); }
+    .status-list b.on { color: var(--green); } .status-list b.off { color: var(--red); } .status-list b.warn { color: var(--gold); }
+    .tag.hero { background: #5d7a3a; color: #fff; }
+    .note a { color: var(--accent); }
     @media (max-width: 600px) { header h1 { font-size: 12px; } body { font-size: 9px; } .panes { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -173,18 +183,18 @@
             <input id="search" placeholder="Nickname bo'yicha qidirish...">
             <select id="f-sort" title="Saralash">
                 <option value="new">Yangilari birinchi</option><option value="old">Eskilari birinchi</option>
-                <option value="coins">Eng ko'p tanga</option><option value="level">Eng yuqori daraja (XP)</option>
+                <option value="coins">Eng ko'p tanga</option><option value="level">Eng yuqori daraja (XP)</option><option value="world">The World: eng uzoq</option><option value="farm">Ferma: eng yuqori</option>
             </select>
             <select id="f-only" title="Filtr">
                 <option value="all">Hammasi</option><option value="online">Faqat onlayn</option><option value="banned">Bloklanganlar</option>
-                <option value="muted">Chati taqiqlanganlar</option><option value="cursed">La'natlanganlar</option>
+                <option value="muted">Chati taqiqlanganlar</option><option value="cursed">La'natlanganlar</option><option value="quest">Faol questi borlar</option><option value="hunter">Ovchi egalari</option>
             </select>
             <button id="search-btn"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
         <div class="card">
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>Nickname</th><th>Ism</th><th>Tanga</th><th>Xaritalar</th><th>Darajalar (K/A/M/S)</th><th>Ro'yxatdan</th><th></th></tr></thead>
+                    <thead><tr><th>Nickname</th><th>Ism</th><th>Tanga</th><th>The World</th><th>Ferma</th><th>Darajalar (K/A/M/S/H)</th><th>Ro'yxatdan</th><th></th></tr></thead>
                     <tbody id="users-body"></tbody>
                 </table>
             </div>
@@ -205,7 +215,7 @@
         </div>
         <div class="panes">
             <div class="pane pxpanel"><h3><i class="fa-solid fa-calendar-day"></i> Kunlar bo'yicha</h3>
-                <div class="table-wrap"><table class="mini"><thead><tr><th>Kun</th><th>Ro'yxat</th><th>O'yinlar</th><th>Reklama</th><th>Reklama tanga</th><th>Admin tanga</th></tr></thead><tbody id="days-body"></tbody></table></div>
+                <div class="table-wrap"><table class="mini"><thead><tr><th>Kun</th><th>Ro'yxat</th><th>O'yinlar</th><th>Quest</th><th>Quest tanga</th><th>Reklama</th><th>Admin tanga</th></tr></thead><tbody id="days-body"></tbody></table></div>
             </div>
             <div class="pane pxpanel"><h3><i class="fa-solid fa-map-location-dot"></i> Xaritalar (14 kun): eng ko'p o'ynalgan / yutqazilgan</h3>
                 <div class="table-wrap"><table class="mini"><thead><tr><th>Xarita</th><th>O'ynaldi</th><th>O'tildi</th><th>Yutqazildi</th></tr></thead><tbody id="maps-body"></tbody></table></div>
@@ -215,6 +225,11 @@
 
     <section id="tab-control" class="hidden">
         <div class="panes">
+            <div class="pane pxpanel">
+                <h3><i class="fa-solid fa-heart-pulse"></i> Sayt holati</h3>
+                <div class="status-list" id="site-status"></div>
+                <p class="note">Havolalar: <a href="https://www.google.com/adsense/" target="_blank" rel="noopener">AdSense</a> · <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Search Console</a> · <a href="https://dashboard.render.com/" target="_blank" rel="noopener">Render</a> · <a href="/guides.html" target="_blank">Qo'llanmalar</a> · <a href="/sitemap.xml" target="_blank">sitemap.xml</a> · <a href="/ads.txt" target="_blank">ads.txt</a></p>
+            </div>
             <div class="pane pxpanel">
                 <h3><i class="fa-solid fa-bullhorn"></i> Hammaga e'lon</h3>
                 <p class="note">Hozir saytda turgan hamma o'yinchilarga (o'yin paytida ham) ekran tepasida 10 soniya ko'rinadi.</p>
@@ -273,12 +288,18 @@
     <div class="modal">
         <h2 id="m-nick"></h2>
         <div class="sub" id="m-sub"></div>
+        <div class="info-grid" id="m-info"></div>
+        <div class="act" id="m-quest-act">
+            <label><i class="fa-solid fa-scroll"></i> Lager questi</label>
+            <div class="status" id="m-quest"></div>
+            <div class="row"><button id="m-quest-clear">Bekor qilish (mukofotsiz)</button></div>
+        </div>
         <div class="act">
             <label><i class="fa-solid fa-coins"></i> Tanga berish (manfiy - ayirish)</label>
             <div class="row"><input id="m-coins" type="number" placeholder="500"><button class="primary" id="m-coins-btn">Berish</button></div>
         </div>
         <div class="act">
-            <label><i class="fa-solid fa-map"></i> Ochiq xaritalar soni</label>
+            <label><i class="fa-solid fa-map"></i> Mavsum xaritalari (eski): nechtasi ochiq</label>
             <div class="row"><select id="m-maps"></select><button class="primary" id="m-maps-btn">Saqlash</button></div>
         </div>
         <div class="act">
@@ -303,7 +324,7 @@
             <div class="row"><button id="m-cure-acid">Kislotani olish</button><button id="m-cure-bolt">Chaqmoqni olish</button><button class="ok" id="m-cure-all">Hammasini olish</button></div>
         </div>
         <div class="act">
-            <label><i class="fa-solid fa-gift"></i> Sovg'a (detal / skin)</label>
+            <label><i class="fa-solid fa-gift"></i> Sovg'a (mebel, Treasure Map, detal, skin)</label>
             <div class="row"><select id="m-gift"></select><button class="primary" id="m-gift-btn">Berish</button></div>
         </div>
         <div class="act">
@@ -342,12 +363,15 @@
         err_field_length: "Juda uzun",
         err_fields_required: "Maydonni to'ldiring",
         err_bad_item: "Noma'lum buyum",
+        home_max: "Bu mebeldan o'yinchida eng ko'p miqdor bor",
         err_room_not_found: "Xona topilmadi (yoki o'yin ketmayapti)"
     };
     const ACTIONS = { ban: 'Blokladi', unban: 'Blokdan chiqardi', coins: 'Tanga', maps: 'Xaritalar', level: 'Daraja', password: 'Parol almashtirdi',
         rename: 'Nickname', curses: "La'nat olib tashladi", gift: "Sovg'a", mute: 'Chat taqig\'i', unmute: 'Taqiq olib tashlandi',
-        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi", season: 'Ferma fasli' };
+        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", quest_clear: 'Questni bekor qildi', announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi", season: 'Ferma fasli' };
     let logPage = 0, catalogLoaded = false;
+    const LOC = { elf: 'Elf Kingdom', forest: 'Forest', snow: 'Snow Base', swamp: 'Swamp', lava: 'Underworld' };
+    const ITEM = { apple: 'sariq olma', fish: 'baliq', crystal: 'muz kristali', lily: 'nilufar' };
     const msgOf = (m) => MSG[m] || m || 'Xato';
     // Matnni xavfsiz qo'shish (nickname'dagi HTML bajarilmasin)
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
@@ -379,7 +403,7 @@
         stats = d;
         const box = $('stats'); box.innerHTML = '';
         [[d.users.total, "Foydalanuvchilar"], [d.users.banned, 'Bloklangan'], [d.online.players, "Hozir o'ynayapti"], [d.online.loggedIn, 'Hisobli o\'yinchilar'],
-         [d.online.rooms, 'Xonalar'], [d.online.playing, "O'yin ketayotgan xonalar"]].forEach(([n, l]) => {
+         [d.online.rooms, 'Xonalar'], [d.online.playing, "O'yin ketayotgan xonalar"], [(d.today || {}).regs || 0, "Bugun ro'yxatdan"], [(d.today || {}).plays || 0, "Bugun o'yinlar"], [(d.today || {}).quests || 0, 'Bugun questlar']].forEach(([n, l]) => {
             const s = el('div', 'stat'); s.appendChild(el('b', '', String(n))); s.appendChild(el('span', '', l)); box.appendChild(s);
         });
         $('m-maxlvl').textContent = d.maxLevel; $('m-level').max = d.maxLevel;
@@ -391,7 +415,7 @@
         if (!d.success) return;
         users = d.users;
         const body = $('users-body'); body.innerHTML = '';
-        if (!users.length) { const tr = el('tr'); const td = el('td', 'empty', 'Hech kim topilmadi'); td.colSpan = 7; tr.appendChild(td); body.appendChild(tr); }
+        if (!users.length) { const tr = el('tr'); const td = el('td', 'empty', 'Hech kim topilmadi'); td.colSpan = 8; tr.appendChild(td); body.appendChild(tr); }
         users.forEach((u) => {
             const tr = el('tr');
             const nick = el('td'); nick.appendChild(el('span', 'nick', u.nickname));
@@ -399,10 +423,12 @@
             if (u.banned) nick.appendChild(el('span', 'tag ban', 'BLOK' + (u.banReason ? ': ' + u.banReason : '')));
             if (u.mutedUntil) nick.appendChild(el('span', 'tag mute', 'CHAT YO\'Q'));
             if (u.curses && (u.curses.acid || u.curses.bolt)) nick.appendChild(el('span', 'tag curse', "LA'NAT"));
+            if (u.owned && (u.owned.heroes || []).includes('hunter')) nick.appendChild(el('span', 'tag hero', 'OVCHI'));
             tr.appendChild(nick);
             tr.appendChild(el('td', '', u.fullName));
             tr.appendChild(el('td', '', String(u.coins)));
-            tr.appendChild(el('td', '', u.maps + (stats ? ' / ' + stats.maps : '')));
+            tr.appendChild(el('td', '', u.world.pct + '%  ·  ' + u.world.bosses + ' boss'));
+            tr.appendChild(el('td', '', u.farm.level + '-daraja'));
             tr.appendChild(el('td', 'levels', [u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join(' / ')));
             tr.appendChild(el('td', '', u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '-'));
             const act = el('td'); const b = el('button', 'primary', 'Boshqarish'); b.onclick = () => openUser(u); act.appendChild(b); tr.appendChild(act);
@@ -423,7 +449,7 @@
             const meta = el('div'); meta.appendChild(el('span', 'code', r.code)); meta.appendChild(document.createTextNode('  ·  ' + r.mapName + (r.isStarted ? '  ·  o\'ynayapti' : '  ·  lobbida'))); c.appendChild(meta);
             const ul = el('ul');
             r.players.forEach((p) => {
-                const li = el('li', '', (p.isHost ? '👑 ' : '') + p.nickname + ' — ' + p.characterType + ' ' + p.level + '-daraja' + (p.registered ? '' : ' (mehmon)'));
+                const li = el('li', '', (p.isHost ? '👑 ' : '') + p.nickname + ' — ' + p.characterType + ' ' + p.level + '-daraja' + (p.registered ? '' : ' (mehmon)') + (p.where ? ' · ' + (LOC[p.where] || p.where) : '') + (p.quest ? ' · quest ' + p.quest : ''));
                 if (p.isAdmin) li.appendChild(el('span', 'tag admin', 'ADMIN'));
                 const x = el('button', 'danger x', 'chiqarish');
                 x.onclick = () => pxConfirm(p.nickname + ' xonadan chiqarilsinmi?', () => roomAct(r.code, '/kick', { playerId: p.id }));
@@ -471,7 +497,11 @@
             if (kind === 'cos') has = own.cosmetics.includes(a + ':' + id);   // "head:crown" / "knight.sword:holo"
             else if (kind === 'skin') has = (own.skins[a] || []).includes(id);
             else if (kind === 'wskin') has = (own.weaponSkins[a] || []).includes(id);
-            o.textContent = o.textContent.replace(/ ✓$/, '') + (has ? ' ✓' : '');
+            else if (kind === 'hero') has = (own.heroes || []).includes(a);
+            else if (kind === 'item') has = !!(u.world && u.world.mapItem);
+            else if (kind === 'home') has = !!(u.farm && u.farm.home && u.farm.home[a]);
+            const cnt = kind === 'home' && has ? ' ✓ ' + u.farm.home[a] : has ? ' ✓' : '';
+            o.textContent = o.textContent.replace(/ ✓( \d+)?$/, '') + cnt;
         });
     }
     function openUser(u) {
@@ -488,6 +518,13 @@
         loadCatalog().then(() => markOwned(u)).catch(() => { });
         $('m-nick').textContent = u.nickname;
         $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · xaritalar: ${u.maps} · darajalar K/A/M/S/H: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
+        const info = $('m-info'); info.innerHTML = '';
+        [[u.world.pct + '%', 'The World: eng uzoq'], [u.world.bosses, "O'ldirilgan bosslar"], [u.world.mapItem ? 'Bor' : "Yo'q", 'Treasure Map'], [u.farm.level, 'Ferma darajasi (' + u.farm.xp + ' XP)'], [u.farm.furniture, 'Mebel (dona)'], [u.lastDay || '-', 'Oxirgi kunlik kirish']].forEach(([b, s]) => {
+            const c = el('div'); c.appendChild(el('b', '', String(b))); c.appendChild(el('span', '', s)); info.appendChild(c);
+        });
+        const q = u.quest;
+        $('m-quest').textContent = !q ? "Faol quest yo'q" : LOC[q.loc] + ': ' + (q.t === 'killk' ? q.k + " o'ldirish" : q.t === 'killn' ? "istalgan dushman o'ldirish" : (ITEM[q.k] || q.k) + " yig'ish") + ' · ' + q.got + '/' + q.n + ' · mukofot ' + q.coins + ' tanga';
+        $('m-quest-clear').disabled = !q;
         $('m-maps').value = u.maps; $('m-coins').value = ''; $('m-level').value = ''; $('m-reason').value = '';
         $('m-msg').textContent = ''; $('m-msg').className = 'msg';
         $('modal').classList.remove('hidden');
@@ -516,10 +553,27 @@
     $('m-cure-acid').onclick = () => act('/curses', { kind: 'acid' }, "Kislota la'nati olindi");
     $('m-cure-bolt').onclick = () => act('/curses', { kind: 'bolt' }, "Chaqmoq la'nati olindi");
     $('m-cure-all').onclick = () => act('/curses', { kind: 'all' }, "La'natlar olindi");
+    $('m-quest-clear').onclick = () => pxConfirm(cur.nickname + ' questi bekor qilinsinmi? Mukofot berilmaydi', () => act('/quest-clear', {}, 'Quest bekor qilindi'));
     $('m-gift-btn').onclick = () => { if ($('m-gift').value) act('/gift', { item: $('m-gift').value }, "Sovg'a berildi"); };
     $('m-mute-btn').onclick = () => act('/mute', { minutes: parseInt($('m-mute').value, 10) }, 'Chat taqiqlandi');
     $('m-unmute-btn').onclick = () => act('/mute', { minutes: 0 }, 'Taqiq olib tashlandi');
 
+    // ===== Sayt holati =====
+    async function loadStatus() {
+        const d = await api('/status');
+        if (!d.success) return;
+        const up = d.server.uptimeSec, upTxt = up >= 86400 ? Math.floor(up / 86400) + ' kun ' + Math.floor(up % 86400 / 3600) + ' soat' : up >= 3600 ? Math.floor(up / 3600) + ' soat ' + Math.floor(up % 3600 / 60) + ' daq' : Math.floor(up / 60) + ' daq';
+        const rows = [
+            ['Baza', d.server.db ? 'Ulangan' : 'ULANMAGAN', d.server.db ? 'on' : 'off'],
+            ['Server ishlayapti', upTxt, ''], ['Xotira', d.server.rssMb + ' MB (heap ' + d.server.heapMb + ')', d.server.rssMb > 450 ? 'warn' : ''],
+            ['Reklama kodi', d.ads.enabled ? 'Yoqilgan' : "O'chiq", d.ads.enabled ? 'on' : 'off'], ['Bannerlar', d.ads.banners ? 'Sozlangan' : "Yo'q", d.ads.banners ? 'on' : 'warn'],
+            ['"Reklama ko\'r" tugmasi', d.ads.reward ? 'Yoqilgan' : "O'chiq (ADS_REWARD=off)", d.ads.reward ? 'on' : 'warn'], ['Reklama sinov rejimi', d.ads.test ? 'YOQILGAN' : "O'chiq", d.ads.test ? 'warn' : ''],
+            ["To'lov (Paddle)", d.pay.webhook ? "Serverda ulangan, o'yinda tugma yo'q (" + d.pay.env + ')' : "O'chiq", 'warn'],
+            ['Yopiq lokatsiyalar', d.world.closed.map(l => LOC[l] || l).join(', ') || "Yo'q", ''], ['Dunyo generatori', 'v' + d.world.gen, '']
+        ];
+        const box = $('site-status'); box.innerHTML = '';
+        rows.forEach(([a, b, c]) => { const r = el('div'); r.appendChild(el('span', '', a)); r.appendChild(el('b', c, b)); box.appendChild(r); });
+    }
     // ===== Statistika =====
     function barChart(box, xBox, vals, labels, tip) {
         box.innerHTML = ''; xBox.innerHTML = '';
@@ -540,7 +594,7 @@
         const db = $('days-body'); db.innerHTML = '';
         d.days.slice().reverse().forEach((x) => {
             const tr = el('tr');
-            [x.day, x.regs, x.plays, x.ads, x.adCoins, x.adminCoins].forEach(v => tr.appendChild(el('td', '', String(v))));
+            [x.day, x.regs, x.plays, x.quests, x.questCoins, x.ads, x.adminCoins].forEach(v => tr.appendChild(el('td', '', String(v))));
             db.appendChild(tr);
         });
         const mb = $('maps-body'); mb.innerHTML = '';
@@ -625,7 +679,7 @@
         clearInterval(roomsTimer);
         if (tab === 'rooms') { loadRooms(); roomsTimer = setInterval(loadRooms, 5000); }
         if (tab === 'stats2') loadStats2();
-        if (tab === 'control') { loadMaint(); loadSeason(); }
+        if (tab === 'control') { loadMaint(); loadSeason(); loadStatus(); }
         if (tab === 'log') { logPage = 0; loadLog(); }
     });
     $('search-btn').onclick = () => { query = $('search').value.trim(); page = 0; loadUsers(); };

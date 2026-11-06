@@ -14,6 +14,7 @@ import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
 import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS, homeMax, homeSellPrice } from './maps';
+import { BIG_GEN, BIG_CLOSED } from './bigmap';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
@@ -213,7 +214,10 @@ const adminUserView = (u: db.UserRecord) => {
     const online = roomManager.findOnline(u.id);
     const levels: { [c: string]: number } = {};
     db.HERO_TYPES.forEach(c => { levels[c] = db.xpLevel((u.charXp || {})[c] || 0); });
+    const adm = u.adm || { worldPct: 0, bosses: 0, farmXp: 0, furniture: 0, homeOwned: {}, lastDay: '' };
     return { id: u.id, nickname: u.nickname, fullName: u.fullName, coins: u.coins, maps: Math.min(u.unlockedLevel + 1, SEASON_MAP_COUNT),
+        world: { pct: adm.worldPct, bosses: adm.bosses, mapItem: !!u.bigMapItem }, farm: { level: farmLevel(adm.farmXp), xp: adm.farmXp, furniture: adm.furniture, home: adm.homeOwned },
+        lastDay: adm.lastDay, quest: u.bigRQ ? { t: u.bigRQ.t, k: u.bigRQ.k || '', loc: u.bigRQ.loc, n: u.bigRQ.n, got: u.bigRQ.got, coins: u.bigRQ.coins } : null,
         levels, banned: !!u.banned, banReason: u.banReason || '', createdAt: u.createdAt || null, online: online ? { room: online.roomName, code: online.roomId } : null,
         mutedUntil: db.isMuted(u.mutedUntil) ? u.mutedUntil : 0, curses: { acid: !!u.cursedAcid, bolt: !!u.cursedBolt },
         owned: { cosmetics: u.ownedCosmetics || [], skins: u.ownedSkins || {}, weaponSkins: u.ownedWeaponSkins || {}, heroes: u.ownedHeroes || [] } };
@@ -237,7 +241,12 @@ setTimeout(sampleOnline, 3000).unref();
 const validUid = (uid: string) => /^[a-f0-9]{24}$/i.test(uid);
 app.post('/api/admin/login', (req, res) => { res.json(adminLogin(req.body && req.body.login, req.body && req.body.password, req.ip)); });
 app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
-    try { res.json({ success: true, users: await db.countUsers(), online: roomManager.onlineStats(), maps: SEASON_MAP_COUNT, maxLevel: db.MAX_LEVEL }); }
+    try {
+        const [users, day, regs] = await Promise.all([db.countUsers(), db.getDayStats(1), db.registrationsByDay(1)]);
+        const c: any = (day[0] && day[0].c) || {};
+        res.json({ success: true, users, online: roomManager.onlineStats(), maps: SEASON_MAP_COUNT, maxLevel: db.MAX_LEVEL,
+            today: { regs: regs.reduce((a, r) => a + r.n, 0), plays: Object.values(c.plays || {}).reduce((a: number, n: any) => a + (Number(n) || 0), 0), quests: c.quests || 0 } });
+    }
     catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
@@ -347,6 +356,8 @@ app.get('/api/admin/catalog', requireAdmin, (_req, res) => {
     Object.keys(SKIN_CATALOG).forEach(c => SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'skin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Personaj skini' }); }));
     Object.keys(WEAPON_SKIN_CATALOG).forEach(c => WEAPON_SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'wskin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Qurol rangi' }); }));
     db.PREMIUM_HEROES.forEach(h => items.push({ value: 'hero|' + h, label: h, group: 'Pullik qahramon' }));
+    items.push({ value: 'item|bigmap|', label: 'Treasure Map (The World xaritasi)', group: "O'yin buyumlari" });
+    HOME_ITEMS.forEach(h => items.push({ value: 'home|' + h.id + '|', label: h.id + ' (' + h.price + ' tanga)', group: 'Uy mebeli' }));
     res.json({ success: true, items });
 });
 app.post('/api/admin/users/:uid/gift', requireAdmin, adminRoute(async (req, res) => {
@@ -362,6 +373,16 @@ app.post('/api/admin/users/:uid/gift', requireAdmin, adminRoute(async (req, res)
     } else if ((kind === 'skin' || kind === 'wskin') && isKnownSkin(a, id, kind === 'wskin') && id !== 'default') {
         upd = await db.adminGiftSkin(String(req.params.uid), kind === 'wskin' ? 'weapon' : 'hero', a, id);
         label = (kind === 'wskin' ? 'weapon ' : '') + a + ':' + id;
+    } else if (kind === 'item' && a === 'bigmap') {
+        upd = await db.adminGiftMap(String(req.params.uid));
+        if (upd) roomManager.adminMapGiven(upd.id);
+        label = 'Treasure Map';
+    } else if (kind === 'home' && HOME_ITEMS.some(h => h.id === a)) {
+        const r = await db.buyHomeItem(String(req.params.uid), a, 0, homeMax(a));
+        if (!r.success) { res.json({ success: false, message: r.message }); return; }
+        upd = await db.getUserById(String(req.params.uid));
+        roomManager.farmChanged(String(req.params.uid));
+        label = 'mebel: ' + a;
     } else if (kind === 'hero' && db.PREMIUM_HEROES.includes(a)) {
         const r = await db.grantHero(String(req.params.uid), a);
         upd = r.success ? await db.getUserById(String(req.params.uid)) : null;
@@ -371,6 +392,16 @@ app.post('/api/admin/users/:uid/gift', requireAdmin, adminRoute(async (req, res)
     if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
     roomManager.notifyGift(upd.id);
     logAdmin(req, 'gift', upd.nickname, label);
+    res.json({ success: true, user: adminUserView(upd) });
+}));
+// Qotib qolgan lager topshirig'ini bekor qilish (mukofotsiz)
+app.post('/api/admin/users/:uid/quest-clear', requireAdmin, adminRoute(async (req, res) => {
+    if (badUser(req, res)) return;
+    await db.setBigRQ(String(req.params.uid), null);
+    roomManager.adminQuestCleared(String(req.params.uid));
+    const upd = await db.getUserById(String(req.params.uid));
+    if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
+    logAdmin(req, 'quest_clear', upd.nickname);
     res.json({ success: true, user: adminUserView(upd) });
 }));
 // 5. Chat taqig'i: minutes > 0 - shuncha daqiqa, -1 - doimiy, 0 - olib tashlash
@@ -449,9 +480,18 @@ app.get('/api/admin/stats2', requireAdmin, adminRoute(async (_req, res) => {
         index: i, name: MAPS[i].name, plays: plays[i] || 0, wins: wins[i] || 0, losses: losses[i] || 0
     })).sort((a, b) => b.plays - a.plays);
     res.json({ success: true,
-        days: days.map(d => ({ day: d, regs: regMap[d] || 0, ads: (statMap[d] || {}).ads || 0, adCoins: (statMap[d] || {}).adCoins || 0,
+        days: days.map(d => ({ day: d, regs: regMap[d] || 0, quests: (statMap[d] || {}).quests || 0, questCoins: (statMap[d] || {}).questCoins || 0, ads: (statMap[d] || {}).ads || 0, adCoins: (statMap[d] || {}).adCoins || 0,
             adminCoins: (statMap[d] || {}).adminCoins || 0, plays: Object.values((statMap[d] || {}).plays || {}).reduce((a: number, n: any) => a + (Number(n) || 0), 0) })),
         online: onlineHistory, maps: mapsTable });
+}));
+// SAYT HOLATI: reklama, to'lov, server (maxfiy kalitlar emas - faqat bor / yo'q)
+app.get('/api/admin/status', requireAdmin, adminRoute(async (_req, res) => {
+    const m = process.memoryUsage();
+    res.json({ success: true,
+        ads: { enabled: /^ca-pub-\d+$/.test(adClient()), banners: !!(process.env.ADS_SLOT_LEFT || '').trim() && !!(process.env.ADS_SLOT_RIGHT || '').trim(), reward: (process.env.ADS_REWARD || 'on').trim() !== 'off', test: (process.env.ADS_TEST || '').trim() === 'on' },
+        pay: { webhook: payEnabled(), env: PAY.env },
+        server: { uptimeSec: Math.round(process.uptime()), rssMb: Math.round(m.rss / 1048576), heapMb: Math.round(m.heapUsed / 1048576), db: db.dbConnected(), node: process.version },
+        world: { gen: BIG_GEN, closed: BIG_CLOSED } });
 }));
 // 10. Admin amallari jurnali
 app.get('/api/admin/log', requireAdmin, adminRoute(async (req, res) => {

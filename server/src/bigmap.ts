@@ -1060,6 +1060,7 @@ export interface BigCtx {
     saveGot(cp: number): void;                     // dunyo egasiga: checkpoint ochildi
     saveQuest(p: PlayerState, q: string, st: number): void;   // topshiriq holati (hisobda)
     saveRQ?(p: PlayerState, q: RandQuest | null): void;       // lager topshirig'i (hisobda)
+    questDone?(coins: number): void;                          // statistika: topshiriq bajarildi
     takeItem?(p: PlayerState, item: string, cb: (left: number) => void): void;   // sumkadan bitta narsa (-1 - yo'q)
     mageHome?(p: PlayerState): void;               // Balot Magi o'yinchining fermasiga ko'chadi
     curse(p: PlayerState): void;                   // semiz elf so'lagi: jon o'zi tiklanmaydi (do'kondagi Eliksir bilan tuzaladi)
@@ -1782,6 +1783,7 @@ export function bigRqTalk(S: BigState, p: PlayerState, npcId: number, ctx: BigCt
     if (q.got >= q.n && q.loc === n.loc) {
         p.bigRQ = null; if (ctx.saveRQ) ctx.saveRQ(p, null);
         ctx.reward(p, q.coins, q.xp);
+        if (ctx.questDone) ctx.questDone(q.coins);
         ctx.emitTo(p.id, 'bigRQ', { ev: 'done', q: null, coins: q.coins, xp: q.xp, npc: n.id });
         return;
     }

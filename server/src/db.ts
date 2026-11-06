@@ -183,6 +183,7 @@ export interface UserRecord {
     bigCp: number;
     bigSeed: number; bigVer: number; bigDoneM: number; bigCpV: number; bigOpened: number[]; bigKilled: number[]; bigGot: number[]; bigRQ: RandQuest | null; bigQuests: { [q: string]: number }; bigKillAt: { [z: string]: number };
     bigMapItem: boolean;
+    adm?: { worldPct: number, bosses: number, farmXp: number, furniture: number, homeOwned: { [id: string]: number }, lastDay: string };   // admin panel uchun
 }
 
 // TAJRIBA DARAJASI (eng yuqori - 100): 1-15 darajalar - har keyingisiga kerakli XP ikki baravar
@@ -259,7 +260,9 @@ function docToUser(doc: any): UserRecord {
         bigKillAt: doc.bigKillAt && typeof doc.bigKillAt === 'object' ? Object.fromEntries(Object.entries(doc.bigKillAt).filter(([k, v]) => /^[0-9]{1,6}$/.test(k) && Number.isFinite(v))) as { [z: string]: number } : {},
         bigRQ: rqFromDoc(doc.bigRQ),
         bigQuests: doc.bigQuests && typeof doc.bigQuests === 'object' ? Object.fromEntries(Object.entries(doc.bigQuests).filter(([k, v]) => /^[a-z]{1,16}$/.test(k) && Number.isInteger(v))) as { [q: string]: number } : {},
-        bigMapItem: !!doc.bigMapItem
+        bigMapItem: !!doc.bigMapItem,
+        adm: { worldPct: doc.bigLbVer === BIG_GEN ? Math.min(100, Math.round((doc.bigBestPct || 0) * 10) / 10) : 0, bosses: Number(doc.bigBosses) || 0, farmXp: Number(doc.farmXp) || 0,
+            furniture: Object.values(homeOf(doc).owned).reduce((a, n) => a + n, 0), homeOwned: homeOf(doc).owned, lastDay: (doc.daily && doc.daily.lastLogin) || '' }
     };
 }
 
@@ -1067,8 +1070,10 @@ export async function listUsers(query: string, skip: number, limit: number, sort
     else if (only === 'muted') filter.$or = [{ mutedUntil: -1 }, { mutedUntil: { $gt: Date.now() } }];
     else if (only === 'cursed') filter.$or = [{ cursedAcid: true }, { cursedBolt: true }];
     else if (only === 'online') filter._id = { $in: onlineIds.filter(id => /^[a-f0-9]{24}$/i.test(id)) };
+    else if (only === 'hunter') filter.ownedHeroes = 'hunter';
+    else if (only === 'quest') filter.bigRQ = { $ne: null };
     const order: any = sort === 'old' ? { createdAt: 1 } : sort === 'coins' ? { coins: -1, createdAt: -1 }
-        : sort === 'level' ? { xp: -1, createdAt: -1 } : { createdAt: -1 };
+        : sort === 'level' ? { xp: -1, createdAt: -1 } : sort === 'world' ? { bigBestPct: -1, createdAt: -1 } : sort === 'farm' ? { farmXp: -1, createdAt: -1 } : { createdAt: -1 };
     const [total, docs] = await Promise.all([
         UserModel.countDocuments(filter),
         UserModel.find(filter).sort(order).skip(Math.max(0, skip)).limit(Math.min(100, Math.max(1, limit)))
@@ -1868,6 +1873,12 @@ export async function adminGiftSkin(userId: string, category: 'hero' | 'weapon',
     const doc = await UserModel.findByIdAndUpdate(userId, { $addToSet: { [field]: skinId } }, { returnDocument: 'after' });
     return doc ? docToUser(doc) : null;
 }
+// Treasure Map sovg'asi (The World xaritasi)
+export async function adminGiftMap(userId: string): Promise<UserRecord | null> {
+    const doc = await UserModel.findByIdAndUpdate(userId, { $set: { bigMapItem: true } }, { returnDocument: 'after' });
+    return doc ? docToUser(doc) : null;
+}
+export const dbConnected = (): boolean => mongoose.connection.readyState === 1;
 // Chat taqiqi: until - ms (0 - olib tashlash, -1 - doimiy)
 export async function adminSetMute(userId: string, until: number): Promise<UserRecord | null> {
     const doc = await UserModel.findByIdAndUpdate(userId, { $set: { mutedUntil: until } }, { returnDocument: 'after' });

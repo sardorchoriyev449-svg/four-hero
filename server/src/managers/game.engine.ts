@@ -5662,6 +5662,7 @@ export class GameEngine {
             saveCp: (p, cp) => { if (!this.bigOwner(roomId, p)) return; p.bigCp = cp; if (p.userId) db.setBigCp(p.userId, cp).catch(err => console.error('setBigCp xatosi:', err)); },
             saveQuest: (p, q, st) => { if (p.userId) db.setBigQuest(p.userId, q, st).catch(err => console.error('setBigQuest xatosi:', err)); },
             saveRQ: (p, q) => { if (p.userId) db.setBigRQ(p.userId, q).catch(err => console.error('setBigRQ xatosi:', err)); },
+            questDone: (coins) => db.bumpStat({ quests: 1, questCoins: coins }),
             takeItem: (p, item, cb) => { if (!p.userId) { cb(-1); return; } db.farmTakeOne(p.userId, item).then(cb).catch((err) => { console.error('farmTakeOne xatosi:', err); cb(-1); }); },
             mageHome: (p) => { if (p.userId) db.mageMoveIn(p.userId).catch(err => console.error('mageMoveIn xatosi:', err)); },
             curse: (p) => this.curse(p, 'acid'),

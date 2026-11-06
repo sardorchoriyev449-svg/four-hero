@@ -1,3 +1,4 @@
+import { bigLocAt } from '../bigmap';
 import { Server, Socket } from 'socket.io';
 import { RoomState, PlayerState } from '../types';
 import { getCharacterLogic } from '../characters';
@@ -803,7 +804,8 @@ export class RoomManager {
             mapIndex: r.selectedLevel, mapName: getMapById(r.selectedLevel).name,
             full: Object.keys(r.players).length >= RoomManager.MAX_PLAYERS,
             players: Object.values(r.players).map(p => ({ id: p.id, nickname: p.nickname, characterType: p.characterType, level: p.level || 0,
-                isAdmin: !!p.isAdmin, isHost: p.id === r.hostId, registered: p.userId !== null }))
+                isAdmin: !!p.isAdmin, isHost: p.id === r.hostId, registered: p.userId !== null,
+                where: r.big && r.isStarted ? bigLocAt(r.big.w, p.x, p.y) : '', quest: p.bigRQ ? p.bigRQ.got + '/' + p.bigRQ.n : '' }))
         }));
     }
     // Admin tokeni tasdiqlandi - shu socket xonada bo'lsa, "ADMIN" belgisi darhol chiqadi
@@ -913,6 +915,17 @@ export class RoomManager {
         Object.values(this.activeRooms).forEach((room) => {
             const p = Object.values(room.players).find(pl => pl.userId === userId);
             if (p) p.ownedHeroes = (p.ownedHeroes || []).filter(h => !db.PREMIUM_HEROES.includes(h));
+        });
+    }
+    // Treasure Map sovg'a qilindi: o'yinda bo'lsa - darhol ishlaydi
+    public adminMapGiven(userId: string): void {
+        Object.values(this.activeRooms).forEach((room) => { const p = Object.values(room.players).find(pl => pl.userId === userId); if (p) p.bigMapItem = true; });
+    }
+    // Lager topshirig'i bekor qilindi: o'yinda bo'lsa - darhol yo'qoladi
+    public adminQuestCleared(userId: string): void {
+        Object.values(this.activeRooms).forEach((room) => {
+            const p = Object.values(room.players).find(pl => pl.userId === userId);
+            if (p) { p.bigRQ = null; this.io.to(p.id).emit('bigRQ', { ev: 'sync', q: null }); }
         });
     }
     public notifyGift(userId: string): void {
