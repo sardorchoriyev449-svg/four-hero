@@ -1,5 +1,5 @@
 // LAGER TOPSHIRIG'I: killk - aniq dushmandan n ta, killn - lokatsiyada istalgan n ta dushman, item - o'rmondan n ta buyum (spots - qolgan joylar), fish - lokatsiya ko'lidan n ta baliq
-export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item' | 'fish'; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; fr?: number; }   // fr - katta o'rmon mevalari (joyi belgilanmaydi)
+export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item' | 'fish' | 'snow' | 'trophy' | 'gift'; boss?: string; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; fr?: number; }   // fr - katta o'rmon mevalari (joyi belgilanmaydi)
 export interface PlayerState {
     mineCd?: number;               // ovchi: yopishqoq mina qayta tiklanishi (tik)
     ownedHeroes?: string[];        // sotib olingan (pullik) qahramonlar
@@ -16,6 +16,9 @@ export interface PlayerState {
     petTrust?: number;             // Pushistik bilan do'stlik (0..10, akkauntda saqlanadi); 10 - doimiy hamroh
     pet?: import('./db').PetData;  // hamroh Pushistik (daraja, jon, kuchaytirishlar); petDirtyAt - bazaga yozish navbati
     petDirtyAt?: number;
+    ride?: { x: number, y: number, out?: boolean };   // ajdarxoga mingan (out - kuchi tugab pastga tushmoqda)
+    rideUsed?: number;       // uchilgan masofa (px), dam olganda kamayadi
+    rideLockUntil?: number;  // kuchi tugagach qachongacha minib bo'lmaydi (ms)
     weaponFx?: string;             // qurol skini effekti (fire, ice, spark, shadow, star)
     skinFx?: string;               // afsonaviy skin effekti (aura, sparkle, flame, rainbow, ghost, crown)
     jetpack?: boolean;             // Season 2 map-9: ranets (faqat shu xaritada, sotib olingan yoki avtomatdan tushgan)
@@ -318,7 +321,7 @@ export interface RoomState {
         have: { [pid: string]: number }, fed: string[], hold: { [pid: string]: number }, seq: number } | null;   // have - so'ragan narsasi fermasida nechta
     critterNextAt?: number;
     // Jangdagi hamrohlar (egasi id si bo'yicha): follow - egasi yonida, dash - raqibga uchib boradi, back - qaytadi
-    pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back' | 'perch', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number, idle?: number, spot?: 'head' | 'ground' } };
+    pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back' | 'perch' | 'ride', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number, idle?: number, spot?: 'head' | 'ground' } };
     tornadoes?: { id: string, owner: string, x: number, y: number, dir: number, t: number, pulse: number }[];   // sehrgar tornadolari
     id: string;
     name: string;

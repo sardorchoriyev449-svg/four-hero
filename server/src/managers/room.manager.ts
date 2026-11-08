@@ -5,7 +5,7 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmRaidK, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, homeMax, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
+import { MAPS, WORLD_SHOP, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmRaidK, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, homeMax, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
 import { GameEngine } from './game.engine';
 import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN, bigNearestEnemy } from '../bigmap';
 import * as db from '../db';
@@ -588,6 +588,7 @@ export class RoomManager {
 
     // ENTER/SICHQONCHA BOSIB TURILGANDA: avtomatik-otish holatini yoqamiz
     public startAttack(socket: Socket, roomId: string, angle: number): void {
+        { const rp = this.activeRooms[roomId] && this.activeRooms[roomId].players[socket.id]; if (rp && rp.ride) return; }   // ajdarxoda uchayotganda urilmaydi
         const room = this.activeRooms[roomId];
         if (!room || !room.isStarted || this.isLoading(room) || RoomManager.frozen(room)) return;
         if (!Number.isFinite(angle)) return;
@@ -1003,7 +1004,7 @@ export class RoomManager {
             p.stamina = p.maxStamina || 100;
             p.specialTicks = 0;
             p.specialCooldown = 0;
-            p.invisLinger = 0; p.invisCd = 0;
+            p.invisLinger = 0; p.invisCd = 0; p.ride = undefined; p.rideUsed = 0; p.rideLockUntil = 0;
             p.ammo = shotgunMagOf(p);
             p.reloadTicks = 0;
             // Har xaritada o'z boshlang'ich joyi: oldingi xaritadagi joy yangi xaritada devor, to'siq
@@ -1431,7 +1432,7 @@ export class RoomManager {
         socket.emit('coinsUpdated', { amount: -price, totalCoins: t.coins });
     }
     // Big Map qishlog'idagi do'kon - Shop xaritasidagi narxlar bilan bir xil
-    public static bigShopDef() { return MAPS.find(m => m.shop && m.mode === 'shop')!.shop!; }
+    public static bigShopDef() { return WORLD_SHOP; }
     public async shopBuy(socket: Socket, roomId: string, item: unknown): Promise<void> {
         const room = this.activeRooms[roomId];
         const p = room?.players[socket.id];

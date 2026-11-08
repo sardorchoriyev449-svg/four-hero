@@ -19,6 +19,9 @@ let phaserGame = null; // Joriy Phaser o'yin nusxasi (raundlar orasida tozalanad
 let touchState = { left: false, right: false, jump: false, down: false }; // PHONE rejimidagi virtual tugmalar holati (down - osmondagi jangda pastga)
 // PHONE tugmalarining amallari: { nomi: [bosilganda, qo'yib yuborilganda] } - har raundda create() yangilaydi
 let touchActions = {};
+// AJDARXOGA MINGAN holat: rideOn - { out, jumpWas }; rideJoy - telefondagi uchish joystigi (-1..1)
+let rideOn = null, rideJoy = { x: 0, y: 0 };
+function setRideControls(on) { const r = document.getElementById('touch-controls'); if (r) r.classList.toggle('riding', !!on); if (!on) { rideJoy.x = 0; rideJoy.y = 0; const k = r && r.querySelector('.fly-knob'); if (k) k.style.transform = ''; } }
 
 // PHONE TUGMALARI (o'yinchi xohlagancha joylashtiradi - Sozlamalar -> "Tugmalarni joylashtirish"):
 // boshqaruv - JOYSTIK (chap/o'ng - yurish, yuqoriga - sakrash) yoki TUGMALAR (chapda ◀ ▶ ▼, o'ngda sakrash);
@@ -119,6 +122,14 @@ function layoutTouchControls(root, layout) {
         emoteTimer = setTimeout(closeEmotes, 3500);
     };
 
+    // AJDARXO: mingan paytda tugmalar o'rniga 4 tomonga uchish joystigi (sakrash tugmasi qoladi - tushish)
+    const fly = document.createElement('div'); fly.className = 'touch-fly'; fly.innerHTML = '<div class="fly-knob"></div>'; root.appendChild(fly);
+    const flyKnob = fly.querySelector('.fly-knob'); let flyId = null;
+    const flySet = (e) => { const b = fly.getBoundingClientRect(), R = b.width / 2; let x = (e.clientX - b.left - R) / R, y = (e.clientY - b.top - R) / R; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; } rideJoy.x = x; rideJoy.y = y; flyKnob.style.transform = 'translate(' + Math.round(x * R * 0.55) + 'px,' + Math.round(y * R * 0.55) + 'px)'; };
+    const flyEnd = (e) => { if (e.pointerId !== flyId) return; flyId = null; rideJoy.x = 0; rideJoy.y = 0; flyKnob.style.transform = ''; };
+    fly.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); flyId = e.pointerId; try { fly.setPointerCapture(e.pointerId); } catch (x) {} flySet(e); });
+    fly.addEventListener('pointermove', (e) => { if (e.pointerId === flyId) flySet(e); });
+    fly.addEventListener('pointerup', flyEnd); fly.addEventListener('pointercancel', flyEnd);
     const fingers = new Map();   // pointerId -> tugma nomi
     const held = {};             // tugma nomi -> nechta barmoq ushlab turibdi
     const btnAt = (x, y) => {
@@ -405,6 +416,7 @@ function stopGame() {
     touchActions = {};
     touchInteractCheck = null;
     touchState = { left: false, right: false, jump: false, down: false };
+    rideOn = null; setRideControls(false);
 }
 
 // Bu funksiya lobby.js ichida xona egasi Start bosganda chaqiriladi
@@ -445,7 +457,7 @@ function launchGame(socket, roomId, mapData, continued) {
         window.__game = {
             get map() { return map; }, get hero() { return currentCharacter; }, get dialog() { return dialog; },
             get backState() { return backState; }, get backBarrels() { return backBarrels; }, get backOnRamp() { return backOnRamp; },
-            get tntState() { return tntState; }, get tntObj() { return tntObj; }, get robotState() { return robotState; }, get robotObj() { return robotObj; }, get vendState() { return vendState; }, get vendObj() { return vendObj; }, get skyState() { return skyState; }, get skyObj() { return skyObj; }, get pvpState() { return pvpState; }, get mfState() { return mfState; }, get liftState() { return liftState; }, get fatElfState() { return fatElfState; }, get critterState() { return critterState; }, get petsState() { return petsState; }, get crObj() { return crObj; }, get mfHouse() { return mfHouse; }, get mfReel() { return mfReel; }, get mfOffset() { return mfOffset; }, set mfOffset(v) { mfOffset = v; }, get stoneSprites() { return stoneSprites; }
+            get petsState() { return petsState; }, get playersNow() { return lastPlayersState; }, get tntState() { return tntState; }, get tntObj() { return tntObj; }, get robotState() { return robotState; }, get robotObj() { return robotObj; }, get vendState() { return vendState; }, get vendObj() { return vendObj; }, get skyState() { return skyState; }, get skyObj() { return skyObj; }, get pvpState() { return pvpState; }, get mfState() { return mfState; }, get liftState() { return liftState; }, get fatElfState() { return fatElfState; }, get critterState() { return critterState; }, get petsState() { return petsState; }, get crObj() { return crObj; }, get mfHouse() { return mfHouse; }, get mfReel() { return mfReel; }, get mfOffset() { return mfOffset; }, set mfOffset(v) { mfOffset = v; }, get stoneSprites() { return stoneSprites; }
         };
     }
     // O'YIN OVOZLARI: sfx - har doim bir xil balandlikda; sfxAt - qahramondan uzoqlashgan sari pasayadi
@@ -954,6 +966,7 @@ function launchGame(socket, roomId, mapData, continued) {
         return 'arrow';
     }
     function predictAttack(scene, angle) {
+        if (rideOn) return;   // ajdarxoda urilmaydi
         const c = currentCharacter, now = performance.now();
         if (!c || !c.active || c.isDead || !scene || !scene.add) return;
         const cdMs = c.characterType === 'samurai' && c.weaponMode === 'alt' ? 750
@@ -4104,7 +4117,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function ensureMyFarmTextures(scene) {
         const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
         map.myFarm.crops.forEach(c => [0, 1, 2].forEach(st => mk('px_mf_' + c.id + '_' + st, mfCropGrid(c.id, st), 3)));
-        map.myFarm.fish.forEach(f => mk('px_mf_fish_' + f.id, mfFishGrid(f.id), 3));
+        [...map.myFarm.fish.map(f => f.id), 'frozenfish'].forEach(id => mk('px_mf_fish_' + id, mfFishGrid(id), 3));
         mk('px_mf_plot', mfPlotGrid(), 2);
         ['flowerbed', 'bench', 'lamppost', 'gnome', 'swing', 'fountain'].forEach(id => mk('px_md_' + id, FarmArt.meadowGrid(id), 3));
         mk('px_mf_grass', mfGrassGrid(), 2);
@@ -4301,18 +4314,29 @@ function launchGame(socket, roomId, mapData, continued) {
                 g.generateTexture('px_note', 16, 16); g.destroy();
             }
     }
+    // FERMA DO'KONI: katta rasta - orqa qismi (devor, javonlar), sotuvchi elf, old qismi (lavha, soyabon, peshtaxta)
     function mfStallTexture(scene) {
+        if (!scene.textures.exists('px_vend_elf')) gridToTexture(scene, 'px_vend_elf', vendElfGrid(), 2);
         if (scene.textures.exists('px_mf_stall')) return;
-        const P = 3, g = scene.add.graphics(), R = (x, y, w, h, c) => { g.fillStyle(c, 1); g.fillRect(x * P, y * P, w * P, h * P); };
-        R(2, 6, 3, 22, 0x000000); R(25, 6, 3, 22, 0x000000); R(3, 7, 1, 20, 0x8d6e63); R(26, 7, 1, 20, 0x8d6e63);   // ustunlar
-        R(0, 2, 30, 6, 0x000000); for (let i = 0; i < 7; i++) { R(1 + i * 4, 3, 4, 4, i % 2 ? 0xf1f8e9 : 0x43a047); R(2 + i * 4, 7, 2, 1, i % 2 ? 0xf1f8e9 : 0x43a047); }   // yo'l-yo'l soyabon
-        R(9, 0, 12, 3, 0x000000); R(10, 0, 10, 2, 0xffca28); R(12, 1, 6, 1, 0xfff59d);   // lavha
-        R(1, 18, 28, 10, 0x000000); R(2, 19, 26, 8, 0xa1887f); R(2, 19, 26, 2, 0xd7ccc8); R(2, 23, 26, 1, 0x6d4c41); R(8, 21, 1, 6, 0x6d4c41); R(21, 21, 1, 6, 0x6d4c41);   // peshtaxta
-        R(4, 14, 4, 5, 0x000000); R(5, 15, 2, 4, 0xff9800); R(5, 13, 2, 2, 0x43a047);   // sabzi
-        R(10, 14, 6, 5, 0x000000); R(11, 15, 4, 3, 0xff8f00); R(12, 15, 1, 3, 0xffb74d); R(12, 13, 1, 2, 0x558b2f);   // qovoq
-        R(17, 15, 4, 4, 0x000000); R(18, 16, 2, 2, 0xe53935); R(18, 16, 1, 1, 0xff8a80);   // olma
-        R(22, 12, 5, 7, 0x000000); R(23, 13, 3, 6, 0xd7b98a); R(23, 13, 3, 1, 0x8d6e63); R(24, 16, 1, 1, 0x6d4c41);   // urug' qopi
-        g.generateTexture('px_mf_stall', 30 * P, 28 * P); g.destroy();
+        const P = 3, W = 52, H = 60, K = 0x000000;
+        const mk = (key, draw) => { const g = scene.add.graphics(), R = (x, y, w, h, c) => { g.fillStyle(c, 1); g.fillRect(x * P, y * P, w * P, h * P); }; draw(R); g.generateTexture(key, W * P, H * P); g.destroy(); };
+        mk('px_mf_stall', (R) => {
+            [2, 45].forEach((x) => { R(x, 22, 5, 38, K); R(x + 1, 22, 3, 38, 0x8d6e63); R(x + 1, 22, 1, 38, 0xbcaaa4); });   // ustunlar
+            R(7, 24, 38, 22, K); R(8, 24, 36, 22, 0x4e342e); for (let x = 8; x < 44; x += 6) R(x, 24, 1, 22, 0x3e2723);   // orqa devor
+            [31, 39].forEach((y) => { R(8, y, 36, 2, 0xa1887f); R(8, y + 2, 36, 1, 0x2d1b14); });   // javonlar
+            [[10, 27, 0xe53935], [14, 27, 0x43a047], [34, 27, 0xfdd835], [38, 27, 0x1e88e5], [10, 35, 0xff9800], [14, 35, 0x8e24aa], [34, 35, 0x00acc1], [38, 35, 0xd81b60]].forEach(([x, y, c]) => { R(x, y, 3, 4, K); R(x, y + 1, 3, 3, c); R(x, y + 1, 1, 1, 0xffffff); });   // bankalar
+        });
+        mk('px_mf_stall_f', (R) => {
+            R(5, 0, 42, 15, K); R(6, 1, 40, 13, 0x8d6e63); R(8, 3, 36, 9, 0xffca28); R(8, 3, 36, 1, 0xfff59d); R(8, 11, 36, 1, 0xf9a825);   // lavha
+            R(1, 15, 50, 9, K);
+            for (let i = 0; i < 8; i++) { const c = i % 2 ? 0xfff3e0 : 0xe53935, d = i % 2 ? 0xffe0b2 : 0xb71c1c, x = 2 + i * 6; R(x, 16, 6, 7, c); R(x, 21, 6, 2, d); R(x + 1, 23, 4, 2, K); R(x + 1, 23, 4, 1, c); }   // yo'l-yo'l soyabon
+            R(0, 44, 52, 16, K); R(1, 45, 50, 15, 0x8d6e63); R(1, 45, 50, 3, 0xd7ccc8); R(1, 48, 50, 1, 0x5d4037); for (let x = 9; x < 50; x += 9) R(x, 49, 1, 11, 0x5d4037);   // peshtaxta
+            R(22, 50, 8, 8, K); R(23, 51, 6, 6, 0xffca28); R(24, 52, 2, 2, 0xfff59d); R(25, 53, 2, 3, 0xf9a825);   // tanga belgisi
+            R(5, 38, 6, 6, K); R(6, 39, 4, 5, 0xff9800); R(7, 36, 2, 3, 0x43a047);   // sabzi
+            R(13, 38, 8, 6, K); R(14, 39, 6, 5, 0xff8f00); R(16, 39, 2, 5, 0xffb74d); R(16, 36, 2, 3, 0x558b2f);   // qovoq
+            R(32, 39, 6, 5, K); R(33, 40, 4, 4, 0xe53935); R(33, 40, 1, 1, 0xff8a80); R(35, 38, 1, 2, 0x4e342e);   // olma
+            R(40, 35, 8, 9, K); R(41, 36, 6, 8, 0xd7b98a); R(41, 36, 6, 2, 0x8d6e63); R(43, 40, 2, 2, 0x6d4c41);   // urug' qopi
+        });
     }
     function buildMyFarmScene(scene) {
         const W = mapWidth, F = map.myFarm;
@@ -4345,7 +4369,14 @@ function launchGame(socket, roomId, mapData, continued) {
         // Buyurtmalar taxtasi va elf
         const board = scene.add.image(F.boardX, 574, 'px_mf_board').setOrigin(0.5, 1).setDepth(-0.48);
         // FERMA DO'KONI (rasta): faqat fermaga oid narsalar sotiladi
-        if (map.shop) { mfStallTexture(scene); scene.add.image(map.shop.counterX, 574, 'px_mf_stall').setOrigin(0.5, 1).setDepth(-0.47); }
+        if (map.shop) {
+            const sx = map.shop.counterX;
+            mfStallTexture(scene);
+            scene.add.image(sx, 574, 'px_mf_stall').setOrigin(0.5, 1).setDepth(-0.47);
+            scene.add.image(sx, 574, 'px_vend_elf').setOrigin(0.5, 1).setDepth(-0.465);
+            scene.add.image(sx, 574, 'px_mf_stall_f').setOrigin(0.5, 1).setDepth(-0.46);
+            scene.add.text(sx, 574 - 180 + 22, t('shop_title'), { fontFamily: PIXEL_FONT, fontSize: '13px', color: '#4e2a00' }).setOrigin(0.5).setDepth(-0.455);
+        }
         const boardMark = scene.add.text(F.boardX, 486, '!', { fontFamily: PIXEL_FONT, fontSize: '16px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5, 1).setDepth(5).setVisible(false);
         // BAHAYBAT TEGIRMON (do'kondan, 4 bosqich - kattalashadi, tezroq aylanadi) va NOTA UYASI
         const millX = F.zoneX0 + F.zoneW * 2 - 11;   // 2- va 3-maydon orasida (taxtachalarni yopmasin)
@@ -4372,14 +4403,14 @@ function launchGame(socket, roomId, mapData, continued) {
             ghG.fillStyle(0x0a0a0a, 1); for (let k = 0; k < 8; k++) ghG.fillRect(x0 + w / 2 - 70 + k * 10, top - 10 - Math.abs(4 - k) * -1, 10, 8); }
         // Bezaklar (do'kondan): gulzorlar, fonar, qo'riqchi it
         const decorObj = {
-            flowers: [scene.add.image(60, 574, 'px_mf_flowers').setOrigin(0.5, 1).setDepth(-0.4), scene.add.image(245, 574, 'px_mf_flowers').setOrigin(0.5, 1).setDepth(-0.4)],
-            lantern: [scene.add.image(310, 574, 'px_mf_lantern').setOrigin(0.5, 1).setDepth(-0.46)],
-            pethouse: [scene.add.image(392, 574, 'px_mf_pethouse').setOrigin(0.5, 1).setDepth(-0.46)],
+            flowers: [scene.add.image(60, 574, 'px_mf_flowers').setOrigin(0.5, 1).setDepth(-0.4), scene.add.image(125, 574, 'px_mf_flowers').setOrigin(0.5, 1).setDepth(-0.4)],
+            lantern: [scene.add.image(462, 574, 'px_mf_lantern').setOrigin(0.5, 1).setDepth(-0.46)],
+            pethouse: [scene.add.image(415, 574, 'px_mf_pethouse').setOrigin(0.5, 1).setDepth(-0.46)],
             cards: [scene.add.image(4140, 574, 'px_mf_cards').setOrigin(0.5, 1).setDepth(-0.4)],
             pool: [scene.add.image(F.meadow ? F.meadow.poolX : 4500, 578, 'px_mf_pool').setOrigin(0.5, 1).setDepth(3.25)],
             dog: [scene.add.image(520, 574, 'px_kennel').setOrigin(0.5, 1).setDepth(-0.46).setScale(0.75), scene.add.image(470, 574, 'px_mf_dog0').setOrigin(0.5, 1).setDepth(-0.45)]
         };
-        const lanternGlow = scene.add.circle(310, 470, 40, 0xffe082, 0.25).setDepth(-0.44).setBlendMode(Phaser.BlendModes.ADD);
+        const lanternGlow = scene.add.circle(462, 470, 40, 0xffe082, 0.25).setDepth(-0.44).setBlendMode(Phaser.BlendModes.ADD);
         // YAYLOV: kirish yo'li belgisi, dala chegarasi, butalar va yovvoyi gullar; grабl grядkalari va ko'chiriladigan bezaklar
         const meadow = { beds: [], decor: {}, glow: null };
         if (F.meadow) {
@@ -4659,8 +4690,9 @@ function launchGame(socket, roomId, mapData, continued) {
             const flick = 0.85 + 0.15 * Math.sin(tNow / 140);
             glow(150 - 30, 500, 44, 0xffb74d, 0.35 * flick);    // uy derazasi
             glow(150 + 30, 500, 44, 0xffb74d, 0.35 * flick);
-            if (D.lantern && !Off.lantern) glow(310, 470, 70, 0xffe082, 0.45 * flick);
-            if (D.pethouse && !Off.pethouse) glow(392, 545, 30, 0xff80ab, 0.4);
+            if (D.lantern && !Off.lantern) glow(462, 470, 70, 0xffe082, 0.45 * flick);
+            if (map.shop) glow(map.shop.counterX, 470, 90, 0xffe082, 0.14 * flick);   // do'kon kechasi ham ko'rinsin
+            if (D.pethouse && !Off.pethouse) glow(415, 545, 30, 0xff80ab, 0.4);
             if (D.dog && !Off.dog) { const ds = mfWorldState && mfWorldState.dog; glow(ds ? ds.x + 10 : 480, (ds ? ds.y : 570) - 34, 12, 0x00e5ff, 0.7); }
         }
         O.flies.forEach((fl) => {
@@ -4910,7 +4942,8 @@ function launchGame(socket, roomId, mapData, continued) {
         const x = c.x;
         if (F.houseX !== undefined && Math.abs(x - F.houseX) <= 45 && c.y > 480) return { kind: 'house' };
         if (mfCarry) return { kind: 'carry', id: mfCarry };
-        const mg = mfMageNear(); if (mg) return mg;   // Balot Magi (fermada yashaydi)
+        const mg = mfMageNear(), nearShop = map.shop && c.y > 480 && Math.abs(x - map.shop.counterX) <= map.shop.range;
+        if (mg && !(mg.kind === 'mage' && nearShop && Math.abs(x - map.shop.counterX) < Math.abs(x - mfMage.x))) return mg;   // Balot Magi (fermada yashaydi); do'kon yaqinroq bo'lsa - do'kon
         for (let k = 0; k < MF_BEDS0 + ((f.beds && f.beds.length) || 0); k++) {
             if (Math.abs(x - mfPlotX(k)) > F.range) continue;
             const z = Math.floor(k / MF_PLOTS);
@@ -7467,7 +7500,18 @@ function launchGame(socket, roomId, mapData, continued) {
         return gridOutline(g, 0x2a1a10);
     }
     // 5, 10, 15-darajalarda ajdarcha kattalashadi (server/src/maps.ts petGrowth bilan bir xil)
-    const petGrowth = (lvl) => lvl >= 15 ? 1.45 : lvl >= 10 ? 1.3 : lvl >= 5 ? 1.15 : 1;
+    const petGrowth = (lvl) => lvl >= 15 ? 3 : lvl >= 10 ? 1.3 : lvl >= 5 ? 1.15 : 1;
+    // yerga o'tirgan 15-darajali o'z ajdarxosi yonidami (E - minish)
+    function petRideTarget() {
+        const c = currentCharacter, q = (petsState || []).find(o => o.id === socket.id), me = lastPlayersState && lastPlayersState[socket.id], pd = me && me.pet;
+        if (rideOn || !c || c.isDead || !q || !pd || pd.l < 15 || q.st !== 'perch' || (!isBig && !isMyFarm)) return null;
+        return Math.abs(c.x - q.x) < 120 && Math.abs(c.y - q.y) < 100 ? q : null;
+    }
+    function endRide() {
+        const c = currentCharacter;
+        rideOn = null; setRideControls(false);
+        if (c && c.body) { c.body.setAllowGravity(true); c.rideSafe = true; }   // havoda tushsa ham yiqilish zarari yo'q
+    }
     // Ajdarcha rasmi berilgan ko'rinishda ("rang|bosh|tana"; bo'sh - standart)
     function petTex(scene, f, k) {
         if (!k || k === '||') return 'px_crit_' + f;
@@ -7599,20 +7643,29 @@ function launchGame(socket, roomId, mapData, continued) {
             const perch = q.st === 'perch' && Math.hypot(o.x - q.x, o.y - q.y) < 6;
             o.setTexture(petTex(scene, perch ? (t0 % 3600 < 180 ? 'blink' : 'sit') : q.st === 'dash' ? 'scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'fly0' : 'fly1'), pk)).setFlipX(q.f < 0)
                 .setAngle(q.st === 'dash' ? q.f * 10 : 0).setScale((q.st === 'dash' ? 0.6 : 0.55) * gk);
+            if (q.st === 'ride') { const mine = q.id === socket.id && currentCharacter; if (mine) o.setPosition(currentCharacter.x, currentCharacter.y + 26); o.setDepth(mine ? currentCharacter.depth - 0.01 : 2.4); } else o.setDepth(4.18);
             if (q.fl) o.setTintFill(0xff5252); else if (o.happyUntil && t0 < o.happyUntil) o.setTint(0xffd1e8); else o.clearTint();
             if (q.st === 'dash' && Math.random() < 0.6) { const tr = scene.add.rectangle(o.x, o.y, 5, 5, 0xd1c4e9, 0.8).setDepth(4.17); scene.tweens.add({ targets: tr, alpha: 0, scale: 0.2, duration: 220, onComplete: () => tr.destroy() }); }
             const pd = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet;
             o.bar.clear();
             if (pd) {
-                o.bar.fillStyle(0x000000, 0.7); o.bar.fillRect(o.x - 15, o.y - 32, 30, 5);
-                o.bar.fillStyle(pd.hp / pd.mx > 0.4 ? 0x76ff03 : 0xff5252, 1); o.bar.fillRect(o.x - 14, o.y - 31, Math.max(1, Math.round(28 * pd.hp / pd.mx)), 3);
-                o.lv.setText((pd.n ? pd.n + ' ' : '') + 'Lv' + pd.l).setPosition(o.x, o.y - 34).setVisible(true);
+                const top = gk >= 3 ? 58 : 32, mineP = q.id === socket.id;
+                if (q.st === 'ride' && mineP) {   // UCHISH KUCHI: qancha metr qoldi
+                    const hy = o.y - 96, rs = Math.max(0, pd.rs === undefined ? 100 : pd.rs);
+                    o.bar.fillStyle(0x000000, 0.8); o.bar.fillRect(o.x - 42, hy, 84, 8);
+                    o.bar.fillStyle(rs > 25 ? 0xffca28 : 0xff5252, 1); o.bar.fillRect(o.x - 40, hy + 2, Math.max(1, Math.round(80 * rs / 100)), 4);
+                    o.lv.setText(Math.round(rs * 3) + 'm').setPosition(o.x, hy - 2).setVisible(true);
+                } else {
+                    o.bar.fillStyle(0x000000, 0.7); o.bar.fillRect(o.x - 15, o.y - top, 30, 5);
+                    o.bar.fillStyle(pd.hp / pd.mx > 0.4 ? 0x76ff03 : 0xff5252, 1); o.bar.fillRect(o.x - 14, o.y - top + 1, Math.max(1, Math.round(28 * pd.hp / pd.mx)), 3);
+                    o.lv.setText((pd.n ? pd.n + ' ' : '') + 'Lv' + pd.l + (mineP && pd.rc > 0 ? '  ' + pd.rc + 's' : mineP && petRideTarget() ? '  [E]' : '')).setPosition(o.x, o.y - top - 2).setVisible(true);
+                }
             } else o.lv.setVisible(false);
         });
         Object.keys(O.pets).forEach((pid) => { if (!petIds.has(pid)) { O.pets[pid].bar.destroy(); O.pets[pid].lv.destroy(); O.pets[pid].destroy(); delete O.pets[pid]; } });
         // DAM OLAYOTGAN hamroh: ferma egasining fermasida (uychasi bo'lsa - uning oldida) uxlaydi, ustida "Zz" va jon
         const hostPet = isMyFarm && mfState && lastPlayersState && lastPlayersState[mfState.hostPid] && lastPlayersState[mfState.hostPid].pet;
-        const restX = mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.pethouse && !(mfState.farm.decorOff || {}).pethouse ? 392 : 280;
+        const restX = mfState && mfState.farm && mfState.farm.decor && mfState.farm.decor.pethouse && !(mfState.farm.decorOff || {}).pethouse ? 415 : 280;
         if (hostPet && hostPet.r) {
             if (!O.rest || !O.rest.scene) {
                 O.rest = scene.add.image(restX, 572, 'px_crit_blink').setOrigin(0.5, 1).setDepth(-0.4).setScale(0.6);
@@ -10302,6 +10355,8 @@ function launchGame(socket, roomId, mapData, continued) {
             if (pauseMenuOpen) return false;
             // 1) Dialog ochiq bo'lsa - keyingi gap
             if (dialog) { if (dry) return true; advanceDialog(); return; }
+            // AJDARXOGA MINISH (15-daraja, yerga o'tirganda)
+            if (petRideTarget()) { if (dry) return true; socket.emit('petRide', { roomId, on: true }); return; }
             // SILASH (E): jonzot yonida - silanadi; fermada dam olayotgan o'z hamrohi - ovqat berish oynasi
             const pk = petTarget();
             if (pk && pk.kind !== 'pet') {
@@ -10925,8 +10980,19 @@ function launchGame(socket, roomId, mapData, continued) {
             for (let i = 0; i < 10; i++) { const f = this.add.rectangle(d.x + (Math.random() - 0.5) * 24, d.y, 4, 3, i % 2 ? 0xfff8ee : 0xb39ddb).setDepth(4.3); this.tweens.add({ targets: f, y: f.y + 30 + Math.random() * 30, x: f.x + (Math.random() - 0.5) * 60, alpha: 0, duration: 900, onComplete: () => f.destroy() }); }
             if (d.id === socket.id && typeof showTopToast === 'function') showTopToast(t('pet_down'));
         });
+        socket.off('petRide');
+        socket.on('petRide', (d) => {
+            if (!d) return;
+            const toast = (s) => { if (typeof showTopToast === 'function') showTopToast(s); };
+            if (d.err) { toast(t(d.err).replace('{s}', d.s || 0)); return; }
+            const c = currentCharacter;
+            if (d.on && c && c.body) { rideOn = { out: false, jumpWas: true }; c.body.setAllowGravity(false); c.rideSafe = true; setRideControls(true); sfx('whoosh', 0.8); toast(t('pet_ride_tip')); }
+            else if (d.out && rideOn) { rideOn.out = true; sfx('thud', 0.5); toast(t('pet_ride_tired')); }
+            else if (d.off && rideOn) endRide();
+        });
         socket.on('petLevelUp', (d) => {
             if (!d) return;
+            if (d.lvl === 15 && typeof showTopToast === 'function') this.time.delayedCall(2500, () => showTopToast(t('pet_ride_unlock')));
             sfx(d.grew ? 'win' : 'xp');
             if (typeof showTopToast === 'function') showTopToast(d.grew ? t('pet_grew').replace('{l}', d.lvl) : t('pet_level_up').replace('{l}', d.lvl));
             const o = crObj && crObj.pets[socket.id];
@@ -13181,6 +13247,25 @@ function launchGame(socket, roomId, mapData, continued) {
         } else if (levelFrozen) {
             levelFrozen = false;
             currentCharacter.body.setAllowGravity(true);
+        }
+        // AJDARXODA UCHISH: 4 tomonga, o'yinchidan 2x tez; kuchi tugasa pastga tushadi; sakrash (Space / tugma) - tushish
+        if (rideOn && currentCharacter.body) {
+            const c = currentCharacter, kb = this.input.keyboard;
+            const L = cursors.left.isDown || kb.addKey('A').isDown || touchState.left, Rt = cursors.right.isDown || kb.addKey('D').isDown || touchState.right;
+            const Up = cursors.up.isDown || kb.addKey('W').isDown, Dn = cursors.down.isDown || kb.addKey('S').isDown;
+            let vx = (Rt ? 1 : 0) - (L ? 1 : 0) + rideJoy.x, vy = (Dn ? 1 : 0) - (Up ? 1 : 0) + rideJoy.y;
+            const m = Math.hypot(vx, vy); if (m > 1) { vx /= m; vy /= m; }
+            const sp = 200 * (c.speedMultiplier || 1) * 2;
+            if (rideOn.out) c.setVelocity(vx * 200, 240); else c.setVelocity(vx * sp, vy * sp);
+            if (vx < -0.05) lastDirection = 'left'; else if (vx > 0.05) lastDirection = 'right';
+            c.rideSafe = true;
+            if (isBig && map.big && c.y < map.big.top + 60) { c.y = map.big.top + 60; if (c.body.velocity.y < 0) c.setVelocityY(0); }
+            const jp = spaceJump() || touchState.jump, ground = c.body.blocked.down || c.body.touching.down;
+            if ((jp && !rideOn.jumpWas) || (rideOn.out && ground)) { socket.emit('petRide', { roomId, on: false }); endRide(); }
+            else rideOn.jumpWas = jp;
+            if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y }); }
+            jumpWasDown = true;
+            return;
         }
         // BIG MAP: lianada chayqalish (←/→ chayqatadi, sakrash - qo'yib yuborib uchadi)
         if (isBig && window.BigMap && !currentCharacter.isDead) {

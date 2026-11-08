@@ -248,24 +248,19 @@ window.BigMap = (function () {
         // LAGER TOPSHIRIQLARI: buyum rasmlari, topshiriq holati serverdan
         rqTextures(scene); fruitTextures(scene); O.fruits = new Map(); O.fruitOff = new Set(); O.rq = null; O.rqImgs = new Map(); O.fish = null; O.reel = null; O.fishG = scene.add.graphics().setDepth(3.5);
         on('bigRQ', (d) => { if (d) onRq(scene, d); });
-        // KATTA O'RMON: meva yeyildi / terildi (hamma ko'radi), yo'l ko'rsatkich orqali o'tildi
+        // KATTA O'RMON: meva yeyildi / terildi (hamma ko'radi); Yer osti: qizil tosh olindi
         on('bigFruit', (d) => {
             if (!d) return;
             if (d.err) { showToast(t(d.err)); return; }
             O.fruitOff.add(d.id); const f = O.fruits.get(d.id); if (f) f.berries.forEach(b => b.setVisible(false));
-            puff(d.x, d.y - 36, d.k === 'apple' ? 0xffd54f : 0xba68c8, 12);
-            if (d.by === X.socket.id) { X.sfx('coin', 0.6); if (d.ev === 'eat') { showToast(t('big_fruit_eat_' + d.k)); const h = X.hero(); if (h) puff(h.x, h.y - 30, 0x81c784, 16, true); } }
-        });
-        on('bigTrailFx', (d) => {
-            if (!d) return;
-            puff(d.x0, d.y0 - 40, 0xc5e1a5, 16); puff(d.x1, d.y1 - 40, 0xc5e1a5, 20, d.id === X.socket.id); X.sfxAt('whoosh', d.x1, 0.8);
-            if (d.id === X.socket.id) { resetFall(); const tr = (W.trails || []).find(q => q.id === d.to); showToast(tr && trailWild(tr) ? t('big_wood_' + tr.loc) : t('big_trail_home')); scene.cameras.main.flash(250, 200, 230, 180); }
+            puff(d.x, d.y - (d.k === 'redstone' ? 16 : 36), d.k === 'apple' ? 0xffd54f : d.k === 'redstone' ? 0xff3d3d : 0xba68c8, 12);
+            if (d.by === X.socket.id) { X.sfx('coin', 0.6); if (d.ev === 'stone') showToast(t('big_stone_got').replace('{c}', d.c)); if (d.ev === 'eat') { showToast(t('big_fruit_eat_' + d.k)); const h = X.hero(); if (h) puff(h.x, h.y - 30, 0x81c784, 16, true); } }
         });
         // THE WORLD DO'KONI: qarmoq (sotuv natijasi Shop'dagidek keladi)
         O.rodResult = (d) => {   // tinglovchi bosilganda qo'yiladi (game.js shopResult tinglovchisini qayta o'rnatadi)
             const el = document.getElementById('shop-panel');
-            if (!d || d.item !== 'rod' || !el || !el.classList.contains('bm-shop-panel')) return;
-            const b = el.querySelector('.shop-rod-buy'), msg = el.querySelector('#bm-shop-msg');
+            if (!d || !['rod', 'elixir', 'chip'].includes(d.item) || !el || !el.classList.contains('bm-shop-panel')) return;
+            const b = d.item === 'rod' ? el.querySelector('.shop-rod-buy') : null, msg = el.querySelector('#bm-shop-msg');
             if (d.success) { if (b) { b.disabled = true; b.textContent = t('shop_owned'); } if (msg) msg.textContent = ''; renderShopWallet(d.coins); const h = X.hero(); if (h) puff(h.x, h.y - 30, 0xffd54f, 14); }
             else { if (msg) msg.textContent = t(d.message || 'err_server'); if (b) { b.disabled = d.message === 'shop_not_needed'; if (d.message === 'shop_not_needed') b.textContent = t('shop_owned'); } }
         };
@@ -429,7 +424,7 @@ window.BigMap = (function () {
     function clearStatus() { if (!O) return; O.rootUntil = 0; O.blindUntil = 0; O.pull = null; O.chillUntil = 0; O.burnUntil = 0; }
     function destroy() {
         closePortalMenu(); closeMap();
-        if (O && O.fruits) O.fruits.forEach((o) => { o.bush.destroy(); o.berries.forEach(b => b.destroy()); });
+        if (O && O.fruits) O.fruits.forEach((o) => { o.bush.destroy(); o.berries.forEach(b => { if (b !== o.bush) b.destroy(); }); });
         if (O && X) O.handlers.forEach(([ev, fn]) => X.socket.off(ev, fn));
         if (O && X && O.rodResult) X.socket.off('shopResult', O.rodResult);
         if (O && O.scene && O.scene.textures) O.isles.forEach((im) => {
@@ -603,9 +598,9 @@ window.BigMap = (function () {
             if (cx < x0 || cx >= x1 || !inRow(l.y)) return;
             ch.objs.push(scene.add.text(cx, l.y - 160, t('big_wood_' + l.loc), { fontFamily: FONT, fontSize: '10px', color: '#c5e1a5', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
         });
-        (W.trails || []).forEach((l) => {
+        (W.signs || []).forEach((l) => {
             if (l.x < x0 || l.x >= x1 || !inRow(l.y)) return;
-            ch.objs.push(scene.add.text(l.x, l.y - 80, trailWild(l) ? t('big_trail_sign_back') : t('big_wood_' + l.loc), { fontFamily: FONT, fontSize: '7px', color: '#ffe0b2', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
+            ch.objs.push(scene.add.text(l.x, l.y - 80, l.home ? t('big_trail_sign_back') : t('big_wood_' + l.loc), { fontFamily: FONT, fontSize: '7px', color: '#ffe0b2', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
         });
         // 4) sandiqlar
         W.chests.forEach((q) => {
@@ -690,6 +685,7 @@ window.BigMap = (function () {
         O.glowSrc.forEach(g => lit(g.x, g.y, g.r));
         O.enemies.forEach(o => { if (o.boss || GLOWY[o.k]) lit(o.x, o.y - o.img.displayHeight / 2, o.boss ? (o.k === 'bullkan' ? 300 : 190) : o.k === 'mimicrock' ? 110 : 80); if (o.k === 'bullkan' && o.hand) o.hand.forEach(h => lit(h.x, h.y, 170)); if (LAMP[o.k]) { lit(o.x + o.f * 8, o.y - 48, 70); lit(o.x + o.f * 62, o.y - 38, 64); } });
         O.rqImgs.forEach(im => lit(im.x, im.y - 14, 56));
+        (W.fruits || []).forEach((f) => { if (f.k === 'redstone' && !O.fruitOff.has(f.id)) lit(f.x, f.y - 16, 72); });   // qizil toshlar zulmatda ko'rinadi
         O.shots.forEach(im => lit(im.x, im.y, 70));
         O.pshots.forEach(im => lit(im.x, im.y, 50));
         O.areaMap.forEach((o) => { const sub = o.k.split(':')[1]; if (o.k === 'mark:mimic') lit(o.x + o.w / 2, o.y + o.h - 10, 100); else if (o.k.startsWith('patch:fire') || o.k.startsWith('patch:magma')) lit(o.x + o.w / 2, o.y + o.h - 10, 110); else if (o.k.startsWith('beam') && !(o.wn > 0)) { lit(o.x, o.y, 110); lit((o.x + o.x2) / 2, (o.y + o.y2) / 2, 120); lit(o.x2, o.y2, 90); } else if (o.k.startsWith('breath:') && (sub === 'fire' || sub === 'greenfire')) lit(o.x + o.w / 2, o.y + o.h / 2, 150); });
@@ -864,6 +860,7 @@ window.BigMap = (function () {
         if (!hero || !hero.body) return;
         if (hero.isDead) { O.fall.y = null; return; }
         const feet = hero.y + 24, F = O.fall;
+        if (hero.rideSafe) { F.y = feet; F.air = false; if (hero.body.blocked.down || hero.body.touching.down) hero.rideSafe = false; return; }   // ajdarxoda / undan tushgach yerga qo'nguncha - yiqilish yo'q
         if (O.vine) { F.y = feet; F.air = false; return; }   // liana - xavfsiz tayanch
         const grounded = hero.body.blocked.down || hero.body.touching.down;
         if (grounded) {
@@ -2104,12 +2101,18 @@ window.BigMap = (function () {
             R(1, 8, 20, 6, 0x1b5e20); R(3, 5, 16, 8, 0x2e7d32); R(6, 2, 10, 4, 0x2e7d32); R(7, 3, 6, 2, 0x43a047); R(4, 6, 5, 2, 0x43a047); R(14, 7, 4, 2, 0x388e3c);
             R(3, 14, 16, 1, 0x3e2723);
         });
+        mk('bm_redstone', 16, 12, (R) => {   // qizil tosh (yer yuzasida bir nechta qirrali bo'lak)
+            R(2, 5, 6, 7, 0x3a0606); R(6, 1, 7, 11, 0x3a0606); R(12, 6, 4, 6, 0x3a0606);
+            R(3, 6, 4, 6, 0xb71c1c); R(7, 2, 5, 10, 0xe53935); R(13, 7, 2, 5, 0xc62828);
+            R(8, 3, 2, 4, 0xff8a80); R(4, 7, 1, 2, 0xef5350); R(13, 8, 1, 1, 0xff8a80); R(9, 9, 2, 3, 0xb71c1c);
+        });
         mk('bm_fr_apple', 5, 6, (R) => { R(0, 1, 5, 5, 0x5d4300); R(1, 2, 3, 3, 0xffd54f); R(1, 2, 1, 1, 0xfff59d); R(3, 3, 1, 2, 0xf9a825); R(2, 0, 1, 2, 0x4e342e); R(3, 0, 2, 1, 0x43a047); });
         mk('bm_fr_berry', 5, 5, (R) => { R(0, 1, 5, 4, 0x1a0026); R(1, 1, 3, 3, 0x6a1b9a); R(1, 1, 1, 1, 0xce93d8); R(3, 3, 1, 1, 0x4a0072); R(2, 0, 1, 1, 0x43a047); });
     }
     function drawFruits(scene) {
         (W.fruits || []).forEach((f) => {
             let o = O.fruits.get(f.id);
+            if (!o && f.k === 'redstone') { const st = scene.add.image(f.x, f.y + 2, 'bm_redstone').setOrigin(0.5, 1).setDepth(-0.5); o = { bush: st, berries: [st] }; O.fruits.set(f.id, o); }
             if (!o) {
                 const bush = scene.add.image(f.x, f.y + 2, 'bm_fbush').setOrigin(0.5, 1).setDepth(-0.56);
                 const berries = [[-19, -30], [-4, -38], [12, -31], [22, -20], [-12, -18], [4, -22]].map(([dx, dy]) => scene.add.image(f.x + dx, f.y + dy, 'bm_fr_' + f.k).setDepth(-0.55));
@@ -2155,18 +2158,20 @@ window.BigMap = (function () {
     }
     const rqGoal = (q) => q.t === 'killk' ? t('rq_g_killk').replace('{n}', q.n).replace('{k}', t('big_e_' + q.k))
         : q.t === 'killn' ? t('rq_g_killn').replace('{n}', q.n).replace('{l}', t('big_loc_' + q.loc))
-        : q.t === 'fish' ? t('rq_g_lake').replace('{n}', q.n).replace('{l}', t('big_lake_' + q.loc)) : t('rq_g_' + q.k).replace('{n}', q.n).replace('{l}', t((q.fr ? 'big_wood_' : 'big_grove_') + q.loc));
+        : q.t === 'fish' ? t(q.k === 'frozen' ? 'rq_g_frozen' : 'rq_g_lake').replace('{n}', q.n).replace('{l}', t('big_lake_' + q.loc))
+        : t('rq_g_' + q.k).replace('{n}', q.n).replace('{l}', t((q.k === 'redstone' ? 'big_loc_' : q.fr ? 'big_wood_' : 'big_grove_') + q.loc));
     // nishon: bajarilgan bo'lsa - razvedkachi; buyum bo'lsa - eng yaqin joy
     function rqTarget(q) {
         const h = X.hero(), hx = h ? h.x : 0, hy = h ? h.y : 0, near = (a, f) => a.slice().sort((p, r) => Math.hypot(f(p)[0] - hx, f(p)[1] - hy) - Math.hypot(f(r)[0] - hx, f(r)[1] - hy))[0];
         if (q.got >= q.n) { const n = near(W.npcs.filter(o => o.rq && o.loc === q.loc), o => [o.x, o.y]); return n ? { x: n.x, y: n.y } : null; }
-        if (q.t === 'item' && q.fr) {   // katta o'rmon mevalari: orolda bo'lmasa - qishloqdagi yo'l ko'rsatkich
-            const wd = (W.wilds || []).find(w => w.loc === q.loc);
-            if (!wd) return null;
-            if (!(hx > wd.x - 100 && hx < wd.x + wd.w + 100 && Math.abs(hy + 24 - wd.y) < 400)) { const tr = (W.trails || []).find(o => o.loc === q.loc && !trailWild(o)); return tr ? { x: tr.x, y: tr.y } : { x: wd.x, y: wd.y }; }
+        if (q.t === 'item' && q.fr) {   // katta o'rmon mevalari / qizil toshlar: yo'l boshidan uzoqda bo'lsa - avval yo'l boshi
             const ripe = (W.fruits || []).filter(f => f.loc === q.loc && !O.fruitOff.has(f.id)), f = ripe.length ? near(ripe, o => [o.x, o.y]) : null;
-            return f ? { x: f.x, y: f.y } : { x: Math.round((wd.fx0 + wd.fx1) / 2), y: wd.y };
+            const wd = (W.wilds || []).find(w => w.loc === q.loc), sign = wd && (W.signs || []).find(o => o.loc === q.loc && !o.home);
+            if (wd && sign) { const dIsle = (x, y) => Math.hypot(x - (wd.x + wd.w / 2), y - wd.y); if (Math.hypot(hx - sign.x, hy - sign.y) > 160 && dIsle(hx, hy) > dIsle(sign.x, sign.y)) return { x: sign.x, y: sign.y }; }
+            return f ? { x: f.x, y: f.y } : wd ? { x: Math.round((wd.fx0 + wd.fx1) / 2), y: wd.y } : null;
         }
+        if (q.t === 'snow') { const p = near(W.piles || [], o => [o.x, o.y]); return p ? { x: p.x, y: p.y } : null; }
+        if (q.t === 'trophy' || q.t === 'gift') { const z = W.zones.find(o => o.boss === q.boss); return z ? { x: Math.round((z.x0 + z.x1) / 2), y: z.y1 - 60 } : null; }
         if (q.t === 'item' && q.spots && q.spots.length) { const s = near(q.spots, o => o); return { x: s[0], y: s[1] }; }
         if (q.t === 'fish') { const ls = (W.ponds || []).filter(o => o.loc === q.loc), l = ls.length ? near(ls, o => [o.x + o.w / 2, o.y]) : null; return l ? { x: l.x + l.w / 2, y: l.y } : null; }
         return null;
@@ -2256,7 +2261,7 @@ window.BigMap = (function () {
         rqRefresh(scene);
         const talk = (lines) => { if (X.dialog) X.dialog(lines.map(text => ({ who: 'elf', text })), null, { elfName: t('rq_name'), elfFace: 'px_elf_face' }); };
         if (d.ev === 'accept') { talk([line('rq_intro_' + d.q.loc), rqGoal(d.q) + ' ' + t('rq_reward').replace('{c}', d.q.coins) + (d.q.t === 'fish' ? ' ' + t('rq_need_rod') : '')]); showToast(t('rq_toast_accept')); rqSetWp(d.q); }
-        else if (d.ev === 'wait') { const q = d.q; talk([q.got >= q.n ? t('rq_other').replace('{l}', t('big_loc_' + q.loc)) : line('rq_wait') + ' ' + rqGoal(q) + ' ' + q.got + '/' + q.n]); }
+        else if (d.ev === 'wait') { const q = d.q; talk([q.got >= q.n ? t('rq_other').replace('{l}', t('big_loc_' + q.loc)) : line('rq_wait') + ' ' + rqGoal(q) + ' ' + q.got + '/' + q.n + (d.skip ? ' ' + t('rq_skip_hint') : '')]); }
         else if (d.ev === 'got') { X.sfx('coin', 0.6); showToast(rqGoal(d.q) + ' ' + d.q.got + '/' + d.q.n); if (d.q.t === 'item') rqSetWp(d.q); }
         else if (d.ev === 'ready') { X.sfx('coin'); showToast(t('rq_toast_ready').replace('{l}', t('big_loc_' + d.q.loc))); rqSetWp(d.q); }
         else if (d.ev === 'done') { talk([line('rq_thanks')]); X.sfx('win'); showToast(t('rq_toast_done').replace('{c}', d.coins).replace('{x}', d.xp)); }
@@ -2311,12 +2316,9 @@ window.BigMap = (function () {
         const feet = hero.y + 24;
         const n = W.npcs.find(o => (o.q || o.rq) && Math.abs(hero.x - o.x) < 90 && Math.abs(feet - o.y) < 70);
         if (n) return { act: n.rq ? 'rq' : 'quest', arg: n.id, x: n.x, y: n.y - 70, hint: t('bq_hint_talk') };
-        // YO'L KO'RSATKICH: qishloq <-> katta o'rmon
-        const tr = (W.trails || []).find(o => Math.abs(hero.x - o.x) < 70 && Math.abs(feet - o.y) < 70);
-        if (tr) return { act: 'trail', arg: tr.id, x: tr.x, y: tr.y - 112, hint: trailWild(tr) ? t('big_trail_back') : t('big_trail_go').replace('{l}', t('big_wood_' + tr.loc)) };
         // MEVA: topshiriq bo'lsa - teriladi, bo'lmasa - yeyiladi (jon to'ladi)
         const fr = (W.fruits || []).find(o => !O.fruitOff.has(o.id) && Math.abs(hero.x - o.x) < 50 && Math.abs(feet - o.y) < 70);
-        if (fr) { const q = O.rq, forQ = q && q.t === 'item' && q.fr && q.loc === fr.loc && q.got < q.n; return { act: 'fruit', arg: fr.id, x: fr.x, y: fr.y - 84, hint: t(forQ ? 'big_fruit_pick' : 'big_fruit_eat') }; }
+        if (fr) { const q = O.rq, forQ = q && q.t === 'item' && q.fr && q.loc === fr.loc && q.got < q.n; const stone = fr.k === 'redstone'; return { act: 'fruit', arg: fr.id, x: fr.x, y: fr.y - (stone ? 54 : 84), hint: t(stone ? (forQ ? 'big_stone_pick' : 'big_stone_take') : forQ ? 'big_fruit_pick' : 'big_fruit_eat') }; }
         // BALIQ KO'LI: E - qarmoq tashlash (qarmoq suvda bo'lsa - qayta tashlanmaydi)
         const pd = (W.ponds || []).find(o => hero.x > o.x - 70 && hero.x < o.x + o.w + 70 && Math.abs(feet - o.y) < 70);
         if (pd && !O.fish) return { act: 'fishcast', arg: pd.id, x: Math.max(pd.x, Math.min(pd.x + pd.w, hero.x)), y: pd.y - 90, hint: t('big_fish_hint') };
@@ -2666,6 +2668,9 @@ window.BigMap = (function () {
             + `<div class="shop-card shop-tool"><div class="shop-icon">${window.FarmArt ? `<img class="shop-pxicon" src="${window.FarmArt.icon('elixir')}" alt="">` : ''}</div>
                 <div class="shop-name">${t('item_elixir')}</div><div class="shop-desc">${t('item_elixir_desc')}</div>
                 <button class="shop-elixir">${coin} ${(W.shop && W.shop.prices && W.shop.prices.elixir) || 50}</button></div>`
+            + `<div class="shop-card shop-tool"><div class="shop-icon">${window.FarmArt ? `<img class="shop-pxicon" src="${window.FarmArt.icon('chip')}" alt="">` : ''}</div>
+                <div class="shop-name">${t('item_chip')}</div><div class="shop-desc">${t('item_chip_desc')}</div>
+                <button class="shop-chip">${coin} ${(W.shop && W.shop.prices && W.shop.prices.chip) || 50}</button></div>`
             + `<div class="shop-card shop-tool"><div class="shop-icon"><img class="shop-pxicon" src="${mapIcon()}" alt="" style="image-rendering:pixelated"></div>
                 <div class="shop-name">${t('item_bigmap')}</div><div class="shop-desc">${t('item_bigmap_desc')}</div>
                 <button class="shop-buy" data-item="bigmap" ${hasMap() ? 'data-own="1"' : ''}>${hasMap() ? t('shop_owned') : coin + ' ' + ((W.shop && W.shop.prices && W.shop.prices.bigmap) || 600)}</button></div>`;
@@ -2677,7 +2682,8 @@ window.BigMap = (function () {
         el.onpointerdown = (e) => e.stopPropagation();
         el.querySelector('.shop-close').onclick = () => el.remove();
         const rd = el.querySelector('.shop-rod'); if (rd) { rd.className = 'shop-buy shop-rod-buy'; rd.onclick = () => { rd.disabled = true; X.socket.off('shopResult', O.rodResult); X.socket.on('shopResult', O.rodResult); X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'rod' }); }; }   // baliq ovi (ko'l va katta daryolarda)
-        const ex = el.querySelector('.shop-elixir'); if (ex) { ex.className = 'shop-buy'; ex.onclick = () => X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'elixir' }); }   // la'natni (jon tiklanmasligini) tuzatadi
+        const cp = el.querySelector('.shop-chip'); if (cp) { cp.className = 'shop-buy'; cp.onclick = () => { X.socket.off('shopResult', O.rodResult); X.socket.on('shopResult', O.rodResult); X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'chip' }); }; }
+        const ex = el.querySelector('.shop-elixir'); if (ex) { ex.className = 'shop-buy'; ex.onclick = () => { X.socket.off('shopResult', O.rodResult); X.socket.on('shopResult', O.rodResult); X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'elixir' }); }; }   // la'natni (jon tiklanmasligini) tuzatadi
         el.querySelectorAll('.shop-buy[data-item]').forEach((b) => { if (b.dataset.own) b.disabled = true; b.onclick = () => { el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; }); X.socket.emit('bigBuy', { roomId: X.roomId(), item: b.dataset.item }); }; });
         host.appendChild(el);
         X.sfx('coin', 0.4);

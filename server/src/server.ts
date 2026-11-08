@@ -1293,7 +1293,11 @@ io.on('connection', (socket) => {
     });
     socket.on('bigAct', (d: { roomId: string, act: string, arg?: number, item?: string }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
-        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'fishcast', 'fishreel', 'cage', 'fruit', 'trail', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
+        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'fishcast', 'fishreel', 'cage', 'fruit', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
+    });
+    socket.on('petRide', (d: { roomId: string, on: boolean }) => {
+        const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
+        if (room && room.isStarted) gameEngine.petRide(room, socket.id, !!d.on);
     });
     socket.on('bigPortal', (d: { roomId: string, loc: string }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;

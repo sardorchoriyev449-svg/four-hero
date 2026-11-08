@@ -296,7 +296,7 @@ export interface BigWorld {
     ponds: { id: number, x: number, y: number, w: number, loc: string, big?: number }[];    // baliq ko'llari (har lokatsiyada bittadan, tinch orolda); big - katta daryo (katta o'rmon orolida)
     wilds: { loc: string, x: number, y: number, w: number, fx0: number, fx1: number }[];   // KATTA O'RMON VA DARYO oroli (Elf, O'rmon): fx0..fx1 - mevali o'rmon
     fruits: { id: number, x: number, y: number, loc: string, k: string }[];   // mevali butalar (katta o'rmonda): yesa - jon to'ladi, topshiriqda - teriladi
-    trails: { id: number, loc: string, x: number, y: number, to: number }[];  // yo'l ko'rsatkich: E - ikkinchi uchiga o'tiladi (qishloq <-> katta o'rmon)
+    signs: { loc: string, x: number, y: number, home?: number }[];   // yo'l ko'rsatkich yozuvi: pastda - yo'l boshi (katta o'rmonga), home - oroldagi (qishloqqa)
     groves: { id: number, x: number, y: number, w: number, loc: string }[];   // o'rmonlar (lager topshirig'i buyumlari shu yerda)
     lakes: { x: number, y: number, w: number }[];            // kraken ko'li (y - suv yuzasi; ichida jon ketadi)
     zones: BigZone[];
@@ -319,7 +319,7 @@ const TOPH = 40;   // orol tepasining qalinligi (to'liq to'qnashuv)
 export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorld {
     const R = rng(seed), B = BIG;
     const W: BigWorld = { seed, width: 0, top: B.top, bottom: NET.bottom, endX: 0, startCp: 0,
-        gates: [], closed: BIG_CLOSED.slice(), locLvl: Object.fromEntries(Object.entries(LOC_POWER).map(([k, v]) => [k, v.lvl])), locs: [], ponds: [], groves: [], wilds: [], fruits: [], trails: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
+        gates: [], closed: BIG_CLOSED.slice(), locLvl: Object.fromEntries(Object.entries(LOC_POWER).map(([k, v]) => [k, v.lvl])), locs: [], ponds: [], groves: [], wilds: [], fruits: [], signs: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
     let zid = 0, nid = 0, cid = 0, iid = 0;
     let crabRoom: { bog: BigWorld["bogs"][number], plats: BigPlat[], zone: BigZone, room: [number, number, number] } | null = null;   // Balot Krabi - oxirida yer yuzasidagi botqoq yo'lga ko'chiriladi
     const plat = (x: number, y: number, w: number, h: number, k: string) => { const p = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), k }; W.plats.push(p); return p; };
@@ -1081,33 +1081,85 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         if (!hasGun && rest.length > 1) rest[rest.length - 1].k = 'minershot';   // lagerda ikkalasi ham bo'lsin
     });
     // KATTA O'RMON VA KATTA DARYO (Elf qirolligi, O'rmon): qishloq tepasidagi bo'sh osmonda alohida orol - chapda mevali o'rmon
-    // (meva yesa - jon to'ladi; meva topshirig'i bo'lsa - teriladi), o'ngda katta daryo (baliq ovi). Qishloqdagi yo'l ko'rsatkichdan (E) boriladi.
+    // (meva yesa - jon to'ladi; meva topshirig'i bo'lsa - teriladi), o'ngda katta daryo (baliq ovi). Qishloqdan orolgacha taxta pog'onali yo'l - piyoda chiqiladi.
     // Eng oxirida: boshqa joylar, zonalar, checkpointlar va saqlangan dunyolar siljimaydi
-    let frId = 0, trId = 0;
+    let frId = 0;
     ['elf', 'forest'].forEach((loc) => {
         const L = W.locs.find(l => l.id === loc), v = W.villages.find(q => q.loc === loc);
         if (!L || !v || BIG_CLOSED.includes(loc)) return;
-        const boxes: number[][] = [];
-        W.plats.forEach(p => boxes.push([p.x, p.y, p.w, p.h]));
-        W.isles.forEach(I => I.r.forEach(r => boxes.push([r[0], r[1], r[2], r[3]])));
-        W.zones.forEach(z => boxes.push([z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0]));
-        W.vines.forEach(q => boxes.push([q.x - 20, q.y, 40, q.len]));
-        W.gates.forEach(q => boxes.push([q.x - 20, q.y - 760, 40, 820]));
-        [...W.ponds, ...W.groves, ...W.lakes, ...W.lavas, ...W.bogs].forEach(q => boxes.push([q.x, q.y - 200, q.w, 220]));
-        [...W.props, ...W.npcs, ...W.cps, ...W.chests, ...W.portals, ...W.shops, ...W.crates, ...W.piles].forEach(q => boxes.push([q.x - 40, q.y - 200, 80, 200]));
-        const free = (x: number, y: number, w: number) => { const a = [x - 150, y - 560, w + 300, 880]; return !boxes.some(b => b[0] < a[0] + a[2] && b[0] + b[2] > a[0] && b[1] < a[1] + a[3] && b[1] + b[3] > a[1]); };
-        const vc = (v.x0 + v.x1) / 2;
-        let hit: { w: number, x: number, y: number } | null = null;
-        for (const IW of [2400, 2000, 1700]) {
-            for (let y = v.y - 500; y >= Math.max(L.y0, W.top) + 560 && !hit; y -= 50)
-                for (let k = 0; k < 60 && !hit; k++) {
-                    const x = Math.round(vc - IW / 2 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 200);
-                    if (x >= L.x0 + 100 && x + IW <= L.x1 - 100 && free(x, y, IW)) hit = { w: IW, x, y };
+        // to'siqlar: hard - yo'l ham o'tolmaydi; soft - faqat orol ustiga tushmasin
+        const hard: number[][] = [], soft: number[][] = [];
+        W.plats.forEach(p => hard.push([p.x, p.y, p.w, p.h]));
+        W.isles.forEach(I => I.r.forEach(r => hard.push([r[0], r[1], r[2], r[3]])));
+        W.zones.forEach(z => hard.push([z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0]));
+        W.vines.forEach(q => hard.push([q.x - 20, q.y, 40, q.len]));
+        W.gates.forEach(q => hard.push([q.x - 20, q.y - 760, 40, 820]));
+        [...W.ponds, ...W.groves, ...W.lakes, ...W.lavas, ...W.bogs].forEach(q => soft.push([q.x, q.y - 200, q.w, 220]));
+        [...W.npcs, ...W.cps, ...W.chests, ...W.portals, ...W.shops, ...W.crates, ...W.piles].forEach(q => soft.push([q.x - 40, q.y - 200, 80, 200]));
+        const ov = (a: number[], b: number[]) => b[0] < a[0] + a[2] && b[0] + b[2] > a[0] && b[1] < a[1] + a[3] && b[1] + b[3] > a[1];
+        type Spot = { w: number, x: number, y: number, c: number };
+        type Node = { x: number, y: number, d: number, p: Node | null };
+        // yo'l: pog'onalar (har biri oldingisidan 80 px gacha baland, sakrab yetiladi) - boshlang'ich sirtdan orol chetigacha eng qisqasi
+        const walk = (q: Spot, starts: { x: number, y: number }[], H: number[][]) => {
+            const seen = new Set<string>(), Q: Node[] = [], SX = 140, SY = 80, keep = [q.x - 10, q.y - 330, q.w + 20, 590];
+            const open = (nx: number, ny: number) => { const r = [nx - 60, ny - 150, 120, 172]; return !ov(r, keep) && !H.some(b => ov(r, b)); };
+            starts.forEach((s) => { seen.add(s.x + ':' + s.y); Q.push({ x: s.x, y: s.y, d: 0, p: null }); });
+            for (let i = 0; i < Q.length && i < 4000; i++) {
+                const n = Q[i];
+                if (n.d > 0 && n.y >= q.y && n.y - q.y <= 80) {
+                    const L0 = n.x + 130 >= q.x && n.x < q.x - 40, R0 = n.x - 130 <= q.x + q.w && n.x > q.x + q.w + 40;
+                    if (L0 || R0) { const nodes: Node[] = []; let m: Node | null = n, base: Node = n; while (m) { if (m.d > 0) nodes.push(m); base = m; m = m.p; } return { nodes, base, entry: L0 ? 'L' : 'R' }; }
                 }
+                if (n.d >= 28) continue;
+                for (const [dx, dy] of [[SX, -SY], [-SX, -SY], [SX + 40, 0], [-SX - 40, 0], [SX, SY], [-SX, SY]]) {
+                    const nx = n.x + dx, ny = n.y + dy, k = nx + ':' + ny;
+                    if (seen.has(k) || ny < W.top + 170 || nx < L.x0 || nx > L.x1 || !open(nx, ny)) continue;
+                    seen.add(k); Q.push({ x: nx, y: ny, d: n.d + 1, p: n });
+                }
+            }
+            return null;
+        };
+        const fixedQ = [...W.cps, ...W.chests, ...W.crates, ...W.piles, ...W.portals, ...W.shops, ...W.npcs.filter(n => n.fix)] as { x: number, y: number }[];
+        const signOk = (sx: number, sy: number) => !fixedQ.some(q => Math.abs(q.x - sx) < 80 && Math.abs(q.y - sy) < 120) && !W.props.some(q => Math.abs(q.x - sx) < 40 && Math.abs(q.y - sy) < 4);
+        const tryAll = (cand: Spot[], startsFor: (q: Spot) => { x: number, y: number }[], near: number[][], H: number[][]) => {
+            cand.sort((a, b) => a.c - b.c);
+            let tried = 0;
+            for (const q of cand) {
+                const box = [q.x - 60, q.y - 380, q.w + 120, 670];
+                if (near.some(b => ov(box, b))) continue;
+                if (++tried > 60) break;
+                const starts = startsFor(q);
+                if (!starts.length) continue;
+                const r = walk(q, starts, H.filter(b => b[0] + b[2] > q.x - 3200 && b[0] < q.x + q.w + 3200));
+                if (r) return { ...q, ...r };
+            }
+            return null;
+        };
+        let hit: ReturnType<typeof tryAll> = null;
+        // 1) qishloqning o'zidan boshlanadi
+        for (const vv of W.villages.filter(q => q.loc === loc)) {
+            const inBand = (b: number[]) => b[0] + b[2] > vv.x0 - 5400 && b[0] < vv.x1 + 5400 && b[1] + b[3] > vv.y - 1600 && b[1] < vv.y + 700;
+            const H = hard.filter(inBand), near = [...H, ...soft.filter(inBand)], cand: Spot[] = [];
+            for (const w of [2400, 2000, 1700, 1400]) for (let y0 = vv.y - 1100; y0 <= vv.y + 200; y0 += 50) { if (y0 - 380 < W.top) continue;
+                for (let x0 = vv.x0 - w - 2400; x0 <= vv.x1 + 2400; x0 += 100) {
+                    if (x0 < L.x0 + 100 || x0 + w > L.x1 - 100 || (x0 < vv.x1 + 60 && x0 + w > vv.x0 - 60 && vv.y - y0 < 480)) continue;
+                    cand.push({ w, x: x0, y: y0, c: Math.abs(vv.y - y0) + Math.max(0, vv.x0 - (x0 + w), x0 - vv.x1) + (2400 - w) * 0.6 });
+                } }
+            const all: { x: number, y: number }[] = [];
+            for (let sx = vv.x0 + 60; sx <= vv.x1 - 60; sx += 140) all.push({ x: sx, y: vv.y });
+            const good = all.filter(s => signOk(s.x, s.y));
+            hit = tryAll(cand, () => good.length ? good : all, near, H);
             if (hit) break;
         }
+        // 2) qishloq yaqinida joy bo'lmasa: lokatsiyaning istalgan yuriladigan orolidan (dushmansiz) - qishloqqa eng yaqini
+        if (!hit) {
+            const inLoc = (b: number[]) => b[0] + b[2] > L.x0 && b[0] < L.x1, H = hard.filter(inLoc), near = [...H, ...soft.filter(inLoc)], cand: Spot[] = [];
+            for (const w of [2400, 2000]) for (let y0 = L.y0 + 400; y0 <= L.y1 - 320; y0 += 100) for (let x0 = L.x0 + 100; x0 + w <= L.x1 - 100; x0 += 200) cand.push({ w, x: x0, y: y0, c: Math.abs(x0 + w / 2 - (v.x0 + v.x1) / 2) + Math.abs(y0 - v.y) });
+            const tops = W.plats.filter(p => p.h === TOPH && p.w >= 200 && p.x >= L.x0 && p.x < L.x1 && p.y >= L.y0 && p.y < L.y1);
+            hit = tryAll(cand, (q) => { const out: { x: number, y: number }[] = []; tops.forEach((p) => { if (Math.abs(p.y - q.y) > 1200 || p.x > q.x + q.w + 2600 || p.x + p.w < q.x - 2600) return; for (let sx = p.x + 60; sx <= p.x + p.w - 60; sx += 140) if (signOk(sx, p.y)) out.push({ x: sx, y: p.y }); }); return out; }, near, H);
+        }
         if (!hit) return;
-        const { w: IW, x, y } = hit, cnt: { [k: string]: number } = {};
+        const { w: IW, x, y, nodes: pathNodes, base: pathBase, entry } = hit, cnt: { [k: string]: number } = {};
         W.isles.filter(I => I.loc === loc && I.band === 'hi').forEach((I) => { cnt[I.k] = (cnt[I.k] || 0) + 1; });
         const K = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || STYLE[loc].ground;
         const fx0 = x + 230, fx1 = x + Math.round(IW * 0.56), rx = x + Math.round(IW * 0.62), rw = Math.round(IW * 0.3), RD = 28;
@@ -1116,24 +1168,33 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         plat(rx + rw, y, x + IW - rx - rw, TOPH, K); top.w = rx - x;
         plat(rx, y + RD, rw, 16, 'riverbed');
         I.pool = [rx, rw]; I.poolD = RD;
-        [x, x + IW - 56].forEach(wx => W.isles.push({ id: ++iid, x: wx, y: y - 320, w: 56, k: K, loc, band: 'hi', r: [[wx, y - 320, 56, 320]] }));   // chetlarida tosh devor - qishloqqa yiqilib ketilmaydi
+        pathNodes.forEach(n => plat(n.x - 50, n.y, 100, 16, 'plank'));   // yo'l
+        (entry === 'L' ? [x + IW - 56] : [x]).forEach(wx => W.isles.push({ id: ++iid, x: wx, y: y - 320, w: 56, k: K, loc, band: 'hi', r: [[wx, y - 320, 56, 320]] }));   // uzoq chetida tosh devor; yo'l kelgan cheti ochiq
         const TR: { [l: string]: string[] } = { elf: ['bigtree', 'tree', 'flowers', 'bigtree', 'tree'], forest: ['bigtree', 'pine', 'bush', 'bigtree', 'pine'] };
         for (let i = 0, px = fx0; px < fx1; px += 80, i++) prop(px, y, TR[loc][i % TR[loc].length]);
         for (let px = fx0 + 50; px < fx1 - 30; px += 150) W.fruits.push({ id: ++frId, x: px, y, loc, k: RQ.item[loc] });
         W.ponds.push({ id: W.ponds.length + 1, loc, x: rx, y, w: rw, big: 1 });
         ['reeds', 'cattail', 'reeds'].forEach((k, i) => { prop(rx - 16 - i * 14, y, k); prop(rx + rw + 16 + i * 14, y, k); });
         for (let i = 0, px = rx + rw + 80; px < x + IW - 90; px += 90, i++) prop(px, y, TR[loc][(i + 1) % TR[loc].length]);
-        // qishloqdagi yo'l ko'rsatkich: chekpoint, portal, do'kon, doimiy NPC va bezaklar ustiga tushmaydi (chetidan boshlab qidiriladi)
-        const fixed = [...W.cps, ...W.chests, ...W.crates, ...W.piles, ...W.portals, ...W.shops, ...W.npcs.filter(n => n.fix)] as { x: number, y: number }[];
-        const okAt = (sx: number) => !fixed.some(q => Math.abs(q.x - sx) < 80 && Math.abs(q.y - v.y) < 120) && !W.props.some(q => Math.abs(q.x - sx) < 40 && Math.abs(q.y - v.y) < 4);
-        let sx: number | null = null;
-        for (let d = 60; d < (v.x1 - v.x0) / 2 && sx === null; d += 20) for (const c of [v.x1 - d, v.x0 + d]) if (okAt(c)) { sx = c; break; }
-        if (sx === null) { const s0 = v.x1 - 60; W.props = W.props.filter(q => !(Math.abs(q.x - s0) < 40 && Math.abs(q.y - v.y) < 4)); sx = s0; }
-        prop(sx, v.y, 'signpost'); prop(x + 120, y, 'signpost');
-        const a = ++trId, b = ++trId;
-        W.trails.push({ id: a, loc, x: sx, y: v.y, to: b }, { id: b, loc, x: x + 120, y, to: a });
+        // yo'l boshida va orol chetida ko'rsatkich
+        const homeX = entry === 'L' ? x + 110 : x + IW - 110;
+        W.props = W.props.filter(q => !(Math.abs(q.x - homeX) < 60 && Math.abs(q.y - y) < 4));
+        prop(pathBase.x, pathBase.y, 'signpost'); prop(homeX, y, 'signpost');
+        W.signs.push({ loc, x: pathBase.x, y: pathBase.y }, { loc, x: homeX, y, home: 1 });
         W.wilds.push({ loc, x, y, w: IW, fx0, fx1 });
     });
+    // QIZIL TOSHLAR (Yer osti): orollar bo'ylab sochilgan - E bilan olinadi (tanga), topshiriq bo'lsa - razvedkachiga olib boriladi
+    const LV = W.locs.find(l => l.id === 'lava');
+    if (LV && !BIG_CLOSED.includes('lava')) {
+        const tops = W.plats.filter(p => p.h === TOPH && p.w >= 160 && p.x >= LV.x0 && p.x < LV.x1 && p.y >= LV.y0 && p.y < LV.y1 && !W.zones.some(z => z.boss && z.x0 < p.x + p.w && z.x1 > p.x && z.y0 < p.y + 20 && z.y1 + 60 > p.y)).sort((a, b) => a.x - b.x || a.y - b.y);
+        const step = Math.max(1, Math.floor(tops.length / 18));
+        tops.filter((_, i) => i % step === 0).slice(0, 18).forEach((p, i) => {
+            const sx = Math.round(p.x + 40 + (p.w - 80) * (((i * 7) % 5) / 4));
+            if (W.vents.some(q => Math.abs(q.x - sx) < 60 && Math.abs(q.y - p.y) < 6) || W.cps.some(q => Math.abs(q.x - sx) < 70 && Math.abs(q.y - p.y) < 40) || W.npcs.some(q => Math.abs(q.x - sx) < 130 && Math.abs(q.y - p.y) < 90)) return;
+            W.props = W.props.filter(q => !(Math.abs(q.x - sx) < 34 && Math.abs(q.y - p.y) < 4));
+            W.fruits.push({ id: ++frId, x: sx, y: p.y, loc: 'lava', k: 'redstone' });
+        });
+    }
     // DUSHMANLAR SONI: bitta joyda 3 tadan ko'p chiqmaydi (barcha lokatsiyalar; bosslar - alohida). Avval har xil turlar qoladi.
     // Yonma-yon lagerlar ham: istalgan bir ekranda (900x600) 3 tadan ko'p emas (yashirin mimiklar - birinchi). Eng oxirida va tasodifsiz
     W.zones.forEach((z) => {
@@ -1194,6 +1255,7 @@ export interface BigState {
     sgrid: Map<number, number[][]>;   // orollarning qattiq tosh qismlari (devorlar)
     w: BigWorld; grid: Map<number, BigPlat[]>; enemies: BigEnemy[]; shots: BigShot[]; hazards: BigHazard[]; pshots: BigPShot[]; seq: number; tick: number;
     cp: number; zoneState: { [id: number]: { st: 'active' | 'done', at: number } }; chests: { [id: number]: boolean };
+    rqSkip?: { [pid: string]: number };   // og'ir topshiriqdan voz kechish uchun oxirgi suhbat (tick)
     fruitAt?: { [id: number]: number };   // katta o'rmon: meva qachon qayta pishadi (tick)
     fishers?: { [pid: string]: { pond: number, st: 'wait' | 'bite', at: number, fish: { id: string, kg: number, value: number } } };
     dead: { [pid: string]: number }; ended: boolean;
@@ -1791,6 +1853,7 @@ export function damageEnemy(S: BigState, room: RoomState, e: BigEnemy, damage: n
         Object.values(room.players).forEach(q => { ctx.reward(q, coins, xp); if (first) ctx.bossKill(q); if (ctx.daily) ctx.daily(q, 'bosses', 1); });
         if (first) { ctx.saveKill(e.zone); bigProgressAll(S, Object.values(room.players), ctx); }
         bigQuestBoss(S, room, e.k, ctx);
+        rqTrophy(S, room, e.k, ctx);
     } else if (owner) { ctx.reward(owner, d.coins, killXp(d), true); if (ctx.daily) ctx.daily(owner, 'kills', 1); if (!e.life) rqKill(S, owner, e, ctx); }
 }
 // O'yinchi o'qi dushmanga tegdimi (engine o'q tsiklidan): tegsa - true
@@ -1905,7 +1968,9 @@ export function bigQuestTalk(S: BigState, p: PlayerState, npcId: number, ctx: Bi
 // Mukofot lokatsiya qiyinligiga qarab. item (lokatsiya o'rmonidan): Elf - sariq olma, O'rmon - yovvoyi rezavor, Qor - muz kristali, Botqoq - nilufar, Yer osti - nurli qo'ziqorin. fish - lokatsiya ko'lidan
 export const RQ = {
     mult: { elf: 1, forest: 1.4, snow: 1.8, swamp: 2.2, lava: 2.6 } as { [l: string]: number },
-    item: { elf: 'apple', forest: 'berry', snow: 'crystal', swamp: 'lily', lava: 'shroom' } as { [l: string]: string },
+    item: { elf: 'apple', forest: 'berry', snow: 'crystal', swamp: 'lily', lava: 'redstone' } as { [l: string]: string },
+    // bosslardan olib kelinadigan narsalar (o'ldirganda hamma topshiriq egasiga tushadi)
+    trophy: { snow: [['bigfootskin', 'bigfoot']], forest: [['gorillafang', 'gorilla']], swamp: [['crabclaw', 'bogcrab']], lava: [['bullkanheart', 'bullkan']] } as { [l: string]: string[][] },
     killk: { n: [3, 6], coins: 14 }, killn: { n: [6, 12], coins: 9 }, itemq: { n: [3, 5], coins: 16 }, fishq: { n: [2, 4], coins: 26 },
     range: 7000, pickX: 44, pickY: 70
 };
@@ -1933,6 +1998,15 @@ function rqSpots(S: BigState, n: { x: number, loc: string }, count: number): num
 function rqMake(S: BigState, n: { id: number, x: number, loc: string }): RandQuest {
     const base = { seed: S.w.seed, loc: n.loc, npc: n.id, got: 0 }, kinds = rqKinds(S, n.loc), roll = Math.random();
     const xpOf = (c: number) => Math.round(c / 2);
+    // ALOHIDA TOPSHIRIQLAR: boss o'ljasi, qorbobo sovg'asi, qor to'plari (boss hozir o'lik bo'lsa - taklif qilinmaydi)
+    const alive = (k: string) => { const z = S.w.zones.find(q => q.boss === k && q.loc === n.loc); return !!z && S.down[z.id] === undefined; };
+    const spec: RandQuest[] = [];
+    (RQ.trophy[n.loc] || []).forEach(([k, boss]) => { if (alive(boss)) { const c = rqCoins(90, 1, n.loc); spec.push({ ...base, t: 'trophy', k, boss, n: 1, coins: c, xp: xpOf(c) }); } });
+    if (n.loc === 'snow') {
+        if (alive('santa')) { const c = rqCoins(60, 1, n.loc); spec.push({ ...base, t: 'gift', k: 'santagift', boss: 'santa', n: 1, coins: c, xp: xpOf(c) }); }
+        if (S.w.piles.length) { const c = rqCoins(5, 10, n.loc); spec.push({ ...base, t: 'snow', k: 'snow', n: 10, coins: c, xp: xpOf(c) }); }
+    }
+    if (spec.length && Math.random() < Math.min(0.5, 0.15 * spec.length)) return spec[rint(0, spec.length - 1)];   // boss ishlari kam, qor bazasida turli xil ko'proq
     if (roll < 0.3 && S.w.fruits.filter(f => f.loc === n.loc).length >= 3) {   // katta o'rmon bor: mevalarni terib keladi
         const cnt = rint(RQ.itemq.n[0], RQ.itemq.n[1]), c = rqCoins(RQ.itemq.coins, cnt, n.loc);
         return { ...base, t: 'item', k: RQ.item[n.loc], n: cnt, coins: c, xp: xpOf(c), spots: [], fr: 1 };
@@ -1941,7 +2015,7 @@ function rqMake(S: BigState, n: { id: number, x: number, loc: string }): RandQue
         const cnt = rint(RQ.itemq.n[0], RQ.itemq.n[1]), spots = rqSpots(S, n, cnt);
         if (spots.length >= 2) { const c = rqCoins(RQ.itemq.coins, spots.length, n.loc); return { ...base, t: 'item', k: RQ.item[n.loc], n: spots.length, coins: c, xp: xpOf(c), spots }; }
     }
-    if (roll < 0.55 && S.w.ponds.some(q => q.loc === n.loc)) { const cnt = rint(RQ.fishq.n[0], RQ.fishq.n[1]), c = rqCoins(RQ.fishq.coins, cnt, n.loc); return { ...base, t: 'fish', n: cnt, coins: c, xp: xpOf(c) }; }
+    if (roll < 0.55 && S.w.ponds.some(q => q.loc === n.loc)) { const cnt = rint(RQ.fishq.n[0], RQ.fishq.n[1]), frozen = n.loc === 'snow', c = rqCoins(RQ.fishq.coins * (frozen ? 1.4 : 1), cnt, n.loc); return { ...base, t: 'fish', k: frozen ? 'frozen' : undefined, n: cnt, coins: c, xp: xpOf(c) }; }
     if (roll < 0.8 && kinds.length) { const cnt = rint(RQ.killk.n[0], RQ.killk.n[1]), c = rqCoins(RQ.killk.coins, cnt, n.loc); return { ...base, t: 'killk', k: kinds[rint(0, kinds.length - 1)], n: cnt, coins: c, xp: xpOf(c) }; }
     const cnt = rint(RQ.killn.n[0], RQ.killn.n[1]), c = rqCoins(RQ.killn.coins, cnt, n.loc);
     return { ...base, t: 'killn', n: cnt, coins: c, xp: xpOf(c) };
@@ -1952,20 +2026,25 @@ export function bigRqTalk(S: BigState, p: PlayerState, npcId: number, ctx: BigCt
     const n = S.w.npcs.find(o => o.id === npcId && o.rq);
     if (!n || p.isDead || Math.abs(p.x - n.x) > 130 || Math.abs(p.y + 24 - n.y) > 90) return;
     const q = rqOf(S, p);
+    const give = () => { const nq = rqMake(S, n); if (nq.t === 'snow') nq.got = Math.min(nq.n, p.snowballs || 0); p.bigRQ = nq; if (ctx.saveRQ) ctx.saveRQ(p, nq); ctx.emitTo(p.id, 'bigRQ', { ev: 'accept', q: nq, npc: n.id }); };
     if (!q) {
-        const nq = rqMake(S, n);
-        p.bigRQ = nq; if (ctx.saveRQ) ctx.saveRQ(p, nq);
-        ctx.emitTo(p.id, 'bigRQ', { ev: 'accept', q: nq, npc: n.id });
+        give();
         return;
     }
+    if (q.t === 'snow') q.got = Math.min(q.n, p.snowballs || 0);   // qor to'plari qo'lda bo'lishi kerak (otib yuborilgan bo'lsa - sanalmaydi)
     if (q.got >= q.n && q.loc === n.loc) {
+        if (q.t === 'snow') p.snowballs = Math.max(0, (p.snowballs || 0) - q.n);
         p.bigRQ = null; if (ctx.saveRQ) ctx.saveRQ(p, null);
         ctx.reward(p, q.coins, q.xp);
         if (ctx.questDone) ctx.questDone(q.coins);
         ctx.emitTo(p.id, 'bigRQ', { ev: 'done', q: null, coins: q.coins, xp: q.xp, npc: n.id });
         return;
     }
-    ctx.emitTo(p.id, 'bigRQ', { ev: 'wait', q, npc: n.id });
+    // boss topshirig'i og'ir bo'lsa: 15 s ichida yana gaplashsa - boshqa ish beradi (o'yinchi qotib qolmasin)
+    const tough = (q.t === 'trophy' || q.t === 'gift') && q.got < q.n, sk = S.rqSkip = S.rqSkip || {};
+    if (tough && sk[p.id] !== undefined && S.tick - sk[p.id] < T(15000)) { delete sk[p.id]; give(); return; }
+    if (tough) sk[p.id] = S.tick;
+    ctx.emitTo(p.id, 'bigRQ', { ev: 'wait', q, npc: n.id, skip: tough ? 1 : 0 });
 }
 function rqProgress(p: PlayerState, q: RandQuest, ctx: BigCtx): void {
     if (ctx.saveRQ) ctx.saveRQ(p, q);
@@ -1973,7 +2052,7 @@ function rqProgress(p: PlayerState, q: RandQuest, ctx: BigCtx): void {
 }
 function rqKill(S: BigState, owner: PlayerState, e: BigEnemy, ctx: BigCtx): void {
     const q = rqOf(S, owner);
-    if (!q || q.t === 'item' || q.t === 'fish' || q.got >= q.n) return;
+    if (!q || (q.t !== 'killk' && q.t !== 'killn') || q.got >= q.n) return;
     if (q.t === 'killk' && q.k !== e.k) return;
     const z = S.w.zones.find(o => o.id === e.zone);
     if (!z || z.loc !== q.loc) return;
@@ -1997,10 +2076,23 @@ function fishTick(S: BigState, room: RoomState, ctx: BigCtx): void {
     });
 }
 // baliq tutildi: shu lokatsiya ko'lidan bo'lsa - topshiriq hisobiga
-export function bigRqFish(S: BigState, p: PlayerState, loc: string, ctx: BigCtx): void {
+export function bigRqFish(S: BigState, p: PlayerState, loc: string, ctx: BigCtx, fish = ''): void {
     const q = rqOf(S, p);
-    if (!q || q.t !== 'fish' || q.loc !== loc || q.got >= q.n) return;
+    if (!q || q.t !== 'fish' || q.loc !== loc || q.got >= q.n || (q.k === 'frozen' && fish !== 'frozenfish')) return;
     q.got++; rqProgress(p, q, ctx);
+}
+// qor to'plari soni o'zgardi (olindi / otildi): topshiriq ko'rsatkichi
+export function bigRqSnow(S: BigState, p: PlayerState, ctx: BigCtx): void {
+    const q = rqOf(S, p);
+    if (!q || q.t !== 'snow') return;
+    const g = Math.min(q.n, p.snowballs || 0);
+    if (g === q.got) return;
+    const up = g > q.got; q.got = g;
+    if (up) rqProgress(p, q, ctx); else { if (ctx.saveRQ) ctx.saveRQ(p, q); ctx.emitTo(p.id, 'bigRQ', { ev: 'sync', q }); }
+}
+// boss o'ldi: uning o'ljasini so'ragan topshiriq egalariga (shu xonadagi hammaga)
+function rqTrophy(S: BigState, room: RoomState, k: string, ctx: BigCtx): void {
+    Object.values(room.players).forEach((p) => { const q = rqOf(S, p); if (q && q.t === 'trophy' && q.boss === k && q.got < q.n) { q.got++; rqProgress(p, q, ctx); } });
 }
 function rqPick(S: BigState, p: PlayerState, ctx: BigCtx): void {
     const q = rqOf(S, p);
@@ -2010,28 +2102,20 @@ function rqPick(S: BigState, p: PlayerState, ctx: BigCtx): void {
     q.spots.splice(i, 1); q.got++; rqProgress(p, q, ctx);
 }
 // ===== KATTA O'RMON: MEVA (yesa - jon to'ladi; shu lokatsiyada meva topshirig'i bo'lsa - teriladi va razvedkachiga olib boriladi). Har biri qayta pishadi =====
-export const FRUIT = { regrowMs: 35000, nearX: 60, nearY: 80 };
+export const FRUIT = { regrowMs: 35000, stoneMs: 90000, stoneCoins: 10, nearX: 60, nearY: 80 };
 export function bigFruit(S: BigState, p: PlayerState, id: number, ctx: BigCtx): void {
     const f = S.w.fruits.find(o => o.id === id);
     if (!f || p.isDead || Math.abs(p.x - f.x) > FRUIT.nearX || Math.abs(p.y + 24 - f.y) > FRUIT.nearY) return;
     const at = S.fruitAt = S.fruitAt || {};
     if ((at[id] || 0) > S.tick) return;
     const q = rqOf(S, p), forQuest = !!q && q.t === 'item' && !!q.fr && q.loc === f.loc && q.got < q.n;
-    if (!forQuest && p.hp >= (p.maxHp || 100)) { ctx.emitTo(p.id, 'bigFruit', { err: 'big_fruit_full' }); return; }
-    at[id] = S.tick + T(FRUIT.regrowMs);
+    const stone = f.k === 'redstone';
+    if (!forQuest && !stone && p.hp >= (p.maxHp || 100)) { ctx.emitTo(p.id, 'bigFruit', { err: 'big_fruit_full' }); return; }
+    at[id] = S.tick + T(stone ? FRUIT.stoneMs : FRUIT.regrowMs);
     if (forQuest) { q!.got++; rqProgress(p, q!, ctx); }
+    else if (stone) ctx.reward(p, FRUIT.stoneCoins, 2);
     else p.hp = p.maxHp || 100;
-    ctx.emit('bigFruit', { id, x: f.x, y: f.y, k: f.k, by: p.id, ev: forQuest ? 'pick' : 'eat' });
-}
-// YO'L KO'RSATKICH: qishloq <-> katta o'rmon oroli (E)
-export function bigTrail(S: BigState, p: PlayerState, id: number, ctx: BigCtx): boolean {
-    const a = S.w.trails.find(o => o.id === id), b = a && S.w.trails.find(o => o.id === a.to);
-    if (!a || !b || p.isDead || Math.abs(p.x - a.x) > 90 || Math.abs(p.y + 24 - a.y) > 90) return false;
-    p.x = b.x + 50; p.y = b.y - 26;
-    delete S.dots[p.id];
-    ctx.emitTo(p.id, 'teleport', { x: p.x, y: p.y });
-    ctx.emit('bigTrailFx', { id: p.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, to: b.id });
-    return true;
+    ctx.emit('bigFruit', { id, x: f.x, y: f.y, k: f.k, by: p.id, ev: forQuest ? 'pick' : stone ? 'stone' : 'eat', c: FRUIT.stoneCoins });
 }
 // robot ilon o'ldi: tishini olish topshirig'i bor hamma o'yinchida - tish olindi
 export function bigQuestBoss(S: BigState, room: RoomState, k: string, ctx: BigCtx): void {
@@ -2097,6 +2181,7 @@ export function bigTrigger(S: BigState, p: PlayerState, room?: RoomState, ctx?: 
         const gf = S.gifts[z.id] || (S.gifts[z.id] = { at: S.tick, ids: {} });
         if (gf.ids[p.id]) return false;
         gf.ids[p.id] = true;
+        if (ctx) { const rq = rqOf(S, p); if (rq && rq.t === 'gift' && rq.got < rq.n) { rq.got++; rqProgress(p, rq, ctx); } }   // qorbobo sovg'asi topshirig'i
         const inside = Object.values(room.players).filter(q => !q.isDead && q.x > z.x0 - 100 && q.x < z.x1 + 100 && q.y + 24 >= z.y0 && q.y + 24 <= z.y1 + 60);
         const n = inside.filter(q => gf.ids[q.id]).length, need = Math.max(1, inside.length);
         if (ctx) ctx.emit('bigGift', { z: z.id, id: p.id, n, need, x: Math.round(p.x), y: Math.round(p.y) });

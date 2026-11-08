@@ -121,7 +121,7 @@
     function mfFishGrid(id) {
         const S = { perch: [14, 7, [0x9e9d24, 0xc0ca33, 0xd4e157, 0xf0f4c3], 0xff7043], carp: [16, 8, [0x4e3b16, 0x7a5f26, 0xa3843a, 0xcdb06a], 0x6d4c2a],
             pike: [20, 6, [0x33691e, 0x558b2f, 0x7cb342, 0xc5e1a5], 0x8bc34a], catfish: [20, 8, [0x37352f, 0x4e4a40, 0x6d665a, 0x9e968a], 0x5d5a52],
-            goldfish: [13, 8, [0xb26a00, 0xffa000, 0xffca28, 0xfff59d], 0xff6f00] }[id];
+            goldfish: [13, 8, [0xb26a00, 0xffa000, 0xffca28, 0xfff59d], 0xff6f00], frozenfish: [16, 8, [0x4f83b5, 0x81c4e8, 0xb3e5fc, 0xeafaff], 0xcfefff] }[id];
         const [W, H, P, fin] = S, g = gridNew(W + 4, H);
         const cy = (H - 1) / 2;
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {

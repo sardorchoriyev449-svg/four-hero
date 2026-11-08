@@ -1,4 +1,4 @@
-import { rollFish, farmCapacity as fcap_, farmLevel as flvl_, farmRaidK } from '../maps';
+import { PET_RIDE, rollFish, rollFrozenFish, farmCapacity as fcap_, farmLevel as flvl_, farmRaidK } from '../maps';
 const FISH_ROD_USES = 20;   // My Farm bilan bir xil (toolUses)
 import * as db from '../db';
 import { Server } from 'socket.io';
@@ -6,7 +6,7 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bigFruit, bigTrail, bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
 import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
@@ -348,7 +348,7 @@ export class GameEngine {
                     x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
-                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,
+                    weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { rs: Math.max(0, Math.round((1 - (p.rideUsed || 0) / PET_RIDE.rangePx) * 100)), rc: Math.max(0, Math.ceil(((p.rideLockUntil || 0) - Date.now()) / 1000)), l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, sl: p.staminaLevel || 0, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
                     tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03), mineCd: Math.ceil((p.mineCd || 0) * 0.03), invisCd: Math.ceil((p.invisCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
@@ -2666,6 +2666,26 @@ export class GameEngine {
         if (g && gd && g.state !== 'intro' && g.state !== 'defeat' && g.state !== 'smash' && g.state !== 'fall') out.push({ x: g.x, y: 570 - gd.height / 2 });
         return out;
     }
+    // AJDARXOGA MINISH / TUSHISH (klientdan): yerga o'tirgan 15-darajali ajdarxo yonida; The World va My Farm da
+    public petRide(room: RoomState, playerId: string, on: boolean): void {
+        const p = room.players[playerId], P = p && p.pet, pt = room.pets && room.pets[playerId];
+        if (!p) return;
+        if (!on) { if (p.ride) this.petRideEnd(room, p); return; }
+        if (p.ride || !P || p.isDead || P.lvl < PET_RIDE.lvl || !pt || pt.st !== 'perch' || pt.spot !== 'ground' || (!room.big && !room.myFarm)) return;
+        if (Math.abs(p.x - pt.x) > PET_RIDE.near || Math.abs(p.y - pt.y) > 110) return;
+        if (room.big && bigArenas(room.big).some(a => p.x > a.x0 && p.x < a.x1 && p.y + 24 >= a.y0 && p.y + 24 <= a.y1 + 120)) { this.io.to(playerId).emit('petRide', { err: 'pet_ride_arena' }); return; }
+        const left = Math.ceil(((p.rideLockUntil || 0) - Date.now()) / 1000);
+        if (left > 0) { this.io.to(playerId).emit('petRide', { err: 'pet_ride_wait', s: left }); return; }
+        p.ride = { x: p.x, y: p.y }; pt.st = 'ride';
+        this.io.to(playerId).emit('petRide', { on: 1 });
+    }
+    private petRideEnd(room: RoomState, p: PlayerState): void {
+        if (p.ride && p.ride.out) { p.rideLockUntil = Date.now() + PET_RIDE.cdMs; p.rideUsed = PET_RIDE.rangePx; }
+        p.ride = undefined;
+        const pt = room.pets && room.pets[p.id];
+        if (pt && pt.st === 'ride') { pt.st = 'follow'; pt.idle = 0; }
+        this.io.to(p.id).emit('petRide', { off: 1 });
+    }
     private updatePets(room: RoomState, roomId: string): void {
         if (!room.pets) room.pets = {};
         const map = getMapById(room.selectedLevel), now = Date.now(), dt = this.TICK_SECONDS;
@@ -2674,13 +2694,23 @@ export class GameEngine {
         Object.values(room.players).forEach((p) => {
             const P = p.pet;
             const ok = !!P && (p.petTrust || 0) >= 10 && !P.resting && !P.home && P.hp > 0 && !p.isDead;
-            if (!ok) { delete room.pets![p.id]; return; }
+            if (!p.ride && (p.rideUsed || 0) > 0) p.rideUsed = Math.max(0, p.rideUsed! - PET_RIDE.rangePx * dt * 1000 / PET_RIDE.cdMs);   // dam olganda kuch qaytadi (15 s da to'liq)
+            if (!ok) { if (p.ride) this.petRideEnd(room, p); delete room.pets![p.id]; return; }
             let pt = room.pets![p.id];
             if (!pt) pt = room.pets![p.id] = { x: p.x - 40, y: p.y - 50, face: 1, st: 'follow', tx: 0, ty: 0, spitAt: 40, dashAt: 100, hitFlash: 0 };
             if (pt.hitFlash > 0) pt.hitFlash--;
             // spitAt / dashAt - keyingi tupurish / uchib urishgacha qolgan tiklar
             if (pt.spitAt > 0) pt.spitAt--;
             if (pt.dashAt > 0) pt.dashAt--;
+            if (p.ride) {   // MINGAN: ajdarxo egasi tagida; bosib o'tilgan masofa - kuchi
+                const r = p.ride, d = Math.hypot(p.x - r.x, p.y - r.y), m0 = this.playerMotion.get(p.id);
+                r.x = p.x; r.y = p.y;
+                if (d < 260) p.rideUsed = (p.rideUsed || 0) + d;
+                pt.st = 'ride'; pt.x = p.x; pt.y = p.y + PET_RIDE.dy;
+                if (m0 && Math.abs(m0.vx) > 20) pt.face = m0.vx > 0 ? 1 : -1;
+                if (!r.out && (p.rideUsed || 0) >= PET_RIDE.rangePx) { r.out = true; this.io.to(p.id).emit('petRide', { out: 1 }); }
+                return;
+            }
             const mo = this.playerMotion.get(p.id);
             const ownerFace = mo && Math.abs(mo.vx) > 20 ? (mo.vx > 0 ? 1 : -1) : pt.face;
             if (targets === null) targets = combat ? this.petTargets(room, map) : [];
@@ -2715,7 +2745,7 @@ export class GameEngine {
                 const still = !mo || Math.hypot(mo.vx, mo.vy) < 15;
                 pt.idle = still && !near ? (pt.idle || 0) + 1 : 0;
                 if (pt.st === 'perch' && (!still || near)) pt.st = 'follow';
-                if (pt.st === 'follow' && (pt.idle || 0) > 70) { pt.st = 'perch'; pt.spot = Math.random() < 0.5 ? 'head' : 'ground'; pt.tx = ownerFace; }   // tx - qo'nish paytidagi egasining yo'nalishi (joy shu bo'yicha o'zgarmaydi)
+                if (pt.st === 'follow' && (pt.idle || 0) > 70) { pt.st = 'perch'; pt.spot = P!.lvl >= PET_RIDE.lvl ? 'ground' : Math.random() < 0.5 ? 'head' : 'ground'; pt.tx = ownerFace; }   // tx - qo'nish paytidagi egasining yo'nalishi (joy shu bo'yicha o'zgarmaydi)
                 if (pt.st === 'perch') {
                     const side = pt.tx >= 0 ? 1 : -1, tx = pt.spot === 'head' ? p.x : p.x - side * 46, gk = petGrowth(P!.lvl), ty = pt.spot === 'head' ? p.y - this.PLAYER_HALF_H - 17 * gk : p.y + this.PLAYER_HALF_H - 18 * gk;
                     const dx = tx - pt.x, dy = ty - pt.y, d = Math.hypot(dx, dy), sp = PET.followSpeed * 0.8 * dt;
@@ -5546,11 +5576,11 @@ if (p) {
     // QOR BAZASI: qor uyumidan to'plar olish va otish
     public bigSnow(room: RoomState, playerId: string): void {
         const p = room.players[playerId];
-        if (room.big && p && bigSnowGrab(room.big, p)) this.io.to(playerId).emit('bigSnowGot', { n: p.snowballs });
+        if (room.big && p && bigSnowGrab(room.big, p)) { this.io.to(playerId).emit('bigSnowGot', { n: p.snowballs }); bigRqSnow(room.big, p, this.bigCtx(room.id)); }
     }
     public bigThrow(room: RoomState, playerId: string, angle: number): void {
         const p = room.players[playerId];
-        if (room.big && p && bigSnowThrow(room.big, p, angle)) this.io.to(room.id).emit('bigThrow', { id: playerId, x: Math.round(p.x), y: Math.round(p.y) });
+        if (room.big && p && bigSnowThrow(room.big, p, angle)) { this.io.to(room.id).emit('bigThrow', { id: playerId, x: Math.round(p.x), y: Math.round(p.y) }); bigRqSnow(room.big, p, this.bigCtx(room.id)); }
     }
     // ELF QIROLLIGI: topshiriq beruvchi bilan gaplashish, qafasni ochish, robot ilonni chaqirish (E), semiz elf suhbati
     public bigAct(room: RoomState, playerId: string, act: string, arg: number, item = ''): void {
@@ -5564,7 +5594,6 @@ if (p) {
         else if (act === 'fishreel') this.bigFishReel(room, S, p, item, ctx).catch(err => console.error('bigFishReel xatosi:', err));
         else if (act === 'cage') bigCage(S, p, ctx);
         else if (act === 'fruit') bigFruit(S, p, arg, ctx);   // katta o'rmonda meva yeyish / terish
-        else if (act === 'trail') bigTrail(S, p, arg, ctx);   // yo'l ko'rsatkich: qishloq <-> katta o'rmon
         else if (act === 'trigger') bigTrigger(S, p, room, ctx);
         else if (act === 'mage') bigMageTalk(S, p, arg, ctx);   // Balot Magi bilan suhbat tugadi - simpatiya
         else if (act === 'magegift') bigMageGift(S, p, arg, item, ctx);   // qo'ldagi narsani sovg'a qilish
@@ -5584,7 +5613,8 @@ if (p) {
         if (!f.rod) { err('big_fish_need_rod'); return; }
         if (S.fishers && S.fishers[p.id]) return;
         const use = await db.toolUse(p.userId, 'rod', FISH_ROD_USES);
-        bigFishStart(S, p, pondId, rollFish(false), ctx);
+        const inSnow = (S.w.ponds.find(q => q.id === pondId) || { loc: '' }).loc === 'snow';   // Qor bazasi ko'lida - ko'pincha muzlagan baliq
+        bigFishStart(S, p, pondId, inSnow && Math.random() < 0.5 ? rollFrozenFish() : rollFish(false), ctx);
         if (use.broken) ctx.emitTo(p.id, 'bigFish', { st: 'broken' });
         this.roomManager.farmChanged(p.userId);
     }
@@ -5601,7 +5631,7 @@ if (p) {
         this.roomManager.farmChanged(p.userId);
         this.roomManager.dailyProgress(room.id, p.id, 'fish', 1);
         if (golden) this.roomManager.grantAchievement(room.id, p.id, 'goldfish', 50).catch(e => console.error('goldfish ach xatosi:', e));
-        if (pond) bigRqFish(S, p, pond.loc, ctx);
+        if (pond) bigRqFish(S, p, pond.loc, ctx, fi.fish.id);
     }
     // PORTAL: ochilgan lokatsiyaga ko'chish
     public bigPortalGo(room: RoomState, playerId: string, loc: string): void {

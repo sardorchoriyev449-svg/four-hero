@@ -130,6 +130,8 @@ export function rollFish(netOnly: boolean): { id: string, kg: number, value: num
     const kg = Math.round((f.minKg + Math.random() ** 1.6 * (f.maxKg - f.minKg)) * 10) / 10;
     return { id: f.id, kg, value: Math.round(f.base + f.perKg * kg) };
 }
+// MUZLAGAN BALIQ: faqat Qor bazasi ko'lida tutiladi (ferma buyurtmalari va daryosida yo'q)
+export function rollFrozenFish(): { id: string, kg: number, value: number } { const kg = Math.round((0.6 + Math.random() * 2.4) * 10) / 10; return { id: 'frozenfish', kg, value: Math.round(18 + 12 * kg) }; }
 // MEVALI DARAXTLAR (bog'): bir marta ekiladi, ulg'aygach har cycleMs da yield ta meva beradi
 export interface FruitTreeDef { id: string; level: number; price: number; matureMs: number; cycleMs: number; yield: number; sell: number; }
 export const FRUIT_TREES: FruitTreeDef[] = [
@@ -457,7 +459,9 @@ export const PET_SKINS: { [slot: string]: { id: string, price: number }[] } = {
 export const petXpNeed = (lvl: number) => 40 * lvl;
 export const petUpCap = (lvl: number) => Math.min(PET.upMax, Math.floor(lvl / 3));   // har 3 darajada bittadan (15 da - hammasi)
 // O'SISH: 5, 10, 15-darajalarda ajdarcha kattalashadi (rasm o'lchami ko'paytmasi)
-export const petGrowth = (lvl: number) => lvl >= 15 ? 1.45 : lvl >= 10 ? 1.3 : lvl >= 5 ? 1.15 : 1;
+export const petGrowth = (lvl: number) => lvl >= 15 ? 3 : lvl >= 10 ? 1.3 : lvl >= 5 ? 1.15 : 1;
+// AJDARXOGA MINISH (15-darajadan): yerga o'tirganda yoniga borib E; 300 m (3000 px) uchadi, kuchi tugasa pastga tushadi va 15 s dam oladi; o'yinchidan 2x tez, sakrash tugmasi - tushish
+export const PET_RIDE = { lvl: 15, rangePx: 3000, cdMs: 15000, near: 130, dy: 26 };
 export const petMaxHp = (up: { hp?: number }) => PET.baseHp + PET.hpPerUp * (up.hp || 0);
 export const petDamage = (lvl: number, up: { dmg?: number }) => PET.baseDmg + PET.dmgPerLvl * (lvl - 1) + PET.dmgPerUp * (up.dmg || 0);
 export const petSpitMs = (up: { spd?: number }) => PET.spitMs - PET.spitPerUp * (up.spd || 0);
@@ -1785,32 +1789,15 @@ export const MAPS: MapDef[] = [
     }
 ];
 
-// FERMA BUYUMLARI: Shop xaritasida va My Farm do'konida bir xil narxda (baliq ovi asboblari, o'g'it, bezaklar, yaylov, elflar, tezlatgichlar, uy jihozlari)
+// FERMA BUYUMLARI: My Farm do'koni narxlari (baliq ovi asboblari, o'g'it, bezaklar, yaylov, elflar, tezlatgichlar, uy jihozlari)
 const FARM_SHOP = { prices: { rod: 100, net: 300, fert: 25, water: 150,
         decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250, decor_pethouse: 1500, decor_cards: 1200, decor_pool: 4000, elf: 1500, rake: MEADOW.rake.price,
         ...Object.fromEntries(MEADOW_DECOR.map(d => ['meadow_' + d.id, d.price])),
         ...Object.fromEntries(HOME_ITEMS.map(h => ['home_' + h.id, h.price])), hive: FARM_HIVE.price } as { [item: string]: number },
     farmUp: { rake: MEADOW.rake, hive: FARM_HIVE, mill: FARM_MILL, sprinkler: FARM_SPRINKLER, scarecrow: FARM_SCARECROW, greenhouse: FARM_GREENHOUSE,
             homeMax: Object.fromEntries(HOME_ITEMS.map(h => [h.id, homeMax(h.id)])) } };   // jihoz - nechtagacha sotib olinadi
-// DO'KON (BONUS): o'rtacha kattalikdagi do'kon - Eliksir (kislotadan keyin jon tiklanishini qaytaradi) va
-// Chip (chaqmoqdan keyin stamina tez to'lishini qaytaradi). Jang yo'q, doim ochiq
-MAPS.push({
-    id: MAPS.length,
-    name: "Shop",
-    description: "A small shop. Buy an Elixir (brings back HP regeneration after acid) or a Chip (brings back fast stamina after lightning).",
-    mode: 'shop',
-    bonus: true,
-    killsToWin: 0,
-    accentColor: 0xffca28,
-    groundColor: 0x5d4037,
-    mapWidth: 800,
-    platforms: [],
-    shop: { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, bigmap: 600, ...FARM_SHOP.prices }, farmUp: FARM_SHOP.farmUp },
-    playerSpawns: [
-        { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }, { x: 210, y: 500 }
-    ],
-    botSpawnZone: { xStart: 0, xEnd: 0, y: 90 }
-});
+// THE WORLD QISHLOQ DO'KONLARI: narxlar (eliksir, chip, xarita va ferma buyumlari)
+export const WORLD_SHOP: NonNullable<MapDef['shop']> = { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, bigmap: 600, ...FARM_SHOP.prices }, farmUp: FARM_SHOP.farmUp };
 
 // BONUS "NO MORE FRIENDS": kichik maydon (qadimiy arena), simmetrik platformalar - PvP
 MAPS.push({
@@ -1858,7 +1845,7 @@ MAPS.push({
     groundColor: 0x6d4c41,
     mapWidth: 7860,   // yaylov (2400) bilan
     platforms: GIANT_TREE_PLATS,
-    shop: { counterX: 470, range: 40, prices: { ...FARM_SHOP.prices }, farmUp: FARM_SHOP.farmUp },   // FERMA DO'KONI (omborxona va taxta orasida): faqat fermaga oid narsalar
+    shop: { counterX: 300, range: 70, prices: { ...FARM_SHOP.prices }, farmUp: FARM_SHOP.farmUp },   // FERMA DO'KONI (uy oldida): faqat fermaga oid narsalar
     myFarm: { zoneX0: 630, zoneW: 460, plotX0: 30, plotW: 48, plotGap: 24, range: 32, zonePrice: 250,
         zonePrices: [0, 250, 250, 250, 400, 600], zoneLevels: [0, 0, 0, 0, 3, 6], waterPrice: 10,
         riverX0: 7260, dockX1: 7520, dockPrice: 200, meadow: MEADOW, meadowDecor: MEADOW_DECOR, netCooldownMs: 30000, toolUses: 20, waterBoost: 0.5, goldenChance: 0.15,
