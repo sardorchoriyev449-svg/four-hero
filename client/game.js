@@ -425,7 +425,6 @@ function launchGame(socket, roomId, mapData, continued) {
     const isGorilla = !!map.gorilla; // tosh gorilla boss (map-8)
     const isFatElf = !!map.fatElf;   // semiz elf (map-9, "Vaxtida kelding")
     const isUnderworld = !!map.underworld; // UnderWorld (map-10): og'zibor gul, shahar, trol
-    const isArena = !!map.arena;     // Arena (bonus): cheksiz botlar, har 5 o'ldirishda boss
     const isGFlower = !!map.giantFlower; // Season 2 map-1: Gigant gul
     const isLift = !!map.lift;           // Season 2 map-2: tog'ga ko'tariluvchi platforma
     const isFarm = !!map.farm;           // Season 2 map-3: zombi poliz
@@ -437,7 +436,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const isVend = !!map.vend;           // Season 2 map-9: do'kon, ranets avtomati, jarlik (Skyland)
     const isSky = !!map.sky;             // Season 2 map-10: osmondagi jang (ranetsda uchish)
     const isPvp = !!map.pvp;             // BONUS: "Boshqa do'st emas" - o'yinchilar bir-biriga qarshi
-    const isShop = !!map.shop && !isVend; // BONUS: do'kon xonasi (Eliksir, Chip)
+    const isShop = !!map.shop && !isVend && !map.myFarm;   // My Farm'dagi do'kon - fermaning o'zida (rasta) // BONUS: do'kon xonasi (Eliksir, Chip)
     const isMyFarm = !!map.myFarm;       // BONUS: My Farm - o'z grядkalari (ekish, o'stirish, yig'ish)
     const isBig = !!map.big;             // BIG MAP: juda katta tasodifiy dunyo (client/bigmap.js)
     // Faqat lokal sinovda (localhost): avtomatik brauzer testlari o'yin ichki holatini o'qiy oladi. Haqiqiy saytda yo'q.
@@ -469,8 +468,7 @@ function launchGame(socket, roomId, mapData, continued) {
     const tongueSeen = {};
     let prevWhipPhase = null;
     const rootUpSeen = new Set();
-    const isSnakeArena = isArena && !!map.arena.snake; // arenada Robot ilon boss bo'lib chiqishi mumkin
-    const snakeDef = map.boss || (isSnakeArena ? map.arena.snake : null);
+    const snakeDef = map.boss || null;
 
     // Shu raundga xos holat (har raundda launchGame qaytadan chaqiriladi)
     let crateGroup, crateTex;
@@ -536,7 +534,6 @@ function launchGame(socket, roomId, mapData, continued) {
     let uwTalkState = null;    // trol bilan suhbat: { state, ... }
     let uwTalkShown = false;
     let trollHint = null;
-    let arenaState = null;     // serverdan: { kills, sinceBoss, boss, bossesBeaten }
     // GIGANT GUL: server holati va sahna obyektlari
     let gfState = null;
     let gfObj = null;          // { head, crown, stem, whip, walls: [img, img], wallGroup, disp: {x, y} }
@@ -847,7 +844,6 @@ function launchGame(socket, roomId, mapData, continued) {
     }
     function weaponPoseKey(sprite, characterType) {
         if (sprite.weaponMode === 'alt' && characterType === 'knight') return 'shotgun';
-        if (sprite.weaponMode === 'alt2' && characterType === 'samurai') return 'kunai';   // ruhiy zarba (alt) - qo'lda katana qoladi
         if (sprite.weaponMode === 'alt' && characterType === 'hunter') return 'blowpipe';
         return characterType in Cosmetics.POSE ? characterType : 'knight';
     }
@@ -953,18 +949,18 @@ function launchGame(socket, roomId, mapData, continued) {
         const m = c.weaponMode || 'main', t = c.characterType;
         if (t === 'mage') return m === 'alt2' ? 'lightning' : m === 'alt' ? 'ice' : 'fireball';
         if (t === 'knight') return m === 'alt2' ? ((c.shieldCd || 0) > 0 ? null : 'shield') : m === 'alt' ? ((c.reloading || (c.ammo || 0) <= 0) ? null : 'pellet') : 'melee';
-        if (t === 'samurai') return m === 'alt2' ? 'shuriken' : m === 'alt' ? 'slash' : 'melee';
+        if (t === 'samurai') return m === 'alt' ? 'slash' : 'melee';
         if (t === 'hunter') return m === 'alt' ? 'dart' : 'knife';
         return 'arrow';
     }
     function predictAttack(scene, angle) {
         const c = currentCharacter, now = performance.now();
         if (!c || !c.active || c.isDead || !scene || !scene.add) return;
-        const cdMs = c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 990 : c.characterType === 'samurai' && c.weaponMode === 'alt' ? 750
+        const cdMs = c.characterType === 'samurai' && c.weaponMode === 'alt' ? 750
             : c.characterType === 'hunter' ? (c.weaponMode === 'alt' ? 450 : 510) : 360;
         if (now - ATK_PREDICT.last < cdMs) return;                      // server cooldown (attackCooldownTicks)
         // Stamina: server bilan AYNAN bir xil narx (har kuchaytirish -10%). Avval yarmi yetarli deb chizilardi - server otmagan "arvoh o'q" dushman ustidan o'tib ketardi
-        if ((c.stamina || 0) < (c.characterType === 'samurai' && c.weaponMode === 'alt' ? 24 : c.characterType === 'samurai' && c.weaponMode === 'alt2' ? 22 : (ATK_COST[c.characterType] || 10)) * (1 - Math.min(5, c.staminaLevel || 0) * 0.1)) return;   // ruhiy zarba - 24, uchburchak drotiklar - 22 stamina
+        if ((c.stamina || 0) < (c.characterType === 'samurai' && c.weaponMode === 'alt' ? 24 : (ATK_COST[c.characterType] || 10)) * (1 - Math.min(5, c.staminaLevel || 0) * 0.1)) return;   // ruhiy zarba - 24 stamina
         const bt = predictedAttackType(c);
         if (!bt) return;
         ATK_PREDICT.last = now; ATK_PREDICT.at = now; ATK_PREDICT.pending = true;
@@ -973,7 +969,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const me = c;   // weaponColor holatdan yoziladi
         playHeroAttack(scene, c, bt);
         const shotName = bt === 'knife' || bt === 'slash' ? 'katana' : bt === 'melee' ? (c.characterType === 'samurai' ? 'katana' : 'sword')
-            : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' || bt === 'shuriken' ? 'kunai' : bt === 'fireball' ? 'fireball'
+            : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' ? 'kunai' : bt === 'fireball' ? 'fireball'
             : bt === 'lightning' ? 'whip' : bt === 'shield' ? 'whoosh' : 'arrow';
         sfxAt(shotName, c.x, 1);
         if (bt === 'melee') {
@@ -999,16 +995,17 @@ function launchGame(socket, roomId, mapData, continued) {
         // Uchadigan o'qlar: server bilan bir xil tezlik va chiqish nuqtasi
         const spec = {
             arrow: [1000, 18, -8], fireball: [600, 20, -10], ice: [700, 20, -10], lightning: [1100, 20, -10],
-            kunai: [750, 18, -4], slash: [640, 24, -2], shuriken: [720, 20, -6], shield: [650, 20, -6], dart: [950, 18, -6]
+            kunai: [750, 18, -4], slash: [640, 24, -2], shield: [650, 20, -6], dart: [950, 18, -6]
         }[bt];
         if (!spec) return;
-        const fan = bt === 'shuriken' ? [-0.2, 0, 0.2] : (bt === 'arrow' && c.characterType === 'archer' && (c.weaponMode || 'main') === 'alt') ? [-0.12, 0, 0.12] : [0];
+        const fan = (bt === 'arrow' && c.characterType === 'archer' && (c.weaponMode || 'main') === 'alt') ? [-0.12, 0, 0.12] : [0];
         let tex = bt === 'arrow' ? 'projectile_arrow' : bt === 'ice' || bt === 'fireball' ? 'projectile_fireball' : bt === 'lightning' ? 'projectile_lightning'
-            : bt === 'shuriken' ? 'projectile_shuriken' : bt === 'kunai' ? 'projectile_kunai' : bt === 'slash' ? 'projectile_slash' : bt === 'dart' ? 'projectile_dart' : 'w_shield';
+            : bt === 'kunai' ? 'projectile_kunai' : bt === 'slash' ? 'projectile_slash' : bt === 'dart' ? 'projectile_dart' : 'w_shield';
         if (bt === 'shield') ensureWeaponTextures(scene);
         if (bt === 'kunai' && c.look) { const ks = cosTexture(scene, 'kunai', c.look.kunai); if (ks) tex = ks.key; }
         if (!scene.textures.exists(tex)) return;
-        const x0 = c.x + Math.cos(angle) * spec[1], y0 = c.y + spec[2];
+        const bigSlash = bt === 'slash' && hasPerkClient('samurai', c.level, 'bigspirit');   // 16-daraja: katta ruh (server bilan bir xil joyda)
+        const x0 = c.x + Math.cos(angle) * spec[1], y0 = c.y + (bigSlash ? -25 : spec[2]);
         fan.forEach(k => {
             const a = angle + k;
             const sp = scene.add.sprite(x0, y0, tex).setDepth(4);
@@ -1017,8 +1014,8 @@ function launchGame(socket, roomId, mapData, continued) {
             else if (bt === 'dart' && hasPerkClient('hunter', c.level, 'poison')) sp.setTint(0x76ff03);
             else if (bt === 'arrow' && me && me.weaponColor && !tex.startsWith('cos_')) sp.setTint(me.weaponColor);
             else if (bt === 'fireball' && me && me.weaponColor) sp.setTint(me.weaponColor);
-            if (bt === 'shield') sp.spin = 22; else if (bt === 'shuriken') sp.setFlipX(false).setRotation(a);   // uchburchak drotik - uchish yo'nalishiga qarab
-            if (bt === 'slash') { sp.slash = true; sp.setAlpha(1).setScale(1.35); if (me && me.weaponColor) sp.setTint(me.weaponColor); }
+            if (bt === 'shield') sp.spin = 22;
+            if (bt === 'slash') { sp.slash = true; sp.setAlpha(1).setScale(bigSlash ? 2.16 : 1.35); if (me && me.weaponColor) sp.setTint(me.weaponColor); }
             sp.ex = { x: x0, y: y0, vx: Math.cos(a) * spec[0], vy: Math.sin(a) * spec[0], t: performance.now() };
             sp.predicted = true;
             sp.trailFx = c.weaponFx || '';
@@ -1101,7 +1098,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (sprite === currentCharacter) scene.cameras.main.shake(70, 0.004);
         } else if (bulletType === 'slash') {
             swing({ angle: -170, dx: 6 }, 55, 210);   // katana keng siltanadi - tig'idan ruh uchib chiqadi
-        } else if (bulletType === 'kunai' || bulletType === 'shuriken' || bulletType === 'shield') {
+        } else if (bulletType === 'kunai' || bulletType === 'shield') {
             swing({ angle: -60, dx: 6 }, 60, 170);
         } else if (bulletType === 'knife') {
             swing({ angle: 70, dx: 9 }, 60, 190);
@@ -2576,7 +2573,7 @@ function launchGame(socket, roomId, mapData, continued) {
         [[5, 1], [6, 2], [7, 3], [8, 4], [9, 5], [10, 6], [10, 1], [9, 2], [8, 3], [6, 5], [5, 6]].forEach(([x, y]) => { g[y][x] = 0xff5252; });
         return gridOutline(g, 0x000000);
     }
-    function buildFatElfScene(scene, arenaOnly = false) {
+    function buildFatElfScene(scene) {
         const W = mapWidth, fd = map.fatElf;
         const mk = (key, grid, P) => { if (!scene.textures.exists(key)) gridToTexture(scene, key, grid, P); };
         ['eat1', 'eat2', 'idle', 'charge', 'spit', 'down'].forEach(pose => mk('px_fe_' + pose, fatElfGrid(pose), 3));
@@ -2588,12 +2585,6 @@ function launchGame(socket, roomId, mapData, continued) {
         mk('px_slab_150', slabGrid(38), 4);
         [3, 2, 3, 5, 4, 6].forEach((P, i) => mk('px_boulder_small' + i, boulderGrid(), P));
         mk('px_slab_170', slabGrid(43), 4);
-        if (arenaOnly) {
-            // Arena: semiz elf boss sifatida chaqirilgunicha ko'rinmaydi
-            fatElfSprite = scene.add.image(fd.x, 574, 'px_fe_idle').setOrigin(0.5, 1).setDepth(2).setVisible(false);
-            fatElfBar = scene.add.graphics().setDepth(4);
-            return;
-        }
         // Orqa fon: yer osti g'ori (zulmat, stalaktitlar, kristallar)
         drawPixelBackdrop(scene, {
             sky: [0x07070d, 0x0a0a14, 0x0d0d1b, 0x101022, 0x14142a, 0x181833],
@@ -3791,11 +3782,9 @@ function launchGame(socket, roomId, mapData, continued) {
         shopPanel = document.createElement('div');
         shopPanel.id = 'shop-panel';
         shopPanel.innerHTML = `<div class="shop-box">
-            <div class="shop-title">${t('shop_title')}</div>
+            <div class="shop-title">${t(map.myFarm ? 'mf_shop_title' : 'shop_title')}</div>
             <div class="shop-cards">
-                ${sec('shop_sec_cure')}
-                ${card('elixir', px('elixir'), t('item_elixir'), t('item_elixir_desc'), !!c.curseA)}
-                ${card('chip', px('chip'), t('item_chip'), t('item_chip_desc'), !!c.curseB)}
+                ${S.prices.elixir ? sec('shop_sec_cure') + card('elixir', px('elixir'), t('item_elixir'), t('item_elixir_desc'), !!c.curseA) + card('chip', px('chip'), t('item_chip'), t('item_chip_desc'), !!c.curseB) : ''}
                 ${S.prices.bigmap && window.BigMap ? sec('shop_sec_bigmap') + mapCard() : ''}
                 ${S.prices.rod ? sec('shop_sec_farm') : ''}
                 ${S.prices.rod ? toolCard('rod', px('rod'), t('item_rod'), t('item_rod_desc'), !!(mfBag && mfBag.rod)) : ''}
@@ -3872,7 +3861,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (st) { st.disabled = false; st.parentElement.querySelector('.shop-status').textContent = t('shop_have').replace('{n}', d.count); }
                 return;
             }
-            else if (currentCharacter) { if (d.item === 'elixir') currentCharacter.curseA = false; else currentCharacter.curseB = false; }
+            if (currentCharacter && (d.item === 'elixir' || d.item === 'chip')) { if (d.item === 'elixir') currentCharacter.curseA = false; else currentCharacter.curseB = false; }
             if (typeof showTopToast === 'function') showTopToast(t('shop_bought_' + d.item));
             closeShopPanel();
         } else if (msg) {
@@ -4312,6 +4301,19 @@ function launchGame(socket, roomId, mapData, continued) {
                 g.generateTexture('px_note', 16, 16); g.destroy();
             }
     }
+    function mfStallTexture(scene) {
+        if (scene.textures.exists('px_mf_stall')) return;
+        const P = 3, g = scene.add.graphics(), R = (x, y, w, h, c) => { g.fillStyle(c, 1); g.fillRect(x * P, y * P, w * P, h * P); };
+        R(2, 6, 3, 22, 0x000000); R(25, 6, 3, 22, 0x000000); R(3, 7, 1, 20, 0x8d6e63); R(26, 7, 1, 20, 0x8d6e63);   // ustunlar
+        R(0, 2, 30, 6, 0x000000); for (let i = 0; i < 7; i++) { R(1 + i * 4, 3, 4, 4, i % 2 ? 0xf1f8e9 : 0x43a047); R(2 + i * 4, 7, 2, 1, i % 2 ? 0xf1f8e9 : 0x43a047); }   // yo'l-yo'l soyabon
+        R(9, 0, 12, 3, 0x000000); R(10, 0, 10, 2, 0xffca28); R(12, 1, 6, 1, 0xfff59d);   // lavha
+        R(1, 18, 28, 10, 0x000000); R(2, 19, 26, 8, 0xa1887f); R(2, 19, 26, 2, 0xd7ccc8); R(2, 23, 26, 1, 0x6d4c41); R(8, 21, 1, 6, 0x6d4c41); R(21, 21, 1, 6, 0x6d4c41);   // peshtaxta
+        R(4, 14, 4, 5, 0x000000); R(5, 15, 2, 4, 0xff9800); R(5, 13, 2, 2, 0x43a047);   // sabzi
+        R(10, 14, 6, 5, 0x000000); R(11, 15, 4, 3, 0xff8f00); R(12, 15, 1, 3, 0xffb74d); R(12, 13, 1, 2, 0x558b2f);   // qovoq
+        R(17, 15, 4, 4, 0x000000); R(18, 16, 2, 2, 0xe53935); R(18, 16, 1, 1, 0xff8a80);   // olma
+        R(22, 12, 5, 7, 0x000000); R(23, 13, 3, 6, 0xd7b98a); R(23, 13, 3, 1, 0x8d6e63); R(24, 16, 1, 1, 0x6d4c41);   // urug' qopi
+        g.generateTexture('px_mf_stall', 30 * P, 28 * P); g.destroy();
+    }
     function buildMyFarmScene(scene) {
         const W = mapWidth, F = map.myFarm;
         ensureMyFarmTextures(scene);
@@ -4342,6 +4344,8 @@ function launchGame(socket, roomId, mapData, continued) {
         const barn = scene.add.image(400, 574, 'px_barn').setOrigin(0.5, 1).setDepth(-0.52).setScale(0.6).setVisible(false);
         // Buyurtmalar taxtasi va elf
         const board = scene.add.image(F.boardX, 574, 'px_mf_board').setOrigin(0.5, 1).setDepth(-0.48);
+        // FERMA DO'KONI (rasta): faqat fermaga oid narsalar sotiladi
+        if (map.shop) { mfStallTexture(scene); scene.add.image(map.shop.counterX, 574, 'px_mf_stall').setOrigin(0.5, 1).setDepth(-0.47); }
         const boardMark = scene.add.text(F.boardX, 486, '!', { fontFamily: PIXEL_FONT, fontSize: '16px', color: '#ffeb3b', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5, 1).setDepth(5).setVisible(false);
         // BAHAYBAT TEGIRMON (do'kondan, 4 bosqich - kattalashadi, tezroq aylanadi) va NOTA UYASI
         const millX = F.zoneX0 + F.zoneW * 2 - 11;   // 2- va 3-maydon orasida (taxtachalarni yopmasin)
@@ -4453,7 +4457,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const treeLabel = scene.add.text(T.x - 150, 494, '', { fontFamily: PIXEL_FONT, fontSize: '8px', color: '#ffe082', align: 'center' }).setOrigin(0.5).setDepth(-0.39);
         // Boss: tepada jon chizig'i, hujum effektlari (havzalar)
         const bossBar = scene.add.graphics().setScrollFactor(0).setDepth(1400).setVisible(false);
-        const bossName = scene.add.text(400, 178, t('mf_tree_boss'), { fontFamily: PIXEL_FONT, fontSize: '10px', color: '#ff8a80', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(1401).setVisible(false);
+        const bossName = scene.add.text(400, 178, t('mf_tree_boss'), { fontFamily: PIXEL_FONT, fontSize: '9px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setScrollFactor(0).setDepth(1401).setVisible(false);
         const worldFx = scene.add.graphics().setDepth(1.6);
         const gt = { canopies, trunk, face0, face1, apples, treeSign, treeLabel, bossBar, bossName, worldFx, spikes: {}, roots: [], pillars: [], shrooms: {} };
         // To'siq (orqada) - butun maydonlar bo'ylab
@@ -4924,6 +4928,7 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         }
         for (let z = 1; z < MF_ZONES; z++) if (z > f.zones && Math.abs(x - mfZoneCenter(z)) <= F.zoneW / 2 - 10) return { kind: 'zone', z };
+        if (map.shop && Math.abs(x - map.shop.counterX) <= map.shop.range && c.y > 480) return { kind: 'shop' };   // ferma do'koni
         if (Math.abs(x - F.boardX) <= 50) return { kind: 'board' };
         // Bog': eng yaqin joy (joylar bir-biriga yaqin)
         let orI = -1;
@@ -5150,6 +5155,7 @@ function launchGame(socket, roomId, mapData, continued) {
             // Taxtada bajarsa bo'ladigan buyurtma bor - elf tepasida "!"
             const can = (f.orders || []).some(o => o.until > mfNow() && Object.keys(o.items).every(k => mfHave(f, k) >= o.items[k]));
             O.boardMark.setVisible(can && mfIsHost()).setPosition(F.boardX, 470 + Math.sin(tNow / 180) * 3);
+            if (shopPanel && map.shop && currentCharacter && Math.abs(currentCharacter.x - map.shop.counterX) > map.shop.range + 40) closeShopPanel();   // do'kondan uzoqlashdi
         }
         // BALIQ OVI: hostning udochkasidan suvdagi po'kakkacha ip (hammaga ko'rinadi)
         const fi = mfState.fishing;
@@ -5323,14 +5329,10 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         for (let i = pil.length; i < G.pillars.length; i++) G.pillars[i].setVisible(false);
         // Boss jon chizig'i
-        G.bossBar.setVisible(!!B); G.bossName.setVisible(!!B);
-        if (B) {
-            const g = G.bossBar, w = 360, x = 220, y = 192;   // HUD panelidan pastda
-            g.clear();
-            g.fillStyle(0x0a0a0a, 1); g.fillRect(x - 4, y - 4, w + 8, 20);
-            g.fillStyle(0x3e2723, 1); g.fillRect(x, y, w, 12);
-            g.fillStyle(B.f ? 0xffffff : 0x66bb6a, 1); g.fillRect(x, y, Math.round(w * B.hp / B.maxHp), 12);
-            g.fillStyle(0xa5d6a7, 1); g.fillRect(x, y, Math.round(w * B.hp / B.maxHp), 3);
+        G.bossBar.setVisible(!!B); if (!B) { G.bossName.setVisible(false); G.bossIntro = null; }
+        if (B) {   // HUD panelidan pastda; jang boshlanganda animatsiya bilan ochiladi
+            if (!G.bossIntro) { G.bossIntro = { id: 1, t0: tNow }; sfx('whoosh', 0.5); }
+            if (window.bossBarFx) window.bossBarFx(G.bossBar, G.bossName, G.bossIntro, tNow, Math.max(0, Math.min(1, B.hp / B.maxHp)), { y: 198, w: 380, col: B.f ? 0xffffff : 0xe8202a });
         }
     }
     function closeMfPanel() { if (mfPanel) { mfPanel.el.remove(); mfPanel = null; } }
@@ -5340,6 +5342,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // FERMER UYI: hamma kira oladi (tomosha), jihozlarni faqat host o'zgartiradi
         if (near.kind === 'house') { if (mfHouse) mfHouseInteract(); else mfEnterHouse(); return; }
         if (near.kind === 'mage' || near.kind === 'mageswing') { mfMageInteract(near); return; }   // suhbat - hamma uchun, sovg'a - ferma egasi
+        if (near.kind === 'shop') { if (shopPanel) closeShopPanel(); else { socket.emit('farmBag'); toggleShopPanel(); } return; }   // ferma do'koni - har kim o'z fermasi uchun oladi
         if (!mfIsHost()) { mfToast('mf_host_only'); return; }
         if (mfState.hostGuest) { mfToast('farm_need_account'); return; }
         const f = mfFarm(), F = map.myFarm;
@@ -5862,6 +5865,7 @@ function launchGame(socket, roomId, mapData, continued) {
             return !inf ? t('hud_mf_or_plant') : inf.stage === 2 ? t('hud_mf_ripe').replace('{c}', t('crop_' + inf.d.id)) : t(inf.stage === 0 ? 'mf_or_growing' : 'mf_or_fruit_in').replace('{c}', t('crop_' + inf.d.id)).replace('{s}', inf.left);
         }
         if (near && near.kind === 'board') return t('hud_mf_board');
+        if (near && near.kind === 'shop') return t('hud_mf_shop');
         if (near && near.kind === 'carry') return t('hud_mf_place').replace('{d}', t('meadow_' + near.id));
         if (near && near.kind === 'mdecor') return t('hud_mf_move').replace('{d}', t('meadow_' + near.id));
         if (near && near.kind === 'dig') return t('hud_mf_dig').replace('{n}', mfBedCount(f)).replace('{m}', MF_BEDS_MAX);
@@ -9526,9 +9530,6 @@ function launchGame(socket, roomId, mapData, continued) {
     }
 
     // BOSS JONI - ekranda katta chiziq (HUD panelidan pastda, o'rtada)
-    function arenaBossName(b) {
-        return b === 'gorilla' ? t('gorilla_name') : b === 'fatelf' ? t('fatelf_name') : b === 'snake' ? t('boss_name') : t('arena_boss_squad');
-    }
     function drawBossBar(scene, hp, maxHp, bossName = t('boss_name')) {
         if (!scene.bossBar) {
             scene.bossBar = {
@@ -9554,7 +9555,7 @@ function launchGame(socket, roomId, mapData, continued) {
     function bossDeathAnim(scene) {
         scene.time.addEvent({
             delay: 140, repeat: 20, callback: () => {
-                const x = (snakeDisplayX || 0) - Phaser.Math.Between(0, isArena ? 260 : 900);
+                const x = (snakeDisplayX || 0) - Phaser.Math.Between(0, 900);
                 const y = Phaser.Math.Between(400, 560);
                 const flash = scene.add.circle(x, y, 14, 0xffeb3b, 1).setDepth(7);
                 scene.tweens.add({ targets: flash, scale: 5, alpha: 0, duration: 380, onComplete: () => flash.destroy() });
@@ -9788,7 +9789,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const alt = ALT_WEAPON_PERK[c.characterType];
         if (alt && hasPerkClient(c.characterType, c.level, alt)) {
             const names = { ice: ['hud_q_fire', 'hud_q_ice', 'hud_q_lightning'], shotgun: ['hud_q_sword', 'hud_q_shotgun', 'hud_q_shield'],
-                kunai: ['hud_q_katana', 'hud_q_kunai', 'hud_q_shuriken'], triple: ['hud_q_arrow', 'hud_q_triple'], blowpipe: ['hud_q_knife', 'hud_q_blowpipe'] }[alt];
+                kunai: ['hud_q_katana', 'hud_q_kunai'], triple: ['hud_q_arrow', 'hud_q_triple'], blowpipe: ['hud_q_knife', 'hud_q_blowpipe'] }[alt];
             let q = '[Q] ' + t(names[c.weaponMode === 'alt2' ? 2 : c.weaponMode === 'alt' ? 1 : 0]);
             // Knight: qalqon otish qayta tiklanmoqda
             if (c.characterType === 'knight' && hasPerkClient('knight', c.level, 'shieldthrow')) q += '  ' + t('hud_q_shield') + ' ' + (c.shieldCd > 0 ? c.shieldCd + 's' : t('hud_r_ready'));
@@ -9797,6 +9798,7 @@ function launchGame(socket, roomId, mapData, continued) {
             parts.push(q);
         }
         if (c.characterType === 'hunter' && hasPerkClient('hunter', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_mine') + ' ' + (c.mineCd > 0 ? c.mineCd + 's' : t('hud_r_ready')));
+        if (c.characterType === 'archer' && hasPerkClient('archer', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_invis') + ' ' + (c.isInvisible ? '!!' : c.invisCd > 0 ? c.invisCd + 's' : t('hud_r_ready')));
         if (c.characterType === 'mage' && hasPerkClient('mage', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_tornado') + ' ' + (c.tornadoCd > 0 ? c.tornadoCd + 's' : t('hud_r_ready')));
         const sp = SPECIAL_PERK[c.characterType];
         if (sp && hasPerkClient(c.characterType, c.level, sp)) {
@@ -10094,11 +10096,10 @@ function launchGame(socket, roomId, mapData, continued) {
             buildMarketScene(this);
             if (isBoss) snakeGfx = this.add.graphics().setDepth(5);
         }
-        if (isSnakeArena) snakeGfx = this.add.graphics().setDepth(5);
         if (isForest) buildForestScene(this);
         if (isStones) buildStonesScene(this);
         if (isGorilla) buildGorillaScene(this);
-        if (isFatElf) buildFatElfScene(this, isArena);
+        if (isFatElf) buildFatElfScene(this);
         if (isUnderworld) buildUnderworldScene(this);
         if (isGFlower) buildGiantFlowerScene(this);
         if (isLift) buildLiftScene(this);
@@ -10236,7 +10237,7 @@ function launchGame(socket, roomId, mapData, continued) {
             g.fillStyle(0xffffff, 1); g.fillRect(12, 5, 10, 1);
             g.generateTexture('projectile_kunai', 26, 12); g.destroy();
         }
-        // 4c. 16-daraja: chaqmoq (siniq sariq chiziq), shuriken (to'rt qirrali yulduz)
+        // 4c. 16-daraja: chaqmoq (siniq sariq chiziq)
         if (!this.textures.exists('projectile_lightning')) {
             const g = this.add.graphics();
             const pts = [[0, 7], [8, 3], [14, 9], [22, 2], [30, 8], [36, 5]];
@@ -10244,16 +10245,6 @@ function launchGame(socket, roomId, mapData, continued) {
             g.lineStyle(3, 0xffeb3b, 1); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath();
             g.lineStyle(1, 0xffffff, 1); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath();
             g.generateTexture('projectile_lightning', 38, 12); g.destroy();
-        }
-        // SAMURAY 16-daraja: UCHBURCHAK DROTIK (o'ngga qaragan uchi; uchish yo'nalishiga burilib uchadi)
-        if (!this.textures.exists('projectile_shuriken')) {
-            const grid = gridNew(13, 9);
-            for (let x = 0; x < 13; x++) {
-                const h = Math.round((12 - x) * 4 / 12);   // chapda keng (4), o'ngda - o'tkir uch
-                for (let y = 4 - h; y <= 4 + h; y++) grid[y][x] = y < 4 ? 0xcfd8dc : y === 4 ? 0xeceff1 : 0x78909c;   // tepa - yorug', o'rta - yaltiroq qirra, past - soya
-            }
-            grid[3][1] = 0xb71c1c; grid[4][0] = 0xd32f2f; grid[5][1] = 0xb71c1c;   // orqasida qizil lenta
-            gridToTexture(this, 'projectile_shuriken', gridOutline(grid, 0x0a0a0a), 2);
         }
         // 5. Standart o'q (Agar kerak bo'lib qolsa)
         if (!this.textures.exists('projectile_normal')) {
@@ -11094,18 +11085,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!currentCharacter || !currentCharacter.body) return;
             currentCharacter.setPosition(d.x, d.y);
             currentCharacter.setVelocity(0, 0);
-        });
-        socket.off('arenaBoss');
-        socket.on('arenaBoss', (d) => {
-            sfx('bossStart'); if (d && d.boss !== 'squad') sfx('roar', 0.8);
-            const nm = arenaBossName(d.boss);
-            this.cameras.main.shake(400, 0.01);
-            arenaBanner(t('arena_boss_in'), '#ff5252', nm);
-        });
-        socket.off('arenaBossDown');
-        socket.on('arenaBossDown', (d) => {
-            sfx('bossDown');
-            arenaBanner(t('arena_boss_down'), '#69f0ae', '+' + d.coins + ' ' + t('coins_word') + '   +' + d.xp + ' XP');
+            if (window.BigMap && BigMap.resetFall) BigMap.resetFall();   // ko'chirildi (portal, yo'l ko'rsatkich) - balanddan yiqilish hisoblanmaydi
         });
         // Tajriba olindi (bot o'ldirildi va h.k.) - qahramon tepasida "+5 XP"
         socket.off('xpGained');
@@ -11246,7 +11226,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('myFarmNet');
         socket.on('myFarmNet', (d) => { if (d && Array.isArray(d.fish)) mfNetFx(this, d.fish); });
         socket.off('farmBag');
-        socket.on('farmBag', (d) => { if (d) mfBag = d; });
+        socket.on('farmBag', (d) => { if (d) { mfBag = d; if (shopPanel && map.myFarm) reopenShopKeepScroll(); } });   // ferma do'koni: nimasi borligi yangilansin
         socket.off('produceSold');
         socket.on('produceSold', (d) => {
             if (!d || typeof showTopToast !== 'function') return;
@@ -11524,16 +11504,7 @@ function launchGame(socket, roomId, mapData, continued) {
             botsKilled = data.botsKilled || 0;
 
             // ROBOT-ILON JANGI: devor buzilishi, rastalar ezilishi, o'lim - bir marta effekt
-            // Arena: ilon yengilib ketdi - chizmalar tozalanadi, keyingi safar yana boshidan chiqadi
-            if (isSnakeArena && !data.boss && bossState) {
-                bossState = null; snakeServerX = null; snakeDisplayX = null; mouthOpen = 0;
-                bossFx = { wall: false, dead: false };
-                if (snakeGfx) { snakeGfx.clear(); (snakeGfx._segs || []).forEach(sg => { if (sg) { sg.img.setVisible(false); sg.core.setVisible(false); } }); }
-                if (fireGfx) fireGfx.clear();
-                Object.values(flyingMineSprites).forEach(sp => sp.destroy());
-                flyingMineSprites = {};
-            }
-            if ((isBoss || isSnakeArena) && data.boss) {
+            if (isBoss && data.boss) {
                 bossState = data.boss;
                 if (isBoss && bossState.wallBroken && !bossFx.wall) { bossFx.wall = true; breakMarketWall(this); }
                 if (bossState.dead && !bossFx.dead) { bossFx.dead = true; bossDeathAnim(this); sfx('bossDown'); }
@@ -11714,7 +11685,6 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (wp === 'lash' && prevWhipPhase !== 'lash') sfx('whip');
                 prevWhipPhase = wp;
             }
-            if (isArena && data.fatElf) bossHitSound('fatelf', data.fatElf.hp, data.fatElf.x);
             // Tomir sanchildi (gigant gul) - yangi "up" holatidagi tomirlar
             (data.gfRoots || []).forEach((r) => { if (r.phase === 'up' && !rootUpSeen.has(r.id)) { rootUpSeen.add(r.id); sfxAt('stab', r.x); } });
             // Zombi-sabzavot igna-til sanchdi
@@ -11723,16 +11693,6 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (ph === 'stab' && tongueSeen[b.id] !== 'stab') sfxAt('stab', b.x);
                 tongueSeen[b.id] = ph;
             });
-
-            // ARENA: hisob, joriy boss; boss yo'q bo'lsa - gorilla/semiz elf yo'q (yashiriladi)
-            if (isArena) {
-                arenaState = data.arena || null;
-                if (!data.gorilla) gorillaState = null;
-                if (!data.fatElf) fatElfState = null;
-                if (!data.gorilla) {
-                    (data.gPlats || []).forEach((st) => { const sp = gPlatSprites[st.id]; if (sp) { sp.state = st.state; sp.ty = st.y; } });
-                }
-            }
 
             // UNDERWORLD: og'zibor gullar va trol bilan suhbat
             if (isUnderworld) {
@@ -11772,7 +11732,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (prev !== st && st === 'spit') { this.cameras.main.shake(140, 0.004); sfxAt('spit', fatElfState.x); }
                 if (prev !== st && st === 'fcharge') sfxAt('roar', fatElfState.x, 0.5);
                 if (prev !== st && st === 'flame') { this.cameras.main.shake(200, 0.005); sfxAt('fireball', fatElfState.x, 1); }
-                if (prev !== st && st === 'down' && !isArena) sfx('bossDown');
+                if (prev !== st && st === 'down') sfx('bossDown');
                 bossHitSound('fatelf', fatElfState.hp, fatElfState.x);
                 if (prev !== st && st === 'down') {
                     this.cameras.main.shake(400, 0.012);
@@ -12074,6 +12034,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.specialCd = myData.specialCd || 0;
                 currentCharacter.tornadoCd = myData.tornadoCd || 0;
                 currentCharacter.mineCd = myData.mineCd || 0;
+                currentCharacter.invisCd = myData.invisCd || 0;          // kamonchi: ko'rinmaslik qayta tiklanishi
+                currentCharacter.isInvisible = !!myData.isInvisible;
                 currentCharacter.ammo = myData.ammo || 0;
                 currentCharacter.maxAmmo = myData.maxAmmo || 7;
                 currentCharacter.reloading = !!myData.reloading;
@@ -12384,7 +12346,6 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (bData.bulletType === 'ice') currentTexture = 'projectile_fireball';
                     else if (bData.bulletType === 'pellet') currentTexture = 'projectile_normal';
                     else if (bData.bulletType === 'lightning') currentTexture = 'projectile_lightning';
-                    else if (bData.bulletType === 'shuriken') currentTexture = 'projectile_shuriken';
                     else if (bData.bulletType === 'knife') currentTexture = 'melee_hunter';
                     else if (bData.bulletType === 'dart') currentTexture = 'projectile_dart';
                     else if (bData.bulletType === 'shield') { ensureWeaponTextures(this); currentTexture = 'w_shield'; }
@@ -12409,7 +12370,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (bData.fire) { bSprite.setTint(0xff7043); bSprite.fireArrow = true; }   // kamonchi 4-daraja: olovli o'q
                     else if (bData.bulletType === 'ice') bSprite.setTint(0x80d8ff);          // muz shari - ko'kish
                     else if (bData.bulletType === 'pellet') bSprite.setTint(0xffe082).setScale(0.7); // sochma o'q
-                    else if (bData.bulletType === 'lightning' || bData.bulletType === 'shuriken') { /* o'z rangida */ }
+                    else if (bData.bulletType === 'lightning') { /* o'z rangida */ }
                     else if (bData.bulletType === 'shield') bSprite.spin = 22;   // otilgan qalqon aylanib uchadi
                     else if (bData.bulletType === 'dart' && bData.poison) { bSprite.setTint(0x76ff03); bSprite.poisonDart = true; }   // zaharli drotik
                     else if (shooter && shooter.weaponColor && !currentTexture.startsWith('cos_')) {
@@ -12443,14 +12404,13 @@ function launchGame(socket, roomId, mapData, continued) {
                     }
                     if (predicted && (isMeleeType || bData.bulletType === 'knife')) bSprite.setVisible(false);   // zarba izi allaqachon chizilgan
                     const bt = bData.bulletType;
-                    if (bt === 'shuriken') { bSprite.spin = 0; bSprite.setFlipX(false).setRotation(Math.atan2(bData.vy, bData.vx)); }   // uchburchak drotik - aylanmaydi, uchi oldinda
-                    if (bt === 'slash') { bSprite.slash = true; bSprite.setAlpha(1).setScale(1.35); }
+                    if (bt === 'slash') { bSprite.slash = true; bSprite.setAlpha(1).setScale(bData.big ? 2.16 : 1.35); }
                     bulletSprites[bData.id] = bSprite;
                     if (predicted) return;
                     // Egasining qurolida zarba animatsiyasi
                     playHeroAttack(this, ownerSprite, bData.bulletType);
                     const shotName = bt === 'knife' || bt === 'slash' ? 'katana' : bt === 'melee' ? (shooter && shooter.characterType === 'samurai' ? 'katana' : 'sword')
-                        : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' || bt === 'shuriken' ? 'kunai' : bt === 'fireball' ? 'fireball'
+                        : bt === 'pellet' ? 'shotgun' : bt === 'ice' ? 'ice' : bt === 'kunai' ? 'kunai' : bt === 'fireball' ? 'fireball'
                         : bt === 'lightning' ? 'whip' : bt === 'shield' ? 'whoosh' : 'arrow';
                     sfxAt(shotName, bData.x, bData.playerId === socket.id ? 1 : 0.6);
 
@@ -12591,7 +12551,6 @@ function launchGame(socket, roomId, mapData, continued) {
         if (dialog || isStory) return 'calm';
         if (isBig) return window.BigMap && BigMap.inBattle && BigMap.inBattle() ? 'action' : 'calm';   // The World: jang musiqasi faqat jangda
         if (isForest) return (forestTriggered && botsKilled < (currentCharacter ? currentCharacter.killsToWin : 1)) ? 'action' : 'calm';
-        if (isArena) return 'action';
         if (isGFlower) return gfState && gfState.state !== 'sleep' ? 'action' : 'calm';
         if (isLift) return liftState && liftState.state === 'rising' ? 'action' : 'calm';
         if (isFarm) return farmState && farmState.state === 'fight' ? 'action' : 'calm';
@@ -12694,16 +12653,16 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         // ILON QUVISHI: ilon silliq siljiydi, KAMERA u bilan bir xil suriladi
         // (ilon ekranning chap chetida ko'rinib turadi)
-        if ((isChase || isBoss || isSnakeArena) && snakeServerX !== null && snakeDisplayX !== null) {
+        if ((isChase || isBoss) && snakeServerX !== null && snakeDisplayX !== null) {
             snakeDisplayX = Phaser.Math.Linear(snakeDisplayX, snakeServerX, 0.3);
             // Bahaybat bosh (~250px) to'liq ko'rinib tursin - kamera ilonni ko'zlaydi
             this.cameras.main.scrollX = Phaser.Math.Clamp(snakeDisplayX - 260, 0, mapWidth - 800);
             const mouthTarget = isBoss && bossState && !bossState.dead ? (bossState.fire === 'fire' ? 1 : bossState.fire === 'charge' ? 0.7 : 0) : 0;
             mouthOpen += (mouthTarget - mouthOpen) * 0.2;
             drawSnake(snakeGfx, snakeDisplayX, this.time.now, mouthOpen);
-            if (isBoss || isSnakeArena) drawBossFire(this);
+            if (isBoss) drawBossFire(this);
             // Zarba olganda ilon lipillaydi
-            if ((isBoss || isSnakeArena) && bossState && !bossState.dead) snakeGfx.setAlpha(bossState.hitFlash > 0 && Math.floor(this.time.now / 60) % 2 ? 0.55 : 1);
+            if (isBoss && bossState && !bossState.dead) snakeGfx.setAlpha(bossState.hitFlash > 0 && Math.floor(this.time.now / 60) % 2 ? 0.55 : 1);
             if (isChase && introWall && snakeDisplayX >= map.chase.introWallX + 10) breakIntroWall(this);
         }
         if (isMarket) {
@@ -12791,28 +12750,6 @@ function launchGame(socket, roomId, mapData, continued) {
                 sp.y = Phaser.Math.Linear(sp.y, sp.ty, 0.6);
                 sp.angle += 6;
             });
-        }
-        if (isArena) {
-            if (gorillaSprite) gorillaSprite.setVisible(!!gorillaState);
-            if (fatElfSprite) fatElfSprite.setVisible(!!fatElfState);
-            if (fatElfBar && !fatElfState) fatElfBar.clear();
-            // Boss chizig'i: gorilla o'zi chizadi; robot otryadi - kuchli robotlar jonlari yig'indisi
-            const elites = Object.values(enemyBots).filter(b => b.elite);
-            if (arenaState && arenaState.boss === 'squad' && elites.length) {
-                drawBossBar(this, elites.reduce((a, b) => a + Math.max(0, b.hp), 0), elites.reduce((a, b) => a + (b.maxHp || 1), 0), t('arena_boss_squad'));
-            } else if (arenaState && arenaState.boss === 'snake' && bossState) {
-                drawBossBar(this, bossState.hp, bossState.maxHp, t('boss_name'));
-            } else if (arenaState && arenaState.boss === 'fatelf' && fatElfState) {
-                drawBossBar(this, fatElfState.hp, fatElfState.maxHp, t('fatelf_name'));
-            }
-            if (this.bossBar) {
-                const show = !!(arenaState && arenaState.boss);
-                [this.bossBar.panel, this.bossBar.bar, this.bossBar.name].forEach(o => o.setVisible(show));
-                if (arenaState && arenaState.boss) {
-                    const nm = arenaBossName(arenaState.boss);
-                    if (this.bossBar.name.text !== nm) this.bossBar.name.setText(nm);
-                }
-            }
         }
         // SEMIZ ELF
         if (isFatElf && fatElfState && fatElfSprite) {
@@ -13177,12 +13114,6 @@ function launchGame(socket, roomId, mapData, continued) {
             } else if (isGFlower) {
                 const st = gfState ? gfState.state : 'sleep';
                 progressText = st === 'sleep' ? t('hud_gf_go') : st === 'wake' ? t('hud_gf_wake') : st === 'dying' ? '' : t('hud_gf_fight');
-            } else if (isArena) {
-                const A = arenaState || { kills: 0, sinceBoss: 0, boss: null };
-                const wave = (A.bossesBeaten || 0) + 1;
-                progressText = A.boss === 'snake' && bossState && bossState.fire !== 'idle' ? t('hud_arena_fire')
-                    : A.boss ? t('hud_arena_boss').replace('{w}', wave)
-                    : t('hud_arena').replace('{w}', wave).replace('{k}', A.kills).replace('{n}', Math.max(0, map.arena.killsPerBoss - A.sinceBoss));
             } else if (isGorilla) {
                 const gst = gorillaState ? gorillaState.state : 'idle';
                 progressText = gst === 'rest' ? t('hud_gorilla_rest') : gst === 'roar' ? t('hud_gorilla_roar')
@@ -13351,7 +13282,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // Harakat koordinatalarini faqat o'z xonamizga yuboramiz
         // Robot-ilon jangida: ilonning ichiga kirib bo'lmaydi (u to'siq)
         // (taxtada - baland turgan qahramon ilon ustidan o'tib keta oladi)
-        if ((isBoss || isSnakeArena) && snakeDisplayX !== null && bossState && !bossState.dead && currentCharacter.y > 360 && currentCharacter.x < snakeDisplayX + 18) {
+        if (isBoss && snakeDisplayX !== null && bossState && !bossState.dead && currentCharacter.y > 360 && currentCharacter.x < snakeDisplayX + 18) {
             currentCharacter.x = snakeDisplayX + 18;
             if (currentCharacter.body.velocity.x < 0) currentCharacter.setVelocityX(0);
         }

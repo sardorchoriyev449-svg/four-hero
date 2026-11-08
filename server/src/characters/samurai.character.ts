@@ -1,41 +1,33 @@
 import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
+import { hasPerk, BIG_SPIRIT } from '../perks';
 
 export class SamuraiCharacter extends BaseCharacter {
-    // Ruhiy zarba ~0.75 s, shuriken yelpig'ichi ~1 s da bir (oddiy katana - tez)
+    // Ruhiy zarba ~0.75 s da bir (oddiy katana - tez)
     public attackCooldownTicks(player: PlayerState): number {
-        return player.weaponMode === 'alt2' ? 33 : player.weaponMode === 'alt' ? 25 : BaseCharacter.ATTACK_COOLDOWN_TICKS;
+        return player.weaponMode === 'alt' ? 25 : BaseCharacter.ATTACK_COOLDOWN_TICKS;
     }
     // Samuray: katana zarbasi stamina sekin oladi; KATANA RUHI (havoni kesib uchadigan zarba) - o'rtacha
     public attackStaminaCost = 8;
     public static readonly SLASH_STAMINA = 24;   // kuchli zarba - stamina tez tugaydi (4 ta zarbadan keyin dam olish kerak)
-    public static readonly DARTS_STAMINA = 22;   // 16-daraja: 3 ta uchburchak drotik birdaniga - stamina ko'p oladi
-    public attackStamina(player: PlayerState): number { return player.weaponMode === 'alt' ? SamuraiCharacter.SLASH_STAMINA : player.weaponMode === 'alt2' ? SamuraiCharacter.DARTS_STAMINA : this.attackStaminaCost; }
+    public attackStamina(player: PlayerState): number { return player.weaponMode === 'alt' ? SamuraiCharacter.SLASH_STAMINA : this.attackStaminaCost; }
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
-        // 16-daraja: UCHBURCHAK DROTIKLAR - bir yo'la 3 ta, yelpig'ich bo'lib (22 stamina)
-        if (player.weaponMode === 'alt2') {
-            for (let k = -1; k <= 1; k++) {
-                const a = angle + k * 0.2;
-                room.bulletIdCounter++;
-                room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + Math.cos(angle) * 18, y: player.y - 4,
-                    vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, color: player.color, lifetime: 28, bulletType: 'shuriken', justSpawned: true });
-            }
-            return;
-        }
         // 3-daraja: Q bilan KATANA RUHI - katana siltanganda tig'idan havoni kesib uchadigan ruhiy zarba (kunai o'rniga)
         if (player.weaponMode === 'alt') {
+            const big = hasPerk(player, 'bigspirit');   // 16-daraja: katta ruh
             room.bulletIdCounter++;
             room.bullets.push({
                 id: 'bullet_' + room.bulletIdCounter,
                 playerId: player.id,
                 x: player.x + Math.cos(angle) * 24,
-                y: player.y - 2,
+                y: player.y + (big ? BIG_SPIRIT.dy : -2),
                 vx: Math.cos(angle) * 640,
                 vy: Math.sin(angle) * 640,
                 color: player.color,
                 lifetime: 22, // ~470px
                 bulletType: 'slash',
+                big,
                 justSpawned: true
             });
             return;

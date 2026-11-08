@@ -1,4 +1,4 @@
-import { rollFish, farmCapacity as fcap_, farmLevel as flvl_ } from '../maps';
+import { rollFish, farmCapacity as fcap_, farmLevel as flvl_, farmRaidK } from '../maps';
 const FISH_ROD_USES = 20;   // My Farm bilan bir xil (toolUses)
 import * as db from '../db';
 import { Server } from 'socket.io';
@@ -6,8 +6,8 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
-import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER } from '../perks';
+import { bigFruit, bigTrail, bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
 // SKY BATTLE: uchar mashina haydovchisi (robot bot) kuzovdan shuncha px yuqoriga chiqib turadi
@@ -226,7 +226,7 @@ export class GameEngine {
                 if (player.isHoldingAttack || player.attackBuffered) {
                     if (player.attackCooldown <= 0 && charLogic.canAttack(player) && player.stamina >= BaseCharacter.staminaCost(player, charLogic.attackStamina(player))) {
                         BaseCharacter.spendStamina(player, charLogic.attackStamina(player));
-                        player.attackCooldown = charLogic.attackCooldownTicks(player);   // bosib turganda ham qurolning o'z oralig'i (avval umumiy 12 tik - kunai / shuriken tezroq otilardi)
+                        player.attackCooldown = charLogic.attackCooldownTicks(player);   // bosib turganda ham qurolning o'z oralig'i (avval umumiy 12 tik - tezroq otilardi)
                         player.attackBuffered = false;
                         charLogic.handleAttack(player, room, player.lastAttackAngle);
                     } else if (player.attackCooldown <= 0) {
@@ -269,8 +269,6 @@ export class GameEngine {
             // 4h. UNDERWORLD - og'zibor gul va trol (faqat map-10)
             this.updateUnderworld(room, roomId);
 
-            // 4i. ARENA (bonus) - cheksiz botlar va bosslar
-            this.updateArena(room);
 
             // 4j. GIGANT GUL (Season 2, map-1)
             this.updateGiantFlower(room, roomId);
@@ -352,7 +350,7 @@ export class GameEngine {
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
                     weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, sl: p.staminaLevel || 0, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
-                    tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03), mineCd: Math.ceil((p.mineCd || 0) * 0.03),
+                    tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03), mineCd: Math.ceil((p.mineCd || 0) * 0.03), invisCd: Math.ceil((p.invisCd || 0) * 0.03),
                     special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0, reloadSec: Math.ceil((p.reloadTicks || 0) * this.TICK_SECONDS),
                     acid: (p.acidTicks || 0) > 0,
@@ -437,7 +435,6 @@ export class GameEngine {
                 lift: room.lift ? { state: room.lift.state, y: Math.round(room.lift.y), progress: this.liftProgress(room) } : null,
                 gfThorns: room.gfThorns || [],
                 gfRoots: (room.gfRoots || []).map(r => ({ id: r.id, x: r.x, y: r.y, phase: r.phase })),
-                arena: room.arena ? { kills: room.arena.kills, sinceBoss: room.arena.sinceBoss, boss: room.arena.boss, bossesBeaten: room.arena.bossesBeaten } : null,
                 uwTalk: room.uwTalk || null,
                 gPlats: room.gPlats || [],
                 gSpikes: room.gSpikes || [],
@@ -498,15 +495,6 @@ export class GameEngine {
             const L = map.lift;
             surfaces.push({ xStart: L.x, xEnd: L.x + L.w, standY: room.lift.y - this.BOT_HALF_H, underY: room.lift.y + 20 + this.BOT_HALF_H, thin: true });
             if (room.lift.state === 'rising' || room.lift.state === 'arrived' || room.lift.state === 'done') surfaces[0].standY = 5000;
-        }
-        // Arena: tosh platformalar gorilla platformalari (room.gPlats) - botlar ham ularga chiqadi.
-        // Joriy balandligi olinadi; shiftga ko'tarilgan/qaytayotgan platforma hisobga olinmaydi
-        if (map.arena && map.gorilla) {
-            (room.gPlats || []).forEach((g, i) => {
-                if (g.state !== 'idle') return;
-                const h = map.gorilla!.platforms[i]?.h ?? 14;
-                surfaces.push({ xStart: g.x, xEnd: g.x + g.w, standY: g.y - this.BOT_HALF_H, underY: g.y + h + this.BOT_HALF_H, thin: true });
-            });
         }
         return surfaces;
     }
@@ -862,8 +850,7 @@ export class GameEngine {
                     } else {
                         // Yaqinda: raqibning SHU tomonida, tanasiga tegib to'xtaydi -
                         // ichiga kirib, uni itarib yubormaydi
-                        const spread = room.arena ? (Math.abs(this.botFormationOffset(bot.id)) / 24) * 5 : 0;
-                        desiredX = p.x + (bot.x <= p.x ? -(contactX + spread) : contactX + spread);
+                        desiredX = p.x + (bot.x <= p.x ? -contactX : contactX);
                     }
                     // Platformada - chetidan tasodifan yiqilib tushmasin
                     if (here.standY !== this.GROUND_Y) {
@@ -905,7 +892,7 @@ export class GameEngine {
                             p.hp = 0;
                             p.isDead = true;
                             p.respawnTimer = 0;
-                            p.isInvisible = false;
+                            p.isInvisible = false; p.invisLinger = 0;
                             p.speedMultiplier = 1;
                             p.isHoldingAbility = false;
                             p.isHoldingAttack = false;
@@ -937,7 +924,7 @@ export class GameEngine {
 
         // BOTLAR BIR-BIRINING ICHIGA KIRIB KETMASLIGI UCHUN
         // (ular orasidagi to'qnashuvni tekshirib, kerak bo'lsa ajratib qo'yamiz)
-        if (!room.arena && !room.farm) this.resolveBotCollisions(room);
+        if (!room.farm) this.resolveBotCollisions(room);
 
         // Itarish natijasida bot xaritadan tashqariga chiqib ketmasin
         const mapWidth = allSurfaces[0].xEnd;
@@ -1020,13 +1007,13 @@ export class GameEngine {
             const isTornado = bullet.bulletType === 'tornado';
             const isBlast = bullet.bulletType === 'blast';
             const isSlash = bullet.bulletType === 'slash';   // katana ruhi - baland yoy (tik turgan o'roq)
-            // MAYDA TEZ O'QLAR (kamon o'qi, drotik, kunai, shuriken): 10x10 juda tor edi - dushman rasmi qutisidan kengroq va klientda ~100 ms kechikib
+            // MAYDA TEZ O'QLAR (kamon o'qi, drotik, kunai): 10x10 juda tor edi - dushman rasmi qutisidan kengroq va klientda ~100 ms kechikib
             // ko'rinadi, shu sabab ko'zga tekkan o'q ba'zan "o'tib ketardi". Teginish qutisi kattaroq (ayniqsa balandligi - sakrayotgan dushmanlarga ham tegsin)
-            const isSmallFast = bullet.bulletType === 'arrow' || bullet.bulletType === 'dart' || bullet.bulletType === 'kunai' || bullet.bulletType === 'shuriken'
+            const isSmallFast = bullet.bulletType === 'arrow' || bullet.bulletType === 'dart' || bullet.bulletType === 'kunai'
                 || bullet.bulletType === 'fireball' || bullet.bulletType === 'ice' || bullet.bulletType === 'lightning' || bullet.bulletType === 'shield';   // sehr va qalqon ham (10x10 - rasmidan ancha tor edi)
             // katana ruhi: ekrandagi rasm 40x78 (30x58 x 1.35) - quti ham shunday (avval 26x50: rasm tekkan dushmanga zarba tegmasdi)
-            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? 40 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
-            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? 78 : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
+            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? (bullet.big ? BIG_SPIRIT.hitW : 40) : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
+            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? (bullet.big ? BIG_SPIRIT.hitH : 78) : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
             // Oldingi tekshirilgan joydan hozirgi joygacha (supurib o'tgan yo'l) - hech narsa "sakrab" o'tilmaydi
             const fx = bullet.sx ?? bullet.x, fy = bullet.sy ?? bullet.y;
             const hitX = Math.min(fx, bullet.x) - hitW / 2;
@@ -1041,14 +1028,13 @@ export class GameEngine {
             let baseDamage = 20;
             if (bullet.bulletType === 'fireball') baseDamage = 30;       // Sehrgar: kuchli, lekin stamina tez ketadi
             if (bullet.bulletType === 'tornado') baseDamage = TORNADO.damage;   // Sehrgar tornadosi (har 0.4 s)
-            else if (bullet.bulletType === 'arrow') baseDamage = 10;     // Kamonchi: yengil zarba
-            else if (bullet.bulletType === 'melee') baseDamage = 20;     // Ritsar/Samuray: o'rtacha, stamina sekin ketadi
+            else if (bullet.bulletType === 'arrow') baseDamage = 14;     // Kamonchi: yengil zarba
+            else if (bullet.bulletType === 'melee') baseDamage = 30;     // Ritsar/Samuray asosiy quroli (qilich / katana): boshqalardan +10, stamina sekin ketadi
             if (bullet.bulletType === 'ice') baseDamage = 40;            // Mage muz shari: olovlidan +10 kuchli va muzlatadi
             else if (bullet.bulletType === 'pellet') baseDamage = 9 + (owner ? weaponUpgradeLevel(owner, 'shotgunDamage') * SHOTGUN_DMG_PER_LEVEL : 0);   // drobovik (+kuchaytirish)
             else if (bullet.bulletType === 'kunai' || bullet.bulletType === 'slash') baseDamage = (bullet.bulletType === 'slash' ? 24 : 22) + (owner ? weaponUpgradeLevel(owner, 'kunaiDamage') * KUNAI_DMG_PER_LEVEL : 0);      // samuray: katana ruhi (+kuchaytirish)
             else if (bullet.bulletType === 'lightning') baseDamage = 26;   // 16-daraja: zanjirli chaqmoq (sakragani - 60%)
             else if (bullet.bulletType === 'shield') baseDamage = 45;      // 16-daraja: otilgan qalqon (10 s da bir)
-            else if (bullet.bulletType === 'shuriken') baseDamage = 14;    // 16-daraja: har bir shuriken
             else if (bullet.bulletType === 'knife') baseDamage = HUNTER.knifeDamage;   // ovchi: uzun pichoq
             else if (bullet.bulletType === 'dart') baseDamage = HUNTER.dartDamage;     // ovchi: drotik (zaharli bo'lsa - keyin jon ketadi)
             // + daraja imkoniyati "DAMAGE +5"
@@ -1477,23 +1463,15 @@ export class GameEngine {
         room.botsKilled++;
         const killer = killerId ? room.players[killerId] : null;
         if (killer && !room.isOver) killer.kills++;
-        const ar = getMapById(room.selectedLevel).arena;
-        // Har bot uchun o'ldirganga tajriba (arenada - tanga ham)
+        // Har bot uchun o'ldirganga tajriba
         if (killer && !room.isOver) {
             this.roomManager.dailyProgress(room.id, killer.id, 'kills', 1);
-            this.roomManager.awardReward(room.id, killer.id, ar ? ar.botCoins : 0, ar ? ar.botXp : GameEngine.KILL_XP, true)
+            this.roomManager.awardReward(room.id, killer.id, 0, GameEngine.KILL_XP, true)
                 .catch(err => console.error('awardReward xatosi:', err));
         }
         if (dead.skin === 'zombie' && room.farm && room.farm.state === 'fight') {
             room.farm.kills++;
             if (room.farm.spawned < room.farm.target) room.farm.nextSpawnTick = room.farm.tick;   // yerdan yana bittasi
-        }
-        if (ar && room.arena && !room.isOver) {
-            room.arena.kills++;
-            if (!room.arena.boss) {
-                room.arena.sinceBoss++;
-                if (room.arena.sinceBoss >= ar.killsPerBoss) this.startArenaBoss(room);
-            }
         }
     }
 
@@ -1630,7 +1608,6 @@ export class GameEngine {
 
     // Gorilla yengildi: hujumlar to'xtaydi, xavflar yo'qoladi, so'nggi suhbat boshlanadi
     private gorillaDefeated(room: RoomState, g: NonNullable<RoomState['gorilla']>): void {
-        if (room.arena) { this.arenaBossBeaten(room); return; }
         g.hp = 0;
         g.state = 'defeat';
         g.attack = null;
@@ -1978,13 +1955,6 @@ export class GameEngine {
         room.tnt = td ? { state: 'intro', hp: tntHp, maxHp: tntHp, tick: 0, timer: Math.round(td.introMs / 30), hitFlash: 0, counter: 0,
             gor: { x: td.gorStartX, y: map.platforms[td.floor].y, surf: td.floor, facing: -1, act: 'idle', t: 0, x0: 0, y0: 0, x1: 0, y1: 0, peak: 0, dur: 0, target: null, plan: null, thrown: 0 },
             bombs: [], warns: [], nextAct: 0, step: 0, contactCd: {} } : null;
-        if (map.arena) {
-            room.gorilla = null;
-            room.fatElf = null;
-            room.arena = { kills: 0, sinceBoss: 0, boss: null, lastBoss: null, bossesBeaten: 0, tick: 0, nextSpawnTick: 30 };
-        } else {
-            room.arena = null;
-        }
         Object.values(room.players).forEach(p => { p.acidTicks = 0; p.jetpack = !!map.sky; });   // ranets - faqat shu xaritada (osmondagi jangda - hammada)
         // O'rmonda itlar darhol emas - daraxt yoniga yetilganda chiqadi
         if (map.mode === 'waves' && !map.forest) GameEngine.spawnWave(room, map);
@@ -2111,7 +2081,6 @@ export class GameEngine {
         Object.values(room.players).forEach(p => { p.introDone = false; });
     }
     private fatElfDefeated(room: RoomState, fe: NonNullable<RoomState['fatElf']>): void {
-        if (room.arena) { this.arenaBossBeaten(room); return; }
         fe.hp = 0;
         fe.state = 'down';
         fe.timer = 0;
@@ -2329,28 +2298,6 @@ export class GameEngine {
                 const winner = (t.by && room.players[t.by]) ? t.by : (alive[0] || Object.values(room.players)[0])?.id;
                 if (winner) this.roomManager.declareWinner(roomId, winner).catch(err => console.error('declareWinner xatosi:', err));
             }
-        }
-    }
-
-    // ===== ARENA (bonus) =====
-    private updateArena(room: RoomState): void {
-        const map = getMapById(room.selectedLevel);
-        const ar = map.arena, A = room.arena;
-        if (!ar || !A || room.isOver) return;
-        A.tick++;
-        const players = Math.max(1, Object.values(room.players).filter(p => !p.isDead).length);
-        // Robot otryadi: kuchli robotlar qolmasa - boss yengildi
-        if (A.boss === 'squad' && !room.bots.some(b => b.elite)) { this.arenaBossBeaten(room); return; }
-        if (A.boss) return;   // boss paytida yangi oddiy botlar chiqmaydi
-        // Oddiy botlar: navbat bilan tepadan tushadi; har boss yengilgach - kuchliroq
-        const want = Math.min(ar.maxBots, players);
-        if (room.bots.length < want && A.tick >= A.nextSpawnTick) {
-            const z = map.botSpawnZone;
-            const hp = Math.round(GameEngine.BOT_MAX_HP * (1 + 0.2 * A.bossesBeaten));
-            const bot = GameEngine.createBots(room.id, [{ x: z.xStart + Math.random() * (z.xEnd - z.xStart), y: z.y }], 'robot', hp)[0];
-            bot.id += '_' + A.tick;
-            room.bots.push(bot);
-            A.nextSpawnTick = A.tick + Math.round(ar.spawnIntervalMs / 30);
         }
     }
 
@@ -3492,14 +3439,14 @@ export class GameEngine {
             this.io.to(p.id).emit('teleport', { x: p.x, y: p.y });
         });
         const alive = Object.values(room.players).filter(p => !p.isDead);
-        const SD = F.shrooms;
+        const SD = F.shrooms, rDmg = farmRaidK(mf.farm ? mf.farm.xp : 0, 'dmg'), rHp = farmRaidK(mf.farm ? mf.farm.xp : 0, 'hp');   // ferma darajasi bilan kuchayadi
         mf.shrooms.forEach((sh) => {
             if (sh.hitFlash > 0) sh.hitFlash--;
             if (now >= sh.nextPuff) {
                 const near = alive.filter(p => Math.abs(p.x - sh.x) <= SD.sporeRange && p.y > 420);
                 if (near.length) {
                     sh.nextPuff = now + SD.sporeEveryMs;
-                    near.forEach(p => this.hurtPlayer(p, SD.sporeDamage));
+                    near.forEach(p => this.hurtPlayer(p, Math.round(SD.sporeDamage * rDmg)));
                     this.io.to(roomId).emit('mfSpore', { x: sh.x });
                 }
             }
@@ -3525,7 +3472,7 @@ export class GameEngine {
             mf.spores = mf.spores.filter((s) => {
                 s.vy += 900 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
                 const hit = alive.find(p => Math.abs(p.x - s.x) <= this.PLAYER_HALF_W + 10 && Math.abs(p.y - s.y) <= this.PLAYER_HALF_H + 10 && now >= (mf.safeUntil[p.id] || 0));
-                if (hit) { this.hurtPlayer(hit, SD.shotDamage); this.knockback(hit, s.vx > 0 ? 160 : -160, -160); this.io.to(roomId).emit('mfSporeHit', { x: Math.round(s.x), y: Math.round(s.y) }); return false; }
+                if (hit) { this.hurtPlayer(hit, Math.round(SD.shotDamage * rDmg)); this.knockback(hit, s.vx > 0 ? 160 : -160, -160); this.io.to(roomId).emit('mfSporeHit', { x: Math.round(s.x), y: Math.round(s.y) }); return false; }
                 if (s.y >= 566) { this.io.to(roomId).emit('mfSporeHit', { x: Math.round(s.x), y: 566 }); return false; }
                 return s.x > -50 && s.x < F.riverX0 + 400;
             });
@@ -3550,7 +3497,7 @@ export class GameEngine {
             });
             ripe.sort(() => Math.random() - 0.5).slice(0, CR.max).forEach((k, i) => {
                 const x = farmPlotX(F, k, f.beds), from = x + (Math.random() < 0.5 ? -1 : 1) * (380 + i * 60);
-                mf.mobs.push({ id: 'cr' + (++mf.seq), kind: 'crow', x: from, y: 120 + i * 30, hp: CR.hp, maxHp: CR.hp, hitFlash: 0, face: x > from ? 1 : -1, v: i % 3,
+                mf.mobs.push({ id: 'cr' + (++mf.seq), kind: 'crow', x: from, y: 120 + i * 30, hp: Math.round(CR.hp * rHp), maxHp: Math.round(CR.hp * rHp), hitFlash: 0, face: x > from ? 1 : -1, v: i % 3,
                     hopFrom: 0, hopTo: 0, hopAt: 0, hopEnd: 0, hitCd: 0, plot: k, phase: 'in', eatAt: 0 });
             });
             if (ripe.length) this.io.to(roomId).emit('mfCrows', { n: Math.min(ripe.length, CR.max) });
@@ -3623,14 +3570,14 @@ export class GameEngine {
                                 const ex = t2.tx - mouthX, ey = t2.ty - mouthY, L2 = ex * ex + ey * ey || 1;
                                 const u = Math.max(0, Math.min(1, ((p.x - mouthX) * ex + (p.y - mouthY) * ey) / L2));
                                 if (Math.hypot(p.x - (mouthX + ex * u), p.y - (mouthY + ey * u)) > 24 || now < (mf.safeUntil[p.id] || 0)) return;
-                                this.hurtPlayer(p, Z.tongueDamage);
+                                this.hurtPlayer(p, Math.round(Z.tongueDamage * rDmg));
                                 this.knockback(p, (p.x < m.x ? -1 : 1) * 160, -260);
                             });
                             // til itga tegdimi
                             if (mf.dog && mf.dog.hp > 0) {
                                 const dgx = mf.dog.x, dgy = mf.dog.y - 20, ex = t2.tx - mouthX, ey = t2.ty - mouthY, L2 = ex * ex + ey * ey || 1;
                                 const u = Math.max(0, Math.min(1, ((dgx - mouthX) * ex + (dgy - mouthY) * ey) / L2));
-                                if (Math.hypot(dgx - (mouthX + ex * u), dgy - (mouthY + ey * u)) <= 26) this.dogHurt(roomId, Z.tongueDamage);
+                                if (Math.hypot(dgx - (mouthX + ex * u), dgy - (mouthY + ey * u)) <= 26) this.dogHurt(roomId, Math.round(Z.tongueDamage * rDmg));
                             }
                         } else { m.tongue = null; m.tongueCd = Math.round(Z.tongueCdMs / 30); }
                     }
@@ -3699,7 +3646,7 @@ export class GameEngine {
             const halfW = m.kind === 'slime' ? 52 : m.kind === 'slimelet' ? 22 : 20, h = m.kind === 'slime' ? 90 : 46;
             if (m.hitCd <= 0) {
                 const hit = alive.find(p => now >= (mf.safeUntil[p.id] || 0) && Math.abs(p.x - m.x) <= halfW + 12 && p.y + 24 > m.y - h && p.y - 24 < m.y);
-                const dmg = m.kind === 'slime' ? RD.slime.dmg : m.kind === 'slimelet' ? RD.slimelet.dmg : RD.zveg.dmg;
+                const dmg = Math.round((m.kind === 'slime' ? RD.slime.dmg : m.kind === 'slimelet' ? RD.slimelet.dmg : RD.zveg.dmg) * rDmg);
                 if (hit) {
                     this.hurtPlayer(hit, dmg);
                     this.knockback(hit, hit.x < m.x ? -380 : 380, -260);
@@ -5255,88 +5202,6 @@ export class GameEngine {
         this.io.to(room.id).emit('gflowerDown');
     }
 
-    // Har 5 ta o'ldirishda: tasodifiy boss (oldingisi takrorlanmaydi); har yengilgan boss - keyingisi kuchliroq
-    private startArenaBoss(room: RoomState): void {
-        const map = getMapById(room.selectedLevel);
-        const A = room.arena!;
-        const options = (['gorilla', 'fatelf', 'squad', 'snake'] as const).filter(b => b !== A.lastBoss && (b !== 'snake' || !!map.arena?.snake));
-        const boss = options[Math.floor(Math.random() * options.length)];
-        const players = Math.max(1, Object.keys(room.players).length);
-        const power = 1 + 0.25 * A.bossesBeaten;
-        A.boss = boss;
-        A.sinceBoss = 0;
-        if (boss === 'gorilla' && map.gorilla) {
-            const gd = map.gorilla;
-            const hp = Math.round(gd.baseHp * 0.6 * players * power);
-            room.gorilla = { hp, maxHp: hp, x: gd.startX, facingLeft: true, state: 'idle', timer: Math.round(1200 / 30), attack: null, crushPlat: -1, hitFlash: 0, lastHitBy: null };
-            room.gPlats = gd.platforms.map((pl, i) => ({ id: 'gp_' + i, x: pl.x, y: pl.y, w: pl.w, state: 'idle' as const, timer: 0, riders: [] as string[] }));
-            room.gSpikes = []; room.gRocks = [];
-        } else if (boss === 'fatelf' && map.fatElf) {
-            const fd = map.fatElf;
-            const hp = Math.round(fd.baseHp * players * power);
-            const alive = Object.values(room.players).filter(p => !p.isDead);
-            const avgX = alive.length ? alive.reduce((a, p) => a + p.x, 0) / alive.length : 200;
-            room.fatElf = { hp, maxHp: hp, x: avgX < 400 ? 620 : 180, facingLeft: true, state: 'idle', timer: Math.round(1500 / 30),
-                targetId: null, hitFlash: 0, lastHitBy: null, grace: Math.round(1200 / 30) };
-            room.acid = [];
-        } else if (boss === 'snake' && map.arena?.snake) {
-            // ROBOT ILON: boshi chap eshikdan chiqib keladi. Yo'lidagi qahramonlar o'ngga suriladi
-            const sd = map.arena.snake;
-            const hp = Math.round((sd.baseHp + sd.hpPerExtraPlayer * Math.max(0, players - 1)) * power);
-            room.snake = { x: -120, speed: sd.advanceSpeed };
-            room.boss = { hp, maxHp: hp, nextMineTick: 0, stallsSmashed: 0, fire: 'idle', fireTicks: 0, nextFireTick: 0, wallBroken: false,
-                dead: false, deathTicks: 0, hitFlash: 0, lastHitBy: null };
-            room.mines = [];
-            room.flyingMines = [];
-            room.levelTicks = room.levelTicks || 0;
-            let slot = 0;
-            Object.values(room.players).forEach(p => {
-                if (p.isDead || p.x > sd.startX + 90) return;
-                p.x = sd.startX + 120 + (slot++) * 40;
-                p.snakeHitCd = 30;
-            });
-        } else {
-            // ROBOT OTRYADI: bir nechta kuchli (4x jonli) robot bir vaqtda tushadi
-            const count = 1 + players;
-            const spawns = Array.from({ length: count }, (_, i) => ({ x: 200 + i * (480 / Math.max(1, count - 1)), y: 90 }));
-            const elites = GameEngine.createBots(room.id, spawns, 'robot', Math.round(GameEngine.BOT_MAX_HP * 4 * power));
-            elites.forEach((b, i) => { b.elite = true; b.id += '_e' + A.tick + '_' + i; });
-            room.bots.push(...elites);
-            A.boss = 'squad';
-        }
-        this.io.to(room.id).emit('arenaBoss', { boss: A.boss });
-    }
-
-    // Boss yengildi: tirik qahramonlarga +100 tanga, +50 XP; oddiy botlar yana chiqa boshlaydi
-    private arenaBossBeaten(room: RoomState): void {
-        const ar = getMapById(room.selectedLevel).arena;
-        const A = room.arena;
-        if (!ar || !A || !A.boss) return;
-        const boss = A.boss;
-        A.lastBoss = boss;
-        A.boss = null;
-        A.bossesBeaten++;
-        A.sinceBoss = 0;
-        A.nextSpawnTick = A.tick + Math.round(2500 / 30);
-        room.gorilla = null;
-        room.fatElf = null;
-        room.acid = [];
-        room.boss = null;
-        room.snake = null;
-        room.mines = [];
-        room.flyingMines = [];
-        room.gSpikes = []; room.gRocks = [];
-        // Gorilla platformalari joyiga qaytadi (gorilla yo'q paytda ularni hech kim qaytarmaydi)
-        const gd = getMapById(room.selectedLevel).gorilla;
-        (room.gPlats || []).forEach((pl, i) => { pl.state = 'idle'; pl.timer = 0; pl.riders = []; if (gd) pl.y = gd.platforms[i].y; });
-        // Boss - jamoaviy g'alaba: xonadagi HAMMAGA (o'sha payt o'lik/arvoh bo'lganlarga ham) tanga va XP
-        Object.values(room.players).forEach(p => {
-            this.roomManager.dailyProgress(room.id, p.id, 'bosses', 1);
-            this.roomManager.awardReward(room.id, p.id, ar.bossCoins, ar.bossXp, true).catch(err => console.error('awardReward xatosi:', err));
-        });
-        this.io.to(room.id).emit('arenaBossDown', { boss, coins: ar.bossCoins, xp: ar.bossXp });
-    }
-
     public markIntroDone(room: RoomState, playerId: string): void {
         const p = room.players[playerId];
         if (p) p.introDone = true;
@@ -5441,8 +5306,7 @@ export class GameEngine {
     //  - joni tugasa: portlash animatsiyasi uchun biroz kutib, xarita o'tiladi
     private updateBoss(room: RoomState, roomId: string): void {
         const map = getMapById(room.selectedLevel);
-        const inArena = !!room.arena && !!map.arena?.snake;
-        const def = map.boss || (inArena ? map.arena!.snake : undefined);
+        const def = map.boss;
         const boss = room.boss;
         if (!def || !boss || !room.snake || room.isOver) return;
         room.levelTicks = (room.levelTicks || 0) + 1;
@@ -5450,7 +5314,6 @@ export class GameEngine {
 
         if (boss.dead) {
             boss.deathTicks--;
-            if (boss.deathTicks <= 0 && inArena) { this.arenaBossBeaten(room); return; }
             if (boss.deathTicks <= 0) {
                 const alive = Object.values(room.players).filter(p => !p.isDead);
                 const winner = (boss.lastHitBy && room.players[boss.lastHitBy]) ? boss.lastHitBy : (alive[0] || Object.values(room.players)[0])?.id;
@@ -5462,7 +5325,7 @@ export class GameEngine {
         // Harakat: faqat oldinga, to'xtamay (xarita oxirida to'xtaydi)
         const snake = room.snake;
         snake.speed = def.advanceSpeed;
-        snake.x = Math.min(inArena ? def.startX : map.mapWidth - 300, snake.x + snake.speed * this.TICK_SECONDS);
+        snake.x = Math.min(map.mapWidth - 300, snake.x + snake.speed * this.TICK_SECONDS);
         if (!boss.wallBroken && snake.x >= 0) {
             boss.wallBroken = true;
             boss.nextFireTick = room.levelTicks + Math.round(def.fireIntervalMs / 30);
@@ -5500,22 +5363,12 @@ export class GameEngine {
             const targets = Object.values(room.players)
                 .filter(p => !p.isDead && p.x > snake.x + 80 && p.x < snake.x + 1100)
                 .sort(() => Math.random() - 0.5);
-            const count = inArena ? Math.max(targets.length, boss.hp < boss.maxHp / 2 ? 2 : 1) : (boss.hp < boss.maxHp / 2 ? 2 : 1);
-            // Arenada maydonda yotgan eski minalar ko'payib ketmasin - eng eskisi o'chadi
-            if (inArena) while (room.mines.length > 4) room.mines.shift();
+            const count = boss.hp < boss.maxHp / 2 ? 2 : 1;
             for (let k = 0; k < count && room.mines.length + flying.length < this.BOSS_MAX_MINES; k++) {
                 const x0 = snake.x - 40, y0 = 440, g = 800;
                 let tx: number, ty: number, T: number;
                 const p = targets.length ? targets[k % targets.length] : null;
-                if (p && inArena) {
-                    // ANIQ MO'LJAL: qahramon hozir qayerga yugurayotganini hisoblab, u yetib boradigan joyga
-                    // tez (0.55-0.9 s) tushadi; sakrab turgan bo'lsa - qo'nadigan sirtiga (yer yoki platforma)
-                    const vx = this.playerMotion.get(p.id)?.vx || 0;
-                    T = Math.max(0.55, Math.min(0.9, (p.x - x0) / 700));
-                    tx = p.x + Math.max(-220, Math.min(220, vx * T)) + (k >= targets.length ? (Math.random() - 0.5) * 120 : 0);
-                    tx = Math.max(snake.x + 70, Math.min(map.mapWidth - 20, tx));
-                    ty = this.bossSurfaceUnder(map, tx, p.y + this.PLAYER_HALF_H, room) - 6;
-                } else if (p) {
+if (p) {
                     T = Math.max(0.7, Math.min(1.2, (p.x - x0) / 550));
                     // Oldinga yugurayotgan bo'lsa - qayerga yetib borishini taxminlaymiz (+ ikkinchi mina biroz tarqoq)
                     const lead = Math.max(-150, Math.min(260, (this.playerMotion.get(p.id)?.vx || 0) * T * 0.8));
@@ -5609,7 +5462,6 @@ export class GameEngine {
     private bossSurfaceUnder(map: MapDef, x: number, feetY: number, room?: RoomState): number {
         let best = 570;
         const consider = (top: number) => { if (top >= feetY - 20 && top < best) best = top; };
-        if (room && room.arena) (room.gPlats || []).forEach(g => { if (g.state === 'idle' && x >= g.x && x <= g.x + g.w) consider(g.y); });
         (map.platforms || []).forEach(pl => { if (pl.h <= 12 && x >= pl.x && x <= pl.x + pl.w) consider(pl.y); });
         const stalls = map.market?.stalls || [];
         stalls.forEach(st => { if (Math.abs(x - st.x) <= STALL_ROOF_HALF_W) consider(STALL_ROOF_Y); });
@@ -5711,6 +5563,8 @@ export class GameEngine {
         else if (act === 'fishcast') this.bigFishCast(room, S, p, arg, ctx).catch(err => console.error('bigFishCast xatosi:', err));
         else if (act === 'fishreel') this.bigFishReel(room, S, p, item, ctx).catch(err => console.error('bigFishReel xatosi:', err));
         else if (act === 'cage') bigCage(S, p, ctx);
+        else if (act === 'fruit') bigFruit(S, p, arg, ctx);   // katta o'rmonda meva yeyish / terish
+        else if (act === 'trail') bigTrail(S, p, arg, ctx);   // yo'l ko'rsatkich: qishloq <-> katta o'rmon
         else if (act === 'trigger') bigTrigger(S, p, room, ctx);
         else if (act === 'mage') bigMageTalk(S, p, arg, ctx);   // Balot Magi bilan suhbat tugadi - simpatiya
         else if (act === 'magegift') bigMageGift(S, p, arg, item, ctx);   // qo'ldagi narsani sovg'a qilish
@@ -5762,7 +5616,7 @@ export class GameEngine {
         p.hp = 0;
         p.isDead = true;
         p.respawnTimer = 0;
-        p.isInvisible = false;
+        p.isInvisible = false; p.invisLinger = 0;
         p.speedMultiplier = 1;
         p.isHoldingAbility = false;
         p.isHoldingAttack = false;

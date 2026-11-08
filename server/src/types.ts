@@ -1,5 +1,5 @@
 // LAGER TOPSHIRIG'I: killk - aniq dushmandan n ta, killn - lokatsiyada istalgan n ta dushman, item - o'rmondan n ta buyum (spots - qolgan joylar), fish - lokatsiya ko'lidan n ta baliq
-export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item' | 'fish'; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; }
+export interface RandQuest { seed: number; loc: string; npc: number; t: 'killk' | 'killn' | 'item' | 'fish'; k?: string; n: number; got: number; coins: number; xp: number; spots?: number[][]; fr?: number; }   // fr - katta o'rmon mevalari (joyi belgilanmaydi)
 export interface PlayerState {
     mineCd?: number;               // ovchi: yopishqoq mina qayta tiklanishi (tik)
     ownedHeroes?: string[];        // sotib olingan (pullik) qahramonlar
@@ -74,7 +74,8 @@ export interface PlayerState {
     tornadoCd?: number;            // sehrgar: tornado qayta tiklanmoqda (tik)
     specialTicks: number;          // R qobiliyati (mage davolash / knight uchish) qolgan vaqti
     specialCooldown: number;       // R qayta tayyor bo'lguncha
-    invisLinger: number;           // archer: SHIFT qo'yib yuborilgach yana ko'rinmas qoladigan vaqt
+    invisLinger: number;           // archer: Shift bosilgach ko'rinmas qoladigan vaqt (tik)
+    invisCd?: number;              // archer: ko'rinmaslik qayta tiklanmoqda (tik)
     ammo?: number;                 // knight drobovigi: magazindagi o'qlar
     reloadTicks?: number;          // drobovik qayta o'qlanmoqda (qolgan tik)
     lastEmoteAt?: number;          // emotsiya spamiga qarshi (ms) // Hisobdagi BARCHA personajlar uchun yaxshilanishlar keshi (personaj almashtirilganda shu yerdan olinadi)
@@ -220,13 +221,14 @@ export interface BulletState {
     vy: number;
     color: number;
     lifetime: number;
-    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'slash' | 'lightning' | 'shield' | 'shuriken' | 'tornado' | 'acid' | 'petbite' | 'knife' | 'dart' | 'blast';
+    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'slash' | 'lightning' | 'shield' | 'tornado' | 'acid' | 'petbite' | 'knife' | 'dart' | 'blast';
     poison?: boolean;     // ovchining zaharli drotigi
     dmg?: number;         // qat'iy zarar (hamroh Pushistikning kislotasi / zarbasi) - egasining kuchaytirishlari qo'shilmaydi
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
     sy?: number;
     fire?: boolean;       // kamonchi 4-daraja: olovli o'q
+    big?: boolean;        // samuray 16-daraja: katta katana ruhi
 }
 
 // Sindiriladigan quti: markaz (x, y), sindirilsa sindirgan o'yinchiga tanga beradi
@@ -418,15 +420,6 @@ export interface RoomState {
     gfThorns?: { id: string, x: number, y: number, vx: number, vy: number }[];
     gfRoots?: { id: string, x: number, y: number, phase: 'warn' | 'up', t: number, hit: string[] }[];
     gfCounter?: number;
-    arena?: {                       // Arena (bonus): hisob va joriy boss
-        kills: number;
-        sinceBoss: number;
-        boss: 'gorilla' | 'fatelf' | 'squad' | 'snake' | null;
-        lastBoss: string | null;
-        bossesBeaten: number;
-        tick: number;
-        nextSpawnTick: number;
-    } | null;
     uwTalk?: { state: 'idle' | 'talk' | 'done', timer: number, by: string | null } | null; // trol bilan suhbat
     gPlats?: GPlatState[];
     gSpikes?: GSpikeState[];

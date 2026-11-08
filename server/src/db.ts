@@ -15,7 +15,7 @@ mongoose.set('bufferTimeoutMS', 8000);
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/four_heroes';
 
 mongoose.connect(MONGO_URI)
-    .then(() => { console.log('MongoDB bilan muvaffaqiyatli ulandi:', MONGO_URI.replace(/\/\/[^@/]+@/, '//***@')); migrateBigLeaderboard().catch(err => console.error('migrateBigLeaderboard xatosi:', err)); })
+    .then(() => { console.log('MongoDB bilan muvaffaqiyatli ulandi:', MONGO_URI.replace(/\/\/[^@/]+@/, '//***@')); migrateBigLeaderboard().catch(err => console.error('migrateBigLeaderboard xatosi:', err)); refundRemovedCosmetics().catch(err => console.error('refundRemovedCosmetics xatosi:', err)); })
     .catch((err) => {
         console.error('MongoDB ulanishida xatolik! MongoDB kompyuteringizda ishga tushirilganiga ishonch hosil qiling.');
         console.error(err.message);
@@ -1862,6 +1862,22 @@ export async function adminClearCurses(userId: string, kinds: ('acid' | 'bolt')[
     if (kinds.includes('bolt')) set.cursedBolt = false;
     const doc = await UserModel.findByIdAndUpdate(userId, { $set: set }, { returnDocument: 'after' });
     return doc ? docToUser(doc) : null;
+}
+// DO'KONDAN OLIB TASHLANGAN KO'RINISHLAR: samuray kunai (16-daraja drotik qurol o'rniga katta ruh kelgach, kunai hech qayerda ko'rinmaydi).
+// Egasiga narxi qaytariladi, buyum va kiyilgani o'chiriladi. Har ishga tushganda tekshiriladi, lekin buyum o'chgani uchun bir odamga ikki marta qaytmaydi (shart atomar)
+const REMOVED_COSMETICS: { [key: string]: number } = { 'samurai.kunai:toothbrush': 250, 'samurai.kunai:dart': 400, 'samurai.kunai:pencil': 550, 'samurai.kunai:fork': 700,
+    'samurai.kunai:cards': 900, 'samurai.kunai:feather': 1100, 'samurai.kunai:icicle': 1400, 'samurai.kunai:golden': 1700 };
+export async function refundRemovedCosmetics(): Promise<{ users: number, coins: number }> {
+    const keys = Object.keys(REMOVED_COSMETICS);
+    const docs = await UserModel.find({ ownedCosmetics: { $in: keys } }, { ownedCosmetics: 1 }).lean();
+    let users = 0, coins = 0;
+    for (const d of docs as any[]) {
+        const own = (d.ownedCosmetics as string[]).filter(k => keys.includes(k)), sum = own.reduce((a, k) => a + REMOVED_COSMETICS[k], 0);
+        const r = await UserModel.updateOne({ _id: d._id, ownedCosmetics: { $all: own } }, { $pull: { ownedCosmetics: { $in: own } }, $inc: { coins: sum }, $unset: { 'equippedCosmetics.samurai.kunai': '' } });
+        if (r.modifiedCount) { users++; coins += sum; }
+    }
+    if (users) console.log("Olib tashlangan ko'rinishlar uchun tanga qaytarildi: " + users + ' o\'yinchi, jami ' + coins + ' tanga');
+    return { users, coins };
 }
 // Sovg'a: detal (kosmetika kaliti - "head:crown", "knight.sword:holo") yoki personaj / qurol skini
 export async function adminGiftCosmetic(userId: string, key: string): Promise<UserRecord | null> {

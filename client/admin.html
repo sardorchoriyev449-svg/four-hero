@@ -299,10 +299,6 @@
             <div class="row"><input id="m-coins" type="number" placeholder="500"><button class="primary" id="m-coins-btn">Berish</button></div>
         </div>
         <div class="act">
-            <label><i class="fa-solid fa-map"></i> Mavsum xaritalari (eski): nechtasi ochiq</label>
-            <div class="row"><select id="m-maps"></select><button class="primary" id="m-maps-btn">Saqlash</button></div>
-        </div>
-        <div class="act">
             <label><i class="fa-solid fa-star"></i> Qahramon darajasi (eng yuqori - <span id="m-maxlvl">15</span>: hamma imkoniyatlar ochiq)</label>
             <div class="row">
                 <select id="m-hero"><option value="all">Hammasi</option><option value="knight">Knight</option><option value="archer">Archer</option><option value="mage">Mage</option><option value="samurai">Samurai</option><option value="hunter">Hunter</option></select>
@@ -407,8 +403,6 @@
             const s = el('div', 'stat'); s.appendChild(el('b', '', String(n))); s.appendChild(el('span', '', l)); box.appendChild(s);
         });
         $('m-maxlvl').textContent = d.maxLevel; $('m-level').max = d.maxLevel;
-        const sel = $('m-maps'); sel.innerHTML = '';
-        for (let i = 1; i <= d.maps; i++) { const o = el('option', '', i === d.maps ? i + ' (hammasi)' : String(i)); o.value = i; sel.appendChild(o); }
     }
     async function loadUsers() {
         const d = await api('/users?page=' + page + '&q=' + encodeURIComponent(query) + '&sort=' + $('f-sort').value + '&only=' + $('f-only').value);
@@ -517,7 +511,7 @@
         $('m-unmute-btn').disabled = !u.mutedUntil;
         loadCatalog().then(() => markOwned(u)).catch(() => { });
         $('m-nick').textContent = u.nickname;
-        $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · xaritalar: ${u.maps} · darajalar K/A/M/S/H: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
+        $('m-sub').textContent = `${u.fullName} · tanga: ${u.coins} · darajalar K/A/M/S/H: ${[u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join('/')}` + (u.banned ? ' · BLOKLANGAN' : '');
         const info = $('m-info'); info.innerHTML = '';
         [[u.world.pct + '%', 'The World: eng uzoq'], [u.world.bosses, "O'ldirilgan bosslar"], [u.world.mapItem ? 'Bor' : "Yo'q", 'Treasure Map'], [u.farm.level, 'Ferma darajasi (' + u.farm.xp + ' XP)'], [u.farm.furniture, 'Mebel (dona)'], [u.lastDay || '-', 'Oxirgi kunlik kirish']].forEach(([b, s]) => {
             const c = el('div'); c.appendChild(el('b', '', String(b))); c.appendChild(el('span', '', s)); info.appendChild(c);
@@ -525,7 +519,7 @@
         const q = u.quest;
         $('m-quest').textContent = !q ? "Faol quest yo'q" : LOC[q.loc] + ': ' + (q.t === 'killk' ? q.k + " o'ldirish" : q.t === 'killn' ? "istalgan dushman o'ldirish" : (ITEM[q.k] || q.k) + " yig'ish") + ' · ' + q.got + '/' + q.n + ' · mukofot ' + q.coins + ' tanga';
         $('m-quest-clear').disabled = !q;
-        $('m-maps').value = u.maps; $('m-coins').value = ''; $('m-level').value = ''; $('m-reason').value = '';
+        $('m-coins').value = ''; $('m-level').value = ''; $('m-reason').value = '';
         $('m-msg').textContent = ''; $('m-msg').className = 'msg';
         $('modal').classList.remove('hidden');
     }
@@ -537,7 +531,6 @@
         if (d.success && d.user) { openUser(d.user); $('m-msg').className = 'msg good'; $('m-msg').textContent = okText + (d.kicked ? " (o'yindan chiqarildi)" : ''); loadUsers(); loadStats(); }
     }
     $('m-coins-btn').onclick = () => act('/coins', { amount: parseInt($('m-coins').value, 10) }, 'Tanga yangilandi');
-    $('m-maps-btn').onclick = () => act('/maps', { n: parseInt($('m-maps').value, 10) }, 'Xaritalar ochildi');
     $('m-level-btn').onclick = () => act('/level', { hero: $('m-hero').value, level: parseInt($('m-level').value, 10) }, 'Daraja saqlandi');
     // Piksel tasdiq oynasi (brauzerning oq confirm() oynasi o'rniga)
     const pxConfirm = (text, onYes) => {

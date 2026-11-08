@@ -1333,20 +1333,21 @@ function bigfootAI(c: SP): void {
 // Xonaning o'ng chetida DARVOZA turadi. Unga otilgan o'q / zarbani klyushkasi bilan qaytaradi - joni FAQAT DARVOZAGA tekkanda ketadi (bigmap damageEnemy). Hujumlari:
 //  1) o'yinchi YERDA (uning sathida) bo'lsa - sirpanib borib, klyushka bilan urib, DARVOZA tomonga uchirib yuboradi (darvozaga tushsa - "GOL!": qo'shimcha zarba)
 //  2) o'yinchi tepada (pog'onada) bo'lsa - klyushka uchida MUZ SHAYBA o'zi paydo bo'ladi va uni urib o'yinchiga otadi (tekkan muzlaydi)
-export const HOCKEY = { accel: 0.09, hitWind: 380, hitDmg: 22, hitV: 980, hitVy: -360, goalMs: 1500, goalDmg: 18, goalW: 45, upDy: 50, shotFirst: 1200, shotEvery: 1700,
+// goalBack - darvoza o'rtasi zona chetidan shuncha ichkarida (zona cheti devordan 40 px, darvoza eni 138 px): orqasi devorga tegadi, orqasiga o'tib bo'lmaydi; netIn - darvoza ichidagi o'yinchi ham jangda hisoblanadi
+export const HOCKEY = { goalBack: 29, netIn: 60, accel: 0.09, hitWind: 380, hitDmg: 22, hitV: 980, hitVy: -360, goalMs: 1500, goalDmg: 18, goalW: 65, goalH: 120, upDy: 50, shotFirst: 1200, shotEvery: 1700,
     slapWind: 450, puckV: 760, puckDmg: 20, contactDmg: 10 };
 function hockeyAI(c: SP): void {
     const { S, e, d } = c, K = HOCKEY, z = zoneOf(S, e);
     if (!z) return;
     e.nl = true;
-    if (e.gx === undefined) { e.gx = z.x1 - 50; e.tA = S.tick + T(K.shotFirst); e.pk = []; e.gl = {}; e.sv = 0; e.bst = 'skate'; spSay(c, 'hkstart'); }
+    if (e.gx === undefined) { e.gx = z.x1 - K.goalBack; e.tA = S.tick + T(K.shotFirst); e.pk = []; e.gl = {}; e.sv = 0; e.bst = 'skate'; spSay(c, 'hkstart'); }
     // DARVOZA (yo'q bo'lsa - qayta qo'yiladi)
     let goal = S.enemies.find(o => o.k === 'hgoal' && o.zone === e.zone);
     if (!goal) { const s = BM.surfaceBelow(S, e.gx, z.y1 - 120, 300, true); goal = BM.spawnEnemy(S, 'hgoal', e.gx, s ? s.y : e.y, e.zone); goal.st = 'idle'; }
-    const gy = goal.y, rage = spRage(c), inA = c.alive.filter(q => inZ(z, q)), gl = e.gl!;
+    const gy = goal.y, rage = spRage(c), inA = c.alive.filter(q => inZ(z, q) || (q.x >= z.x1 && q.x < z.x1 + K.netIn && feetOf(q) >= z.y0 - 40 && feetOf(q) <= z.y1 + 80)), gl = e.gl!;
     // GOL: darvoza tomon uchirilgan o'yinchi darvozaga (devorgacha) tushdi
     inA.forEach((q) => {
-        if (!((gl[q.id] || 0) > S.tick) || q.x < e.gx! - K.goalW || feetOf(q) < gy - 90 || feetOf(q) > gy + 6) return;
+        if (!((gl[q.id] || 0) > S.tick) || q.x < e.gx! - K.goalW || feetOf(q) < gy - K.goalH || feetOf(q) > gy + 6) return;
         delete gl[q.id]; BM.hurtBig(q, K.goalDmg, c.ctx, 'ground'); c.ctx.knock(q, -560, -400);
         spSay(c, 'goal', { gx: Math.round(e.gx!), gy: Math.round(gy) });
     });
@@ -1404,7 +1405,7 @@ function hockeyAI(c: SP): void {
     e.sv = (e.sv || 0) + (want - (e.sv || 0)) * K.accel;
     if (e.bst !== 'skate') e.sv *= 0.85;
     BM.moveEnemy(S, e, d, e.sv, null, c.dt);
-    const lo = z.x0 + d.w / 2, hi = e.gx! - 70;
+    const lo = z.x0 + d.w / 2, hi = z.x1 + 10;   // darvoza ichiga ham kira oladi: u yerda turgan o'yinchiga ham yetadi
     if (e.x < lo || e.x > hi) { e.x = Math.max(lo, Math.min(hi, e.x)); e.sv = 0; }
 }
 // darvoza: joyidan qimirlamaydi (zarbasi xokkeychiga o'tadi - bigmap damageEnemy)
@@ -1443,6 +1444,148 @@ function iceramAI(c: CR): void {
 }
 Object.assign(SETPIECE, { santa: santaAI, bigfoot: bigfootAI, hockey: hockeyAI, hgoal: goalAI });
 CREATURE.iceram = iceramAI;
+// MIMIK ROCK (Yer osti): tosh bo'lib yotadi, yaqin kelsa uyg'onadi. Navbat bilan: o'yinchi USTIGA sakraydi (qo'nadigan joyda yerda "!" belgisi - qochib ulgurasan),
+// keyin boshidagi krateridan yoy bo'ylab olovli sharlar otadi
+export const MIMICROCK = { firstMs: 350, crouchMs: 550, markMs: 2000, landK: 1.2, landR: 48, restMs: 800, fireWindMs: 420, fireGapMs: 260, fireN: 3, walkMs: 1300, range: 390 };   // landR - tanasi (33) + qahramon (12): faqat haqiqatan tekkanda; range - ekranda ko'rinib turganda
+function mimicrockAI(c: CR): void {
+    const { S, e, d, p } = c, K = MIMICROCK, dx = p.x - e.x, dist = Math.abs(dx), dy = feetOf(p) - e.y;
+    const unmark = () => { S.areas = S.areas.filter(a => !(a.owner === e.id && a.k === 'mark:mimic')); };
+    if (e.tA === undefined) { e.tA = S.tick + T(K.firstMs); e.mi = 0; }
+    let vx = 0;
+    if (e.bst === 'crouch') {
+        if (--e.ph! <= 0) {
+            const ok = BM.leapTo(e, e.aimX!, e.fy!, d.jump * 1.7);
+            e.bst = ok ? 'leap' : undefined;
+            if (ok) c.ctx.emit('bigBossMove', { id: e.id, k: e.k, m: 'ramleap', x: Math.round(e.x), y: Math.round(e.y) });
+            else { unmark(); e.tA = S.tick + T(K.restMs); e.mi = 1; }
+        }
+    } else if (e.bst === 'fire') {
+        e.f = dx < 0 ? -1 : 1;
+        if (--e.ph! <= 0) {
+            const sx = e.x, sy = e.y - d.h, tx = p.x - sx, ty = p.y - sy, sh = d.shot!, t = Math.max(0.6, Math.min(1.6, Math.abs(tx) / sh.spd));
+            S.shots.push({ id: ++S.seq, x: sx, y: sy, vx: tx / t, vy: (ty - 0.5 * 600 * t * t) / t, dmg: sh.dmg, t: 0, arc: true, owner: e.id, k: 'lava', sc: 1.5 });   // boshidan - yuqoriga, keyin o'yinchi ustiga tushadi
+            c.ctx.emit('bigShoot', { id: e.id });
+            e.combo = (e.combo || 0) - 1;
+            if (e.combo! > 0) e.ph = T(K.fireGapMs);
+            else { e.bst = undefined; e.tA = S.tick + T(K.walkMs); e.mi = 0; }
+        }
+    } else if (e.bst !== 'leap') {
+        e.f = dx < 0 ? -1 : 1;
+        if (dist > 70) vx = e.f * d.spd;
+        if (e.ground && S.tick >= e.tA!) {
+            const s = e.mi === 0 && Math.abs(dy) < 320 && dist < K.range ? BM.surfaceBelow(S, p.x, feetOf(p) - 8, 200) : null;
+            if (s) {
+                e.aimX = Math.max(s.x + 10, Math.min(s.x + s.w - 10, p.x)); e.fy = s.y; e.bst = 'crouch'; e.ph = T(K.crouchMs); vx = 0;
+                area(S, { zone: e.zone, owner: e.id, k: 'mark:mimic', x: e.aimX - K.landR, y: s.y - 20, w: K.landR * 2, h: 20, warn: T(K.markMs), t: 1, dmg: 0 });
+                c.ctx.emit('bigWind', { id: e.id });
+            } else if (dist < K.range && Math.abs(dy) < 320) {
+                e.bst = 'fire'; e.ph = T(K.fireWindMs); e.combo = K.fireN; vx = 0;
+                c.ctx.emit('bigWind', { id: e.id });
+            } else { e.mi = e.mi === 0 ? 1 : 0; e.tA = S.tick + T(K.restMs); }
+        }
+    }
+    const landed = BM.moveEnemy(S, e, d, vx, p, c.dt);
+    if (e.bst === 'leap' && (landed || e.ground)) {
+        e.bst = undefined; unmark(); e.tA = S.tick + T(K.restMs); e.mi = 1;
+        c.alive.forEach((q) => { if (Math.abs(q.x - e.x) < K.landR && Math.abs(feetOf(q) - e.y) < 60) { BM.hurtBig(q, d.dmg * K.landK, c.ctx, 'ground'); c.ctx.knock(q, Math.sign((q.x - e.x) || 1) * 300, -300); } });
+        c.ctx.emit('bigBossMove', { id: e.id, m: 'rockland', x: Math.round(e.x), y: Math.round(e.y) });
+    }
+}
+CREATURE.mimicrock = mimicrockAI;
+// BULLKAN (Yer osti bossi): yerdan ko'tarilib chiqqan bahaybat vulqon-golem, joyidan qimirlamaydi; ikki qo'li alohida uchib yuradi. Navbat bilan:
+//  1) MUSHT: mushti bilan yerni uradi (yonida turgan ham oladi) - keyin har o'yinchi TAGIDAN lava otilib chiqadi (oldin yerda belgi)
+//  2) MUSHT TEPADAN: mushti o'yinchi boshi ustiga keladi va kuzatib turadi (yerda soyasi), to'xtaydi va tepadan uradi
+//  3) TOSH: qo'lida tosh olib, o'yinchiga yoy bo'ylab otadi; tushgan joyida sinadi
+// Qo'llariga tegish zarar bermaydi - faqat zarba paytida. O'q FAQAT BOSHIGA tegadi (server tanasi - bosh: e.x - bosh o'rtasi, e.y - jag' osti, yerdan headUp px balandda)
+export const BULLKAN = { headUp: 58, riseMs: 1600, gapMs: 1000, homeX: 285, homeUp: 120, moveV: 1200, fistH: 69, palmH: 53,
+    slamUp: 270, slamWind: 280, slamV: 2600, slamDmg: 30, slamR: 58, lavaWarn: 650, lavaT: 300, lavaDmg: 28, lavaW: 90, lavaH: 190,
+    palmTrack: 800, palmTrackV: 850, palmLock: 300, palmUp: 190, palmV: 2600, palmDmg: 36, palmW: 120, restMs: 350,   // slamR, palmW - rasmidan torroq: faqat haqiqatan tekkanda
+   
+    throwUp: 270, throwWind: 380, rockDmg: 26, rockBlast: 70, rockT: 1.0 };   // rockBlast: tosh qutisi (5.3 -> 4.4 x 9) burchagi tekkanda ham zarar o'tadi (aks holda tosh portlab, tegmasdi)
+function bullkanAI(c: SP): void {
+    const { S, e } = c, K = BULLKAN, z = zoneOf(S, e);
+    if (!z) return;
+    if (e.bst === undefined) {
+        e.hx = e.x; e.hy = e.y; e.f = 1; e.bst = 'rise'; e.ph = T(K.riseMs); e.hide = 'under'; e.mi = -1; e.combo = 0; e.tA = S.tick + T(K.riseMs + 500); e.cc = {};
+        e.bh = [e.x - K.homeX, e.y - K.homeUp, 0, 1, e.x + K.homeX, e.y - K.homeUp, 0, -1];
+        spSay(c, 'bkrise');
+    }
+    e.x = e.hx; e.y = e.hy! - K.headUp; e.vx = 0; e.vy = 0; e.ground = true;
+    const H = e.bh!, g = e.hy!, rage = spRage(c), act = e.combo!, hx = H[act * 4], hy = H[act * 4 + 1];
+    const mv = (i: number, tx: number, ty: number, v: number) => { const o = i * 4, ax = tx - H[o], ay = ty - H[o + 1], l = Math.hypot(ax, ay), st = v * c.dt; if (l <= st) { H[o] = tx; H[o + 1] = ty; return true; } H[o] += ax / l * st; H[o + 1] += ay / l * st; return false; };
+    const look = (i: number, k: number, f: number) => { H[i * 4 + 2] = k; H[i * 4 + 3] = f; };
+    const free = (i: number) => { look(i, 0, i ? -1 : 1); return mv(i, e.hx + (i ? 1 : -1) * K.homeX, g - K.homeUp, K.moveV); };
+    if (e.bst === 'rise') { if (e.ph! < T(K.riseMs * 0.4)) e.hide = undefined; if (--e.ph! <= 0) { e.bst = 'idle'; e.hide = undefined; } return; }
+    const inA = c.alive.filter(q => inZ(z, q));
+    const unshadow = () => { S.areas = S.areas.filter(a => !(a.owner === e.id && a.k === 'fall:shadow')); };
+    // hamma chiqib ketdi - qo'llar joyiga qaytadi
+    if (!inA.length) { unshadow(); e.bst = 'idle'; free(0); free(1); e.tA = Math.max(e.tA!, S.tick + T(800)); return; }
+    const tgt = () => inA.find(q => q.id === e.tgt) || BM.nearest(inA, e)!;
+    if (e.bst === 'idle') {
+        free(0); free(1);
+        if (S.tick < e.tA!) return;
+        const q = pickOne(inA), side = q.x < e.x ? 0 : 1;
+        e.tgt = q.id; e.combo = side; e.mi = ((e.mi ?? -1) + 1) % 3; e.cc = {};
+        if (e.mi === 0) { e.bst = 'slamup'; e.aimX = e.hx + (side ? 1 : -1) * (K.homeX + 40); spSay(c, 'bkwind'); }
+        else if (e.mi === 1) {
+            e.bst = 'palmgo'; e.ph = T(K.palmTrack);
+            const s = BM.surfaceBelow(S, q.x, feetOf(q) - 8, 400);
+            spAr(c, { k: 'fall:shadow', x: q.x - K.palmW / 2, y: (s ? s.y : feetOf(q)) - 20, w: K.palmW, h: 20, warn: T(K.palmTrack + K.palmLock + 900), t: 1, dmg: 0 });
+            spSay(c, 'bkpalm');
+        } else { e.bst = 'throwup'; spSay(c, 'bkgrab'); }
+        return;
+    }
+    free(1 - act);
+    if (e.bst === 'slamup') {
+        if (mv(act, e.aimX!, g - K.slamUp, K.moveV)) { e.bst = 'slamwind'; e.ph = T(K.slamWind * (rage ? 0.8 : 1)); }
+    } else if (e.bst === 'slamwind') {
+        if (--e.ph! <= 0) e.bst = 'slamdown';
+    } else if (e.bst === 'slamdown') {
+        if (mv(act, e.aimX!, g - K.fistH, K.slamV)) {
+            spSay(c, 'bkslam', { x: Math.round(e.aimX!), y: Math.round(g) });
+            inA.forEach((q) => { if (Math.abs(q.x - e.aimX!) < K.slamR && feetOf(q) > g - 2 * K.fistH && feetOf(q) <= g + 8) { BM.hurtBig(q, K.slamDmg, c.ctx, 'hit'); safeKnock(S, z, q, Math.sign((q.x - e.aimX!) || 1) * 340, -280, c.ctx); } });
+            // har o'yinchi tagidan lava (g'azabda - yana bittasi bir yonida, ikkinchi yon bo'sh: qochish mumkin)
+            inA.forEach((q) => {
+                const s = BM.surfaceBelow(S, q.x, feetOf(q) - 8, 400); if (!s) return;
+                (rage ? [0, (Math.random() < 0.5 ? -1 : 1) * 220] : [0]).forEach((dx) => {
+                    const x = q.x + dx, f = dx ? BM.surfaceBelow(S, x, feetOf(q) - 8, 400) : s; if (!f) return;
+                    spAr(c, { k: 'pillar:fire', x: x - K.lavaW / 2, y: f.y - K.lavaH, w: K.lavaW, h: K.lavaH, warn: T(K.lavaWarn), t: T(K.lavaT), dmg: K.lavaDmg, kb: [0, -520], dk: 'ground' });
+                });
+            });
+            e.bst = 'rest'; e.ph = T(K.restMs);
+        }
+    } else if (e.bst === 'palmgo') {
+        // musht boshi ustida kuzatadi, yerda soyasi ham birga yuradi
+        const q = tgt(); look(act, 0, act ? -1 : 1);
+        mv(act, Math.max(z.x0, Math.min(z.x1, q.x)), feetOf(q) - K.palmUp, K.palmTrackV);
+        const a = S.areas.find(o => o.owner === e.id && o.k === 'fall:shadow'), s = BM.surfaceBelow(S, H[act * 4], feetOf(q) - 8, 400);   // o'yinchi turgan sath: pog'ona ostidagiga ham tegadi (qo'l pog'onadan o'tadi)
+        if (a && s) { a.x = H[act * 4] - K.palmW / 2; a.y = s.y - a.h; }
+        if (--e.ph! <= 0) { e.bst = 'palmlock'; e.ph = T(K.palmLock); e.fy = s ? s.y : g; }   // g'azabda ham qochishga vaqt qisqarmaydi
+    } else if (e.bst === 'palmlock') {
+        if (--e.ph! <= 0) { e.bst = 'palmdown'; spSay(c, 'bkdrop', { x: Math.round(hx), y: Math.round(e.fy!) }); }
+    } else if (e.bst === 'palmdown') {
+        const down = mv(act, hx, e.fy! - K.fistH, K.palmV), yy = H[act * 4 + 1];
+        const box = { x: hx - K.palmW / 2, y: yy - 30, w: K.palmW, h: 30 + K.fistH - 10 };
+        inA.forEach((q) => { if (e.cc![q.id] || !BM.overlap(box, BM.pRect(q))) return; e.cc![q.id] = 1; BM.hurtBig(q, K.palmDmg, c.ctx, 'hit'); safeKnock(S, z, q, Math.sign((q.x - hx) || 1) * 320, -260, c.ctx); });
+        if (down) { unshadow(); spSay(c, 'bkland', { x: Math.round(hx), y: Math.round(e.fy!) }); e.bst = 'rest'; e.ph = T(K.restMs); }
+    } else if (e.bst === 'throwup') {
+        look(act, 2, act ? -1 : 1);
+        if (mv(act, e.hx + (act ? 1 : -1) * (K.homeX - 40), g - K.throwUp, K.moveV)) { e.bst = 'throwwind'; e.ph = T(K.throwWind * (rage ? 0.8 : 1)); }
+    } else if (e.bst === 'throwwind') {
+        if (--e.ph! <= 0) {
+            // tosh - qo'ldagi joyidan (rasm: tosh o'rtasi qo'l o'rtasidan 46 px chetda, 15 px tepada); g'azabda - ikkinchisi ham, yon tomonga
+            const q = tgt(), bx = hx + (act ? 46 : -46), by = hy - 15;
+            (rage ? [0, q.x < e.x ? 170 : -170] : [0]).forEach((dx, i) => S.shots.push({ id: ++S.seq, owner: e.id, x: bx, y: by, ...lob(bx, by, q.x + dx, feetOf(q) - 10, K.rockT + i * 0.2), arc: true, t: 0, k: 'brock', sc: 4.4, blast: K.rockBlast, dmg: K.rockDmg, life: T(5000) }));
+            look(act, 1, act ? -1 : 1); spSay(c, 'bkthrow', { x: Math.round(bx), y: Math.round(by) });
+            e.bst = 'rest'; e.ph = T(K.restMs);
+        }
+    } else if (e.bst === 'rest') {
+        if (--e.ph! <= 0) e.bst = 'back';
+    } else if (e.bst === 'back') {
+        if (free(act)) { e.bst = 'idle'; e.tA = S.tick + T(K.gapMs * (rage ? 0.75 : 1)); }
+    } else e.bst = 'idle';
+}
+SETPIECE.bullkan = bullkanAI;
 
 // ===== BOTQOQ =====
 // BAHAYBAT GUL (1-boss): balchiq ko'lining o'rtasida o'sib turadi (qimirlamaydi), uzun ingichka poya, tepasida to'q pushti BOSH - katta tishli og'iz.

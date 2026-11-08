@@ -127,7 +127,7 @@ window.BigArt = (function () {
         }
         if (I.pool) for (let j = 0; j + 1 < I.pool.length; j += 2) {
             const px0 = Math.round((I.pool[j] - ox) / P), px1 = Math.round((I.pool[j] + I.pool[j + 1] - ox) / P);
-            for (let y = 0; y < 3 + 6; y++) for (let x = px0; x < px1; x++) if (fill[y]) fill[y][x] = 0;
+            for (let y = 0; y < 3 + (I.poolD ? Math.round(I.poolD / P) : 6); y++) for (let x = px0; x < px1; x++) if (fill[y]) fill[y][x] = 0;   // poolD - chuqurroq (katta daryo)
         }
         const g = gNew(cw, chh), topRow = 3, depthRows = Math.max(1, Math.round((maxY - I.y) / P));
         const seed = I.id * 31 + 7;
@@ -515,6 +515,7 @@ window.BigArt = (function () {
         stalagmite: [12, 26, 3, (a) => { a.roof(6, 0, 26, 1, 12, C.basalt); a.roof(2.5, 13, 13, 1, 5, C.basalt); a.roof(9.5, 16, 10, 1, 4, C.basalt); a.p(6, 5, 0x9a6aff); a.p(5, 10, 0x7c4dff); a.p(7, 15, 0x9a6aff); }],
         lavarock: [16, 11, 3, (a) => { a.e(8, 6.5, 7.5, 4.5, C.basalt); a.e(5, 4.5, 3, 2, C.basalt, 0.15); a.line(3, 7, 7, 5, 0xff5a1a); a.line(7, 5, 12, 8, 0xff7a1a); a.p(8, 5, 0xffc35a); a.p(11, 7, 0xffc35a); }],
         skull: [10, 8, 3, (a) => { a.e(5, 3.5, 4.4, 3.6, C.bone, 0.1); a.r(2, 6, 6, 2, C.bone[1]); a.r(2, 3, 2, 2, OUT); a.r(6, 3, 2, 2, OUT); a.p(5, 5, OUT); [3, 5, 7].forEach(x => a.p(x, 7, OUT)); }],
+        mimicrock: [30, 30, 3, (a) => rockMimicDraw(a, 0)],   // oddiy tosh - mimik rock 0-kadri bilan AYNAN bir xil
         lavapuddle: [22, 12, 3, (a) => blobDraw(a, 0)],   // lava ko'lmagi - tirik maxluq (magmablob) 0-kadri bilan AYNAN bir xil
         lantern: [9, 30, 3, (a) => { a.s(3, 9, 3, 21, C.iron); a.r(2, 28, 5, 2, C.iron[1]); a.r(1, 3, 7, 6, C.iron[1]); a.r(2, 4, 5, 4, 0xff9a3a); a.r(3, 5, 3, 2, 0xffe0a0); a.r(3, 1, 3, 2, C.iron[2]); a.r(1, 9, 7, 1, C.iron[1]); }],
         minecart: [24, 16, 3, (a) => { a.s(1, 4, 22, 8, C.iron); a.r(1, 4, 22, 1, C.iron[3]); for (let x = 4; x < 22; x += 5) a.r(x, 5, 1, 7, C.iron[0]); a.e(7, 3, 4.4, 2.4, C.grey); a.e(15, 2.5, 3.4, 2, C.red); a.p(14, 2, 0xffd54f); a.e(18, 3, 2.4, 1.8, [0x1f6f8e, 0x3fb6e0, 0x7ee8ff]); a.e(6, 13, 2.6, 2.6, C.dark); a.e(18, 13, 2.6, 2.6, C.dark); a.r(0, 15, 24, 1, C.iron[1]); }],
@@ -617,6 +618,34 @@ window.BigArt = (function () {
         a.r(9, 8, 5, f === 2 ? 2 : 1, 0x5a0c10); a.p(6, 3 - up, 0xfff2b0); a.p(16, 2, 0xffc35a);
         if (f === 2) { a.p(11, 0, 0xffc35a); a.p(12, 1, 0xff7a1a); }
     }
+    // MIMIK ROCK (kulba va to'nka mimiklar oilasidan: oddiy narsa + tishli og'iz + kalta oyoqlar): 0 - oddiy krater-tosh (bezak bilan bir xil!), 1-2 - qadam, 3 - sakrashga cho'kkan, 4 - havoda, 5 - boshidan olov
+    const ROCKM = { rock: [0x2a2024, 0x463638, 0x6a5652, 0x8f7a6c, 0xb09a88], leg: [0x1e1618, 0x3a2c2e, 0x5a4844, 0x7a6658],
+        rows: [[-6, 6], [-8, 7], [-9, 9], [-10, 10], [-11, 10], [-11, 11], [-12, 11], [-12, 12], [-12, 12], [-12, 12], [-12, 12], [-12, 12], [-11, 12], [-11, 11], [-10, 11], [-10, 10], [-8, 9], [-7, 8]] };
+    function rockMimicDraw(a, f) {
+        const awake = f > 0, crouch = f === 3, leap = f === 4, fire = f === 5, step = f === 2 ? 1 : 0, cx = 15, base = 29, K = ROCKM;
+        const by = base - (!awake ? 0 : crouch ? 2 : leap ? 6 : 5), top = by - K.rows.length;
+        if (awake) [-1, 1].forEach((d) => {
+            const s = d > 0 ? step : 1 - step, kx = cx + d * (leap ? 14 : 13), ky = leap ? by - 2 : by - 5 - s - (crouch ? 1 : 0), fx = cx + d * (leap ? 12 : 14), fy = leap ? base - 1 : base;
+            limb(a, cx + d * 9, by - 4, kx, ky, 2.2, 1.8, K.leg); limb(a, kx, ky, fx, fy, 1.8, 1.1, K.leg, -0.1); a.p(fx, fy, 0xff9a3a);   // tashqi oyoq
+            const ix = cx + d * 7, iy = leap ? by + 3 : base - s;
+            limb(a, cx + d * 5, by - 2, ix, iy, 1.8, 1.1, K.leg); a.p(ix, iy, 0xff9a3a);                                                     // ichki oyoq
+        });
+        K.rows.forEach((r, i) => { for (let x = cx + r[0]; x <= cx + r[1]; x++) a.p(x, top + i, shade(0.74 - (x - cx) * 0.02 - i * 0.024, x, top + i, K.rock)); });
+        // qirralar: tosh yorilgandek
+        a.line(cx - 12, top + 8, cx - 5, top + 3, K.rock[1]); a.line(cx + 4, top + 2, cx + 11, top + 7, K.rock[1]); a.line(cx - 9, top + 15, cx - 3, top + 17, K.rock[1]); a.line(cx + 12, top + 11, cx + 8, top + 16, K.rock[1]);
+        [[cx - 8, top + 5], [cx - 4, top + 2], [cx + 3, top + 4], [cx - 10, top + 10]].forEach(([x, y]) => a.r(x, y, 2, 1, K.rock[4]));
+        // krater
+        a.r(cx - 7, top - 1, 15, 2, K.rock[3]); a.r(cx - 7, top + 1, 15, 1, K.rock[1]); a.r(cx - 5, top, 11, 1, !awake ? 0x7a1a0a : 0xff7a1a); a.r(cx - 3, top, 7, 1, !awake ? 0xa8300e : 0xffc35a);
+        if (awake) {
+            // yoriqlardan lava, g'azabli ko'zlar, tishli og'iz (kulba / to'nka mimiklardagidek)
+            a.line(cx - 11, top + 7, cx - 8, top + 10, 0xff7a1a); a.line(cx + 9, top + 5, cx + 11, top + 9, 0xff7a1a);
+            [-1, 1].forEach((d) => { a.r(cx + d * 4 - 1, top + 6, 3, 2, 0xffe14a); a.p(cx + d * 4, top + 7, 0x140406); a.line(cx + d * 2, top + 6, cx + d * 6, top + 4, K.rock[0]); });
+            const op = crouch ? 2 : leap || fire ? 5 : 3, my = top + 10;
+            a.r(cx - 8, my, 17, op, 0x140406); if (fire || leap) a.r(cx - 5, my + 1, 11, op - 2, 0xb3261e);
+            for (let x = cx - 8; x <= cx + 8; x += 2) { a.p(x, my, 0xf4efe2); a.p(x + 1, my + op - 1, 0xf4efe2); }
+        }
+        if (fire) { a.e(cx, top - 3, 3.2, 3.6, C.lava, 0.2); a.p(cx, top - 4, 0xffffff); a.p(cx - 4, top - 2, 0xff7a1a); a.p(cx + 4, top - 3, 0xffc35a); }
+    }
     // qorbobo: 0 - oddiy (bezak bilan bir xil!), 1 - jonlangan (qizil ko'z), 2 - qor to'pi otmoqda
     function snowmanDraw(a, f) {
         const pal = [0xa8c8e4, 0xcce2f4, 0xe8f4ff, 0xffffff];
@@ -700,10 +729,29 @@ window.BigArt = (function () {
         firestaff: (a, x, y, f, tTop, legTop) => { const sx = x + 1; a.r(sx, tTop - 3, 1, legTop - tTop + 7, C.obs[3]); a.e(sx, tTop - 6, 1.8, 2.4, f === 2 ? [0xffc35a, 0xfff2b0, 0xffffff] : C.lava, 0.2); },
         soulstaff: (a, x, y, f, tTop, legTop) => { const sx = x + 1; a.r(sx, tTop - 4, 1, legTop - tTop + 8, C.bone[1]); a.e(sx, tTop - 6, 1.6, 1.6, C.bone, 0.1); a.e(sx, tTop - 9, 1.6, 2.2, f === 2 ? [0x9a6aff, 0xd8c8ff, 0xffffff] : C.soul, 0.2); },
         oar: (a, x, y) => { a.r(x + 1, y - 10, 1, 15, C.wood[2]); a.s(x, y + 4, 3, 5, C.wood); },
+        // SHAXTYOR kirkasi: turganda - tepaga ko'tarilgan, zarbada - oldinga urilgan
+        minepick: (a, x, y, f) => {
+            const HI = 0xe4e8f0, MID = 0xa8b0c0;
+            if (f === 2) { a.line(x, y + 1, x + 7, y + 2, C.wood[1]); a.line(x, y, x + 7, y + 1, C.wood[2]); a.line(x + 8, y - 4, x + 8, y + 5, MID); a.line(x + 9, y - 3, x + 9, y + 3, HI); a.p(x + 8, y + 6, HI); return; }
+            a.line(x + 1, y + 1, x + 3, y - 10, C.wood[2]); a.line(x, y + 1, x + 2, y - 10, C.wood[1]);
+            a.line(x - 3, y - 8, x + 1, y - 11, HI); a.r(x + 1, y - 12, 3, 2, MID); a.line(x + 4, y - 12, x + 8, y - 8, HI); a.line(x + 4, y - 11, x + 7, y - 8, MID);
+        },
+        // SHAXTYOR SHUTER quroli: temir barabanli quvur (eskizdagidek); otganda orqaga tepadi, og'zida olov
+        oregun: (a, x, y, f) => {
+            const o = f === 2 ? -1 : 0, by = f === 2 ? y : y - 5;
+            a.s(x - 3 + o, by, 7, 6, [0x3a2a1a, 0x6a4a2a, 0x8a6236, 0xa87c46], 0.1); a.r(x - 1 + o, by, 1, 6, C.iron[1]); a.r(x + 1 + o, by, 1, 6, C.iron[1]);
+            a.s(x + 4 + o, by + 1, 6, 4, C.iron, 0.1); a.r(x + 10 + o, by, 1, 6, C.iron[3]); a.r(x + 10 + o, by + 2, 1, 2, 0x141014);
+            if (f === 2) a.e(x + 12, by + 3, 1.6, 2.2, [0xff7a1a, 0xffc35a, 0xfff2b0, 0xffffff], 0.2);
+        },
         pick: (a, x, y) => { a.r(x + 1, y - 8, 1, 10, C.wood[2]); a.line(x - 2, y - 8, x + 1, y - 9, C.iron[3]); a.line(x + 1, y - 9, x + 5, y - 7, C.iron[2]); }
     };
     // bosh kiyimlari
     const HAT = {
+        // shaxtyor kaskasi: chetli, oldida chiroq; goggles - ko'zoynak
+        minerhat: (pal, goggles) => (a, x, y, w) => {
+            a.s(x, y - 2, w, 3, pal, 0.15); a.r(x - 2, y + 1, w + 4, 1, pal[1]); a.r(x + w - 1, y - 1, 2, 2, 0xfff2b0); a.p(x + w + 1, y, 0xffffff);
+            if (goggles) { a.r(x, y + 2, w, 1, 0x1a1420); a.p(x + 1, y + 2, 0xff5a3a); a.p(x + w - 2, y + 2, 0xff5a3a); }
+        },
         hood: (pal) => (a, x, y, w, h) => { a.s(x - 1, y - 1, w + 2, 3, pal, 0.1); a.s(x - 1, y + 2, 1, h - 1, pal); a.s(x + w, y + 2, 1, h - 1, pal, -0.1); },
         helmet: (a, x, y, w) => { a.s(x - 1, y - 2, w + 2, 4, C.iron, 0.1); a.r(x - 1, y + 1, w + 2, 1, C.iron[1]); a.r(x + Math.floor(w / 2), y + 2, 1, 2, C.iron[2]); },
         hornhelm: (a, x, y, w) => { a.s(x - 1, y - 2, w + 2, 4, C.iron, 0.1); a.line(x - 1, y - 1, x - 3, y - 4, C.bone[2]); a.line(x + w, y - 1, x + w + 2, y - 4, C.bone[2]); },
@@ -1461,12 +1509,13 @@ window.BigArt = (function () {
         });
     }
     // XOKKEY DARVOZASI (yon tomondan): qizil temir ustunlar, oq to'r; ochiq tomoni - o'ngda (klient o'yin maydoniga qaratadi)
+    // XOKKEY DARVOZASI (138 x 126 px): old ustuni o'ngda (o'yinda aylantiriladi - og'zi chapga), orqasi devorga tegib turadi
     function goalArt() {
-        return art(26, 24, (a) => {
+        return art(46, 42, (a) => {
             const red = [0x7a0a10, 0xb81a22, 0xe83a3a, 0xff8a80];
-            for (let y = 3; y < 22; y++) for (let x = 4 + Math.round((22 - y) * 0.22); x < 22; x++) if ((x + y) % 3 === 0 || ((x - y) % 3 + 3) % 3 === 0) a.p(x, y, (x + y) % 2 ? 0xdde1e7 : 0xb6bcc6);
-            a.s(22, 1, 3, 22, red, 0.1); a.s(3, 1, 22, 3, red, 0.1);
-            a.line(3, 3, 8, 22, red[1]); a.r(3, 22, 22, 2, red[1]);
+            for (let y = 4; y < 39; y++) for (let x = 3 + Math.round((39 - y) * 0.2); x < 41; x++) if ((x + y) % 4 === 0 || ((x - y) % 4 + 4) % 4 === 0) a.p(x, y, (x + y) % 2 ? 0xdde1e7 : 0xb6bcc6);
+            a.s(40, 1, 4, 39, red, 0.1); a.s(3, 1, 41, 4, red, 0.1);
+            a.line(3, 4, 11, 39, red[1]); a.line(4, 4, 12, 39, red[2]); a.r(3, 39, 41, 3, red[1]); a.r(3, 39, 41, 1, red[2]);
         });
     }
     // Barcha dushman rasmlari: [P, chizish(f), kadrlar soni (yo'q - 3)]
@@ -1639,6 +1688,13 @@ window.BigArt = (function () {
         eggsac: [3, (f) => art(12, 12, (a) => { const pal = [0xa8a090, 0xd0c8b0, 0xece4cc, 0xffffff]; a.e(6, 7, 5.4 + (f === 1 ? 0.4 : 0), 4.8 + (f === 1 ? 0.4 : 0), pal, 0.1); for (let k = 0; k < 6; k++) a.line(1 + k * 2, 2 + (k % 2), 6, 7, 0xe6e6f0); a.e(6, 7, 2, 1.6, [0x63289a, 0x9cff6e]); if (f === 2) { a.line(4, 3, 7, 9, OUT); a.line(7, 9, 9, 5, OUT); } })],
         // YER OSTI OLAMI
         emberling: [3, (f) => biped({ skin: C.magma, ears: 'goblin', eyes: 0xffe14a, mouth: 0x1a0606, W: 16, H: 15, headW: 6, headH: 5, torsoW: 6, torsoH: 5, legH: 4, torso: C.obs, legs: C.dark, boots: 0x0a0608, weapon: WPN.obsblade, tusk: true, hat: HAT.horns }, f)],
+        // SHAXTYOR (kirka, sariq kaska) va SHAXTYOR SHUTER (barabanli qurol, zang rangli kaska va ko'zoynak): kir yuz, ko'k kombinezon
+        miner: [3, (f) => biped({ skin: [0x6a4a36, 0x8a664c, 0xa88468, 0xc4a080], eyes: 0xff3a1a, mouth: 0x2a1a14, W: 30, H: 24, headW: 6, headH: 5, torsoW: 6, torsoH: 6, legH: 5,
+            torso: [0x1a2838, 0x2a4058, 0x3e5a7a, 0x56789c], arm: [0x5a3216, 0x8a4e22, 0xb06a30, 0xcc8a48], legs: [0x1a2838, 0x2a4058, 0x3e5a7a], boots: 0x1a120c, belt: C.leather[1],
+            chest: (a, tx, tTop, tW) => { a.r(tx, tTop, tW, 1, 0xb06a30); a.p(tx + 1, tTop + 1, 0xd8a818); a.p(tx + tW - 2, tTop + 1, 0xd8a818); }, hat: HAT.minerhat([0xa07a10, 0xd8a818, 0xf2c83a, 0xffe26a]), weapon: WPN.minepick }, f)],
+        minershot: [3, (f) => biped({ skin: [0x6a4a36, 0x8a664c, 0xa88468, 0xc4a080], eyes: false, mouth: 0x2a1a14, W: 36, H: 24, headW: 6, headH: 5, torsoW: 6, torsoH: 6, legH: 5,
+            torso: [0x1a2838, 0x2a4058, 0x3e5a7a, 0x56789c], arm: [0x3a3a3e, 0x56565c, 0x74747c, 0x94949c], legs: [0x1a2838, 0x2a4058, 0x3e5a7a], boots: 0x1a120c, belt: C.leather[1],
+            chest: (a, tx, tTop, tW) => { for (let k = 0; k < tW; k++) a.p(tx + k, tTop + 3 - Math.floor(k / 2), 0xd8a818); }, hat: HAT.minerhat([0x6a2a10, 0xa8481c, 0xd0682c, 0xee8a48], true), weapon: WPN.oregun }, f)],
         bonearcher: [3, (f) => biped({ skin: C.bone, eyes: 0xff5a1a, mouth: OUT, W: 16, H: 18, headW: 6, headH: 5, torsoW: 6, torsoH: 6, legH: 5, torso: [0x5a5244, 0x8c8270, 0xb4aa94, 0xd8d0bc], legs: C.bone, boots: C.bone[0], belt: C.leather[1],
             chest: (a, tx, tTop, tW) => { for (let k = 1; k < 5; k += 2) a.r(tx + 1, tTop + k, tW - 2, 1, OUT); }, hat: HAT.hood([0x1a0a0a, 0x3a1414, 0x5a2020, 0x7a3030]), weapon: WPN.bow }, f)],
         magmabrute: [3, (f) => art(22, 22, (a) => {
@@ -1678,6 +1734,8 @@ window.BigArt = (function () {
             a.e(2.5, 6 + cl, 2.6, 2.2, C.magma, 0.1); a.e(22.5, 6 + cl, 2.6, 2.2, C.magma, 0.1); a.p(1, 4 + cl, OUT); a.p(24, 4 + cl, OUT); a.line(4, 7, 6, 8, C.magma[1]); a.line(21, 7, 19, 8, C.magma[1]);
             a.r(10, 2, 1, 2, C.magma[2]); a.r(14, 2, 1, 2, C.magma[2]); a.p(10, 1, 0xffe14a); a.p(14, 1, 0xffe14a);
         })],
+        mimicrock: [3, (f) => art(30, 30, (a) => rockMimicDraw(a, f)), 6],
+        bullkan: [3, () => art(2, 2, () => {}), 1],   // rasmi - bigmap.js BOSS_IMG (yuklanguncha ko'rinmaydi)
         magmablob: [3, (f) => art(22, 12, (a) => blobDraw(a, f))],
         // MAGMA TITANI: ulkan erigan tosh gavda, shoxli, ko'kragida yonib turgan yadro
         magmatitan: [4, (f) => art(26, 28, (a) => {
@@ -1914,6 +1972,7 @@ window.BigArt = (function () {
             ct.refresh();
         }
         tex(scene, 'bm_sh_lava', art(9, 9, (a) => { a.e(4, 4.5, 4, 4, C.lava, 0.2); a.p(3, 3, 0xffffff); a.p(5, 8, 0xb3261e); }), 2);
+        tex(scene, 'bm_sh_ore', art(15, 7, (a) => { a.r(0, 1, 4, 1, 0xffc35a); a.r(1, 3, 5, 1, 0xffe9b0); a.r(0, 5, 4, 1, 0xffc35a); a.e(10.5, 3.5, 3.4, 3.4, [0x2a2430, 0x4a4250, 0x6a6270, 0x8a8290], 0.2); a.p(9, 2, 0xffc35a); a.p(12, 4, 0xff7a1a); }), 2);   // shaxtyor shuter o'qi: ruda parchasi, orqasida tezlik chiziqlari
         tex(scene, 'bm_hz_fire', art(16, 30, (a) => { for (let y = 0; y < 30; y++) { const w = 2 + Math.round((y / 30) * 5 + Math.sin(y / 2) * 1.2); for (let x = 8 - w; x < 8 + w; x++) a.p(x, y, Math.abs(x - 7.5) < w * 0.4 ? (y < 10 ? 0xfff2b0 : 0xffc35a) : y < 6 ? 0xffc35a : 0xff7a1a); } a.r(2, 28, 12, 2, 0xb3261e); }, 0x5a0c06), 3);
         tex(scene, 'bm_hz_bones', art(20, 16, (a) => { for (let k = 0; k < 5; k++) a.roof(2 + k * 4, 2 + (k % 2) * 3, 14 - (k % 2) * 3, 1, 3, C.bone); a.e(10, 13, 2.4, 2, C.bone); a.p(9, 13, OUT); a.p(11, 13, OUT); }), 3);
         // lava (ko'l va dengiz): plitka - yorqin oqim chiziqlari, qorayib qolgan po'st

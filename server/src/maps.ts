@@ -272,10 +272,13 @@ export function meadowFreeSpot(f: Parameters<typeof meadowSpotFree>[0], id: stri
 export type FarmSeason = 'spring' | 'summer' | 'autumn' | 'winter';
 export const FARM_SEASONS: FarmSeason[] = ['spring', 'summer', 'autumn', 'winter'];
 export const SEASON_GROWTH: { [s in FarmSeason]: number } = { spring: 1.25, summer: 1.5, autumn: 1, winter: 0.6 };
-// O'SISH TEZLIGI: asos - 20% sekinroq; ferma darajasi oshgan sari sekinlashadi (har daraja -5%);
+// O'SISH TEZLIGI: asos - 20% sekinroq; ferma darajasi oshgan sari sekinlashadi (har daraja -10%);
 // tezlatgichlar: NOTA UYASI (asalari uyasidan notalar uchib ekinlarga tegadi) va BAHAYBAT TEGIRMON (4 bosqich)
 export const FARM_GROW_BASE = 1.2;
-export const FARM_LEVEL_SLOW = 0.05;
+export const FARM_LEVEL_SLOW = 0.1;
+// MAXLUQLAR KUCHI: ferma darajasi oshgan sari hujumchilar kuchayadi (har darajada: jon +15%, zarar +8%, tanga +10%)
+export const FARM_RAID_UP = { hp: 0.15, dmg: 0.08, coins: 0.1 };
+export const farmRaidK = (xp: number, k: 'hp' | 'dmg' | 'coins') => 1 + FARM_RAID_UP[k] * farmLevel(xp || 0);
 // NOTA UYASI: 5 tagacha (har biri keyingi maydon chetiga qo'yiladi). Birinchisi +15%, keyingilari +10% dan o'sish
 export const FARM_HIVE = { price: 600, level: 2, boost: 0.15, max: 5, prices: [600, 900, 1300, 1800, 2500], levels: [2, 3, 4, 5, 6], more: 0.1 };
 // FERMA ELFLARI (2 tagacha): pishgan ekinni o'zi yig'adi (omborga). Darajasi (1..5) - yig'gan hosilidan; yuqori daraja -
@@ -958,20 +961,6 @@ export interface PvpDef {
     shieldBlock: number;       // ritsar qalqoni ushlab turilsa - zararning shuncha ulushi to'siladi
 }
 
-// ARENA (BONUS xarita, mashq): botlar to'xtamay chiqadi; har o'ldirilgan bot uchun o'ldirganga
-// +10 tanga va +5 XP. Har killsPerBoss ta o'ldirishda tasodifiy BOSS jangi (Gorila Rock, Semiz elf,
-// Robot otryadi); boss yengilsa tirik qahramonlarga +100 tanga, +50 XP. Hamma o'lguncha davom etadi
-export interface ArenaDef {
-    killsPerBoss: number;
-    botCoins: number;
-    botXp: number;
-    bossCoins: number;
-    bossXp: number;
-    spawnIntervalMs: number;
-    maxBots: number;
-    snake?: BossDef;           // Robot ilon arenada: chap eshikdan chiqib, joyida turib mina otadi va olov sochadi
-}
-
 export interface MapDef {
     id: number;              // 0-based ketma-ket indeks (ochilish tartibi)
     name: string;
@@ -981,7 +970,7 @@ export interface MapDef {
     // 'apples' - botlar yo'q, elf daraxtdan olma otadi, har kim savatchaga N ta tutadi
     // 'story' - jang yo'q: NPC bilan suhbat (sahna), oxirida keyingi xaritaga o'tiladi
     // 'boss' - bahaybat robot-ilon bilan jang: joni tugaguncha otiladi
-    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'arena' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors' | 'back' | 'tnt' | 'robot' | 'shop' | 'vend' | 'sky' | 'pvp' | 'myfarm' | 'big';
+    mode: 'waves' | 'chase' | 'apples' | 'story' | 'boss' | 'stones' | 'gorilla' | 'fatelf' | 'underworld' | 'gflower' | 'lift' | 'farm' | 'squid' | 'doors' | 'back' | 'tnt' | 'robot' | 'shop' | 'vend' | 'sky' | 'pvp' | 'myfarm' | 'big';
     killsToWin: number;      // 'waves': xaritadagi botlarning umumiy soni (0 = o'yinchilar soni)
     bossCoins?: number;      // Boss xaritasi: bossni o'ldirgan (oxirgi zarbani bergan) o'yinchiga shuncha tanga (yo'q bo'lsa - odatdagi 100)
     xpReward?: number;       // Xarita o'tilganda har o'yinchiga beriladigan tajriba (yo'q bo'lsa - XP_PER_MAP = 10). Bosslar - ko'proq
@@ -1003,7 +992,6 @@ export interface MapDef {
     gorilla?: GorillaDef;       // Faqat tosh gorilla (map-8)
     fatElf?: FatElfDef;         // Faqat semiz elf (map-9)
     underworld?: UnderworldDef; // Faqat UnderWorld (map-10)
-    arena?: ArenaDef;           // Faqat Arena (bonus)
     giantFlower?: GiantFlowerDef; // Season 2, map-1
     lift?: LiftDef;             // Season 2, map-2
     farm?: FarmDef;             // Season 2, map-3
@@ -1015,7 +1003,7 @@ export interface MapDef {
     vend?: VendDef;             // Season 2, map-9 (ranets avtomati, jarlik)
     sky?: SkyDef;               // Season 2, map-10 (osmondagi jang)
     pvp?: PvpDef;               // BONUS: o'yinchilar bir-biriga qarshi
-    shop?: { counterX: number, range: number, prices: { elixir: number, chip: number, [item: string]: number | undefined },   // BONUS: do'kon
+    shop?: { counterX: number, range: number, prices: { elixir?: number, chip?: number, [item: string]: number | undefined },   // BONUS: do'kon (My Farm do'konida - faqat ferma buyumlari)
         farmUp?: { hive: { price: number, level: number, boost: number }, mill: { price: number, level: number, boost: number }[], [k: string]: any } };
     myFarm?: MyFarmDef;         // BONUS: My Farm (o'z ekinlari)
     season?: number;            // 1 (yo'q bo'lsa) yoki 2 - lobbida qaysi bo'limda ko'rinadi
@@ -1797,31 +1785,13 @@ export const MAPS: MapDef[] = [
     }
 ];
 
-// ARENA (BONUS): Gorila Rock zalida; bosslar - mavsum xaritalaridagi gorilla va semiz elf
-// (ular arenada yer ostidan emas, chaqirilganda paydo bo'ladi)
-MAPS.push({
-    id: MAPS.length,
-    name: "Arena",
-    description: "Endless training: bots keep coming. Every kill gives coins and XP, every 5 kills a random boss appears!",
-    mode: 'arena',
-    bonus: true,
-    killsToWin: 0,
-    accentColor: 0xff5252,
-    groundColor: 0x3a3440,
-    mapWidth: 800,
-    platforms: [],
-    gorilla: MAPS.find(m => m.gorilla)!.gorilla,
-    fatElf: { ...MAPS.find(m => m.fatElf)!.fatElf!, x: 600, doorX: 780 },
-    arena: { killsPerBoss: 5, botCoins: 50, botXp: 15, bossCoins: 250, bossXp: 100, spawnIntervalMs: 1400, maxBots: 4,
-        // Robot ilon: boshi chap eshikdan chiqadi (startX - to'xtaydigan joyi), oldinga yurmaydi
-        snake: { ...MAPS.find(m => m.boss)!.boss!, baseHp: 900, hpPerExtraPlayer: 600, startX: 150, advanceSpeed: 160,
-            contactDamage: 20, mineIntervalMs: 2600, fireIntervalMs: 6500, fireRange: 460, fireSafeY: 400 } },
-    playerSpawns: [
-        { x: 50, y: 500 }, { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }
-    ],
-    botSpawnZone: { xStart: 260, xEnd: 740, y: 90 }
-});
-
+// FERMA BUYUMLARI: Shop xaritasida va My Farm do'konida bir xil narxda (baliq ovi asboblari, o'g'it, bezaklar, yaylov, elflar, tezlatgichlar, uy jihozlari)
+const FARM_SHOP = { prices: { rod: 100, net: 300, fert: 25, water: 150,
+        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250, decor_pethouse: 1500, decor_cards: 1200, decor_pool: 4000, elf: 1500, rake: MEADOW.rake.price,
+        ...Object.fromEntries(MEADOW_DECOR.map(d => ['meadow_' + d.id, d.price])),
+        ...Object.fromEntries(HOME_ITEMS.map(h => ['home_' + h.id, h.price])), hive: FARM_HIVE.price } as { [item: string]: number },
+    farmUp: { rake: MEADOW.rake, hive: FARM_HIVE, mill: FARM_MILL, sprinkler: FARM_SPRINKLER, scarecrow: FARM_SCARECROW, greenhouse: FARM_GREENHOUSE,
+            homeMax: Object.fromEntries(HOME_ITEMS.map(h => [h.id, homeMax(h.id)])) } };   // jihoz - nechtagacha sotib olinadi
 // DO'KON (BONUS): o'rtacha kattalikdagi do'kon - Eliksir (kislotadan keyin jon tiklanishini qaytaradi) va
 // Chip (chaqmoqdan keyin stamina tez to'lishini qaytaradi). Jang yo'q, doim ochiq
 MAPS.push({
@@ -1835,12 +1805,7 @@ MAPS.push({
     groundColor: 0x5d4037,
     mapWidth: 800,
     platforms: [],
-    shop: { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, bigmap: 600, rod: 100, net: 300, fert: 25, water: 150,
-        decor_flowers: 80, decor_lantern: 120, decor_paint: 150, decor_dog: 250, decor_pethouse: 1500, decor_cards: 1200, decor_pool: 4000, elf: 1500, rake: MEADOW.rake.price,
-        ...Object.fromEntries(MEADOW_DECOR.map(d => ['meadow_' + d.id, d.price])),
-        ...Object.fromEntries(HOME_ITEMS.map(h => ['home_' + h.id, h.price])), hive: FARM_HIVE.price },
-        farmUp: { rake: MEADOW.rake, hive: FARM_HIVE, mill: FARM_MILL, sprinkler: FARM_SPRINKLER, scarecrow: FARM_SCARECROW, greenhouse: FARM_GREENHOUSE,
-            homeMax: Object.fromEntries(HOME_ITEMS.map(h => [h.id, homeMax(h.id)])) } },   // jihoz - nechtagacha sotib olinadi
+    shop: { counterX: 470, range: 110, prices: { elixir: 50, chip: 50, bigmap: 600, ...FARM_SHOP.prices }, farmUp: FARM_SHOP.farmUp },
     playerSpawns: [
         { x: 90, y: 500 }, { x: 130, y: 500 }, { x: 170, y: 500 }, { x: 210, y: 500 }
     ],
@@ -1893,6 +1858,7 @@ MAPS.push({
     groundColor: 0x6d4c41,
     mapWidth: 7860,   // yaylov (2400) bilan
     platforms: GIANT_TREE_PLATS,
+    shop: { counterX: 470, range: 40, prices: { ...FARM_SHOP.prices }, farmUp: FARM_SHOP.farmUp },   // FERMA DO'KONI (omborxona va taxta orasida): faqat fermaga oid narsalar
     myFarm: { zoneX0: 630, zoneW: 460, plotX0: 30, plotW: 48, plotGap: 24, range: 32, zonePrice: 250,
         zonePrices: [0, 250, 250, 250, 400, 600], zoneLevels: [0, 0, 0, 0, 3, 6], waterPrice: 10,
         riverX0: 7260, dockX1: 7520, dockPrice: 200, meadow: MEADOW, meadowDecor: MEADOW_DECOR, netCooldownMs: 30000, toolUses: 20, waterBoost: 0.5, goldenChance: 0.15,

@@ -3,7 +3,7 @@ import { PlayerState, RoomState } from '../types';
 import { hasPerk } from '../perks';
 
 export class ArcherCharacter extends BaseCharacter {
-    // Kamonchi: zarba 10 ta HP oladi, stamina sal sekinroq ketadi (ritsardan tezroq, sehrgardan sekinroq)
+    // Kamonchi: zarba 14 ta HP oladi, stamina sal sekinroq ketadi (ritsardan tezroq, sehrgardan sekinroq)
     public attackStaminaCost = 12;
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
@@ -39,8 +39,8 @@ export class ArcherCharacter extends BaseCharacter {
         });
     }
 
-    // Kamonchi uchun SHIFT = ko'rinmaslik. Bosib turilgancha ko'rinmas,
-    // qo'yib yuborilsa yoki stamina tugasa darrov ko'rinadigan bo'lib qoladi.
+    // Kamonchi uchun SHIFT = ko'rinmaslik: bir bosishda 2 s (10-darajadan 4 s), keyin 15 s kutish - room.manager startAbility.
+    // Bosib turish ishlatilmaydi (quyidagilar faqat umumiy interfeys uchun)
     applyHeldAbility(player: PlayerState, room: RoomState): void {
         player.isInvisible = true;
     }

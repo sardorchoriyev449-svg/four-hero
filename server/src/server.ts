@@ -283,17 +283,6 @@ app.post('/api/admin/users/:uid/coins', requireAdmin, async (req, res) => {
         res.json({ success: true, user: adminUserView(upd) });
     } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
 });
-app.post('/api/admin/users/:uid/maps', requireAdmin, async (req, res) => {
-    try {
-        const n = Number(req.body && req.body.n);
-        if (!validUid(String(req.params.uid)) || !Number.isInteger(n) || n < 1 || n > SEASON_MAP_COUNT) { res.status(400).json({ success: false, message: 'err_bad_amount' }); return; }
-        const upd = await db.setUnlockedLevel(String(req.params.uid), n - 1);
-        if (!upd) { res.json({ success: false, message: 'err_user_not_found' }); return; }
-        roomManager.notifyUnlocked(upd.id, n - 1);
-        logAdmin(req, 'maps', upd.nickname, String(n));
-        res.json({ success: true, user: adminUserView(upd) });
-    } catch (e) { res.status(500).json({ success: false, message: 'err_server' }); }
-});
 app.post('/api/admin/users/:uid/level', requireAdmin, async (req, res) => {
     try {
         const hero = String((req.body && req.body.hero) || '').toLowerCase();
@@ -1304,7 +1293,7 @@ io.on('connection', (socket) => {
     });
     socket.on('bigAct', (d: { roomId: string, act: string, arg?: number, item?: string }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
-        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'fishcast', 'fishreel', 'cage', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
+        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'fishcast', 'fishreel', 'cage', 'fruit', 'trail', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
     });
     socket.on('bigPortal', (d: { roomId: string, loc: string }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;

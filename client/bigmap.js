@@ -1,3 +1,33 @@
+// ===== BOSS JON PANELI (umumiy: The World, My Farm): jang boshlanganda animatsiya bilan ochiladi -
+// avval ingichka ko'k vertikal chiziq paydo bo'ladi, keyin uch bosqichda kengayadi (kichik -> o'rta -> to'liq), oxirida ichida boss nomi chiqadi.
+// st - har boss uchun holat ({ id, t0, ghost }), k - jon ulushi (0..1), o.y - panel markazi (ekran), o.col - jon rangi
+window.bossBarFx = function (g, txt, st, now, k, o) {
+    const FW = o.w || 460, H = o.h || 18, cx = o.x || 400, cy = o.y, el = now - st.t0;
+    const back = (q) => { q = Math.max(0, Math.min(1, q)); const s = 1.6; return 1 + (s + 1) * Math.pow(q - 1, 3) + s * Math.pow(q - 1, 2); };   // biroz oshib qaytadi
+    const L = 320, STEPS = [[440, 640, 0.26], [840, 1040, 0.6], [1240, 1480, 1]];   // chiziq L ms; [boshlanish ms, tugash ms, kenglik ulushi] - har bosqichdan keyin qisqa to'xtash
+    let w = 6, h = H + 18;
+    if (el < 440) h = (H + 18) * Math.min(1, el / L);   // 1) vertikal chiziq o'sadi (va biroz turadi)
+    else {
+        let prev = 6;
+        for (const [a, b, f] of STEPS) { if (el < a) break; const to = FW * f; w = el >= b ? to : prev + (to - prev) * back((el - a) / (b - a)); prev = to; }
+        h = H + 18 * Math.max(0, 1 - (el - 440) / 160);   // chiziq panel balandligiga tushadi
+    }
+    w = Math.max(6, Math.round(w)); h = Math.max(2, Math.round(h));
+    st.ghost = st.ghost === undefined ? k : (st.ghost > k ? Math.max(k, st.ghost - 0.006) : k);   // olingan zarar - och iz bo'lib sekin kamayadi
+    const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2), B = 3;
+    g.clear();
+    g.fillStyle(0x000000, 0.85); g.fillRect(x - B - 2, y - B - 2, w + 2 * B + 4, h + 2 * B + 4);
+    g.fillStyle(0x3d4fd8, 1); g.fillRect(x - B, y - B, w + 2 * B, h + 2 * B);   // ko'k ramka
+    g.fillStyle(0x8c9eff, 1); g.fillRect(x - B, y - B, w + 2 * B, 1);
+    g.fillStyle(0x2a0505, 1); g.fillRect(x, y, w, h);
+    if (el >= 440) {
+        g.fillStyle(0xffcdd2, 1); g.fillRect(x, y, Math.round(w * st.ghost), h);
+        g.fillStyle(o.col || 0xe8202a, 1); g.fillRect(x, y, Math.round(w * k), h);
+        g.fillStyle(0xff8a80, 0.55); g.fillRect(x, y, Math.round(w * k), Math.max(1, Math.round(h / 5)));
+    }
+    const na = el < 1500 ? 0 : Math.min(1, (el - 1500) / 250);   // nom - panel to'liq ochilgach
+    txt.setPosition(cx, cy).setAlpha(na).setVisible(na > 0);
+};
 // ===== BIG MAP (klient): juda katta tasodifiy dunyo - server/src/bigmap.ts bilan birga, rasmlar - client/bigart.js =====
 // Dunyo - osmonda muallaq orollar va ular orasidagi pog'ona-toshlar. Faqat kamera atrofidagisi chiziladi va fizikasi yaratiladi:
 // orollar - alohida tekstura (zinapoyasimon tosh pastki qismi bilan), toshlar / bezaklar / sandiqlar - bo'laklab (CH px).
@@ -160,6 +190,9 @@ window.BigMap = (function () {
         (W.vents || []).forEach(v => O.glowSrc.push({ x: v.x, y: v.y - 8, r: 60 }));
         W.cps.forEach(c => { if (inLava(c.x, c.y)) O.glowSrc.push({ x: c.x, y: c.y - 40, r: 80 }); });
         (W.shops || []).forEach(s => { if (inLava(s.x, s.y)) O.glowSrc.push({ x: s.x, y: s.y - 60, r: 170 }); });
+        // yer osti ko'li (suvi nur sochadi) va razvedkachilar zulmatda ham ko'rinadi
+        (W.ponds || []).forEach(l => { if (inLava(l.x, l.y)) for (let x = l.x + 30; x < l.x + l.w; x += 70) O.glowSrc.push({ x, y: l.y - 10, r: 90 }); });
+        W.npcs.forEach(n => { if (n.rq && inLava(n.x, n.y)) O.glowSrc.push({ x: n.x, y: n.y - 30, r: 90 }); });
         // CHECKPOINT bayroqlari
         W.cps.forEach((c, i) => {
             const pole = scene.add.image(c.x, c.y + 1, O.got.has(i) ? 'bm_cp1' : 'bm_cp0').setOrigin(0.5, 1).setDepth(-0.3);
@@ -170,7 +203,7 @@ window.BigMap = (function () {
         O.hudDist = scene.add.text(455, 20, '', { fontFamily: FONT, fontSize: '8px', color: '#ffffff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(1001);
         O.hudBar = pixelize(scene.add.graphics()).setScrollFactor(0).setDepth(1000);
         O.bossBar = pixelize(scene.add.graphics()).setScrollFactor(0).setDepth(1000).setVisible(false);
-        O.bossName = scene.add.text(400, 548, '', { fontFamily: FONT, fontSize: '10px', color: '#ff8a80', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(1001).setVisible(false);
+        O.bossName = scene.add.text(400, 548, '', { fontFamily: FONT, fontSize: '9px', color: '#ffffff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setScrollFactor(0).setDepth(1001).setVisible(false);
         O.toast = scene.add.text(400, 130, '', { fontFamily: FONT, fontSize: '11px', color: '#b9f6ca', stroke: '#000', strokeThickness: 5, align: 'center' }).setOrigin(0.5).setScrollFactor(0).setDepth(1001).setAlpha(0);
         O.hint = scene.add.text(0, 0, '[E]', { fontFamily: FONT, fontSize: '9px', color: '#ffeb3b', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(6).setVisible(false);
         O.shotG = pixelize(scene.add.graphics()).setDepth(4.2);
@@ -213,8 +246,29 @@ window.BigMap = (function () {
         });
         on('bigQuest', (d) => { if (d) onQuest(scene, d); });
         // LAGER TOPSHIRIQLARI: buyum rasmlari, topshiriq holati serverdan
-        rqTextures(scene); O.rq = null; O.rqImgs = new Map(); O.fish = null; O.reel = null; O.fishG = scene.add.graphics().setDepth(3.5);
+        rqTextures(scene); fruitTextures(scene); O.fruits = new Map(); O.fruitOff = new Set(); O.rq = null; O.rqImgs = new Map(); O.fish = null; O.reel = null; O.fishG = scene.add.graphics().setDepth(3.5);
         on('bigRQ', (d) => { if (d) onRq(scene, d); });
+        // KATTA O'RMON: meva yeyildi / terildi (hamma ko'radi), yo'l ko'rsatkich orqali o'tildi
+        on('bigFruit', (d) => {
+            if (!d) return;
+            if (d.err) { showToast(t(d.err)); return; }
+            O.fruitOff.add(d.id); const f = O.fruits.get(d.id); if (f) f.berries.forEach(b => b.setVisible(false));
+            puff(d.x, d.y - 36, d.k === 'apple' ? 0xffd54f : 0xba68c8, 12);
+            if (d.by === X.socket.id) { X.sfx('coin', 0.6); if (d.ev === 'eat') { showToast(t('big_fruit_eat_' + d.k)); const h = X.hero(); if (h) puff(h.x, h.y - 30, 0x81c784, 16, true); } }
+        });
+        on('bigTrailFx', (d) => {
+            if (!d) return;
+            puff(d.x0, d.y0 - 40, 0xc5e1a5, 16); puff(d.x1, d.y1 - 40, 0xc5e1a5, 20, d.id === X.socket.id); X.sfxAt('whoosh', d.x1, 0.8);
+            if (d.id === X.socket.id) { resetFall(); const tr = (W.trails || []).find(q => q.id === d.to); showToast(tr && trailWild(tr) ? t('big_wood_' + tr.loc) : t('big_trail_home')); scene.cameras.main.flash(250, 200, 230, 180); }
+        });
+        // THE WORLD DO'KONI: qarmoq (sotuv natijasi Shop'dagidek keladi)
+        O.rodResult = (d) => {   // tinglovchi bosilganda qo'yiladi (game.js shopResult tinglovchisini qayta o'rnatadi)
+            const el = document.getElementById('shop-panel');
+            if (!d || d.item !== 'rod' || !el || !el.classList.contains('bm-shop-panel')) return;
+            const b = el.querySelector('.shop-rod-buy'), msg = el.querySelector('#bm-shop-msg');
+            if (d.success) { if (b) { b.disabled = true; b.textContent = t('shop_owned'); } if (msg) msg.textContent = ''; renderShopWallet(d.coins); const h = X.hero(); if (h) puff(h.x, h.y - 30, 0xffd54f, 14); }
+            else { if (msg) msg.textContent = t(d.message || 'err_server'); if (b) { b.disabled = d.message === 'shop_not_needed'; if (d.message === 'shop_not_needed') b.textContent = t('shop_owned'); } }
+        };
         on('bigFish', (d) => { if (d) onFish(scene, d); });
         X.socket.emit('bigAct', { roomId: X.roomId(), act: 'rqsync', arg: 0 });
         on('bigTalk', (d) => { if (d) onTalk(scene, d); });
@@ -315,6 +369,12 @@ window.BigMap = (function () {
             else if (d.m === 'goal') { banner(t('big_mv_goal'), '#ff5252'); puff(d.gx, d.gy - 30, 0xffffff, 18); scene.cameras.main.shake(300, 0.012); X.sfxAt('boom', d.gx, 0.7); }
             else if (d.m === 'bfrise') { scene.cameras.main.shake(1800, 0.008); X.sfxAt('roar', d.sx, 1); X.sfx('bossStart'); for (let k = 0; k < 6; k++) scene.time.delayedCall(k * 260, () => { if (O) puff(d.sx + Phaser.Math.Between(-170, 170), d.sy - 4, 0xffffff, 12); }); }
             else if (d.m === 'ramleap') X.sfxAt('whoosh', d.x, 0.7);
+            else if (d.m === 'bkrise') { scene.cameras.main.shake(1600, 0.008); X.sfxAt('rumble', d.x, 1); X.sfxAt('roar', d.x, 0.9); }
+            else if (d.m === 'bkslam') { puff(d.x, d.y - 6, 0xff7a1a, 24); puff(d.x, d.y - 6, 0x6e6270, 18); scene.cameras.main.shake(320, 0.014); X.sfxAt('boom', d.x, 1); }
+            else if (d.m === 'bkdrop') X.sfxAt('whoosh', d.x, 0.8);
+            else if (d.m === 'bkland') { puff(d.x, d.y - 6, 0x6e6270, 18); puff(d.x, d.y - 6, 0xff7a1a, 10); scene.cameras.main.shake(240, 0.011); X.sfxAt('thud', d.x, 1); }
+            else if (d.m === 'bkthrow') X.sfxAt('whoosh', d.x, 0.9);
+            else if (d.m === 'rockland') { puff(d.x, d.y - 4, 0x6e6270, 14); puff(d.x, d.y - 4, 0xff7a1a, 8); scene.cameras.main.shake(160, 0.007); X.sfxAt('thud', d.x, 0.9); }
             else if (d.m === 'ramland') { puff(d.x, d.y - 4, 0xe1f5fe, 12); scene.cameras.main.shake(140, 0.006); X.sfxAt('thud', d.x, 0.8); }
             else if (d.m === 'hkhit') X.sfxAt('whip', d.x, 0.8);
             else if (d.m === 'flbite') O.flBite = { tx: d.tx, ty: d.ty, at: scene.time.now };   // gul shu nishon tomon egilib tishlaydi
@@ -337,7 +397,7 @@ window.BigMap = (function () {
             else if (d.m === 'rage') { banner(t('big_boss_rage'), '#ff5252'); scene.cameras.main.shake(400, 0.01); X.sfxAt('roar', d.x, 1); }
             else if (d.m === 'leap' || d.m === 'pounce') X.sfxAt('whoosh', d.x, 0.8);
         });
-        on('bigWake', (d) => { if (!d) return; puff(d.x, d.y - 20, d.k === 'gargoyle' ? 0x9e9e9e : d.k === 'magmablob' ? 0xff7a1a : d.k === 'boglurker' ? 0x558b2f : d.k === 'hutmimic' ? 0xffffff : d.k === 'stumpmimic' ? 0x6d4c41 : 0x8d5a3a, 16); X.sfxAt('roar', d.x, 0.6); showToast(t(d.k === 'mimic' ? 'big_mimic' : 'big_wake_' + d.k)); });
+        on('bigWake', (d) => { if (!d) return; puff(d.x, d.y - 20, d.k === 'gargoyle' ? 0x9e9e9e : d.k === 'magmablob' || d.k === 'mimicrock' ? 0xff7a1a : d.k === 'boglurker' ? 0x558b2f : d.k === 'hutmimic' ? 0xffffff : d.k === 'stumpmimic' ? 0x6d4c41 : 0x8d5a3a, 16); X.sfxAt('roar', d.x, 0.6); showToast(t(d.k === 'mimic' ? 'big_mimic' : 'big_wake_' + d.k)); });
         on('bigBurn', (d) => {
             if (!d) return;
             const now = scene.time.now;
@@ -346,7 +406,7 @@ window.BigMap = (function () {
         });
         on('bigEnd', () => { banner(t('big_end'), '#b9f6ca'); X.sfx('win'); });
         on('bigWind', (d) => { const e = d && O.enemies.get(d.id); if (e) e.windAt = scene.time.now; });
-        on('bigShoot', (d) => { const e = d && O.enemies.get(d.id); if (e) { e.windAt = scene.time.now; X.sfxAt('arrow', e.x, 0.5); } });
+        on('bigShoot', (d) => { const e = d && O.enemies.get(d.id); if (e) { e.windAt = scene.time.now; X.sfxAt(e.k === 'mimicrock' ? 'fireball' : 'arrow', e.x, 0.5); } });
         on('teleport', (d) => { O.fall.y = null; O.vine = null; O.locked = null; releaseHeld(); clearStatus(); if (d) stream(true, d.x, d.y); });
         on('bigSnowGot', (d) => { if (!d) return; X.sfx('pop'); showToast(t('big_snow_got').replace('{n}', d.n)); O.mySnow = d.n; });
         on('bigSnowHit', (d) => { if (!d) return; puff(d.x, d.y, 0xffffff, d.e ? 14 : 8); if (d.e) X.sfxAt('hit', d.x, 0.6); });
@@ -369,7 +429,9 @@ window.BigMap = (function () {
     function clearStatus() { if (!O) return; O.rootUntil = 0; O.blindUntil = 0; O.pull = null; O.chillUntil = 0; O.burnUntil = 0; }
     function destroy() {
         closePortalMenu(); closeMap();
+        if (O && O.fruits) O.fruits.forEach((o) => { o.bush.destroy(); o.berries.forEach(b => b.destroy()); });
         if (O && X) O.handlers.forEach(([ev, fn]) => X.socket.off(ev, fn));
+        if (O && X && O.rodResult) X.socket.off('shopResult', O.rodResult);
         if (O && O.scene && O.scene.textures) O.isles.forEach((im) => {
             const k = im.texture && im.texture.key;
             (im.covers || []).forEach(c => { c.destroy(); if (O.scene.textures.exists(c.texKey)) O.scene.textures.remove(c.texKey); });
@@ -489,8 +551,9 @@ window.BigMap = (function () {
             const im = scene.add.image(p.x, p.y + 2, key).setOrigin(0.5, 1).setDepth(front ? 3.6 : p.k === 'castle' ? -0.9 : -0.6);
             if (p.k === 'kidcage') { const c = (W.cages || []).find(q => q.x === p.x && q.y === p.y); im.cageZone = c ? c.zone : -1; O.cageImgs = O.cageImgs.filter(q => q.active); O.cageImgs.push(im); }
             if (front) im.setAlpha(0.95);
+            if (p.k === 'mimicrock') im.setDepth(-0.5);   // oddiy tosh boshqa bezaklar nuri ostida qolib, rangi o'zgarmasin (tirik mimikdan farq qilmasin)
             ch.objs.push(im);
-            if (GLOW_PROPS[p.k]) {
+            if (GLOW_PROPS[p.k] && p.k !== 'mimicrock') {   // oddiy tosh nurlanmaydi: yotgan mimikdan farq qilmasin
                 const gl = pxDisc(scene, p.x, p.y - GLOW_PROPS[p.k], p.k === 'campfire' || p.k === 'lavapillar' ? 60 : 46, p.k === 'campfire' || p.k === 'lavapillar' ? 60 : 46, COLD_GLOW[p.k] ? (p.k === 'stalagmite' || p.k === 'mushhouse' ? 0x9a6aff : 0x7ee8ff) : p.k === 'vent' || p.k === 'lavarock' || p.k === 'lavapuddle' ? 0xff5a1a : 0xffc46b, 0.16).setDepth(-0.55).setBlendMode(Phaser.BlendModes.ADD);
                 scene.tweens.add({ targets: gl, alpha: 0.24, duration: 700 + (p.x % 400), yoyo: true, repeat: -1 });
                 ch.objs.push(gl); O.propGlows.push(gl);
@@ -522,16 +585,27 @@ window.BigMap = (function () {
         // BALIQ KO'LI: orol ustidagi sayoz suv (qahramon suv ustida turadi) va nomi
         (W.ponds || []).forEach((l) => {
             if (l.x < x0 || l.x >= x1 || !inRow(l.y)) return;
-            const ts = scene.add.tileSprite(l.x, l.y - 3, l.w, 16, 'bm_lake').setOrigin(0, 0).setDepth(-0.4).setAlpha(0.95);
-            ts.setTint(l.loc === 'snow' ? 0xcdeeff : l.loc === 'swamp' ? 0x8fbf8a : 0x7fc8ff);
+            const ts = l.big ? scene.add.tileSprite(l.x, l.y - 3, l.w, 32, 'bm_lake').setOrigin(0, 0).setDepth(3.05).setAlpha(0.85)   // KATTA DARYO: o'yilgan o'zan - qahramon suvga kirib turadi
+                : scene.add.tileSprite(l.x, l.y - 3, l.w, 16, 'bm_lake').setOrigin(0, 0).setDepth(-0.4).setAlpha(0.95);
+            ts.setTint(l.loc === 'snow' ? 0xcdeeff : l.loc === 'swamp' ? 0x8fbf8a : l.loc === 'lava' ? 0x4fe0d0 : 0x7fc8ff);
             ts.baseX = 0;
-            const name = scene.add.text(l.x + l.w / 2, l.y - 62, t('big_lake_' + l.loc), { fontFamily: FONT, fontSize: '8px', color: '#b3e5fc', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3);
+            const name = scene.add.text(l.x + l.w / 2, l.y - 62, t((l.big ? 'big_river_' : 'big_lake_') + l.loc), { fontFamily: FONT, fontSize: '8px', color: '#b3e5fc', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3);
             O.waters.add(ts); ch.objs.push(ts, name);
         });
         // O'RMON nomi
         (W.groves || []).forEach((l) => {
             if (l.x < x0 || l.x >= x1 || !inRow(l.y)) return;
             ch.objs.push(scene.add.text(l.x + l.w / 2, l.y - 120, t('big_grove_' + l.loc), { fontFamily: FONT, fontSize: '8px', color: '#c5e1a5', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
+        });
+        // KATTA O'RMON nomi va yo'l ko'rsatkichlar yozuvi
+        (W.wilds || []).forEach((l) => {
+            const cx = Math.round((l.fx0 + l.fx1) / 2);
+            if (cx < x0 || cx >= x1 || !inRow(l.y)) return;
+            ch.objs.push(scene.add.text(cx, l.y - 160, t('big_wood_' + l.loc), { fontFamily: FONT, fontSize: '10px', color: '#c5e1a5', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
+        });
+        (W.trails || []).forEach((l) => {
+            if (l.x < x0 || l.x >= x1 || !inRow(l.y)) return;
+            ch.objs.push(scene.add.text(l.x, l.y - 80, trailWild(l) ? t('big_trail_sign_back') : t('big_wood_' + l.loc), { fontFamily: FONT, fontSize: '7px', color: '#ffe0b2', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(-0.3));
         });
         // 4) sandiqlar
         W.chests.forEach((q) => {
@@ -572,7 +646,7 @@ window.BigMap = (function () {
     }
     const FRONT_PROPS = { bush: 1, fence: 1, fern: 1 };
     const GLOW_PROPS = { icelamp: 80, icecrystal: 30, igloo: 22, shopigloo: 30, lamp: 82, torch: 48, campfire: 22, crystal: 30, glowshroom: 20, house: 62, house2: 62, hut: 50, tower: 110, castle: 150,
-        lantern: 76, forge: 30, minehut: 60, mushhouse: 60, lavapillar: 118, vent: 8, lavarock: 12, shopcart: 80, lavapuddle: 6, skulltent: 50, stalagmite: 40 };
+        lantern: 76, forge: 30, minehut: 60, mushhouse: 60, lavapillar: 118, vent: 8, lavarock: 12, shopcart: 80, lavapuddle: 6, mimicrock: 45, skulltent: 50, stalagmite: 40 };
     const COLD_GLOW = { crystal: 1, glowshroom: 1, icecrystal: 1, icelamp: 1, mushhouse: 1, stalagmite: 1 };
 
     // ===== FON =====
@@ -606,16 +680,22 @@ window.BigMap = (function () {
         if (a <= 0.02) return;
         N.clear(); N.fill(0x050206, a);
         const sx = cam.scrollX, sy = cam.scrollY, L = O.lightImg;
-        const lit = (wx, wy, r) => { const x = wx - sx, y = wy - sy; if (x < -r || x > 800 + r || y < -r || y > 600 + r) return; L.setScale(r / 128); N.erase(L, x, y); };
+        // YORUG'LIKLAR BIR CHIZISHDA: N.erase har chaqiruvda butun 800x600 ni qayta chizadi (jangda kadriga 18 marta - o'yin qotardi); endi hammasi yig'ilib, bir marta "o'chiriladi"
+        let open = false;
+        const stamp = (x, y, scale) => { if (!open) { open = true; N.beginDraw(); } L.setScale(scale); N.batchDraw(L, x, y); };
+        const lit = (wx, wy, r) => { const x = wx - sx, y = wy - sy; if (x < -r || x > 800 + r || y < -r || y > 600 + r) return; stamp(x, y, r / 128); };
+        try {
         if (hero && !hero.isDead) lit(hero.x, hero.y - 10, 240);
         if (X.others) X.others().forEach(s => { if (s && s.active && s.visible && s.alpha > 0.2) lit(s.x, s.y - 10, 170); });
         O.glowSrc.forEach(g => lit(g.x, g.y, g.r));
-        O.enemies.forEach(o => { if (o.boss || GLOWY[o.k]) lit(o.x, o.y - o.img.displayHeight / 2, o.boss ? 190 : 80); });
+        O.enemies.forEach(o => { if (o.boss || GLOWY[o.k]) lit(o.x, o.y - o.img.displayHeight / 2, o.boss ? (o.k === 'bullkan' ? 300 : 190) : o.k === 'mimicrock' ? 110 : 80); if (o.k === 'bullkan' && o.hand) o.hand.forEach(h => lit(h.x, h.y, 170)); if (LAMP[o.k]) { lit(o.x + o.f * 8, o.y - 48, 70); lit(o.x + o.f * 62, o.y - 38, 64); } });
+        O.rqImgs.forEach(im => lit(im.x, im.y - 14, 56));
         O.shots.forEach(im => lit(im.x, im.y, 70));
         O.pshots.forEach(im => lit(im.x, im.y, 50));
-        O.areaMap.forEach((o) => { const sub = o.k.split(':')[1]; if (o.k.startsWith('patch:fire') || o.k.startsWith('patch:magma')) lit(o.x + o.w / 2, o.y + o.h - 10, 110); else if (o.k.startsWith('beam') && !(o.wn > 0)) { lit(o.x, o.y, 110); lit((o.x + o.x2) / 2, (o.y + o.y2) / 2, 120); lit(o.x2, o.y2, 90); } else if (o.k.startsWith('breath:') && (sub === 'fire' || sub === 'greenfire')) lit(o.x + o.w / 2, o.y + o.h / 2, 150); });
+        O.areaMap.forEach((o) => { const sub = o.k.split(':')[1]; if (o.k === 'mark:mimic') lit(o.x + o.w / 2, o.y + o.h - 10, 100); else if (o.k.startsWith('patch:fire') || o.k.startsWith('patch:magma')) lit(o.x + o.w / 2, o.y + o.h - 10, 110); else if (o.k.startsWith('beam') && !(o.wn > 0)) { lit(o.x, o.y, 110); lit((o.x + o.x2) / 2, (o.y + o.y2) / 2, 120); lit(o.x2, o.y2, 90); } else if (o.k.startsWith('breath:') && (sub === 'fire' || sub === 'greenfire')) lit(o.x + o.w / 2, o.y + o.h / 2, 150); });
         O.flares.forEach(f => lit(f.x, f.y, f.r));
-        if (seaY < 640) for (let x = -40; x < 860; x += 130) { L.setScale(1.3); N.erase(L, x + ((sx * 0.5) % 130 + 130) % 130 - 65, seaY + 10); }
+        if (seaY < 640) for (let x = -40; x < 860; x += 130) stamp(x + ((sx * 0.5) % 130 + 130) % 130 - 65, seaY + 10, 1.3);
+        } finally { if (open) N.endDraw(true); }
     }
     function mix(a, b, k) {
         const ar = a >> 16, ag = (a >> 8) & 255, ab = a & 255, br = b >> 16, bg = (b >> 8) & 255, bb = b & 255;
@@ -774,6 +854,7 @@ window.BigMap = (function () {
         const ea = !ch && !sh && !po && !pl && nearElfAct(hero);
         if (ea) O.hint.setVisible(true).setText(ea.hint).setPosition(ea.x, ea.y + Math.sin(now / 200) * 3);
         drawQuests(scene, now);
+        drawFruits(scene);
         drawFishing(scene, now);
         if (shopOpen() && !sh) closeShop();
         if (portalMenuOpen() && !po) closePortalMenu();
@@ -934,7 +1015,7 @@ window.BigMap = (function () {
                 o.img.setAlpha(0); O.scene.tweens.add({ targets: o.img, alpha: 1, duration: 250 });
                 O.enemies.set(e.id, o);
             }
-            Object.assign(o, { ch: e.ch, tx: e.x, ty: e.y, f: e.f, hp: e.hp, mx: e.mx, a: e.a, fl: e.fl, m: e.m, l: e.l, r: e.r, s: e.s, pz: e.pz, b: e.b, u: e.u, sd: e.sd, v: e.v, sp: e.sp, pa: e.pa, lf: e.lf, j: e.j, bs: e.bs, hx: e.hx, iv: e.iv });
+            Object.assign(o, { ch: e.ch, tx: e.x, ty: e.y, f: e.f, hp: e.hp, mx: e.mx, a: e.a, fl: e.fl, m: e.m, l: e.l, r: e.r, s: e.s, pz: e.pz, b: e.b, u: e.u, sd: e.sd, v: e.v, sp: e.sp, pa: e.pa, lf: e.lf, j: e.j, bs: e.bs, hx: e.hx, iv: e.iv, bh: e.bh });
         });
         [...O.enemies.keys()].forEach((id) => { if (!seen.has(id)) { const o = O.enemies.get(id); o.img.destroy(); o.bar.destroy(); if (o.chute) o.chute.destroy(); (o.ghosts || []).forEach(g => g.destroy()); (o.extra || []).forEach(g => g.destroy()); O.enemies.delete(id); } });
         // HUJUM MAYDONLARI (ogohlantirish -> faol): ko'rinishi drawAreas() da
@@ -947,6 +1028,7 @@ window.BigMap = (function () {
         });
         O.areaMap.forEach((o, id) => { if (!aseen.has(id)) { (o.imgs || []).forEach(im => im.destroy()); O.areaMap.delete(id); } });
         O.shotList = d.sh || [];
+        O.fruitOff = new Set(d.fu || []);   // terilgan (hali qayta pishmagan) mevalar
         O.arenas = d.ba || [];
         if (d.pm !== undefined) O.portalMax = d.pm;
         if (d.pd) O.paidZones = d.pd;
@@ -959,16 +1041,17 @@ window.BigMap = (function () {
         O.pshots.forEach((im, id) => { if (!pseen.has(id)) { im.destroy(); O.pshots.delete(id); } });
         (d.ch || []).forEach((id) => { if (!O.opened.has(id)) { O.opened.add(id); const c = O.chests.get(id); if (c) c.setTexture('bm_chest1'); } });
     }
-    const BOSSES = { warlord: 1, shadowknight: 1, golem: 1, alpha: 1, ancient: 1, spiderqueen: 1, yetiking: 1, icequeen: 1, mammoth: 1, fatelf: 1, gorilla: 1, kraken: 1, skyship: 1, magmatitan: 1, boneking: 1, hellhound: 1, magmaworm: 1, hydra: 1, toadking: 1, bigcroc: 1, rsnake: 1, sambo: 1, bigtree: 1, zvfarm: 1, santa: 1, bigfoot: 1, hockey: 1, bigflower: 1, swampmage: 1, bogcrab: 1 };
+    const BOSSES = { bullkan: 1, warlord: 1, shadowknight: 1, golem: 1, alpha: 1, ancient: 1, spiderqueen: 1, yetiking: 1, icequeen: 1, mammoth: 1, fatelf: 1, gorilla: 1, kraken: 1, skyship: 1, magmatitan: 1, boneking: 1, hellhound: 1, magmaworm: 1, hydra: 1, toadking: 1, bigcroc: 1, rsnake: 1, sambo: 1, bigtree: 1, zvfarm: 1, santa: 1, bigfoot: 1, hockey: 1, bigflower: 1, swampmage: 1, bogcrab: 1 };
     const FLY = { bat: 1, hornet: 1, imp: 1, gargoyle: 1, wisp: 1, frostbat: 1, wraith: 1, skyship: 1, firebat: 1, gazer: 1, mosquito: 1, bogspirit: 1 };
     const LIFT = { kraken: 36, gorilla: -6 };   // gorilla - oyog'i biroz yerga botgan (muallaq ko'rinmasin)   // suvdagi kraken: rasm biroz ko'tarilgan (ko'zi suvdan chiqib tursin; serverdagi tana balandligi shunga mos)
-    const LURKER = { mimic: 1, snowman: 1, flower: 1, magmablob: 1, boglurker: 1, hutmimic: 1, stumpmimic: 1 };
+    const LURKER = { mimicrock: 1, mimic: 1, snowman: 1, flower: 1, magmablob: 1, boglurker: 1, hutmimic: 1, stumpmimic: 1 };
     // zulmatda o'zi nur sochadiganlar (olovli maxluqlar)
-    const GLOWY = { emberling: 1, magmabrute: 1, firebat: 1, emberbeetle: 1, cultist: 1, magmacrab: 1, magmablob: 1, imp: 1, wisp: 1, bogspirit: 1 };
+    const LAMP = { miner: 1, minershot: 1 };   // kaskasidagi chiroq: boshi va oldi yoritiladi
+    const GLOWY = { mimicrock: 1, emberling: 1, magmabrute: 1, firebat: 1, emberbeetle: 1, cultist: 1, magmacrab: 1, magmablob: 1, imp: 1, wisp: 1, bogspirit: 1 };
     // season rasmlari chapga qaragan - yo'nalish teskari
     const FACE_LEFT = { troll: 0, blocky: 0, zveg: 0, flower: 0, fatelf: 0, gorilla: 0, kraken: 0, skyship: 0 };
     // odamsimon oddiy dushmanlar qahramondan (48 px, bosh kiyimi bilan ~56) past ko'rinmasin; kichik maxluqlar - o'z o'lchamida
-    const BIG_SCALE = { lizard: 2, snowkid: 1.15, iceram: 1.4, hspear: 1.2, hknives: 1.2, hshield: 1.2, myconid: 1.12, snowballer: 1.1, bogwitch: 1.1, cultist: 1.1, frostmage: 1.1, darkmage: 1.1, bandit: 1.12, darkelf: 1.1, tarcher: 1.15, tknife: 1.15, icecrawler: 1.35, frostling: 1.2, rat: 1.35, spider: 1.25, frog: 1.35, slime: 1.2, mimic: 1.15, goblin: 1.2, gobarcher: 1.2, hornet: 1.2, wisp: 1.2, emberbeetle: 1.35, emberling: 1.2, bonearcher: 1.15, leech: 1.35, bogling: 1.2, mosquito: 1.2, spitter: 1.2,
+    const BIG_SCALE = { miner: 1.15, minershot: 1.15, lizard: 2, snowkid: 1.15, iceram: 1.4, hspear: 1.2, hknives: 1.2, hshield: 1.2, myconid: 1.12, snowballer: 1.1, bogwitch: 1.1, cultist: 1.1, frostmage: 1.1, darkmage: 1.1, bandit: 1.12, darkelf: 1.1, tarcher: 1.15, tknife: 1.15, icecrawler: 1.35, frostling: 1.2, rat: 1.35, spider: 1.25, frog: 1.35, slime: 1.2, mimic: 1.15, goblin: 1.2, gobarcher: 1.2, hornet: 1.2, wisp: 1.2, emberbeetle: 1.35, emberling: 1.2, bonearcher: 1.15, leech: 1.35, bogling: 1.2, mosquito: 1.2, spitter: 1.2,
         // BOSSLAR: bahaybatlari katta, chaqqonlari o'rtacha (serverdagi tana o'lchami shunga mos)
         warlord: 1.25, golem: 1.5, ancient: 1.5, mammoth: 1.5, magmatitan: 1.4, hydra: 1.45, toadking: 1.35, yetiking: 1.25, bigcroc: 1.2, magmaworm: 1.3 };
     // 1-kadri yurish emas (elf - hamla, gorilla - baqiriq, Qor Bobo - itarish): yurganda faqat chayqaladi
@@ -981,6 +1064,9 @@ window.BigMap = (function () {
     //  bigfoot: 0 turish, 1 og'zi ochiq (muz), 2 mushtida qor, 3 qo'li cho'zilgan, 4 o'kirish; bffarm - cho'zilgan qo'l bilagi (takrorlanadi), bffist - musht
     const BOSS_IMG = { bigtree: { src: '/public/boss/bigtree/bigtree.png?v=2', w: 106, h: 119, n: 5, S: 3 },
         santa: { src: '/public/boss/santa/santa.png?v=2', w: 70, h: 62, n: 5, S: 2, ox: 0.45 }, hockey: { src: '/public/boss/hockey/hockey.png?v=2', w: 77, h: 60, n: 5, S: 2, ox: 0.28 },
+        // BULLKAN: tanasi (0 turish, 1 og'zi ochiq), musht, ochiq qo'l, tosh ushlagan qo'l, otilgan tosh
+        bullkan: { src: '/public/boss/bullkan/bullkan.png?v=2', w: 202, h: 121, n: 2, S: 2 }, bkfist: { src: '/public/boss/bullkan/bullkan_fist.png?v=2', w: 67, h: 69, n: 1, S: 2 },
+        bkpalm: { src: '/public/boss/bullkan/bullkan_palm.png?v=2', w: 89, h: 53, n: 1, S: 2 }, bkthrow: { src: '/public/boss/bullkan/bullkan_throw.png?v=2', w: 96, h: 63, n: 1, S: 2 }, brock: { src: '/public/boss/bullkan/bullkan_rock.png?v=2', w: 51, h: 51, n: 1, S: 2 },
         bigfoot: { src: '/public/boss/bigfoot/bigfoot.png?v=3', w: 177, h: 109, n: 5, S: 3 }, bffist: { src: '/public/boss/bigfoot/bigfoot_fist.png?v=2', w: 36, h: 37, n: 1, S: 3 },
         bffarm: { src: '/public/boss/bigfoot/bigfoot_arm.png?v=1', w: 26, h: 26, n: 1, S: 3 },
         // BOTQOQ: gul (0 turish, 1 og'iz keng, 2 tishlarini qisgan, 3 barglari ko'tarilgan, 4 boshi orqada), Balot Magi (6 kadr) + suhbat portreti,
@@ -1066,6 +1152,7 @@ window.BigMap = (function () {
             if (o.k === 'kraken') { drawKraken(scene, o, now); o.bar.clear(); boss = o; return; }
             if (o.k === 'zvfarm') { o.img.setVisible(false); o.bar.clear(); boss = o; return; }   // ferma boshqaruvchisi - ko'rinmas, faqat chizig'i (qolgan zombilar)
             if (o.k === 'rsnake') { drawRSnake(scene, o, now); o.bar.clear(); boss = o; return; }
+            if (o.k === 'bullkan') { drawBullkan(scene, o, now); o.bar.clear(); boss = o; return; }
             if (o.k === 'bigfoot') { drawBigfoot(scene, o, now); o.bar.clear(); boss = o; return; }
             if (o.k === 'bigflower') { drawFlower(scene, o, now); o.bar.clear(); boss = o; return; }
             if (o.k === 'swampmage' && TEX.swampact) { drawMage(scene, o, now); o.bar.clear(); boss = o; return; }
@@ -1085,6 +1172,7 @@ window.BigMap = (function () {
             if (o.k === 'bigtree') fr = o.bs === 'spit' ? 1 : o.bs === 'quake' || o.bs === 'roots' ? 2 : 0;
             // QOR BAZASI: muz taran (cho'kish / sakrash / musht), kulba-mimik (yashiringanda - oddiy kulba), Qor Bobo, xokkeychi, darvoza
             if (o.k === 'iceram') fr = o.bs === 'crouch' ? 3 : o.bs === 'leap' || o.j ? 4 : wind ? 2 : moving ? Math.floor(now / 170) % 2 : 0;
+            if (o.k === 'mimicrock') fr = o.l ? 0 : o.bs === 'crouch' ? 3 : o.bs === 'leap' || o.j ? 4 : o.bs === 'fire' ? 5 : moving ? 1 + Math.floor(now / 150) % 2 : 1;
             if (o.k === 'hutmimic') fr = o.l ? 0 : wind ? 2 : moving ? (Math.floor(now / 120) % 2 ? 1 : 3) : 1;
             if (o.k === 'santa') fr = o.bs === 'arrive' ? 4 : o.bs === 'rest' ? 3 : o.m === 'swind' || o.m === 'sroll' ? 1 : o.m === 'bwind' || o.m === 'sbag' ? 2 : 0;
             if (o.k === 'hockey') fr = o.bs === 'hwind' || o.bs === 'swind' ? 2 : o.bs === 'hit' || o.bs === 'slap' ? 3 : o.bs === 'drop' ? 4 : moving ? Math.floor(now / 240) % 2 : 0;
@@ -1153,12 +1241,11 @@ window.BigMap = (function () {
         if (hero && now < O.rootUntil) { for (let k = 0; k < 4; k++) { fx.lineStyle(3, k % 2 ? 0x6d4c41 : 0xd7ccc8, 0.9); fx.strokeEllipse(hero.x, hero.y + 14 - k * 6, 34 - k * 4, 10); } }
         O.ink.setAlpha(Phaser.Math.Linear(O.ink.alpha, now < O.blindUntil ? 0.9 : 0, 0.08));
         // BOSS chizig'i (ekran pastida)
-        O.bossBar.setVisible(!!boss); O.bossName.setVisible(!!boss);
+        O.bossBar.setVisible(!!boss); if (!boss) { O.bossName.setVisible(false); O.bossIntro = null; }
         if (boss) {
-            const g = O.bossBar, bw = 420, k = Math.max(0, boss.hp / boss.mx);
-            g.clear(); g.fillStyle(0x000000, 0.75); g.fillRect(400 - bw / 2 - 3, 560, bw + 6, 16);
-            g.fillStyle(0x5d0000, 1); g.fillRect(400 - bw / 2, 563, bw, 10); g.fillStyle(boss.sd ? 0x90a4ae : boss.v ? 0xffeb3b : 0xff1744, 1); g.fillRect(400 - bw / 2, 563, bw * k, 10);
+            if (!O.bossIntro || O.bossIntro.id !== boss.id) { O.bossIntro = { id: boss.id, t0: now }; X.sfx('whoosh', 0.5); }   // yangi boss - panel animatsiya bilan ochiladi
             O.bossName.setText(t('big_e_' + boss.k));
+            window.bossBarFx(O.bossBar, O.bossName, O.bossIntro, now, Math.max(0, Math.min(1, boss.hp / boss.mx)), { y: 562, col: boss.sd ? 0x90a4ae : boss.v ? 0xffeb3b : 0xe8202a });
         }
         drawShots(scene, now);
         drawAreas(scene, now);
@@ -1199,6 +1286,28 @@ window.BigMap = (function () {
         if (o.bs === 'spit' && Math.random() < 0.5) puff(o.x + 20, o.y - 10, 0xb3e5fc, 2);
         if (o.bs === 'throw' && Math.random() < 0.15) puff(o.x + 135, g - 105, 0xffffff, 2);   // mushtidagi qor to'kiladi
         if (o.u === 1 && Math.random() < 0.4) puff(o.x - BF_DX + Phaser.Math.Between(-150, 150), g - 6, 0xffffff, 3);   // qordan chiqib kelmoqda
+    }
+    // BULLKAN: tanasi orol ortidan chiqib turadi (joyidan qimirlamaydi), ikki qo'li - alohida rasmlar, joyini server beradi (o.bh)
+    const BK_HAND = ['bkfist', 'bkpalm', 'bkthrow'];
+    function drawBullkan(scene, o, now) {
+        if (!TEX.bullkan) { o.img.setVisible(false); return; }   // rasm yuklanguncha
+        if (o.bs !== o.pbs) { o.pbs = o.bs; o.bsAt = now; }
+        const up = o.bs === 'rise' ? Math.min(1, (now - (o.bsAt || now)) / 1600) : 1, breath = Math.round(Math.sin(now / 480) * 1.4) * 2, BK_UP = 58;   // o.y - jag' osti (server tanasi - boshi), yerdan BK_UP px balandda
+        const roar = o.bs && o.bs !== 'idle' && o.bs !== 'back' && o.bs !== 'rest';
+        if (!o.bkOn) { o.bkOn = true; scene.tweens.killTweensOf(o.img); o.img.setAlpha(1); if (X.hero() && Math.abs(X.hero().x - o.x) < 1500) showToast(t('big_bk_head')); }
+        o.img.setVisible(true).setDepth(-1.25).setTexture(A().enemyKey(TEX.bullkan, roar ? 1 : 0)).setOrigin(0.5, 1).setScale(1).setFlipX(false).setAngle(0).setPosition(Math.round(o.x / 2) * 2, o.y + BK_UP + 8 + breath + Math.round((1 - up) * 300));
+        if (o.fl) o.img.setTintFill(0xffffff); else if (o.r && Math.floor(now / 200) % 2) o.img.setTint(0xff8a80); else o.img.clearTint();
+        if (!o.hand && TEX.bkfist && TEX.bkpalm && TEX.bkthrow) { o.hand = [0, 1].map(() => scene.add.image(o.x, o.y, A().enemyKey(TEX.bkfist, 0)).setDepth(3.3)); o.extra = (o.extra || []).concat(o.hand); }
+        if (o.hand && o.bh) o.hand.forEach((im, i) => {
+            const k = o.bh[i * 4 + 2], f = o.bh[i * 4 + 3], idle = o.bs === 'idle' || o.bs === 'rise', bob = idle ? Math.round(Math.sin(now / 260 + i * 2) * 5) * 2 : 0;
+            const tx = o.bh[i * 4], ty = o.bh[i * 4 + 1] + bob;
+            if (im.px === undefined) { im.px = tx; im.py = ty; }
+            im.px = Phaser.Math.Linear(im.px, tx, 0.7); im.py = Phaser.Math.Linear(im.py, ty, 0.7);
+            im.setTexture(A().enemyKey(TEX[BK_HAND[k]] || TEX.bkfist, 0)).setFlipX(f < 0).setPosition(Math.round(im.px / 2) * 2, Math.round(im.py / 2) * 2).setAlpha(up);
+            if (o.fl) im.setTintFill(0xffffff); else im.clearTint();
+            if (Math.random() < 0.03) puff(im.x + Phaser.Math.Between(-40, 40), im.y + Phaser.Math.Between(-40, 40), 0xff7a1a, 2);
+        });
+        if (o.bs === 'rise' && Math.random() < 0.5) puff(o.x + Phaser.Math.Between(-190, 190), o.y + BK_UP - 6, 0x8d6e63, 3);
     }
     // ===== BOTQOQ BOSSLARI (rasmdan) =====
     // BAHAYBAT GUL: rasm tagi - ildiz (balchiq tubida); server tanasi - BOSHI (o.x - bosh o'rtasi, o.y - bosh osti, ildizdan FL_UP px balandda).
@@ -1980,8 +2089,36 @@ window.BigMap = (function () {
         }
     }
     // ===== ELF QIROLLIGI: suhbatlar, topshiriqlar, qafas, ilon ini =====
-    const OWN_TELL = { sambo: 1, gorilla: 1, bigtree: 1, santa: 1, bigfoot: 1, hockey: 1, bigflower: 1, swampmage: 1, bogcrab: 1 };   // hujum paytida to'q sariq rangga bo'yalmaydigan bosslar (sambochi terisi, tosh gorilla, daraxt)
+    const OWN_TELL = { bullkan: 1, sambo: 1, gorilla: 1, bigtree: 1, santa: 1, bigfoot: 1, hockey: 1, bigflower: 1, swampmage: 1, bogcrab: 1 };   // hujum paytida to'q sariq rangga bo'yalmaydigan bosslar (sambochi terisi, tosh gorilla, daraxt)
     const THIEF = { tknife: 1, tarcher: 1, tbrute: 1, hspear: 1, hknives: 1, hshield: 1 };   // o'g'rilar va o'rmon ovchilari - bir xil kadr tartibi
+    // ===== KATTA O'RMON: mevali buta (oltin olma / yovvoyi rezavor) =====
+    const trailWild = (tr) => (W.wilds || []).some(w => w.loc === tr.loc && Math.abs(w.y - tr.y) < 2);   // orol tomondagi ko'rsatkich
+    function fruitTextures(scene) {
+        const mk = (key, Wd, H, draw) => {
+            if (scene.textures.exists(key)) return;
+            const g = scene.add.graphics(), R = (x, y, w, h, c) => { g.fillStyle(c, 1); g.fillRect(x * 3, y * 3, w * 3, h * 3); };
+            draw(R); g.generateTexture(key, Wd * 3, H * 3); g.destroy();
+        };
+        mk('bm_fbush', 22, 15, (R) => {   // keng yashil buta
+            R(2, 4, 18, 11, 0x0b2e10); R(0, 7, 22, 8, 0x0b2e10); R(5, 1, 12, 4, 0x0b2e10);
+            R(1, 8, 20, 6, 0x1b5e20); R(3, 5, 16, 8, 0x2e7d32); R(6, 2, 10, 4, 0x2e7d32); R(7, 3, 6, 2, 0x43a047); R(4, 6, 5, 2, 0x43a047); R(14, 7, 4, 2, 0x388e3c);
+            R(3, 14, 16, 1, 0x3e2723);
+        });
+        mk('bm_fr_apple', 5, 6, (R) => { R(0, 1, 5, 5, 0x5d4300); R(1, 2, 3, 3, 0xffd54f); R(1, 2, 1, 1, 0xfff59d); R(3, 3, 1, 2, 0xf9a825); R(2, 0, 1, 2, 0x4e342e); R(3, 0, 2, 1, 0x43a047); });
+        mk('bm_fr_berry', 5, 5, (R) => { R(0, 1, 5, 4, 0x1a0026); R(1, 1, 3, 3, 0x6a1b9a); R(1, 1, 1, 1, 0xce93d8); R(3, 3, 1, 1, 0x4a0072); R(2, 0, 1, 1, 0x43a047); });
+    }
+    function drawFruits(scene) {
+        (W.fruits || []).forEach((f) => {
+            let o = O.fruits.get(f.id);
+            if (!o) {
+                const bush = scene.add.image(f.x, f.y + 2, 'bm_fbush').setOrigin(0.5, 1).setDepth(-0.56);
+                const berries = [[-19, -30], [-4, -38], [12, -31], [22, -20], [-12, -18], [4, -22]].map(([dx, dy]) => scene.add.image(f.x + dx, f.y + dy, 'bm_fr_' + f.k).setDepth(-0.55));
+                o = { bush, berries }; O.fruits.set(f.id, o);
+            }
+            const on = !O.fruitOff.has(f.id);
+            if (o.on !== on) { o.on = on; o.berries.forEach(b => b.setVisible(on)); }
+        });
+    }
     // ===== LAGER TOPSHIRIQLARI (tasodifiy) =====
     function rqTextures(scene) {
         const mk = (key, W, H, draw) => {
@@ -2011,16 +2148,27 @@ window.BigMap = (function () {
             R(0, 6, 13, 3, 0x1b5e20); R(1, 6, 11, 2, 0x43a047);
             R(5, 0, 3, 2, 0x880e4f); R(3, 2, 7, 4, 0x880e4f); R(6, 1, 1, 1, 0xf48fb1); R(4, 3, 5, 2, 0xf06292); R(5, 2, 3, 3, 0xf48fb1); R(6, 3, 1, 1, 0xfff59d);
         });
+        mk('rq_shroom', 11, 12, (R) => {   // nurli qo'ziqorin (Yer osti)
+            R(2, 0, 7, 1, 0x00695c); R(1, 1, 9, 1, 0x00695c); R(0, 2, 11, 4, 0x00695c); R(1, 6, 9, 1, 0x00695c); R(4, 7, 3, 5, 0x37474f); R(3, 11, 5, 1, 0x37474f);
+            R(2, 1, 7, 1, 0x4dd0c4); R(1, 2, 9, 3, 0x26c6da); R(2, 5, 7, 1, 0x00acc1); R(3, 2, 2, 1, 0xe0f7fa); R(7, 3, 2, 1, 0xb2ebf2); R(5, 7, 1, 4, 0xb2dfdb);
+        });
     }
     const rqGoal = (q) => q.t === 'killk' ? t('rq_g_killk').replace('{n}', q.n).replace('{k}', t('big_e_' + q.k))
         : q.t === 'killn' ? t('rq_g_killn').replace('{n}', q.n).replace('{l}', t('big_loc_' + q.loc))
-        : q.t === 'fish' ? t('rq_g_lake').replace('{n}', q.n).replace('{l}', t('big_lake_' + q.loc)) : t('rq_g_' + q.k).replace('{n}', q.n).replace('{l}', t('big_grove_' + q.loc));
+        : q.t === 'fish' ? t('rq_g_lake').replace('{n}', q.n).replace('{l}', t('big_lake_' + q.loc)) : t('rq_g_' + q.k).replace('{n}', q.n).replace('{l}', t((q.fr ? 'big_wood_' : 'big_grove_') + q.loc));
     // nishon: bajarilgan bo'lsa - razvedkachi; buyum bo'lsa - eng yaqin joy
     function rqTarget(q) {
         const h = X.hero(), hx = h ? h.x : 0, hy = h ? h.y : 0, near = (a, f) => a.slice().sort((p, r) => Math.hypot(f(p)[0] - hx, f(p)[1] - hy) - Math.hypot(f(r)[0] - hx, f(r)[1] - hy))[0];
         if (q.got >= q.n) { const n = near(W.npcs.filter(o => o.rq && o.loc === q.loc), o => [o.x, o.y]); return n ? { x: n.x, y: n.y } : null; }
+        if (q.t === 'item' && q.fr) {   // katta o'rmon mevalari: orolda bo'lmasa - qishloqdagi yo'l ko'rsatkich
+            const wd = (W.wilds || []).find(w => w.loc === q.loc);
+            if (!wd) return null;
+            if (!(hx > wd.x - 100 && hx < wd.x + wd.w + 100 && Math.abs(hy + 24 - wd.y) < 400)) { const tr = (W.trails || []).find(o => o.loc === q.loc && !trailWild(o)); return tr ? { x: tr.x, y: tr.y } : { x: wd.x, y: wd.y }; }
+            const ripe = (W.fruits || []).filter(f => f.loc === q.loc && !O.fruitOff.has(f.id)), f = ripe.length ? near(ripe, o => [o.x, o.y]) : null;
+            return f ? { x: f.x, y: f.y } : { x: Math.round((wd.fx0 + wd.fx1) / 2), y: wd.y };
+        }
         if (q.t === 'item' && q.spots && q.spots.length) { const s = near(q.spots, o => o); return { x: s[0], y: s[1] }; }
-        if (q.t === 'fish') { const l = (W.ponds || []).find(o => o.loc === q.loc); return l ? { x: l.x + l.w / 2, y: l.y } : null; }
+        if (q.t === 'fish') { const ls = (W.ponds || []).filter(o => o.loc === q.loc), l = ls.length ? near(ls, o => [o.x + o.w / 2, o.y]) : null; return l ? { x: l.x + l.w / 2, y: l.y } : null; }
         return null;
     }
     function rqTrack(q) {
@@ -2163,6 +2311,12 @@ window.BigMap = (function () {
         const feet = hero.y + 24;
         const n = W.npcs.find(o => (o.q || o.rq) && Math.abs(hero.x - o.x) < 90 && Math.abs(feet - o.y) < 70);
         if (n) return { act: n.rq ? 'rq' : 'quest', arg: n.id, x: n.x, y: n.y - 70, hint: t('bq_hint_talk') };
+        // YO'L KO'RSATKICH: qishloq <-> katta o'rmon
+        const tr = (W.trails || []).find(o => Math.abs(hero.x - o.x) < 70 && Math.abs(feet - o.y) < 70);
+        if (tr) return { act: 'trail', arg: tr.id, x: tr.x, y: tr.y - 112, hint: trailWild(tr) ? t('big_trail_back') : t('big_trail_go').replace('{l}', t('big_wood_' + tr.loc)) };
+        // MEVA: topshiriq bo'lsa - teriladi, bo'lmasa - yeyiladi (jon to'ladi)
+        const fr = (W.fruits || []).find(o => !O.fruitOff.has(o.id) && Math.abs(hero.x - o.x) < 50 && Math.abs(feet - o.y) < 70);
+        if (fr) { const q = O.rq, forQ = q && q.t === 'item' && q.fr && q.loc === fr.loc && q.got < q.n; return { act: 'fruit', arg: fr.id, x: fr.x, y: fr.y - 84, hint: t(forQ ? 'big_fruit_pick' : 'big_fruit_eat') }; }
         // BALIQ KO'LI: E - qarmoq tashlash (qarmoq suvda bo'lsa - qayta tashlanmaydi)
         const pd = (W.ponds || []).find(o => hero.x > o.x - 70 && hero.x < o.x + o.w + 70 && Math.abs(feet - o.y) < 70);
         if (pd && !O.fish) return { act: 'fishcast', arg: pd.id, x: Math.max(pd.x, Math.min(pd.x + pd.w, hero.x)), y: pd.y - 90, hint: t('big_fish_hint') };
@@ -2210,15 +2364,15 @@ window.BigMap = (function () {
         O.cageImgs.forEach((im) => { const open = (O.cagesOpen || []).includes(im.cageZone); if (open !== im.isOpen) { im.isOpen = open; im.setTexture(open ? 'bm_p_kidcage_open' : 'bm_p_kidcage'); } });
     }
     // ===== DUSHMAN O'QLARI: turiga qarab rasm (o'q - yo'nalishiga, tosh - aylanib, xarsang - dumalab, bomba / fugu - yerda pilik) =====
-    const ROT_SHOTS = { spear: 1, thorn: 1, arrow: 1, fire: 1, fish: 1, sqfish: 1, crescent: 1, missile: 1, cannon: 0 };
-    const GLOW_SHOTS = { dark: 0x9a4aff, orb: 0xb388ff, fire: 0xff7a1a, lava: 0xff7a1a, spore: 0x9cff6e, acid: 0x9cff6e, skull: 0x9a6aff, crescent: 0x9a6aff, missile: 0xff9100, flame: 0xff7a1a, ink: 0x311b92 };
+    const ROT_SHOTS = { ore: 1, spear: 1, thorn: 1, arrow: 1, fire: 1, fish: 1, sqfish: 1, crescent: 1, missile: 1, cannon: 0 };
+    const GLOW_SHOTS = { ore: 0xffb04a, dark: 0x9a4aff, orb: 0xb388ff, fire: 0xff7a1a, lava: 0xff7a1a, spore: 0x9cff6e, acid: 0x9cff6e, skull: 0x9a6aff, crescent: 0x9a6aff, missile: 0xff9100, flame: 0xff7a1a, ink: 0x311b92 };
     function drawShots(scene, now) {
         const seen = new Set();
         (O.shotList || []).forEach((s) => {
             seen.add(s.id);
             let im = O.shots.get(s.id);
             if (!im) {
-                const key = scene.textures.exists('bm_sh_' + s.k) ? 'bm_sh_' + s.k : 'bm_sh_orb';
+                const key = s.k === 'brock' && TEX.brock ? A().enemyKey(TEX.brock, 0) : scene.textures.exists('bm_sh_' + s.k) ? 'bm_sh_' + s.k : 'bm_sh_orb';
                 im = scene.add.image(s.x, s.y, key).setDepth(4.25);
                 im.k = s.k; im.px = s.x;
                 if (GLOW_SHOTS[s.k] !== undefined) im.glow = pxDisc(scene, s.x, s.y, 14, 14, GLOW_SHOTS[s.k], 0.25).setDepth(4.2).setBlendMode(Phaser.BlendModes.ADD);
@@ -2233,6 +2387,7 @@ window.BigMap = (function () {
                 else im.rotation += 0.15;
             }
             else if (s.k === 'puck') im.setRotation(0);
+            else if (s.k === 'brock') im.rotation += 0.1;   // Bullkan toshi - o'z o'lchamida
             else if (s.st && (s.k === 'gbomb')) { im.setTexture(Math.floor(now / 110) % 2 ? 'bm_sh_gbomb_lit' : 'bm_sh_gbomb').setRotation(0); }
             else if (s.k === 'gboulder') {   // S1 xarsangi: shiftda kutayotganda ko'rinmaydi - faqat chang to'kiladi; tushayotganda aylanadi
                 im.setScale(s.sc || 2).setVisible(!s.wt);
@@ -2287,6 +2442,14 @@ window.BigMap = (function () {
             o.imgs = o.imgs || [];
             if (!warn && !o.active) { o.active = true; o.actAt = now; onActivate(scene, o, type, sub, cx, by); }
             const pulse = 0.5 + 0.5 * Math.sin(now / 70);
+            if (o.k === 'mark:mimic') {   // MIMIK ROCK shu yerga tushadi: yerda doira va ogohlantirish uchburchagi "!"
+                lo.fillStyle(0xff1744, 0.2 + 0.25 * pulse); lo.fillEllipse(cx, by - 2, o.w, 18);
+                lo.lineStyle(3, 0xff1744, 0.6 + 0.4 * pulse); lo.strokeEllipse(cx, by - 2, o.w, 18);
+                hi.fillStyle(0x000000, 1); hi.fillTriangle(cx - 21, by + 34, cx + 21, by + 34, cx, by - 3);
+                hi.fillStyle(pulse > 0.5 ? 0xffd600 : 0xff9100, 1); hi.fillTriangle(cx - 15, by + 30, cx + 15, by + 30, cx, by + 4);
+                hi.fillStyle(0x000000, 1); hi.fillRect(cx - 2, by + 13, 4, 9); hi.fillRect(cx - 2, by + 24, 4, 4);
+                return;
+            }
             if (type === 'fall') {
                 lo.fillStyle(0x000000, 0.25 + 0.35 * p); lo.fillEllipse(cx, by, o.w * (0.45 + 0.55 * p), 16);
                 if (sub !== 'shadow') { lo.lineStyle(3, col, 0.6 + 0.4 * pulse); lo.strokeEllipse(cx, by, o.w * 1.1, 20); }
@@ -2497,6 +2660,9 @@ window.BigMap = (function () {
                 <div class="shop-name">${t('bigshop_' + it.id)}</div>
                 <div class="shop-desc">${t('bigshop_' + it.id + '_desc')}</div>
                 <button class="shop-buy" data-item="${it.id}">${coin} ${it.price}</button></div>`).join('')
+            + `<div class="shop-card shop-tool"><div class="shop-icon">${window.FarmArt ? `<img class="shop-pxicon" src="${window.FarmArt.icon('rod')}" alt="">` : ''}</div>
+                <div class="shop-name">${t('item_rod')}</div><div class="shop-desc">${t('bigshop_rod_desc')}</div>
+                <button class="shop-rod">${coin} ${(W.shop && W.shop.prices && W.shop.prices.rod) || 100}</button></div>`
             + `<div class="shop-card shop-tool"><div class="shop-icon">${window.FarmArt ? `<img class="shop-pxicon" src="${window.FarmArt.icon('elixir')}" alt="">` : ''}</div>
                 <div class="shop-name">${t('item_elixir')}</div><div class="shop-desc">${t('item_elixir_desc')}</div>
                 <button class="shop-elixir">${coin} ${(W.shop && W.shop.prices && W.shop.prices.elixir) || 50}</button></div>`
@@ -2510,6 +2676,7 @@ window.BigMap = (function () {
         el.appendChild(inner);
         el.onpointerdown = (e) => e.stopPropagation();
         el.querySelector('.shop-close').onclick = () => el.remove();
+        const rd = el.querySelector('.shop-rod'); if (rd) { rd.className = 'shop-buy shop-rod-buy'; rd.onclick = () => { rd.disabled = true; X.socket.off('shopResult', O.rodResult); X.socket.on('shopResult', O.rodResult); X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'rod' }); }; }   // baliq ovi (ko'l va katta daryolarda)
         const ex = el.querySelector('.shop-elixir'); if (ex) { ex.className = 'shop-buy'; ex.onclick = () => X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'elixir' }); }   // la'natni (jon tiklanmasligini) tuzatadi
         el.querySelectorAll('.shop-buy[data-item]').forEach((b) => { if (b.dataset.own) b.disabled = true; b.onclick = () => { el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; }); X.socket.emit('bigBuy', { roomId: X.roomId(), item: b.dataset.item }); }; });
         host.appendChild(el);

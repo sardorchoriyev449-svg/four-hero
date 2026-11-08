@@ -14,11 +14,11 @@ export type PerkId =
     | 'shotgun' // knight: Q - qilich/drobovik almashtirish
     | 'djump'   // samurai: havoda ikkinchi sakrash
     | 'kunai'   // samurai: Q - katana/kunai (otiladigan pichoq) almashtirish
-    | 'invis2'  // archer: SHIFT qo'yib yuborilgach yana 2 soniya ko'rinmas
+    | 'invis2'  // archer: ko'rinmaslik 2 s o'rniga 4 s
     | 'firearrow' // archer: olovli o'qlar
     | 'lightning'   // mage 16: Q - zanjirli chaqmoq (3-qurol)
     | 'shieldthrow' // knight 16: Q - qalqon otish (3-qurol, 10 s qayta tiklanadi)
-    | 'shuriken'    // samurai 16: Q - 3 ta shuriken yelpig'ichi (3-qurol)
+    | 'bigspirit'   // samurai 16: katana ruhi kattalashadi
     | 'triple'      // archer 16: Q - uchtalik o'q
     | 'blowpipe'    // hunter 3: Q - pichoq / puflama naycha (drotik)
     | 'poison'      // hunter 10: drotik zaharli (1 s dan keyin jon keta boshlaydi)
@@ -33,10 +33,10 @@ export const PERK_TABLE: { [character: string]: { level: number, id: PerkId }[] 
     hunter: [{ level: 1, id: 'shift' }, { level: 2, id: 'stam5' }, { level: 3, id: 'blowpipe' }, { level: 4, id: 'mine2' }, { level: 5, id: 'dmg5' }, { level: 10, id: 'poison' }, { level: 15, id: 'stam5' }, { level: 15, id: 'dmg5' }, { level: 16, id: 'trap' }]
 };
 
-// 16-DARAJA: har personajga yangi qurol (Q bilan almashtiriladi)
+// 16-DARAJA: mage, knight, archer - yangi qurol (Q bilan almashtiriladi); samurai - katana ruhi kattalashadi
 PERK_TABLE.mage.push({ level: 16, id: 'lightning' });
 PERK_TABLE.knight.push({ level: 16, id: 'shieldthrow' });
-PERK_TABLE.samurai.push({ level: 16, id: 'shuriken' });
+PERK_TABLE.samurai.push({ level: 16, id: 'bigspirit' });
 PERK_TABLE.archer.push({ level: 16, id: 'triple' });
 // 20, 30, ... 100-darajalarda bittadan, navbat bilan: 20, 40, 60, 80, 100 - +5 stamina; 30, 50, 70, 90 - +5 zarar
 Object.keys(PERK_TABLE).forEach((c) => {
@@ -45,8 +45,10 @@ Object.keys(PERK_TABLE).forEach((c) => {
 
 // Q bilan almashadigan ikkinchi qurol (personaj bo'yicha)
 export const ALT_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'ice', knight: 'shotgun', samurai: 'kunai', archer: 'triple', hunter: 'blowpipe' };
-// Q bilan uchinchi qurol (16-daraja): mage - chaqmoq, knight - qalqon otish, samurai - shuriken
-export const THIRD_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'lightning', knight: 'shieldthrow', samurai: 'shuriken' };
+// Q bilan uchinchi qurol (16-daraja): mage - chaqmoq, knight - qalqon otish
+export const THIRD_WEAPON_PERK: { [character: string]: PerkId } = { mage: 'lightning', knight: 'shieldthrow' };
+// SAMURAY 16-daraja: katana ruhi tegish qutisi (oddiysi 40x78) va markazi (oddiysi - player.y - 2): pastki cheti o'sha joyda qoladi, tepaga o'sadi
+export const BIG_SPIRIT = { hitW: 64, hitH: 124, dy: -25 };
 export const SHIELD_THROW_COOLDOWN_TICKS = 333;   // ~10 s
 // Q tartibi: shu o'yinchida hozir mavjud qurol rejimlari (knight qalqoni qayta tiklanayotganda - yo'q)
 export function weaponModesOf(p: PlayerState): ('main' | 'alt' | 'alt2')[] {
@@ -70,7 +72,8 @@ export const SPECIAL_TICKS = 67;          // ~2s
 // SEHRGAR SHIFT - TORNADO: qaragan tomonga 3 s yuradi, yo'lidagi dushmanlarga zarar; 20 s qayta tiklanadi
 export const TORNADO = { cdTicks: 667, lifeTicks: 100, speed: 200, halfW: 60, height: 180, pulseTicks: 13, damage: 22, stamina: 20, pull: 2.5 };
 export const SPECIAL_COOLDOWN_TICKS = 500; // ~15s
-export const INVIS_LINGER_TICKS = 67;     // ~2s
+export const INVIS_LINGER_TICKS = 67;     // ~2s: archer Shift - shuncha ko'rinmas (10-darajadan, invis2 - ikki barobar: 4s)
+export const INVIS_COOLDOWN_TICKS = 500;  // ~15s: ko'rinmaslik tugagach qayta ishlatish uchun kutish
 
 function unlocked(characterType: string, level: number): PerkId[] {
     return (PERK_TABLE[characterType] || []).filter(p => level >= p.level).map(p => p.id);

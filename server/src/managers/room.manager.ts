@@ -5,12 +5,12 @@ import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
 import { lookString } from '../cosmetics';
-import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, homeMax, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
+import { MAPS, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmRaidK, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, homeMax, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
 import { GameEngine } from './game.engine';
 import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN, bigNearestEnemy } from '../bigmap';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
-import { TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE, HUNTER } from '../perks';
+import { INVIS_COOLDOWN_TICKS, TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE, HUNTER } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -697,6 +697,14 @@ export class RoomManager {
             this.io.to(roomId).emit('tornadoCast', { x: Math.round(player.x + dir * 50), y: Math.round(player.y + 24) });
             return;
         }
+        // KAMONCHI: Shift - bir bosishda 2 s ko'rinmas (10-darajadan 4 s), tugagach 15 s qayta tiklanadi; bosib turish shart emas
+        if (player.characterType === 'archer') {
+            if ((player.invisCd || 0) > 0 || (player.invisLinger || 0) > 0) return;
+            player.isInvisible = true;
+            player.invisLinger = INVIS_LINGER_TICKS * (hasPerk(player, 'invis2') ? 2 : 1);
+            player.invisCd = INVIS_COOLDOWN_TICKS;
+            return;
+        }
         player.isHoldingAbility = true;
     }
 
@@ -708,14 +716,10 @@ export class RoomManager {
         const player = room.players[socket.id];
         if (!player) return;
 
+        if (player.characterType === 'archer') return;   // kamonchi ko'rinmasligi - vaqt bilan tugaydi (qo'yib yuborish uni o'chirmaydi)
         player.isHoldingAbility = false;
         const charLogic = getCharacterLogic(player.characterType);
         charLogic.releaseHeldAbility(player, room);
-        // Archer 10-daraja: qo'yib yuborilgach yana 2 soniya ko'rinmas
-        if (player.characterType === 'archer' && hasPerk(player, 'invis2') && !player.isDead) {
-            player.isInvisible = true;
-            player.invisLinger = INVIS_LINGER_TICKS;
-        }
     }
 
     // O'yinchi xonadan chiqib ketganda yoki uzilganda
@@ -999,7 +1003,7 @@ export class RoomManager {
             p.stamina = p.maxStamina || 100;
             p.specialTicks = 0;
             p.specialCooldown = 0;
-            p.invisLinger = 0;
+            p.invisLinger = 0; p.invisCd = 0;
             p.ammo = shotgunMagOf(p);
             p.reloadTicks = 0;
             // Har xaritada o'z boshlang'ich joyi: oldingi xaritadagi joy yangi xaritada devor, to'siq
@@ -1123,7 +1127,6 @@ export class RoomManager {
             gorilla: map.gorilla || null,
             fatElf: map.fatElf || null,
             underworld: map.underworld || null,
-            arena: map.arena || null,
             giantFlower: map.giantFlower || null,
             lift: map.lift || null,
             farm: map.farm || null,
@@ -1438,7 +1441,7 @@ export class RoomManager {
         if (!room || !p || !map || !shop || !room.isStarted || !(['elixir', 'chip', 'rod', 'net', 'fert', 'water'].includes(item as string) || FARM_DECOR.some(d => 'decor_' + d.id === item) || HOME_ITEMS.some(h => 'home_' + h.id === item) || ['hive', 'mill', 'sprinkler', 'scarecrow', 'greenhouse', 'elf', 'rake'].includes(item as string) || MEADOW_DECOR.some(d => 'meadow_' + d.id === item) || item === 'bigmap')) return;
         if (room.big ? !bigShopNear(room.big, p) : Math.abs(p.x - shop.counterX) > shop.range + 40) { reply({ success: false, item, message: 'shop_too_far' }); return; }
         if (p.userId === null) { reply({ success: false, item, message: 'shop_need_account' }); return; }
-        if (item === 'bigmap') { await this.sellBigMap(socket, p, reply); return; }
+        if (item === 'bigmap') { if (!shop.prices.bigmap) return; await this.sellBigMap(socket, p, reply); return; }
         // O'SISH TEZLATGICHLARI: nota uyasi va bahaybat tegirmon (ferma darajasi bilan ochiladi)
         if (item === 'hive' || item === 'mill' || item === 'sprinkler' || item === 'scarecrow' || item === 'greenhouse') {
             const f = await db.getFarm(p.userId);
@@ -1544,6 +1547,7 @@ export class RoomManager {
         }
         const kind = item === 'elixir' ? 'acid' : 'bolt';
         const curePrice = shop.prices[item as 'elixir' | 'chip'];
+        if (!curePrice) return;   // ferma do'konida eliksir / chip sotilmaydi
         const r = await db.buyCure(p.userId, kind, curePrice);
         if (!r.success || !r.user) { reply({ success: false, item, message: r.message }); return; }
         if (kind === 'acid') p.acidCurse = false; else p.boltCurse = false;
@@ -2037,9 +2041,9 @@ export class RoomManager {
         const open = Array.from({ length: FARM_PLOTS * (f.zones + 1) }, (_, k) => k);
         const planted = open.filter(k => f.plots[k]).sort(() => Math.random() - 0.5);
         const rest = open.filter(k => !f.plots[k]).sort(() => Math.random() - 0.5);
-        const now = Date.now();
+        const now = Date.now(), hp = Math.round(SD.hp * farmRaidK(f.xp, 'hp'));
         [...planted, ...rest].slice(0, n).forEach((k, i) => {
-            mf.shrooms.push({ id: 'sh' + (++mf.seq), x: farmPlotX(F, k), k, hp: SD.hp, maxHp: SD.hp, born: now, nextPuff: now + 1500 + i * 300, ate: false, hitFlash: 0 });
+            mf.shrooms.push({ id: 'sh' + (++mf.seq), x: farmPlotX(F, k), k, hp, maxHp: hp, born: now, nextPuff: now + 1500 + i * 300, ate: false, hitFlash: 0 });
         });
     }
     // Qo'ziqorin o'ldirildi (o'yin siklidan): tanga, bazadagi qolgan soni
@@ -2052,7 +2056,7 @@ export class RoomManager {
         const F = getMapById(room.selectedLevel).myFarm!;
         this.io.to(roomId).emit('mfShroomDown', { x: sh.x, left: mf.shrooms.length });
         if (mf.owner) db.farmSetShrooms(mf.owner, mf.shrooms.length);
-        if (killerId && room.players[killerId]) this.awardCrateCoins(roomId, killerId, F.shrooms.killCoins).catch(err => console.error('shroom coins xatosi:', err));
+        if (killerId && room.players[killerId]) this.awardCrateCoins(roomId, killerId, Math.round(F.shrooms.killCoins * farmRaidK(mf.farm ? mf.farm.xp : 0, 'coins'))).catch(err => console.error('shroom coins xatosi:', err));
     }
     // MAXLUQLAR HUJUMI boshlanadi (o'yin siklidan): tasodifiy tur, hostning yonidan (ekrandan tashqaridan) keladi
     public startRaid(roomId: string): void {
@@ -2070,11 +2074,11 @@ export class RoomManager {
         const mob = (k: 'slime' | 'slimelet' | 'zveg', x: number, hp: number, v = 0) => ({ id: 'mb' + (++mf.seq), kind: k, x, y: 570, hp, maxHp: hp, hitFlash: 0,
             face: -1, v, hopFrom: x, hopTo: x, hopAt: now + 600 + Math.random() * 500, hopEnd: 0, hitCd: 0 });
         if (kind === 'slime') {
-            const hp = RD.slime.hp + RD.slime.hpPerPlayer * Math.max(0, alive.length - 1);
+            const hp = Math.round((RD.slime.hp + RD.slime.hpPerPlayer * Math.max(0, alive.length - 1)) * farmRaidK(mf.farm.xp, 'hp'));   // ferma darajasi bilan kuchayadi
             mf.mobs.push(mob('slime', clampX(host.x + side() * 480), hp));
         } else if (kind === 'zveg') {
             const s = side();
-            for (let i = 0; i < RD.zveg.n; i++) mf.mobs.push(mob('zveg', clampX(host.x + s * (440 + i * 55)), RD.zveg.hp, i % 3));
+            for (let i = 0; i < RD.zveg.n; i++) mf.mobs.push(mob('zveg', clampX(host.x + s * (440 + i * 55)), Math.round(RD.zveg.hp * farmRaidK(mf.farm.xp, 'hp')), i % 3));
         } else {
             this.spawnShrooms(room, RD.shrooms);
         }
@@ -2087,15 +2091,15 @@ export class RoomManager {
         const i = mf.mobs.findIndex(m => m.id === id);
         if (i < 0) return;
         const m = mf.mobs.splice(i, 1)[0];
-        const RD = getMapById(room.selectedLevel).myFarm!.raids, now = Date.now();
+        const RD = getMapById(room.selectedLevel).myFarm!.raids, now = Date.now(), fxp = mf.farm ? mf.farm.xp : 0, lhp = Math.round(RD.slimelet.hp * farmRaidK(fxp, 'hp'));
         if (m.kind === 'slime') {
             for (let k = 0; k < RD.slime.splits; k++) {
                 const x = m.x + (k - (RD.slime.splits - 1) / 2) * 50;
-                mf.mobs.push({ id: 'mb' + (++mf.seq), kind: 'slimelet', x, y: 570, hp: RD.slimelet.hp, maxHp: RD.slimelet.hp, hitFlash: 0, face: k % 2 ? 1 : -1, v: k % 3,
+                mf.mobs.push({ id: 'mb' + (++mf.seq), kind: 'slimelet', x, y: 570, hp: lhp, maxHp: lhp, hitFlash: 0, face: k % 2 ? 1 : -1, v: k % 3,
                     hopFrom: x, hopTo: x, hopAt: now + 500 + k * 150, hopEnd: 0, hitCd: 15 });
             }
         }
-        const coins = m.kind === 'slime' ? RD.slime.coins : m.kind === 'slimelet' ? RD.slimelet.coins : m.kind === 'crow' ? RD.crows.coins : RD.zveg.coins;
+        const coins = Math.round((m.kind === 'slime' ? RD.slime.coins : m.kind === 'slimelet' ? RD.slimelet.coins : m.kind === 'crow' ? RD.crows.coins : RD.zveg.coins) * farmRaidK(fxp, 'coins'));
         this.io.to(roomId).emit('mfMobDown', { x: Math.round(m.x), kind: m.kind, split: m.kind === 'slime' });
         if (killerId && room.players[killerId]) this.awardCrateCoins(roomId, killerId, coins).catch(err => console.error('mob coins xatosi:', err));
         if (m.kind !== 'crow' && !mf.mobs.some(x => x.kind !== 'crow') && !mf.shrooms.length) this.io.to(roomId).emit('mfRaidCleared', {});

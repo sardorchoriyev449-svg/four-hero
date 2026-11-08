@@ -18,6 +18,7 @@ export abstract class BaseCharacter {
         if ((player.shieldCd || 0) > 0) player.shieldCd!--;   // knight: qalqon otish qayta tiklanmoqda
         if ((player.tornadoCd || 0) > 0) player.tornadoCd!--;   // mage: tornado qayta tiklanmoqda
         if ((player.mineCd || 0) > 0) player.mineCd!--;         // hunter: mina qayta tiklanmoqda
+        if ((player.invisCd || 0) > 0 && !((player.invisLinger || 0) > 0)) player.invisCd!--;   // archer: ko'rinmaslik tugagach - kutish
 
         // SHIFT (qobiliyat) ushlab turilsa - BARCHA personajlar uchun stamina ketadi
         if (player.isHoldingAbility) {
@@ -67,7 +68,7 @@ export abstract class BaseCharacter {
 
     // Hujum qilish mumkinmi (masalan, drobovik qayta o'qlanayotganda - yo'q). Standart - ha
     public canAttack(_player: PlayerState): boolean { return true; }
-    // Zarbalar orasidagi kutish (tik) - qurolga qarab (masalan, samuray kunai/shurikeni sekinroq)
+    // Zarbalar orasidagi kutish (tik) - qurolga qarab (masalan, samuray katana ruhi sekinroq)
     public attackCooldownTicks(_player: PlayerState): number { return BaseCharacter.ATTACK_COOLDOWN_TICKS; }
     // bitta zarbaning stamina narxi (qurol rejimiga qarab o'zgarishi mumkin - samurayning ruhiy zarbasi qimmatroq)
     public attackStamina(_player: PlayerState): number { return this.attackStaminaCost; }

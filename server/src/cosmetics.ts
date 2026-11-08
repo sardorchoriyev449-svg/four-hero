@@ -116,16 +116,6 @@ export const WEAPON_ITEMS: { [characterType: string]: { [slot: string]: Cosmetic
             { id: 'ice', name: 'Ice Katana', price: 1700 },
             { id: 'flame', name: 'Flame Katana', price: 2100 },
             { id: 'golden', name: 'Golden Katana', price: 2600 }
-        ],
-        kunai: [
-            { id: 'toothbrush', name: 'Toothbrush', price: 250 },
-            { id: 'dart', name: 'Dart', price: 400 },
-            { id: 'pencil', name: 'Pencil', price: 550 },
-            { id: 'fork', name: 'Fork', price: 700 },
-            { id: 'cards', name: 'Playing Cards', price: 900 },
-            { id: 'feather', name: 'Feather', price: 1100 },
-            { id: 'icicle', name: 'Icicle', price: 1400 },
-            { id: 'golden', name: 'Golden Kunai', price: 1700 }
         ]
     }
 };

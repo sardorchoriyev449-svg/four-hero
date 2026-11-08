@@ -12,7 +12,7 @@ import { bossAI, updateAreas, updateShots, SETPIECE, CREATURE, bossPre } from '.
 export const BIG_GEN = 10;
 // VAQTINCHA YOPIQ LOKATSIYALAR (keyingi yangilanishda ochiladi): dunyo o'zgarmaydi (progress saqlanadi) - faqat kirish yopiladi:
 // zinapoya-yo'llar uchida to'siq (W.gates), portal ishlamaydi, u yerdagi checkpointda turgan o'yinchi - boshlang'ich qishloqda tug'iladi
-export const BIG_CLOSED: string[] = ['lava'];
+export const BIG_CLOSED: string[] = [];
 export function bigLocAt(w: { locs: { id: string, x0: number, x1: number, y0: number, y1: number }[] }, x: number, y: number): string {
     const r = w.locs.find(l => x >= l.x0 && x < l.x1 && y >= l.y0 && y < l.y1);
     return r ? r.id : '';
@@ -30,13 +30,14 @@ export const LOC_POWER: { [loc: string]: { hp: [number, number], dmg: number, bo
 // DARAJA HIMOYASI: har qahramon darajasi dushman zararini kamaytiradi (0 - 100%, 10 - 80%, 20 - 67%, 40 - 50%; 60-darajadan keyin o'smaydi)
 export const bigLevelDefense = (level: number): number => 1 / (1 + 0.025 * Math.max(0, Math.min(60, level || 0)));
 export const SIDE_BOSS = 1.5;
+export const BOSS_HP_BONUS = 700;   // har bossga (1 o'yinchi uchun) qo'shimcha jon
 // dushman paydo bo'lganda: joni va zarba koeffitsienti (dk) - lokatsiyasiga qarab (o'qlari / olovi / ildizlari ham shu koeffitsient bilan)
 function powerUp(S: BigState, e: BigEnemy, d: EnemyDef): void {
     const z = S.w.zones.find(q => q.id === e.zone), P = z && LOC_POWER[z.loc];
     if (!P || e.k === 'zvfarm' || e.k === 'hgoal') return;   // ferma boshqaruvchisi - joni = qolgan zombilar soni; xokkey darvozasi - jonsiz (zarbani xokkeychiga o'tkazadi)
     if (d.boss) {
-        const L = BIG_LOCS.find(l => l.id === z!.loc), main = !!L && L.bosses.includes(e.k) && !d.secret;
-        e.hp = e.mx = Math.round(P.boss * (main ? 1 : SIDE_BOSS));
+        const L = BIG_LOCS.find(l => l.id === z!.loc), main = !!L && (L.bosses.includes(e.k) || e.k === 'bullkan') && !d.secret;
+        e.hp = e.mx = Math.round(P.boss * (main ? 1 : SIDE_BOSS)) + BOSS_HP_BONUS;
         e.dk = Math.max(1, (P.dmg + 5) / Math.max(1, d.dmg));
     } else {
         const t = Math.max(0, Math.min(1, (d.hp - 50) / 250));
@@ -90,8 +91,9 @@ export const BIG_LOCS: { id: string, enemies: string[], extra: string[], bosses:
     // yer ostidagi maxfiy xonada - MUZ XOKKEYCHI (joni faqat darvozaga otilganda ketadi); g'orda boss yo'q - qor bola / muz taran uyasi
     { id: 'snow', enemies: ['iceram', 'snowkid', 'iceram', 'snowkid', 'snowkid', 'snowkid'], extra: ['snowkid', 'iceram', 'snowkid'], bosses: ['santa', 'bigfoot'], secretBoss: 'hockey', season: ['snowkid', 'iceram', 'snowkid'], cave: '',
         npcs: ['trapper', 'shaman', 'fisher', 'elder', 'kid'] },
-    // YER OSTI OLAMI: qorong'i g'or-dunyo (faqat yorug'lik atrofi ko'rinadi), lava ko'llari (kuydiradi), olov favvoralari,
-    // lava ko'lmagi bo'lib yotgan maxluq; g'orda - Magma qurti. Qishloqda konchilar bilan birga UnderWorld trollari va kubik maxluqlar (tinch aholi)
+    // YER OSTI OLAMI: qorong'i g'or-dunyo (faqat yorug'lik atrofi ko'rinadi), lava ko'llari (kuydiradi), olov favvoralari.
+    // Raqiblari: FAQAT shaxtyor, shaxtyor shuter, mimik rock; bossi - BULLKAN. Quyidagi ro'yxatlar dunyo generatorining tasodifi siljimasligi uchun qolgan - generateWorld oxirida almashtiriladi
+    // Qishloqda konchilar bilan birga UnderWorld trollari va kubik maxluqlar (tinch aholi)
     { id: 'lava', enemies: ['emberling', 'bonearcher', 'magmabrute', 'firebat', 'emberbeetle', 'cultist'], extra: ['gazer', 'magmacrab', 'magmablob'], bosses: ['magmatitan', 'boneking'], secretBoss: 'hellhound', season: ['emberling', 'bonearcher', 'magmabrute'], cave: 'magmaworm',
         npcs: ['miner', 'smith', 'troll', 'shaman', 'blocky', 'elder', 'blockyo', 'kid'] },
     // BOTQOQ: yer ostidan PASTGA tushiladi (butun yo'l ~36 m pastda). Loy (sekinlashtiradi), zaharli gaz, tuman, lianalar.
@@ -139,11 +141,13 @@ export const BIG_SHOP: { id: string, price: number, ms?: number }[] = [
     { id: 'feather', price: 70, ms: 90000 },         // 90 s yiqilishdan zarar yo'q
     { id: 'phoenix', price: 250 }                    // keyingi o'limda shu joyning o'zida 50% jon bilan tiriladi (bir marta)
 ];
+// bitta joyda (lager / ekran) eng ko'pi bilan shuncha oddiy dushman
+export const BIG_CAP = 3;
 export const buffOn = (p: PlayerState, k: 'battery' | 'strength' | 'feather') => !!p.buffs && (p.buffs[k] || 0) > Date.now();
 export const ARMOR = { add: 150, max: 300 };
 // Dushmanlar: w/h - tana (klientdagi rasm o'lchamiga mos), spd - yurish, jump - sakrash tezligi, shot - otadi, fly - uchadi
 export interface EnemyDef { hp: number; spd: number; dmg: number; w: number; h: number; jump: number; reach: number; atkMs: number; coins: number;
-    shot?: { spd: number, cdMs: number, dmg: number, arc?: boolean }; fly?: boolean; armor?: number; boss?: boolean; secret?: boolean;
+    shot?: { spd: number, cdMs: number, dmg: number, arc?: boolean, range?: number }; fly?: boolean; armor?: number; boss?: boolean; secret?: boolean;
     lurk?: number; xp?: number; sway?: number; guard?: number[]; }   // guard - [ehtimol, ms, kutish ms]: otilsa / urilsa qalqon ko'taradi (oldidan kelganini to'sadi)   // sway - suvda u yoq-bu yoqqa chayqalish (kraken)   // lurk - yashirinib (sandiq / haykal bo'lib) turadi, shu masofaga kelsa uyg'onadi; xp - o'ldirganga tajriba
 export const ENEMIES: { [k: string]: EnemyDef } = {
     // ELF QIROLLIGI (qirollikka bostirib kirganlar)
@@ -225,6 +229,13 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     boneking:  { hp: 2000, spd: 125, dmg: 24, w: 50, h: 104, jump: 620, reach: 64, atkMs: 1000, coins: 180, boss: true, shot: { spd: 460, cdMs: 2300, dmg: 16 } },
     hellhound: { hp: 3200, spd: 200, dmg: 30, w: 112, h: 64, jump: 700, reach: 74, atkMs: 1000, coins: 340, boss: true, secret: true },
     magmaworm: { hp: 2700, spd: 140, dmg: 28, w: 182, h: 94, jump: 0,   reach: 100, atkMs: 1300, coins: 270, boss: true, armor: 0.2 },    // yer osti g'ori: ulkan magma qurti
+    // YER OSTI (yangi): SHAXTYOR - kirka bilan yaqindan uradi; SHAXTYOR SHUTER - barabanli quroldan ruda otadi. Ikkalasining kaskasida chiroq bor (zulmatda oldini yoritadi)
+    miner:     { hp: 210, spd: 105, dmg: 28, w: 30, h: 50, jump: 500, reach: 56, atkMs: 1200, coins: 12, armor: 0.1 },
+    minershot: { hp: 120, spd: 75,  dmg: 12, w: 30, h: 50, jump: 480, reach: 0,  atkMs: 0,    coins: 12, shot: { spd: 500, cdMs: 2100, dmg: 14, range: 390 } },   // range: faqat ekranda ko'rinib turganda otadi (zulmatda ko'rinmay urmasin)
+    // MIMIK ROCK: qora tosh bo'lib yotadi; yaqin kelsa oyoqlari chiqadi, o'yinchi ustiga sakraydi va boshidagi krateridan olovli sharlar otadi (bigboss.ts)
+    mimicrock: { hp: 240, spd: 70,  dmg: 14, w: 66, h: 72, jump: 640, reach: 0,  atkMs: 0,    coins: 25, armor: 0.25, lurk: 190, xp: 15, shot: { spd: 420, cdMs: 2000, dmg: 14, arc: true } },
+    // BULLKAN (Yer osti bossi): w/h - BOSHI (o'q faqat unga tegadi); joyidan qimirlamaydi, ikki qo'li alohida uchib yuradi (bigboss.ts)
+    bullkan:   { hp: 2400, spd: 0,  dmg: 30, w: 118, h: 176, jump: 0, reach: 0, atkMs: 9999, coins: 260, boss: true, armor: 0.2 },
     // QOR BAZASI (yangi): qor bola, muz taran, kulba-mimik; bosslar - Alter Qor Bobo (2 o'yinchi bo'yi), Robot Bigfut (w/h - YUZI: o'q faqat unga tegadi),
     // Muz xokkeychi (o'qni klyushkasi bilan qaytaradi - joni faqat DARVOZAGA otilganda ketadi; darvoza - alohida jonsiz "dushman")
     snowkid:   { hp: 85,  spd: 100, dmg: 9,  w: 26, h: 40, jump: 520, reach: 0,  atkMs: 0,    coins: 6, shot: { spd: 400, cdMs: 2000, dmg: 11, arc: true } },
@@ -233,7 +244,7 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     santa:     { hp: 2000, spd: 90, dmg: 30, w: 66, h: 96, jump: 0,   reach: 0,  atkMs: 9999, coins: 200, boss: true, armor: 0.15 },
     bigfoot:   { hp: 2600, spd: 55, dmg: 32, w: 72, h: 54, jump: 0,   reach: 0,  atkMs: 9999, coins: 240, boss: true },   // w/h - yuzi (bigfoot.png: ustun 103..125, qator 43..59)
     hockey:    { hp: 3000, spd: 230, dmg: 28, w: 60, h: 96, jump: 600, reach: 80, atkMs: 900, coins: 330, boss: true, secret: true },
-    hgoal:     { hp: 1,   spd: 0,   dmg: 0,  w: 76, h: 70, jump: 0,   reach: 0,  atkMs: 9999, coins: 0 },
+    hgoal:     { hp: 1,   spd: 0,   dmg: 0,  w: 130, h: 120, jump: 0,  reach: 0,  atkMs: 9999, coins: 0 },   // katta darvoza: orqasi xona devoriga tegib turadi
     // BOTQOQ
     bogling:   { hp: 75,  spd: 120, dmg: 11, w: 28, h: 46, jump: 520, reach: 38, atkMs: 900,  coins: 5 },
     spitter:   { hp: 65,  spd: 80,  dmg: 9,  w: 34, h: 40, jump: 560, reach: 0,  atkMs: 0,    coins: 6, shot: { spd: 380, cdMs: 2000, dmg: 10, arc: true } },
@@ -263,7 +274,7 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
 export interface BigPlat { x: number; y: number; w: number; h: number; k: string; rest?: number; }   // rest - dam olish oroli (checkpoint, lagersiz)        // k - ko'rinish (cobble, grass, skyrock, deep..., stone, cloud, branch, ledge)
 export interface BigRect { x: number; y: number; w: number; h: number; k: string; }
 // Orol: tepasi (plats ichida, h = 40) va pastki "tosh zinapoya" qismi - r: [x, y, w, h, faqatRasm(1)] (faqat klient: rasm va fizika)
-export interface BigIsle { id: number; x: number; y: number; w: number; k: string; loc: string; band: string; r: number[][]; sec?: number; hole?: number[]; pool?: number[]; }   // pool - ko'llar [x, w, x2, w2...]   // hole - g'orga kirish [x, w]   // sec - maxfiy (yaqinda ko'rinadi)
+export interface BigIsle { id: number; x: number; y: number; w: number; k: string; loc: string; band: string; r: number[][]; sec?: number; hole?: number[]; pool?: number[]; poolD?: number; }   // pool - ko'llar [x, w, x2, w2...]   // hole - g'orga kirish [x, w]   // sec - maxfiy (yaqinda ko'rinadi)
 export interface BigZone { id: number; x0: number; x1: number; y0: number; y1: number; loc: string; layer: string; kind: string; boss?: string; secret?: boolean; spawns: { x: number, y: number, k: string }[];
     trig?: string; dx?: number; dy?: number; cx0?: number; cx1?: number;   // cx0..cx1 - boss yuradigan oraliq (Balot Krabi: tekis balchiq yo'l)
     gp?: number[]; }   // gp - Gorila Rock grotosidagi platformalar (W.plats raqami): gorilla ularni shiftga uradi   // trig 'e' - boss o'zi chiqmaydi: (dx, dy) dagi teshik oldida E bosilsa chiqadi (robot ilon)
@@ -282,7 +293,10 @@ export interface BigWorld {
     lavas: { x: number, y: number, w: number }[];            // lava ko'llari tubi (ichida turgan kuyadi)
     vents: { x: number, y: number, k?: string }[];           // olov favvoralari / zaharli gaz (botqoq) - navbat bilan otilib chiqadi
     bogs: { x: number, y: number, w: number, t?: number }[];           // loy ko'llari tubi (botqoq: ichida sekin yuriladi)
-    ponds: { id: number, x: number, y: number, w: number, loc: string }[];    // baliq ko'llari (har lokatsiyada bittadan, tinch orolda)
+    ponds: { id: number, x: number, y: number, w: number, loc: string, big?: number }[];    // baliq ko'llari (har lokatsiyada bittadan, tinch orolda); big - katta daryo (katta o'rmon orolida)
+    wilds: { loc: string, x: number, y: number, w: number, fx0: number, fx1: number }[];   // KATTA O'RMON VA DARYO oroli (Elf, O'rmon): fx0..fx1 - mevali o'rmon
+    fruits: { id: number, x: number, y: number, loc: string, k: string }[];   // mevali butalar (katta o'rmonda): yesa - jon to'ladi, topshiriqda - teriladi
+    trails: { id: number, loc: string, x: number, y: number, to: number }[];  // yo'l ko'rsatkich: E - ikkinchi uchiga o'tiladi (qishloq <-> katta o'rmon)
     groves: { id: number, x: number, y: number, w: number, loc: string }[];   // o'rmonlar (lager topshirig'i buyumlari shu yerda)
     lakes: { x: number, y: number, w: number }[];            // kraken ko'li (y - suv yuzasi; ichida jon ketadi)
     zones: BigZone[];
@@ -305,7 +319,7 @@ const TOPH = 40;   // orol tepasining qalinligi (to'liq to'qnashuv)
 export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorld {
     const R = rng(seed), B = BIG;
     const W: BigWorld = { seed, width: 0, top: B.top, bottom: NET.bottom, endX: 0, startCp: 0,
-        gates: [], closed: BIG_CLOSED.slice(), locLvl: Object.fromEntries(Object.entries(LOC_POWER).map(([k, v]) => [k, v.lvl])), locs: [], ponds: [], groves: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
+        gates: [], closed: BIG_CLOSED.slice(), locLvl: Object.fromEntries(Object.entries(LOC_POWER).map(([k, v]) => [k, v.lvl])), locs: [], ponds: [], groves: [], wilds: [], fruits: [], trails: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
     let zid = 0, nid = 0, cid = 0, iid = 0;
     let crabRoom: { bog: BigWorld["bogs"][number], plats: BigPlat[], zone: BigZone, room: [number, number, number] } | null = null;   // Balot Krabi - oxirida yer yuzasidagi botqoq yo'lga ko'chiriladi
     const plat = (x: number, y: number, w: number, h: number, k: string) => { const p = { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), k }; W.plats.push(p); return p; };
@@ -984,8 +998,9 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
     const solid = (x: number, y: number) => W.isles.some(is => is.r.some(r => !r[4] && x > r[0] - 16 && x < r[0] + r[2] + 16 && y > r[1] - 24 && y < r[1] + r[3] + 16));
     W.zones.forEach(z => z.spawns.forEach((sp) => { if (!ENEMIES[sp.k] || !ENEMIES[sp.k].fly) return; for (let k = 0; k < 20 && solid(sp.x, sp.y - 10); k++) sp.y -= 40; }));
     // KO'L VA O'RMON: har lokatsiyada tinch joyda: avval dushmansiz orol, bo'lmasa - qishloq oroli cheti (qishloqlar har dunyoda bor).
-    // Eng oxirida va tasodifsiz: saqlangan dunyolar siljimaydi
-    BIG_LOCS.filter(l => !BIG_CLOSED.includes(l.id) && W.locs.some(o => o.id === l.id)).forEach((l) => {
+    // Eng oxirida va tasodifsiz: saqlangan dunyolar siljimaydi. Yer osti - eng keyin: boshqa lokatsiyalardagi ko'l va razvedkachilar raqami o'zgarmaydi
+    const openLocs = BIG_LOCS.filter(l => !BIG_CLOSED.includes(l.id) && W.locs.some(o => o.id === l.id)).sort((a, b) => (a.id === 'lava' ? 1 : 0) - (b.id === 'lava' ? 1 : 0));
+    openLocs.forEach((l) => {
         const ST = STYLE[l.id], vs = W.villages.filter(v => v.loc === l.id), vc = vs.length ? (vs[0].x0 + vs[0].x1) / 2 : 0;
         const noEnemy = (I: { x: number, y: number, w: number }) => !W.zones.some(z => z.x0 < I.x + I.w && z.x1 > I.x && z.y0 < I.y + 20 && z.y1 > I.y - 60);
         const inVillage = (I: { x: number, y: number, w: number }) => W.villages.some(v => v.x0 < I.x + I.w && v.x1 > I.x && Math.abs(v.y - I.y) < 200);
@@ -995,7 +1010,7 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
             .sort((a, b) => bandRank(a.band) - bandRank(b.band) || Math.abs(a.x + a.w / 2 - vc) - Math.abs(b.x + b.w / 2 - vc));
         const home = W.isles.filter(I => I.loc === l.id && !I.hole && inVillage(I) && noEnemy(I) && hasTop(I)).sort((a, b) => b.x - a.x);
         // bo'sh joy: chekpoint, sandiq, yashik, portal, do'kon, doimiy NPC va boshqa ko'l / o'rmon ustiga tushmaydi
-        const fixed = [...W.cps, ...W.chests, ...W.crates, ...W.piles, ...W.portals, ...W.shops, ...W.npcs.filter(n => n.fix)] as { x: number, y: number }[];
+        const fixed = [...W.cps, ...W.chests, ...W.crates, ...W.piles, ...W.portals, ...W.shops, ...W.vents, ...W.npcs.filter(n => n.fix)] as { x: number, y: number }[];
         const blocked = (x0: number, x1: number, y: number) => fixed.some(q => q.x > x0 - 50 && q.x < x1 + 50 && Math.abs(q.y - y) < 80) || [...W.ponds, ...W.groves].some(q => Math.abs(q.y - y) < 4 && q.x < x1 + 60 && q.x + q.w > x0 - 60);
         const span = (I: { x: number, y: number, w: number }, len: number) => {
             for (let k = 0; I.w - 80 - len - k * 40 >= 0; k++) for (const x of [I.x + I.w - 40 - len - k * 40, I.x + 40 + k * 40]) if (!blocked(x, x + len, I.y)) return Math.round(x);
@@ -1007,10 +1022,10 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         if (P) {
             W.ponds.push({ id: W.ponds.length + 1, loc: l.id, ...P }); clear(P);
             prop(P.x + 60, P.y, ST.snow ? 'fishhole' : 'dock');
-            (ST.snow ? ['icecrystal', 'snowpile'] : ['reeds', 'cattail']).forEach((k, i) => { prop(P.x - 14, P.y, k); prop(P.x + P.w + 14 + i * 10, P.y, k); });
+            (ST.snow ? ['icecrystal', 'snowpile'] : ST.lava ? ['crystal', 'glowshroom'] : ['reeds', 'cattail']).forEach((k, i) => { prop(P.x - 14, P.y, k); prop(P.x + P.w + 14 + i * 10, P.y, k); });
         }
         // o'rmon: shu lokatsiya daraxtlari
-        const TREES: { [k: string]: string[] } = { elf: ['tree', 'bigtree', 'tree', 'bush'], forest: ['bigtree', 'pine', 'bush', 'pine'], snow: ['snowpine', 'snowpine', 'icecrystal', 'snowpine'], swamp: ['deadtree', 'cattail', 'deadtree', 'mushroom'] };
+        const TREES: { [k: string]: string[] } = { elf: ['tree', 'bigtree', 'tree', 'bush'], forest: ['bigtree', 'pine', 'bush', 'pine'], snow: ['snowpine', 'snowpine', 'icecrystal', 'snowpine'], swamp: ['deadtree', 'cattail', 'deadtree', 'mushroom'], lava: ['mushhouse', 'glowshroom', 'stalagmite', 'glowshroom', 'crystal'] };
         const G = place(600) || place(320);
         if (G) {
             W.groves.push({ id: W.groves.length + 1, loc: l.id, ...G }); clear(G);
@@ -1019,11 +1034,125 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         }
     });
     // LAGER TOPSHIRIQLARI: har lokatsiyada ikkita lager chetida razvedkachi (eng oxirida va tasodifsiz - saqlangan dunyolar siljimaydi, NPC raqamlari o'zgarmaydi)
-    BIG_LOCS.filter(l => !BIG_CLOSED.includes(l.id) && W.locs.some(o => o.id === l.id)).forEach((l) => {
+    openLocs.forEach((l) => {
         const cs = W.zones.filter(z => z.kind === 'camp' && z.loc === l.id).sort((a, b) => (a.layer === 'ground' ? 0 : 1) - (b.layer === 'ground' ? 0 : 1) || a.x0 - b.x0);
         const pick = cs.length > 2 ? [cs[0], cs[cs.length - 1].layer === 'ground' ? cs[cs.length - 1] : cs[1]] : cs;
         pick.forEach(z => W.npcs.push({ id: ++nid, x: z.x0 - 8, y: z.y0 + 320, t: l.npcs[0], loc: l.id, v: -1, fix: 1, rq: 1 }));
         if (!pick.length) W.villages.filter(v => v.loc === l.id).slice(0, 1).forEach(v => W.npcs.push({ id: ++nid, x: v.x1 - 70, y: v.y, t: l.npcs[0], loc: l.id, v: -1, fix: 1, rq: 1 }));
+    });
+    // YER OSTI RAQIBLARI: faqat shaxtyor, shaxtyor shuter va mimik rock; bitta boss - BULLKAN (eng oxirida va tasodifsiz - joylar, zona raqamlari va boshqa lokatsiyalar siljimaydi).
+    // Birinchi boss maydoni - Bullkanniki (eskiz bo'yicha uchta pog'ona), qolgan boss maydonlari va maxfiy xonalar oddiy lagerga aylanadi; "lava ko'lmagi" bezagi o'rniga - mimikka o'xshash oddiy tosh (qaysi biri tirik - yaqin kelmaguncha bilinmaydi)
+    W.props.forEach((q) => { if (q.k === 'lavapuddle') q.k = 'mimicrock'; });
+    const lavaFloor = (z: BigZone) => W.plats.filter(q => !q.k.endsWith('bed') && q.w >= 80 && q.y >= z.y0 && q.y <= z.y1 + 40 && q.x + q.w > z.x0 && q.x < z.x1).sort((a, b) => b.y - a.y || b.w - a.w)[0];
+    W.zones.filter(z => z.loc === 'lava').forEach((z) => {
+        if (z.boss === 'magmatitan') {
+            const cx = Math.round((z.x0 + z.x1) / 2), f = W.plats.find(q => q.k === 'basalt' && q.x <= cx && q.x + q.w >= cx && q.y >= z.y0 && q.y <= z.y1 + 40) || lavaFloor(z);
+            if (f) {
+                const g = f.y, dead = W.plats.filter(q => q.k === 'ledge' && q.y >= g - 290 && q.y < g && q.x + q.w > z.x0 && q.x < z.x1);
+                // eski pog'onalar o'rniga uchta (eskizdagidek); grotodagi platforma raqamlari siljimasin
+                const oldIdx = new Map(W.plats.map((q, i) => [q, i] as [BigPlat, number]));
+                W.plats = W.plats.filter(q => !dead.includes(q));
+                const newIdx = new Map(W.plats.map((q, i) => [oldIdx.get(q), i] as [number | undefined, number]));
+                W.zones.forEach((o) => { if (o.gp) o.gp = o.gp.map(i => newIdx.get(i) ?? i); });
+                plat(cx - 425, g - 100, 200, 16, 'ledge'); plat(cx - 100, g - 60, 200, 16, 'ledge'); plat(cx + 225, g - 100, 200, 16, 'ledge');
+                // tanasi oldida bezak va quti yo'q
+                W.props = W.props.filter(q => !(q.x > cx - 230 && q.x < cx + 230 && Math.abs(q.y - g) < 4));
+                W.crates = W.crates.filter(q => !(q.x > cx - 230 && q.x < cx + 230 && q.y > g - 120 && q.y <= g));
+                z.boss = 'bullkan'; z.spawns = [{ x: cx, y: g, k: 'bullkan' }];
+                return;
+            }
+        }
+        if (z.boss) {
+            const f = lavaFloor(z);
+            z.boss = undefined; z.secret = undefined; z.trig = undefined; z.dx = undefined; z.dy = undefined; z.kind = 'camp'; z.spawns = [];
+            if (f) { const a = Math.max(f.x + 40, z.x0), b = Math.min(f.x + f.w - 40, z.x1); [[0.35, 'miner'], [0.6, 'mimicrock'], [0.85, 'minershot']].forEach(([t, k]) => z.spawns.push({ x: a + (b - a) * (t as number), y: f.y, k: k as string })); }
+            return;
+        }
+        // uchuvchilar o'rni: pastidagi sirtga tushadi (sirt bo'lmasa - yo'q)
+        z.spawns = z.spawns.filter((sp) => {
+            if (!ENEMIES[sp.k].fly) return true;
+            const g = W.plats.filter(q => !q.k.endsWith('bed') && q.x <= sp.x && q.x + q.w >= sp.x && q.y >= sp.y - 10 && q.y <= sp.y + 400).sort((a, b) => a.y - b.y)[0];
+            if (!g) return false;
+            sp.y = g.y; return true;
+        });
+        const shooter = (sp: { k: string }) => !!ENEMIES[sp.k].shot && !ENEMIES[sp.k].lurk;
+        const hasGun = z.spawns.some(shooter), rest = z.spawns.filter(sp => !ENEMIES[sp.k].lurk && !shooter(sp));
+        z.spawns.forEach((sp) => { sp.k = ENEMIES[sp.k].lurk ? 'mimicrock' : shooter(sp) ? 'minershot' : 'miner'; });
+        if (!hasGun && rest.length > 1) rest[rest.length - 1].k = 'minershot';   // lagerda ikkalasi ham bo'lsin
+    });
+    // KATTA O'RMON VA KATTA DARYO (Elf qirolligi, O'rmon): qishloq tepasidagi bo'sh osmonda alohida orol - chapda mevali o'rmon
+    // (meva yesa - jon to'ladi; meva topshirig'i bo'lsa - teriladi), o'ngda katta daryo (baliq ovi). Qishloqdagi yo'l ko'rsatkichdan (E) boriladi.
+    // Eng oxirida: boshqa joylar, zonalar, checkpointlar va saqlangan dunyolar siljimaydi
+    let frId = 0, trId = 0;
+    ['elf', 'forest'].forEach((loc) => {
+        const L = W.locs.find(l => l.id === loc), v = W.villages.find(q => q.loc === loc);
+        if (!L || !v || BIG_CLOSED.includes(loc)) return;
+        const boxes: number[][] = [];
+        W.plats.forEach(p => boxes.push([p.x, p.y, p.w, p.h]));
+        W.isles.forEach(I => I.r.forEach(r => boxes.push([r[0], r[1], r[2], r[3]])));
+        W.zones.forEach(z => boxes.push([z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0]));
+        W.vines.forEach(q => boxes.push([q.x - 20, q.y, 40, q.len]));
+        W.gates.forEach(q => boxes.push([q.x - 20, q.y - 760, 40, 820]));
+        [...W.ponds, ...W.groves, ...W.lakes, ...W.lavas, ...W.bogs].forEach(q => boxes.push([q.x, q.y - 200, q.w, 220]));
+        [...W.props, ...W.npcs, ...W.cps, ...W.chests, ...W.portals, ...W.shops, ...W.crates, ...W.piles].forEach(q => boxes.push([q.x - 40, q.y - 200, 80, 200]));
+        const free = (x: number, y: number, w: number) => { const a = [x - 150, y - 560, w + 300, 880]; return !boxes.some(b => b[0] < a[0] + a[2] && b[0] + b[2] > a[0] && b[1] < a[1] + a[3] && b[1] + b[3] > a[1]); };
+        const vc = (v.x0 + v.x1) / 2;
+        let hit: { w: number, x: number, y: number } | null = null;
+        for (const IW of [2400, 2000, 1700]) {
+            for (let y = v.y - 500; y >= Math.max(L.y0, W.top) + 560 && !hit; y -= 50)
+                for (let k = 0; k < 60 && !hit; k++) {
+                    const x = Math.round(vc - IW / 2 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 200);
+                    if (x >= L.x0 + 100 && x + IW <= L.x1 - 100 && free(x, y, IW)) hit = { w: IW, x, y };
+                }
+            if (hit) break;
+        }
+        if (!hit) return;
+        const { w: IW, x, y } = hit, cnt: { [k: string]: number } = {};
+        W.isles.filter(I => I.loc === loc && I.band === 'hi').forEach((I) => { cnt[I.k] = (cnt[I.k] || 0) + 1; });
+        const K = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || STYLE[loc].ground;
+        const fx0 = x + 230, fx1 = x + Math.round(IW * 0.56), rx = x + Math.round(IW * 0.62), rw = Math.round(IW * 0.3), RD = 28;
+        // orol; daryo o'rni o'yilgan (qahramon ko'kragigacha suvga kiradi, tubida yuradi)
+        const top = isle(x, y, IW, K, loc, 'hi', 220), I = W.isles[W.isles.length - 1];
+        plat(rx + rw, y, x + IW - rx - rw, TOPH, K); top.w = rx - x;
+        plat(rx, y + RD, rw, 16, 'riverbed');
+        I.pool = [rx, rw]; I.poolD = RD;
+        [x, x + IW - 56].forEach(wx => W.isles.push({ id: ++iid, x: wx, y: y - 320, w: 56, k: K, loc, band: 'hi', r: [[wx, y - 320, 56, 320]] }));   // chetlarida tosh devor - qishloqqa yiqilib ketilmaydi
+        const TR: { [l: string]: string[] } = { elf: ['bigtree', 'tree', 'flowers', 'bigtree', 'tree'], forest: ['bigtree', 'pine', 'bush', 'bigtree', 'pine'] };
+        for (let i = 0, px = fx0; px < fx1; px += 80, i++) prop(px, y, TR[loc][i % TR[loc].length]);
+        for (let px = fx0 + 50; px < fx1 - 30; px += 150) W.fruits.push({ id: ++frId, x: px, y, loc, k: RQ.item[loc] });
+        W.ponds.push({ id: W.ponds.length + 1, loc, x: rx, y, w: rw, big: 1 });
+        ['reeds', 'cattail', 'reeds'].forEach((k, i) => { prop(rx - 16 - i * 14, y, k); prop(rx + rw + 16 + i * 14, y, k); });
+        for (let i = 0, px = rx + rw + 80; px < x + IW - 90; px += 90, i++) prop(px, y, TR[loc][(i + 1) % TR[loc].length]);
+        // qishloqdagi yo'l ko'rsatkich: chekpoint, portal, do'kon, doimiy NPC va bezaklar ustiga tushmaydi (chetidan boshlab qidiriladi)
+        const fixed = [...W.cps, ...W.chests, ...W.crates, ...W.piles, ...W.portals, ...W.shops, ...W.npcs.filter(n => n.fix)] as { x: number, y: number }[];
+        const okAt = (sx: number) => !fixed.some(q => Math.abs(q.x - sx) < 80 && Math.abs(q.y - v.y) < 120) && !W.props.some(q => Math.abs(q.x - sx) < 40 && Math.abs(q.y - v.y) < 4);
+        let sx: number | null = null;
+        for (let d = 60; d < (v.x1 - v.x0) / 2 && sx === null; d += 20) for (const c of [v.x1 - d, v.x0 + d]) if (okAt(c)) { sx = c; break; }
+        if (sx === null) { const s0 = v.x1 - 60; W.props = W.props.filter(q => !(Math.abs(q.x - s0) < 40 && Math.abs(q.y - v.y) < 4)); sx = s0; }
+        prop(sx, v.y, 'signpost'); prop(x + 120, y, 'signpost');
+        const a = ++trId, b = ++trId;
+        W.trails.push({ id: a, loc, x: sx, y: v.y, to: b }, { id: b, loc, x: x + 120, y, to: a });
+        W.wilds.push({ loc, x, y, w: IW, fx0, fx1 });
+    });
+    // DUSHMANLAR SONI: bitta joyda 3 tadan ko'p chiqmaydi (barcha lokatsiyalar; bosslar - alohida). Avval har xil turlar qoladi.
+    // Yonma-yon lagerlar ham: istalgan bir ekranda (900x600) 3 tadan ko'p emas (yashirin mimiklar - birinchi). Eng oxirida va tasodifsiz
+    W.zones.forEach((z) => {
+        if (z.boss || z.spawns.length <= BIG_CAP) return;
+        const keep: typeof z.spawns = [];
+        [...new Set(z.spawns.map(s => s.k))].forEach((k) => { if (keep.length < BIG_CAP) keep.push(z.spawns.find(s => s.k === k)!); });
+        z.spawns.forEach((s) => { if (keep.length < BIG_CAP && !keep.includes(s)) keep.push(s); });
+        z.spawns = z.spawns.filter(s => keep.includes(s));
+    });
+    const kept: { x: number, y: number }[] = [];
+    W.zones.filter(z => !z.boss).sort((a, b) => (a.kind === 'lurk' ? 0 : 1) - (b.kind === 'lurk' ? 0 : 1) || a.id - b.id).forEach((z) => {
+        z.spawns = z.spawns.filter((s) => {
+            const near = kept.filter(q => Math.abs(q.x - s.x) <= 900 && Math.abs(q.y - s.y) <= 500);   // s bilan birga 900x500 ekranga sig'adiganlar
+            const xs = [s.x - 900, s.x, ...near.flatMap(q => [q.x, q.x - 900])].filter(a => a <= s.x && a >= s.x - 900), ys = [s.y - 500, s.y, ...near.flatMap(q => [q.y, q.y - 500])].filter(b => b <= s.y && b >= s.y - 500);
+            let most = 0;
+            xs.forEach(a => ys.forEach((b) => { most = Math.max(most, near.filter(q => q.x >= a && q.x <= a + 900 && q.y >= b && q.y <= b + 500).length); }));
+            if (most >= BIG_CAP) return false;
+            kept.push(s); return true;
+        });
     });
     return W;
 }
@@ -1043,6 +1172,7 @@ export interface BigEnemy { np?: number; id: number; k: string; x: number; y: nu
     // set-piece bosslar (S1/S2 dagidek, bigboss.ts): ey - kraken ko'zi balandligi; tA/tB/tC - hujumlar navbati (tik); cc - o'yinchiga tegish kutishi; rn - dam olishgacha hujumlar
     ey?: number; tA?: number; tB?: number; tC?: number; cc?: { [pid: string]: number }; rn?: number; ak?: string; tk?: boolean;
     // muz xokkeychi: gx - darvoza joyi, pk - yerdagi shaybalar (o'q id), gl - darvoza tomon uchirilgan o'yinchi (shu tikkacha "gol" bo'lishi mumkin), sv - sirpanish tezligi, gHit - zarba darvozadan
+    bh?: number[];   // Bullkan qo'llari: [x, y, ko'rinish, yo'nalish] x 2 (ko'rinish: 0 musht, 1 ochiq qo'l, 2 tosh ushlagan)
     gx?: number; pk?: number[]; gl?: { [pid: string]: number }; sv?: number; gHit?: boolean; }   // tk - suhbat bo'lib o'tgan (semiz elf)   // ccd - to'qnashuv zarbasi kutishi (tik)   // life - yordamchining umri; para - parashyutda; block / bcd - robot bot qalqoni   // stun - ovchi qopqonida                    // lvx - sakrash (uchish) tezligi, jcd - sakrash kutishi, mi - boss hujum navbati
 // k - o'q turi (klient rasmi): arrow, orb, fire, spore, web, rock, shock; gnd - yer bo'ylab yuguradigan to'lqin; home - nishonga burilish (kadr)
 export interface BigShot { id: number; x: number; y: number; vx: number; vy: number; dmg: number; t: number; arc: boolean; k: string; gnd?: boolean; home?: number;
@@ -1064,6 +1194,7 @@ export interface BigState {
     sgrid: Map<number, number[][]>;   // orollarning qattiq tosh qismlari (devorlar)
     w: BigWorld; grid: Map<number, BigPlat[]>; enemies: BigEnemy[]; shots: BigShot[]; hazards: BigHazard[]; pshots: BigPShot[]; seq: number; tick: number;
     cp: number; zoneState: { [id: number]: { st: 'active' | 'done', at: number } }; chests: { [id: number]: boolean };
+    fruitAt?: { [id: number]: number };   // katta o'rmon: meva qachon qayta pishadi (tick)
     fishers?: { [pid: string]: { pond: number, st: 'wait' | 'bite', at: number, fish: { id: string, kg: number, value: number } } };
     dead: { [pid: string]: number }; ended: boolean;
     paid: { [zone: number]: boolean };   // boss birinchi marta o'ldirilgan (o'rganilgan foiz, topshiriqlar, qafaslar; to'liq mukofot bir marta)
@@ -1204,7 +1335,7 @@ export const BOSS_MINION: { [k: string]: string } = { fatelf: 'zveg', kraken: 'm
 // o'q turlari (klientdagi rasm)
 const SHOT_K: { [k: string]: string } = { hspear: 'spear', gobarcher: 'arrow', bandit: 'arrow', darkmage: 'orb', shadowknight: 'orb', wisp: 'orb', imp: 'fire', frog: 'spore', myconid: 'spore', ancient: 'spore', spiderqueen: 'web',
     snowballer: 'snow', snowman: 'snow', frostmage: 'ice', wraith: 'ice', icequeen: 'ice', fatelf: 'acid', kraken: 'ink', skyship: 'orb', darkelf: 'dark',
-    bonearcher: 'fire', cultist: 'fire', gazer: 'orb', magmablob: 'lava', boneking: 'orb', hellhound: 'fire', magmaworm: 'fire',
+    bonearcher: 'fire', cultist: 'fire', minershot: 'ore', gazer: 'orb', magmablob: 'lava', boneking: 'orb', hellhound: 'fire', magmaworm: 'fire',
     spitter: 'acid', bogwitch: 'spore', bogspirit: 'spore', hydra: 'acid', toadking: 'acid', snowkid: 'icesnow' };
 export const CHILL = { snow: 1, ice: 1, icesnow: 1, snowboulder: 1, puck: 1, bfspit: 1, greenorb: 1 } as { [k: string]: number };   // tegsa - qahramon 1.4 s sekinlashadi (muzlaydi)
 // O'ldirganga tajriba: maydalar 5, o'rtachalar 10, kuchlilar 15 (lurk/maxsuslar - xp bilan)
@@ -1361,8 +1492,9 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
         if (e.flash > 0) e.flash--;
         if (e.cd > 0) e.cd--;
         if (e.jcd) e.jcd--;
-        // hamma o'yinchidan juda uzoq - yo'qoladi (lager keyin qayta ishlashi mumkin)
-        if (!d.boss && e.fz === undefined && !alive.some(p => Math.abs(p.x - e.x) < 2600 && Math.abs(p.y - e.y) < 1500)) {
+        // hamma o'yinchidan juda uzoq - yo'qoladi (lager keyin qayta ishlashi mumkin). O'lgan (tirilishni kutayotgan) o'yinchi ham hisobga olinadi:
+        // aks holda yolg'iz o'yinchi o'lgan zahoti atrofidagi dushmanlar ekrandan yo'qolib, tirilganda yana paydo bo'lardi
+        if (!d.boss && e.fz === undefined && !players.some(p => Math.abs(p.x - e.x) < 2600 && Math.abs(p.y - e.y) < 1500)) {
             S.enemies.splice(i, 1);
             if (!S.enemies.some(o => o.zone === e.zone)) delete S.zoneState[e.zone];
             continue;
@@ -1527,7 +1659,7 @@ function enemyAI(S: BigState, e: BigEnemy, d: EnemyDef, alive: PlayerState[], ro
             if (d.shot) {
                 // otuvchi: masofani saqlaydi, ko'rinsa otadi
                 if (Math.abs(dx) < 170) wantVx = -e.f * d.spd; else if (Math.abs(dx) > 380) wantVx = e.f * d.spd;
-                if (e.cd <= 0 && !(e.block! > 0) && Math.abs(dx) < 560 && Math.abs(dyFeet) < 300) { shoot(S, e, d, p); e.cd = T(d.shot.cdMs) + Math.floor(Math.random() * 15); ctx.emit('bigShoot', { id: e.id }); }
+                if (e.cd <= 0 && !(e.block! > 0) && Math.abs(dx) < (d.shot.range || 560) && Math.abs(dyFeet) < 300) { shoot(S, e, d, p); e.cd = T(d.shot.cdMs) + Math.floor(Math.random() * 15); ctx.emit('bigShoot', { id: e.id }); }
             } else if (Math.abs(dx) > d.reach * 0.7) wantVx = e.f * d.spd;
             // yaqin zarba: tayyorlanish (0.35 s) - keyin hali yaqin bo'lsa tegadi
             if (d.reach > 0 && e.atk === 0 && e.cd <= 0 && !(e.block! > 0) && Math.abs(dx) < d.reach + 12 && Math.abs(dyFeet) < 46) { e.atk = T(350); e.cd = T(d.atkMs); ctx.emit('bigWind', { id: e.id }); }
@@ -1770,10 +1902,10 @@ export function bigQuestTalk(S: BigState, p: PlayerState, npcId: number, ctx: Bi
     ctx.emitTo(p.id, 'bigQuest', { q, st: qs[q], ev, npc: n.id });
 }
 // ===== LAGER TOPSHIRIQLARI (tasodifiy): razvedkachi beradi, bajarilgach o'sha lokatsiyaning istalgan razvedkachisiga topshiriladi =====
-// Mukofot lokatsiya qiyinligiga qarab. item (lokatsiya o'rmonidan): Elf - sariq olma, O'rmon - yovvoyi rezavor, Qor - muz kristali, Botqoq - nilufar. fish - lokatsiya ko'lidan
+// Mukofot lokatsiya qiyinligiga qarab. item (lokatsiya o'rmonidan): Elf - sariq olma, O'rmon - yovvoyi rezavor, Qor - muz kristali, Botqoq - nilufar, Yer osti - nurli qo'ziqorin. fish - lokatsiya ko'lidan
 export const RQ = {
-    mult: { elf: 1, forest: 1.4, snow: 1.8, swamp: 2.2 } as { [l: string]: number },
-    item: { elf: 'apple', forest: 'berry', snow: 'crystal', swamp: 'lily' } as { [l: string]: string },
+    mult: { elf: 1, forest: 1.4, snow: 1.8, swamp: 2.2, lava: 2.6 } as { [l: string]: number },
+    item: { elf: 'apple', forest: 'berry', snow: 'crystal', swamp: 'lily', lava: 'shroom' } as { [l: string]: string },
     killk: { n: [3, 6], coins: 14 }, killn: { n: [6, 12], coins: 9 }, itemq: { n: [3, 5], coins: 16 }, fishq: { n: [2, 4], coins: 26 },
     range: 7000, pickX: 44, pickY: 70
 };
@@ -1801,6 +1933,10 @@ function rqSpots(S: BigState, n: { x: number, loc: string }, count: number): num
 function rqMake(S: BigState, n: { id: number, x: number, loc: string }): RandQuest {
     const base = { seed: S.w.seed, loc: n.loc, npc: n.id, got: 0 }, kinds = rqKinds(S, n.loc), roll = Math.random();
     const xpOf = (c: number) => Math.round(c / 2);
+    if (roll < 0.3 && S.w.fruits.filter(f => f.loc === n.loc).length >= 3) {   // katta o'rmon bor: mevalarni terib keladi
+        const cnt = rint(RQ.itemq.n[0], RQ.itemq.n[1]), c = rqCoins(RQ.itemq.coins, cnt, n.loc);
+        return { ...base, t: 'item', k: RQ.item[n.loc], n: cnt, coins: c, xp: xpOf(c), spots: [], fr: 1 };
+    }
     if (roll < 0.3) {
         const cnt = rint(RQ.itemq.n[0], RQ.itemq.n[1]), spots = rqSpots(S, n, cnt);
         if (spots.length >= 2) { const c = rqCoins(RQ.itemq.coins, spots.length, n.loc); return { ...base, t: 'item', k: RQ.item[n.loc], n: spots.length, coins: c, xp: xpOf(c), spots }; }
@@ -1872,6 +2008,30 @@ function rqPick(S: BigState, p: PlayerState, ctx: BigCtx): void {
     const i = q.spots.findIndex(s => Math.abs(p.x - s[0]) < RQ.pickX && Math.abs(p.y + 24 - s[1]) < RQ.pickY);
     if (i < 0) return;
     q.spots.splice(i, 1); q.got++; rqProgress(p, q, ctx);
+}
+// ===== KATTA O'RMON: MEVA (yesa - jon to'ladi; shu lokatsiyada meva topshirig'i bo'lsa - teriladi va razvedkachiga olib boriladi). Har biri qayta pishadi =====
+export const FRUIT = { regrowMs: 35000, nearX: 60, nearY: 80 };
+export function bigFruit(S: BigState, p: PlayerState, id: number, ctx: BigCtx): void {
+    const f = S.w.fruits.find(o => o.id === id);
+    if (!f || p.isDead || Math.abs(p.x - f.x) > FRUIT.nearX || Math.abs(p.y + 24 - f.y) > FRUIT.nearY) return;
+    const at = S.fruitAt = S.fruitAt || {};
+    if ((at[id] || 0) > S.tick) return;
+    const q = rqOf(S, p), forQuest = !!q && q.t === 'item' && !!q.fr && q.loc === f.loc && q.got < q.n;
+    if (!forQuest && p.hp >= (p.maxHp || 100)) { ctx.emitTo(p.id, 'bigFruit', { err: 'big_fruit_full' }); return; }
+    at[id] = S.tick + T(FRUIT.regrowMs);
+    if (forQuest) { q!.got++; rqProgress(p, q!, ctx); }
+    else p.hp = p.maxHp || 100;
+    ctx.emit('bigFruit', { id, x: f.x, y: f.y, k: f.k, by: p.id, ev: forQuest ? 'pick' : 'eat' });
+}
+// YO'L KO'RSATKICH: qishloq <-> katta o'rmon oroli (E)
+export function bigTrail(S: BigState, p: PlayerState, id: number, ctx: BigCtx): boolean {
+    const a = S.w.trails.find(o => o.id === id), b = a && S.w.trails.find(o => o.id === a.to);
+    if (!a || !b || p.isDead || Math.abs(p.x - a.x) > 90 || Math.abs(p.y + 24 - a.y) > 90) return false;
+    p.x = b.x + 50; p.y = b.y - 26;
+    delete S.dots[p.id];
+    ctx.emitTo(p.id, 'teleport', { x: p.x, y: p.y });
+    ctx.emit('bigTrailFx', { id: p.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, to: b.id });
+    return true;
 }
 // robot ilon o'ldi: tishini olish topshirig'i bor hamma o'yinchida - tish olindi
 export function bigQuestBoss(S: BigState, room: RoomState, k: string, ctx: BigCtx): void {
@@ -1961,7 +2121,7 @@ export function bigPayload(S: BigState, room: RoomState) {
         cp: S.cp,
         en: S.enemies.filter(e => near(e.x, e.y)).map(e => ({ id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y), f: e.f, hp: Math.ceil(e.hp), mx: e.mx, ch: e.st === 'chase' ? 1 : 0,
             a: e.atk > 0 ? 1 : 0, fl: e.flash > 0 ? 1 : 0, m: e.move && e.move !== 'walk' ? e.move : '', l: e.st === 'lurk' ? 1 : 0, r: e.p2 ? 1 : 0, s: e.stun && e.stun > 0 ? 1 : 0, pz: e.poison && e.poison.delay <= 0 ? 1 : 0,
-            b: e.block && e.block > 0 ? 1 : 0, u: e.hide === 'under' ? 1 : e.hide === 'up' ? 2 : e.hide === 'blink' ? 3 : 0, sd: e.shield && e.shield > S.tick ? 1 : 0, v: (e.daze || 0) > 0 || (e.vuln || 0) > S.tick ? 1 : 0, sp: e.spin ? 1 : 0, pa: e.para ? 1 : 0, lf: e.life !== undefined ? 1 : 0, j: e.ground === false && !ENEMIES[e.k].fly ? 1 : 0, bs: ENEMIES[e.k].boss || e.k === 'lizard' || e.k === 'iceram' ? e.bst || '' : undefined, iv: e.iv && e.iv > S.tick ? 1 : undefined, hx: e.k === 'rsnake' ? Math.round(e.hx) : undefined })),
+            b: e.block && e.block > 0 ? 1 : 0, u: e.hide === 'under' ? 1 : e.hide === 'up' ? 2 : e.hide === 'blink' ? 3 : 0, sd: e.shield && e.shield > S.tick ? 1 : 0, v: (e.daze || 0) > 0 || (e.vuln || 0) > S.tick ? 1 : 0, sp: e.spin ? 1 : 0, pa: e.para ? 1 : 0, lf: e.life !== undefined ? 1 : 0, j: e.ground === false && !ENEMIES[e.k].fly ? 1 : 0, bh: e.bh ? e.bh.map(Math.round) : undefined, bs: ENEMIES[e.k].boss || e.k === 'lizard' || e.k === 'iceram' || e.k === 'mimicrock' ? e.bst || '' : undefined, iv: e.iv && e.iv > S.tick ? 1 : undefined, hx: e.k === 'rsnake' ? Math.round(e.hx) : undefined })),
         sh: S.shots.filter(s => near(s.x, s.y)).map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), k: s.k, d: Math.round(Math.atan2(s.vy, s.vx) * 10) / 10, sc: s.roll ? Math.round(s.roll / 13 * 10) / 10 : s.sc || 0, st: s.sit !== undefined || s.idle ? 1 : 0, ...(s.wait && s.t < s.wait ? { wt: 1 } : {}) })),
         ar: S.areas.filter(a => near(a.x + a.w / 2, a.y + a.h / 2) || (a.x2 !== undefined && near(a.x2, a.y2!))).map(a => ({ id: a.id, k: a.k, x: Math.round(a.x), y: Math.round(a.y), w: Math.round(a.w), h: Math.round(a.h), x2: a.x2 !== undefined ? Math.round(a.x2) : undefined, y2: a.y2 !== undefined ? Math.round(a.y2) : undefined,
             wn: a.warn, t: a.t, f: a.f || 0 })),
@@ -1974,6 +2134,7 @@ export function bigPayload(S: BigState, room: RoomState) {
         sb: Object.fromEntries(ps.map(p => [p.id, p.snowballs || 0])),
         bf: Object.fromEntries(ps.map(p => { const b = p.buffs || {}, n = Date.now(), s = (v?: number) => Math.max(0, Math.ceil(((v || 0) - n) / 1000));
             return [p.id, { battery: s(b.battery), armor: Math.round(b.armorHp || 0), strength: s(b.strength), feather: s(b.feather), phoenix: b.phoenix ? 1 : 0, q: p.bigQuests || {} }]; })),
-        cg: S.w.cages.filter(c => S.paid[c.zone]).map(c => c.zone)
+        cg: S.w.cages.filter(c => S.paid[c.zone]).map(c => c.zone),
+        fu: S.fruitAt ? Object.keys(S.fruitAt).map(Number).filter(id => S.fruitAt![id] > S.tick) : undefined   // hali pishmagan (terilgan) mevalar
     };
 }
