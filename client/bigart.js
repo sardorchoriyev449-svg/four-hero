@@ -210,6 +210,22 @@ window.BigArt = (function () {
             const x0 = Math.round((f.x - ox) / P), x1 = Math.round((f.x + f.w - ox) / P);
             for (const xx of [x0, x1 - 1]) for (let y = topRow + 1; y < topRow + 6; y++) if (g[y] && g[y][xx] !== null && hash(xx, y, 9) < 0.6) g[y][xx] = S.soil[0];
         });
+        // QOPQOQ manbasi: xona o'rnida - xuddi shu orol toshi (shu kataklar naqshi), atrofida 1 katak devor (chok yopiladi)
+        I.r.filter(q => q[4]).forEach((q, n) => {
+            const rockAt = (x, y) => {
+                const d = y - topRow; if (d < 4) return surface(S, x, d, y, seed);
+                const k = d / depthRows, v = 0.78 - k * 0.55, pal = k < 0.45 ? S.soil : S.rock;
+                return hash(x >> 1, y >> 1, seed) < 0.05 ? shade(v + 0.3, x, y, S.rock) : shade(v, x, y, pal);
+            };
+            const rx0 = Math.round((q[0] - ox) / P), rx1 = Math.round((q[0] + q[2] - ox) / P), ry0 = Math.round((q[1] - oy) / P), ry1 = Math.round((q[1] + q[3] - oy) / P);
+            const x0 = Math.max(0, rx0 - 1), x1 = Math.min(cw, rx1 + 1), y0 = Math.max(0, ry0 - 1), y1 = Math.min(chh, ry1 + 1), cg = gNew(x1 - x0, y1 - y0);
+            for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+                const f = fill[y][x], inQ = x >= rx0 && x < rx1 && y >= ry0 && y < ry1;
+                if (inQ && f) cg[y - y0][x - x0] = f === 2 ? rockAt(x, y) : g[y][x];
+                else if (!inQ && f === 1) cg[y - y0][x - x0] = g[y][x];   // chetdagi devor katagi - o'zi (g'or kirish teshigi ochiq qoladi)
+            }
+            COVER_SRC.set(key + '#' + n, { g: cg, x: ox + x0 * P, y: oy + y0 * P });
+        });
         const out = gOutline(g, OUT);
         if (scene.textures.exists(key)) scene.textures.remove(key);
         tex(scene, key, out, P);
@@ -232,8 +248,13 @@ window.BigArt = (function () {
         return key;
     }
     // MAXFIY XONA QOPQOG'I: orol toshi bilan bir xil (kontursiz) - qahramon ichiga kirguncha xonani yashiradi
+    const COVER_SRC = new Map(), COVER_POS = new Map();
+    const coverPos = (key) => COVER_POS.get(key);
     function coverTex(scene, key, I, q) {
         if (!scene.textures.exists(key) && WCV.has(key)) { scene.textures.addImage(key, WCV.get(key)); return key; }   // shu dunyoda oldin chizilgan
+        // orol bilan bir xil naqshli manba bo'lsa - o'shandan (chok ko'rinmaydi)
+        const m = /^bm_cov_(.+)_(\d+)$/.exec(key), src = m && COVER_SRC.get('bm_isle_' + m[1] + '#' + m[2]);
+        if (src) { COVER_POS.set(key, { x: src.x, y: src.y }); return tex(scene, key, src.g, 4); }
         const P = 4, S = ISLE[I.k] || ISLE.cobble, cw = Math.ceil(q[2] / P), chh = Math.ceil(q[3] / P), seed = I.id * 31 + 7;
         const top = Math.round((q[1] - I.y) / P) - 3, depthRows = Math.max(1, Math.round((q[1] + q[3] - I.y) / P) + 10);
         const g = gNew(cw, chh);
@@ -2442,5 +2463,5 @@ window.BigArt = (function () {
 
     // sahifa yuklangach (lobbi) - bo'sh vaqtda oldindan chizib qo'yiladi
     window.addEventListener('load', () => setTimeout(prebuild, 2500));
-    return { tex, art, isleTex, coverTex, hallTex, stoneTex, buildSprites, buildBackground, prebuild, SKY, hash, enemyKey, ENEMY, NPC, PROPS };
+    return { tex, art, isleTex, coverTex, coverPos, hallTex, stoneTex, buildSprites, buildBackground, prebuild, SKY, hash, enemyKey, ENEMY, NPC, PROPS };
 })();

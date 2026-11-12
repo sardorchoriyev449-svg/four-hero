@@ -528,8 +528,8 @@ window.BigMap = (function () {
         const img = O.scene.add.image(T.x, T.y, T.key).setOrigin(0, 0).setDepth(-1.2);
         // maxfiy xonalar ustida qopqoq (qahramon ichiga kirsa - ochiladi)
         img.covers = I.r.filter(q => q[4]).map((q, n) => {
-            const ck = A().coverTex(O.scene, 'bm_cov_' + W.seed + '_' + I.id + '_' + n, I, q);
-            const c = O.scene.add.image(q[0], q[1], ck).setOrigin(0, 0).setDepth(3.7);
+            const ck = A().coverTex(O.scene, 'bm_cov_' + W.seed + '_' + I.id + '_' + n, I, q), cp = A().coverPos(ck) || { x: q[0], y: q[1] };
+            const c = O.scene.add.image(cp.x, cp.y, ck).setOrigin(0, 0).setDepth(3.7);
             c.rect = q; c.texKey = ck; c.cave = !!I.hole;
             return c;
         });
@@ -569,6 +569,7 @@ window.BigMap = (function () {
             if (!scene.textures.exists(key)) return;
             const front = FRONT_PROPS[p.k];
             const im = scene.add.image(p.x, p.y + 2, key).setOrigin(0.5, 1).setDepth(front ? 3.6 : p.k === 'castle' ? -0.9 : -0.6);
+            if (p.k === 'snakeden') { O.coverProps = (O.coverProps || []).filter(q => q.active); O.coverProps.push(im); }   // g'or ichida - qopqoq yopiq paytda ko'rinmaydi
             if (p.k === 'kidcage') { const c = (W.cages || []).find(q => q.x === p.x && q.y === p.y); im.cageZone = c ? c.zone : -1; O.cageImgs = O.cageImgs.filter(q => q.active); O.cageImgs.push(im); }
             if (front) im.setAlpha(0.95);
             if (p.k === 'mimicrock') im.setDepth(-0.5);   // oddiy tosh boshqa bezaklar nuri ostida qolib, rangi o'zgarmasin (tirik mimikdan farq qilmasin)
@@ -846,6 +847,8 @@ window.BigMap = (function () {
             const q = c.rect, inside = hero && hero.x > q[0] - 10 && hero.x < q[0] + q[2] + 10 && hero.y + 20 > q[1] && hero.y - 20 < q[1] + q[3] + 40;
             c.setAlpha(Phaser.Math.Linear(c.alpha, inside ? 0 : 1, 0.12));
             O.propGlows.forEach((g) => { if (g.x > q[0] && g.x < q[0] + q[2] && g.y > q[1] - 60 && g.y < q[1] + q[3] + 20) g.setVisible(c.alpha < 0.5); });
+            // qopqoqdan chiqib turgan ichki bezak (ilon ini devorga kirib turadi) - tashqaridan ko'rinmasin
+            (O.coverProps || []).forEach((pi) => { if (pi.active && pi.x > q[0] - 120 && pi.x < q[0] + q[2] + 120 && pi.y > q[1] && pi.y < q[1] + q[3] + 80) pi.setAlpha(1 - c.alpha); });
             if (inside && c.cave && !c.seen) { c.seen = true; const sn = W.zones.some(z => z.trig === 'e' && z.dx > q[0] && z.dx < q[0] + q[2] + 100 && Math.abs(z.dy - (q[1] + q[3])) < 120); banner(t(sn ? 'big_cave_snake' : 'big_cave'), sn ? '#ff8a80' : '#ffcc80'); }
         }));
         // do'kondan olingan faol ta'sirlar (qolgan soniya)
@@ -1023,8 +1026,36 @@ window.BigMap = (function () {
     function line(key) { const a = t(key).split('|'); return a[Math.floor(Math.random() * a.length)]; }
     function pairOf(key) { const a = t(key).split('|'), k = Math.floor(Math.random() * Math.floor(a.length / 2)) * 2; return [a[k], a[k + 1] || '...']; }
     // ===== DUSHMANLAR (server holatidan, silliq) =====
+    // DUSHMANLAR BUFERI: holat qachon yuborilgan bo'lsa - o'sha paytga (server vaqti -> bizning vaqt: eng tez kelgan paketdagi farq)
+    const E_DELAY = 100;
+    function enemySnap(o, t, x, y) {
+        const sn = o.sn || (o.sn = []), last = sn[sn.length - 1];
+        if (last && Math.hypot(x - last.x, y - last.y) > 300) sn.length = 0;   // sakrab o'tdi (teleport) - bufer tozalanadi
+        if (last && t <= last.t) return;
+        sn.push({ t, x, y });
+        while (sn.length > 30 || (sn.length > 2 && t - sn[0].t > 1200)) sn.shift();
+    }
+    function enemyPos(o) {
+        const sn = o.sn;
+        if (!sn || !sn.length) return false;
+        const rt = performance.now() - E_DELAY;
+        let k = sn.length - 1;
+        while (k > 0 && sn[k].t > rt) k--;
+        const a = sn[k], b = sn[k + 1];
+        if (b && rt > a.t) { const f = Math.min(1, (rt - a.t) / Math.max(1, b.t - a.t)); o.x = a.x + (b.x - a.x) * f; o.y = a.y + (b.y - a.y) * f; }
+        else if (!b && k > 0 && rt > a.t) { const pr = sn[k - 1], dt = Math.max(1, a.t - pr.t), ex = Math.min(rt - a.t, 80); o.x = a.x + (a.x - pr.x) / dt * ex; o.y = a.y + (a.y - pr.y) / dt * ex; }
+        else { o.x = a.x; o.y = a.y; }
+        return true;
+    }
     function state(d) {
         if (!O || !d) return;
+        // server vaqti -> bizning vaqt
+        let snapT = performance.now();
+        if (Number.isFinite(d.st)) {
+            const off = snapT - d.st;
+            if (O.stOff === undefined || off < O.stOff || off - O.stOff > 2000) O.stOff = off; else O.stOff += Math.min(0.5, off - O.stOff);
+            snapT = d.st + O.stOff;
+        }
         O.cpNow = d.cp;
         if (d.ex !== undefined) O.ex = d.ex;
         if (d.gc) d.gc.forEach((i) => { if (!O.got.has(i)) { O.got.add(i); if (O.cps[i]) O.cps[i].setTexture('bm_cp1'); } });
@@ -1038,6 +1069,7 @@ window.BigMap = (function () {
                 o.img.setAlpha(0); O.scene.tweens.add({ targets: o.img, alpha: 1, duration: 250 });
                 O.enemies.set(e.id, o);
             }
+            enemySnap(o, snapT, e.x, e.y);
             Object.assign(o, { ch: e.ch, tx: e.x, ty: e.y, f: e.f, hp: e.hp, mx: e.mx, a: e.a, fl: e.fl, m: e.m, l: e.l, r: e.r, s: e.s, pz: e.pz, b: e.b, u: e.u, sd: e.sd, v: e.v, sp: e.sp, pa: e.pa, lf: e.lf, j: e.j, bs: e.bs, hx: e.hx, iv: e.iv, bh: e.bh, tv: e.tv });
         });
         [...O.enemies.keys()].forEach((id) => { if (!seen.has(id)) { const o = O.enemies.get(id); o.img.destroy(); o.bar.destroy(); if (o.chute) o.chute.destroy(); (o.ghosts || []).forEach(g => g.destroy()); (o.extra || []).forEach(g => g.destroy()); O.enemies.delete(id); } });
@@ -1188,7 +1220,8 @@ window.BigMap = (function () {
         if (O.tvScr) O.tvScr.forEach((sc) => { if (sc.active) sc.setVisible(false); });   // boss yo'q - ekranlar o'chiq
         O.enemies.forEach((o) => {
             const lk = o.k === 'fieryhooves' && o.bs === 'charge' ? 0.85 : 0.3;   // juda tez chopayotgan kiyik ekranda orqada qolmasin
-            o.x = Phaser.Math.Linear(o.x, o.tx, lk); o.y = Phaser.Math.Linear(o.y, o.ty, 0.3);
+            // bufer bo'yicha silliq (juda tez chopayotgan kiyik - eski usul: ekranda orqada qolmasin)
+            if (lk > 0.5 || !enemyPos(o)) { o.x = Phaser.Math.Linear(o.x, o.tx, lk); o.y = Phaser.Math.Linear(o.y, o.ty, 0.3); }
             // LEGENDARY KRAKEN - S2 dagidek: suvdan chiqqan ulkan tana, qizil ko'z, suvga osilgan qo'llar
             if (o.k === 'kraken') { drawKraken(scene, o, now); o.bar.clear(); boss = o; return; }
             if (o.k === 'mwheart') { o.img.setVisible(false); o.bar.clear(); return; }   // Mr. Who yuragi - televizor ekranida chiziladi

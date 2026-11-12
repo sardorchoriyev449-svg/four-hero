@@ -2413,6 +2413,7 @@ export function bigPayload(S: BigState, room: RoomState) {
     const ps = Object.values(room.players);
     const near = (x: number, y: number) => ps.some(p => Math.abs(p.x - x) < 1300 && Math.abs(p.y - y) < 900);
     return {
+        st: Date.now(),   // server vaqti - klient dushmanlarni shu vaqt chizig'ida silliq ijro etadi
         cp: S.cp,
         en: S.enemies.filter(e => near(e.x, e.y)).map(e => ({ id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y), f: e.f, hp: Math.ceil(e.hp), mx: e.mx, ch: e.st === 'chase' ? 1 : 0,
             a: e.atk > 0 ? 1 : 0, fl: e.flash > 0 ? 1 : 0, m: e.move && e.move !== 'walk' ? e.move : '', l: e.st === 'lurk' ? 1 : 0, r: e.p2 ? 1 : 0, s: e.stun && e.stun > 0 ? 1 : 0, pz: e.poison && e.poison.delay <= 0 ? 1 : 0,

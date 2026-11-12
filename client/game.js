@@ -12787,7 +12787,24 @@ function launchGame(socket, roomId, mapData, continued) {
 
     // Jang musiqasi qisqa "tinch" lahzalarda (boss holatlari orasida) o'chib-yonib turmasin: jang tugagach ham 3 s davom etadi
     let lastActionMusicAt = 0;
+    // EKRANDAN TASHQARIDAGI RASMLAR chizilmaydi: Phaser kamera ko'rmayotgan rasmlarni ham har kadrda chizishga tayyorlaydi (ayniqsa uzun
+    // xaritalarda yuzlab obyekt) - sekin qurilmada FPS tushadi. Kamera ko'rinishidan (+300 px) tashqaridagilarga (har 2 kadrda) renderFlags
+    // da alohida bit (16) qo'yiladi - willRender() ularni o'tkazib yuboradi; visible ga tegilmaydi (o'yin mantig'i o'zgarmaydi)
+    const CULL_BIT = 16; let cullTick = 0;
+    function cullOffscreen(scene) {
+        if ((++cullTick & 1) !== 0) return;   // har 2 kadrda (o'z qahramoni - doim chiziladi)
+        const cam = scene.cameras.main, v = cam.worldView, M = 300;
+        const x0 = v.x - M, x1 = v.right + M, y0 = v.y - M, y1 = v.bottom + M, L = scene.children.list;
+        for (let i = 0; i < L.length; i++) {
+            const o = L[i], tp = o.type;
+            if (o === currentCharacter) { if (o.renderFlags & CULL_BIT) o.renderFlags &= ~CULL_BIT; continue; }
+            if ((tp !== 'Image' && tp !== 'Sprite' && tp !== 'TileSprite') || o.scrollFactorX !== 1 || o.scrollFactorY !== 1) { if (o.renderFlags & CULL_BIT) o.renderFlags &= ~CULL_BIT; continue; }
+            const w = Math.abs(o.displayWidth), h = Math.abs(o.displayHeight), l = o.x - w * o.originX, t = o.y - h * o.originY, r = Math.max(w, h);
+            if (l - r > x1 || l + w + r < x0 || t - r > y1 || t + h + r < y0) o.renderFlags |= CULL_BIT; else if (o.renderFlags & CULL_BIT) o.renderFlags &= ~CULL_BIT;
+        }
+    }
     function update() {
+        cullOffscreen(this);
         if (window.GameAudio) {
             let mm = musicMode();
             const nowM = performance.now();
