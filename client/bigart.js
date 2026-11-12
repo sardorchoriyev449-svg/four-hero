@@ -41,10 +41,14 @@ window.BigArt = (function () {
     // Grid -> Phaser kanvas teksturasi (bir xil rangli qatorlar bitta to'rtburchak bilan chiziladi)
     const HEX = new Map();
     const hex = (c) => { let s = HEX.get(c); if (!s) { s = '#' + c.toString(16).padStart(6, '0'); HEX.set(c, s); } return s; };
+    // Phaser'ga - oddiy rasm sifatida (addImage): addCanvas / createCanvas har kanvasni qayta o'qiydi (getImageData) - sekin.
+    // Dunyo orollari / qopqoqlari (kalitda seed bor - mazmuni o'zgarmaydi) - shu dunyo uchun eslab qolinadi (keyingi startda qayta chizilmaydi)
+    const WCV = new Map(); let wSeed = null;
     function tex(scene, key, g, P) {
         if (scene.textures.exists(key)) return key;
         const h = g.length, w = g[0].length;
-        const ct = scene.textures.createCanvas(key, w * P, h * P), ctx = ct.getContext();
+        const cv = document.createElement('canvas'); cv.width = w * P; cv.height = h * P;
+        const ctx = cv.getContext('2d'), ct = { refresh() { } };
         for (let y = 0; y < h; y++) {
             let x = 0;
             while (x < w) {
@@ -57,6 +61,10 @@ window.BigArt = (function () {
             }
         }
         ct.refresh();
+        if (scene === PRE) { CANV.set(key, cv); return key; }
+        scene.textures.addImage(key, cv);
+        const m = /^bm_(isle|cov)_([0-9]+)_/.exec(key);
+        if (m) { if (wSeed !== m[2]) { WCV.clear(); wSeed = m[2]; } WCV.set(key, cv); }
         return key;
     }
 
@@ -113,6 +121,7 @@ window.BigArt = (function () {
     const ISLE_POS = new Map();
     function isleTex(scene, key, I) {
         if (scene.textures.exists(key) && ISLE_POS.has(key)) return ISLE_POS.get(key);
+        if (ISLE_POS.has(key) && WCV.has(key)) { scene.textures.addImage(key, WCV.get(key)); return ISLE_POS.get(key); }   // shu dunyoda oldin chizilgan
         const P = 4, S = ISLE[I.k] || ISLE.cobble;
         const rects = [[I.x, I.y, I.w, 40, 0], ...I.r.map(q => [q[0], q[1], q[2], q[3], q[4] || 0])];
         let minX = I.x, maxX = I.x + I.w, maxY = I.y + 40;
@@ -224,6 +233,7 @@ window.BigArt = (function () {
     }
     // MAXFIY XONA QOPQOG'I: orol toshi bilan bir xil (kontursiz) - qahramon ichiga kirguncha xonani yashiradi
     function coverTex(scene, key, I, q) {
+        if (!scene.textures.exists(key) && WCV.has(key)) { scene.textures.addImage(key, WCV.get(key)); return key; }   // shu dunyoda oldin chizilgan
         const P = 4, S = ISLE[I.k] || ISLE.cobble, cw = Math.ceil(q[2] / P), chh = Math.ceil(q[3] / P), seed = I.id * 31 + 7;
         const top = Math.round((q[1] - I.y) / P) - 3, depthRows = Math.max(1, Math.round((q[1] + q[3] - I.y) / P) + 10);
         const g = gNew(cw, chh);
@@ -2159,11 +2169,30 @@ window.BigArt = (function () {
         forest_kid: [{ ...TRIBE, tunic: 0xa1887f, tunicD: 0x6d4c41, collar: 0xd7ccc8, paint: 0x1e88e5, headgear: (R) => { R(5, 4, 8, 2, 0x3e2723); R(9, 2, 1, 2, 0x56a852); } }, null]
     };
     function enemyKey(k, f) { return 'bm_e_' + k + f; }
-    function buildSprites(scene) {
+    // TAYYOR RASMLAR KESHI: dushman / NPC / bezak / o'q / fon rasmlari (o'zgarmas) sahifa davomida bir marta kanvasga chiziladi,
+    // har o'yin boshida faqat Phaser'ga ulanadi; lobbida bo'sh vaqtda oldindan (bo'laklab) tayyorlanadi - START tez ishlaydi
+    const CANV = new Map(), built = { sprites: false, bg: false };
+    const PRE = { textures: { exists: (k) => CANV.has(k), createCanvas: (k, w, h) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; CANV.set(k, cv); const c = cv.getContext('2d'); return { getContext: () => c, refresh() { } }; } } };
+    function attachCached(scene) { CANV.forEach((cv, k) => { if (!scene.textures.exists(k)) scene.textures.addImage(k, cv); }); }   // addImage - piksellarni qayta o'qimaydi (addCanvas sekin)
+    function buildSprites(scene) { if (!built.sprites) { buildSpritesRaw(PRE); built.sprites = true; } attachCached(scene); }
+    function buildBackground(scene) { if (!built.bg) { buildBackgroundRaw(PRE); built.bg = true; } attachCached(scene); }
+    function prebuild() {
+        if (built.sprites && built.bg) return;
+        const jobs = [], E = PRE.textures.exists;
+        Object.entries(ENEMY).forEach(([k, [P, draw, n]]) => { for (let f = 0; f < (n || 3); f++) jobs.push(() => { if (!E(enemyKey(k, f))) tex(PRE, enemyKey(k, f), draw(f), P); }); });
+        Object.entries(NPC).forEach(([k, [st, item]]) => [0, 1].forEach(f => jobs.push(() => { if (!E('bm_n_' + k + f)) tex(PRE, 'bm_n_' + k + f, elfLike(st, f, item), k.endsWith('kid') ? 2 : 3); })));
+        Object.entries(PROPS).forEach(([k, [w, h, P, draw, outline]]) => jobs.push(() => { if (!E('bm_p_' + k)) tex(PRE, 'bm_p_' + k, art(w, h, draw, outline === null ? null : OUT), P); }));
+        jobs.push(() => { if (!built.sprites) { buildSpritesRaw(PRE); built.sprites = true; } });
+        jobs.push(() => { if (!built.bg) { buildBackgroundRaw(PRE); built.bg = true; } });
+        const run = () => { const t = performance.now(); while (jobs.length && performance.now() - t < 10) { try { jobs.shift()(); } catch (e) { jobs.length = 0; } } if (jobs.length) next(); };
+        const next = () => (window.requestIdleCallback ? window.requestIdleCallback(run, { timeout: 600 }) : setTimeout(run, 40));
+        next();
+    }
+    function buildSpritesRaw(scene) {
         tex(scene, 'bm_tv', tvArt(), 2); [1, 2, 3, 4].forEach(k => tex(scene, 'bm_tvs_' + k, tvScreen(k), 2));   // Mr. Who maydoni
-        Object.entries(ENEMY).forEach(([k, [P, draw, n]]) => { for (let f = 0; f < (n || 3); f++) tex(scene, enemyKey(k, f), draw(f), P); });
-        Object.entries(NPC).forEach(([k, [st, item]]) => [0, 1].forEach(f => tex(scene, 'bm_n_' + k + f, elfLike(st, f, item), k.endsWith('kid') ? 2 : 3)));
-        Object.entries(PROPS).forEach(([k, [w, h, P, draw, outline]]) => tex(scene, 'bm_p_' + k, art(w, h, draw, outline === null ? null : OUT), P));
+        Object.entries(ENEMY).forEach(([k, [P, draw, n]]) => { for (let f = 0; f < (n || 3); f++) if (!scene.textures.exists(enemyKey(k, f))) tex(scene, enemyKey(k, f), draw(f), P); });
+        Object.entries(NPC).forEach(([k, [st, item]]) => [0, 1].forEach(f => { if (!scene.textures.exists('bm_n_' + k + f)) tex(scene, 'bm_n_' + k + f, elfLike(st, f, item), k.endsWith('kid') ? 2 : 3); }));
+        Object.entries(PROPS).forEach(([k, [w, h, P, draw, outline]]) => { if (!scene.textures.exists('bm_p_' + k)) tex(scene, 'bm_p_' + k, art(w, h, draw, outline === null ? null : OUT), P); });
         // dushman o'qlari (o'ngga qaragan - klient burchakka buradi) va yerdan otilib chiqadigan tikan / ildiz
         tex(scene, 'bm_sh_arrow', art(12, 3, (a) => { a.r(0, 1, 10, 1, C.wood[3]); a.roof(11, 0, 3, 1, 1, C.iron); a.r(10, 0, 2, 3, C.iron[3]); a.r(0, 0, 2, 1, 0xf4efe2); a.r(0, 2, 2, 1, 0xf4efe2); }), 2);
         tex(scene, 'bm_sh_orb', art(8, 8, (a) => a.e(3.5, 3.5, 3.6, 3.6, [0x4a148c, 0x7c4dff, 0xb388ff, 0xf0e0ff], 0.25)), 2);
@@ -2312,7 +2341,7 @@ window.BigArt = (function () {
         swamp: [0x050a08, 0x0a140f, 0x10201a, 0x182c22, 0x22382a, 0x2e4632, 0x40583a, 0x5a6e44]       // botqoq: xira yashil shom
     };
     // uzoqdagi muallaq orollar siluetlari (2 qatlam) va pushti piksel bulutlar
-    function buildBackground(scene) {
+    function buildBackgroundRaw(scene) {
         const mk = (key, W, H, P, draw) => { if (!scene.textures.exists(key)) tex(scene, key, art(W, H, draw, null), P); };
         const isl = (a, x, y, w, c, d) => { a.r(x, y, w, 2, c); for (let k = 0; k < d; k++) { const ww = Math.round(w * (1 - k / d)); a.r(x + Math.round((w - ww) / 2 + Math.sin(k + x) * 1.5), y + 2 + k, ww, 1, c); } };
         ['elf', 'forest'].forEach((loc) => {   // qor bazasi foni - pastda alohida
@@ -2411,5 +2440,7 @@ window.BigArt = (function () {
         mk('bm_stars', 200, 60, 2, (a) => { for (let i = 0; i < 70; i++) a.p(Math.floor(hash(i, 1, 3) * 200), Math.floor(hash(i, 2, 3) * 60), hash(i, 3, 3) < 0.3 ? 0xfff2b0 : 0xb8b0d8); });
     }
 
-    return { tex, art, isleTex, coverTex, hallTex, stoneTex, buildSprites, buildBackground, SKY, hash, enemyKey, ENEMY, NPC, PROPS };
+    // sahifa yuklangach (lobbi) - bo'sh vaqtda oldindan chizib qo'yiladi
+    window.addEventListener('load', () => setTimeout(prebuild, 2500));
+    return { tex, art, isleTex, coverTex, hallTex, stoneTex, buildSprites, buildBackground, prebuild, SKY, hash, enemyKey, ENEMY, NPC, PROPS };
 })();

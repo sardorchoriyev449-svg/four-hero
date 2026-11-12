@@ -1513,6 +1513,25 @@ function launchGame(socket, roomId, mapData, continued) {
         return out;
     }
     function gridToTexture(scene, key, grid, P) {
+        // tez yo'l: kanvasga, bir xil rangli ketma-ket kataklar - bitta to'rtburchak (natija o'sha-o'sha)
+        const ct = !scene.textures.exists(key) && scene.textures.createCanvas(key, grid[0].length * P, grid.length * P);
+        if (ct) {
+            const ctx = ct.getContext(), W = grid[0].length;
+            grid.forEach((row, y) => {
+                let x = 0;
+                const n = Math.min(W, row.length);
+                while (x < n) {
+                    if (!(x in row) || row[x] === null) { x++; continue; }
+                    const c = row[x] || 0; let x1 = x + 1;
+                    while (x1 < n && (x1 in row) && row[x1] !== null && (row[x1] || 0) === c) x1++;
+                    ctx.fillStyle = '#' + (c >>> 0 & 0xffffff).toString(16).padStart(6, '0');
+                    ctx.fillRect(x * P, y * P, (x1 - x) * P, P);
+                    x = x1;
+                }
+            });
+            ct.refresh();
+            return;
+        }
         const g = scene.add.graphics();
         grid.forEach((row, y) => row.forEach((c, x) => {
             if (c === null) return;

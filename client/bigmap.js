@@ -1153,19 +1153,30 @@ window.BigMap = (function () {
             }
         }
     }
+    // yuklangan rasm fayllari - sahifa davomida saqlanadi: keyingi o'yinda kadrlar DARHOL yasaladi
+    // (aks holda TEX oldingi o'yindan qolib, rasm hali yo'q paytda yaratilgan obyektlar ko'rinmay qolardi - masalan qisqichbaqa toshlari)
+    const BOSS_IMGEL = {};
     function loadBossImages(scene) {
         Object.entries(BOSS_IMG).forEach(([k, B]) => {
             const base = k + 'img';
             if (scene.textures.exists(A().enemyKey(base, 0))) { TEX[k] = base; return; }
-            const img = new Image();
-            img.onload = () => {
-                if (!O || !scene.sys || !scene.textures) return;
+            const make = (img) => {
                 for (let f = 0; f < B.n; f++) {
                     const key = A().enemyKey(base, f); if (scene.textures.exists(key)) continue;
-                    const ct = scene.textures.createCanvas(key, B.w * B.S, B.h * B.S), c = ct.getContext();
-                    c.imageSmoothingEnabled = false; c.drawImage(img, f * B.w, 0, B.w, B.h, 0, 0, B.w * B.S, B.h * B.S); ct.refresh();
+                    const cv = document.createElement('canvas'); cv.width = B.w * B.S; cv.height = B.h * B.S;
+                    const c = cv.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(img, f * B.w, 0, B.w, B.h, 0, 0, B.w * B.S, B.h * B.S);
+                    scene.textures.addImage(key, cv);
                 }
                 TEX[k] = base;
+            };
+            const done = BOSS_IMGEL[k];
+            if (done) { make(done); return; }
+            delete TEX[k];   // yuklanguncha - kod bilan chizilgan zaxira rasm
+            const img = new Image();
+            img.onload = () => {
+                BOSS_IMGEL[k] = img;
+                if (!O || O.scene !== scene || !scene.sys || !scene.textures) return;
+                make(img);
             };
             img.src = B.src;
         });
