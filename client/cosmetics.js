@@ -952,7 +952,117 @@ window.Cosmetics = (() => {
 
     // Qahramon (o'yindagi ko'rinishi, 1 katak = 1px): 64x48 lik sahnada markazi (30, 30).
     // (ox, oy) - siljish (lobbi o'rinlarida sahnaning bir qismi ko'rinadi)
+    // ===== YANGI QAHRAMON (Gemini rasmi, /public/hero/hero.png): kulrang varaq, 11 kadr 42x55 - qahramon rangiga bo'yaladi =====
+    // 0/1 turish, 2/3 yurish (yaqin / uzoq oyoq oldinda - navbat bilan), 4 sakrash, 5 tushish, 6 qo'l ko'tarish, 7 zarba. Yuklanmaguncha / yuklanmasa - eski tana (bodyGrid)
+    // 0/1 turish, 2-5 yurish, 6 sakrash, 7 tushish, 8 qo'l ko'tarish, 9 zarba, 10 nishonga olish (arbalet / drobovik), 11 tepki, 12 yuqoriga nishon,
+    // 13 ninja tayyor, 14 otilish, 15 zarbadan keyin (qo'llar orqada), 16 yuqoriga kesish, 17 cho'kib qo'nish
+    // fistR2 - musht doirasi (radius^2): shu piksellar qurol ustidan qayta chiziladi
+    // hands - har kadrda O'NG musht (qurol shu yerda; turish kadrida ekranning chap tomonidagi qo'l), lhands - chap musht (qalqon) (kadr kataklarida), wang - shu kadrlarda qurol burchagi (o'ngga qaraganda, gradus)
+    const HERO = { src: '/public/hero/hero.png?v=3', w: 64, h: 58, n: 18, mid: 196, wpn: 0.6, fistR2: 10, hands: [[20,42],[20,43],[18,37],[22,40],[19,35],[21,37],[17,32],[13,33],[20,9],[45,31],[52,22],[49,18],[49,14],[19,31],[51,30],[6,29],[29,6],[21,44]],
+        lhands: [[41,41],[41,41],[38,36],[37,40],[40,37],[39,36],[40,32],[48,33],[47,36],[45,31],[52,22],[49,18],[49,14],[42,35],[51,30],[6,29],[43,5],[36,42]],
+        wang: { 10: 0, 11: -8, 12: -45, 13: -50, 14: 0, 15: 170, 16: -90, 17: 150 },
+        // rest - qo'l tana yonida (0-7 kadrlar) qurol burchagi: qilich pastga-orqaga, tayoq tik, arbalet / drobovik pastga
+        rest: { sword: 125, katana: 152, staff: -88, bow: 110, shotgun: 110, kunai: 120, hknife: 120, blowpipe: 60 } };
+    // BOSH har kadrda: [markaz x, tepasi, visor qatori, kengligi, visor x0, x1, y0, y1] (kadr kataklarida)
+    HERO.heads = [[31.5,5,16,20,29,40,15,17],[31.5,5,16,20,29,40,15,17],[32,6,14,15,31,38,13,15],[32,9,17,15,31,38,16,17],[32,5,13,15,30,38,12,14],[32,4,12,15,31,38,11,13],[31.5,3,13,18,30,39,12,14],[31.5,5,15,18,29,39,14,16],[35.5,5,16,20,33,44,14,17],[31.5,6,18,20,29,40,16,19],[32,6,14,15,30,38,13,15],[31.5,6,14,14,30,37,13,15],[28,6,14,15,26,34,13,15],[31.5,8,16,14,30,37,15,17],[32,14,23,15,31,38,22,23],[32,9,17,15,30,38,16,18],[34.5,7,15,20,30,38,14,15],[31.5,15,24,14,31,37,23,24]];
+    // eski tana (32x48 quti) uchun chizilgan bosh kiyimi / yuz buyumi -> shu kadrdagi boshga: masshtab k = bosh kengligi / 32,
+    // bosh kiyimi - bosh tepasiga, yuz buyumi - visorga (eski visor markazi: tana tepasidan 14 px). Natija - kadr kataklarida markaz va k
+    function heroHeadPlace(f, slot, dxOld, dyOld) {
+        const h = HERO.heads[f] || HERO.heads[0], k = h[3] / 32;
+        return { x: h[0] + 0.5 + k * dxOld, y: slot === 'face' ? h[2] + 0.5 + k * 0.75 * (dyOld + 10) : h[1] + k * (dyOld + 24), k };   // yuz pastki qismi qisqa - 0.75
+    }
+    const heroRest = (f, kind) => (f < 8 && HERO.rest[kind] !== undefined ? HERO.rest[kind] : undefined);
+    let heroImg = null, heroOk = false;
+    const heroCache = new Map();
+    function loadHero() {
+        if (heroImg || typeof Image === 'undefined') return;
+        heroImg = new Image();
+        heroImg.onload = () => { heroOk = true; if (!HERO.hands.length) findHands(); try { if (typeof drawCharPreview === 'function') drawCharPreview(); } catch (e) { } };
+        heroImg.src = HERO.src;
+    }
+    // O'NG MUSHT har kadrda (qurol shu yerda ushlanadi): qo'l balandligidagi (26-42 qator) eng o'ngdagi nuqta - mushtning o'rtasi
+    function findHands() {
+        const cv = document.createElement('canvas'); cv.width = HERO.w * HERO.n; cv.height = HERO.h;
+        const c = cv.getContext('2d'); c.drawImage(heroImg, 0, 0);
+        const p = c.getImageData(0, 0, cv.width, cv.height).data;
+        HERO.hands = Array.from({ length: HERO.n }, (_, f) => {
+            let bx = -1, by = 0, n = 0;
+            for (let y = 26; y <= 42; y++) for (let x = HERO.w - 1; x >= 0; x--) {
+                if (!p[(y * cv.width + f * HERO.w + x) * 4 + 3]) continue;
+                if (x > bx) { bx = x; by = y; n = 1; } else if (x === bx) { by += y; n++; }
+                break;
+            }
+            return bx < 0 ? [31, 38] : [bx - 2, Math.round(by / n)];
+        });
+    }
+    // kadr kanvasi qahramon rangida: kulrang yorqinligi - rang ulushi (yorug' joylar oqqa yaqin, kontur - qora qoladi)
+    function heroCanvas(packed, f) {
+        const key = packed + ':' + f;
+        if (heroCache.has(key)) return heroCache.get(key);
+        const col = toInt(packed) % 0x1000000, cr = (col >> 16) & 255, cg = (col >> 8) & 255, cb = col & 255;
+        const cv = document.createElement('canvas'); cv.width = HERO.w; cv.height = HERO.h;
+        const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+        c.drawImage(heroImg, f * HERO.w, 0, HERO.w, HERO.h, 0, 0, HERO.w, HERO.h);
+        const id = c.getImageData(0, 0, HERO.w, HERO.h), p = id.data;
+        // ikkinchi rang (kombinatsiyali skin) - VISOR (ko'zoynak tasmasi) shu rangda, qorong'i joyi to'qroq
+        const acc = Math.floor(toInt(packed) / 0x1000000), hv = acc && HERO.heads && HERO.heads[f];
+        if (hv) {
+            const ar = (acc >> 16) & 255, ag = (acc >> 8) & 255, ab = acc & 255;
+            for (let y = hv[6]; y <= hv[7]; y++) for (let x = hv[4]; x <= hv[5]; x++) {
+                const i = (y * HERO.w + x) * 4;
+                if (!p[i + 3] || p[i] >= 0x60) continue;
+                const k = 0.6 + 0.4 * (p[i] / 0x60) + (y === hv[6] ? 0.15 : 0);
+                p[i] = Math.min(255, Math.round(ar * k)); p[i + 1] = Math.min(255, Math.round(ag * k)); p[i + 2] = Math.min(255, Math.round(ab * k)); p[i + 3] = 254;   // 254 - bo'yalgan (tana rangi tegmaydi)
+            }
+        }
+        for (let i = 0; i < p.length; i += 4) {
+            if (!p[i + 3] || p[i + 3] === 254) { if (p[i + 3] === 254) p[i + 3] = 255; continue; }
+            const t = p[i] / HERO.mid, k = Math.min(1, t), hi = Math.max(0, Math.min(1, (t - 1) * 2.2)) * 0.55;
+            p[i] = Math.round(cr * k + (255 - cr * k) * hi); p[i + 1] = Math.round(cg * k + (255 - cg * k) * hi); p[i + 2] = Math.round(cb * k + (255 - cb * k) * hi);
+        }
+        c.putImageData(id, 0, 0);
+        heroCache.set(key, cv);
+        return cv;
+    }
+    // MUSHT: shu kadrning faqat musht atrofidagi piksellari (qurol ustidan chiziladi - qo'l dastani ushlab turgani ko'rinadi)
+    function heroFistCanvas(packed, f) {
+        const key = 'fist:' + packed + ':' + f;
+        if (heroCache.has(key)) return heroCache.get(key);
+        const h = HERO.hands[f] || HERO.hands[0] || [0, 0];
+        const cv = document.createElement('canvas'); cv.width = HERO.w; cv.height = HERO.h;
+        const c = cv.getContext('2d'); c.drawImage(heroCanvas(packed, f), 0, 0);
+        const id = c.getImageData(0, 0, HERO.w, HERO.h), p = id.data;
+        for (let y = 0; y < HERO.h; y++) for (let x = 0; x < HERO.w; x++) {
+            const dx = x - h[0], dy = y - h[1];
+            if (dx * dx + dy * dy > HERO.fistR2) p[(y * HERO.w + x) * 4 + 3] = 0;
+        }
+        c.putImageData(id, 0, 0);
+        heroCache.set(key, cv);
+        return cv;
+    }
+    loadHero();
     function drawHero(ctx, type, color, look, ox = 0, oy = 0) {
+        if (heroOk) {   // YANGI QAHRAMON: turish kadri, yarim o'lchamda (lobbi kanvasi - 1 katak = 2 piksel), oyog'i soya chizig'ida
+            const L0 = parseLook(look), cx0 = 30 + ox, cy0 = 30 + oy;
+            ctx.imageSmoothingEnabled = false;
+            ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(cx0 - 12, cy0 + 13, 24, 3);
+            const hx0 = cx0 - HERO.w / 4, hy0 = cy0 + 15 - HERO.h / 2;   // kadr yarim o'lchamda, oyog'i soya chizig'ida
+            ctx.drawImage(heroCanvas(toInt(color), 0), hx0, hy0, HERO.w / 2, HERO.h / 2);
+            ['face', 'head'].forEach((slot) => {   // boshga moslangan (lobbi - yarim o'lcham: 1 katak = 1 px)
+                const a = L0[slot] && art(slot, L0[slot]);
+                if (!a) return;
+                const cv = gridCanvas(slot + ':' + L0[slot], a.grid), w = cv.width, h = cv.height;
+                const pl = heroHeadPlace(0, slot, -16 + 2 * a.ax + w, -24 + 2 * a.ay + h);
+                ctx.drawImage(cv, hx0 + pl.x / 2 - pl.k * w / 2, hy0 + pl.y / 2 - pl.k * h / 2, pl.k * w, pl.k * h);
+            });
+            const pose0 = POSE[type] || POSE.knight, custom0 = L0[pose0.slot] && art(pose0.slot, L0[pose0.slot]);
+            const cv0 = gridCanvas(custom0 ? pose0.slot + ':' + L0[pose0.slot] : 'def:' + pose0.kind, custom0 ? custom0.grid : defaultWeapon(pose0.kind));
+            const hd = HERO.hands[0] || [31, 38];   // turish kadridagi o'ng musht (yarim o'lchamda)
+            ctx.save(); ctx.translate(hx0 + hd[0] / 2, hy0 + hd[1] / 2); ctx.scale(HERO.wpn, HERO.wpn); ctx.rotate((heroRest(0, pose0.kind) !== undefined ? heroRest(0, pose0.kind) : (custom0 && custom0.angle !== undefined) ? custom0.angle : pose0.angle) * Math.PI / 180);
+            ctx.drawImage(cv0, -(custom0 ? custom0.ox : pose0.ox) * cv0.width, -(custom0 ? custom0.oy : 0.5) * cv0.height); ctx.restore();
+            ctx.drawImage(heroFistCanvas(toInt(color), 0), hx0, hy0, HERO.w / 2, HERO.h / 2);   // musht dasta ustida
+            return;
+        }
         const L = parseLook(look);
         const cx = 30 + ox, cy = 30 + oy;
         ctx.imageSmoothingEnabled = false;
@@ -989,5 +1099,5 @@ window.Cosmetics = (() => {
         paint(ctx, a.grid, Math.floor((canvas.width - W * s) / 2), Math.floor((canvas.height - H * s) / 2), s);
     }
 
-    return { SLOTS, POSE, bodyGrid, defaultWeapon, art, has, parseLook, drawHero, drawIcon };
+    return { SLOTS, POSE, bodyGrid, defaultWeapon, art, has, parseLook, drawHero, drawIcon, HERO, heroRest, heroHeadPlace, heroCanvas, heroFistCanvas, heroReady: () => heroOk };
 })();

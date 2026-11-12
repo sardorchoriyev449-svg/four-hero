@@ -1,10 +1,12 @@
 import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
-import { hasPerk } from '../perks';
+import { hasPerk, SKILLS } from '../perks';
 
 export class ArcherCharacter extends BaseCharacter {
     // Kamonchi: zarba 14 ta HP oladi, stamina sal sekinroq ketadi (ritsardan tezroq, sehrgardan sekinroq)
     public attackStaminaCost = 12;
+    // olovli o'qlar (3-daraja): stamina tezroq ketadi
+    public attackStamina(player: PlayerState): number { return hasPerk(player, 'firearrow') ? SKILLS.fireArrowStamina : this.attackStaminaCost; }
 
     handleAttack(player: PlayerState, room: RoomState, angle: number): void {
         // 16-daraja: Q bilan UCHTALIK O'Q - yelpig'ich shaklida 3 ta

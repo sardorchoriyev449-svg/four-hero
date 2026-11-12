@@ -1,3 +1,4 @@
+import { SKINS_OFF } from './skins';
 // DETALLAR (kosmetika): bosh kiyimi, yuz buyumi va qurol ko'rinishlari. Faqat tashqi ko'rinish -
 // o'yin kuchiga ta'sir qilmaydi. Bosh va yuz buyumlari HAMMA personajga umumiy (bir marta sotib
 // olinadi, har personajga alohida kiydiriladi); qurol ko'rinishlari - o'sha personajning qurol turiga.
@@ -140,6 +141,6 @@ export function cosmeticKey(characterType: string, slot: string, itemId: string)
 
 // Personajning kiyilgan detallari -> "cowboy|hockey|bat|..." (LOOK_SLOTS tartibida, bo'shi - "")
 export function lookString(equipped: { [slot: string]: string } | undefined, characterType: string): string {
-    const e = equipped || {};
+    const e = SKINS_OFF ? {} as { [slot: string]: string } : (equipped || {});   // skinlar o'chiq - detallarsiz
     return LOOK_SLOTS.map(slot => (e[slot] && findCosmetic(characterType, slot, e[slot])) ? e[slot] : '').join('|');
 }

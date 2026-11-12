@@ -11,7 +11,7 @@ import { RoomState } from './types';
 import { RoomManager } from './managers/room.manager';
 import { GameEngine } from './managers/game.engine';
 import * as db from './db';
-import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin } from './skins';
+import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin, SKINS_OFF } from './skins';
 import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
 import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS, homeMax, homeSellPrice } from './maps';
 import { BIG_GEN, BIG_CLOSED } from './bigmap';
@@ -199,8 +199,11 @@ app.get('/api/user/:id', async (req, res) => {
 });
 
 // SKIN KATALOGINI OLISH (narxlar va ranglar)
+// skinlar o'chiq (yangi personaj dizayni tayyorlanguncha): sotib olish / kiyish - yopiq (sotib olinganlari hisobda saqlanadi)
+const skinsOffGuard = (req: express.Request, res: express.Response, next: express.NextFunction) => { if (SKINS_OFF) { res.json({ success: false, message: 'err_skins_off' }); return; } next(); };
+app.use(['/api/skins/:userId/buy', '/api/skins/:userId/equip', '/api/weapon-skins/:userId/buy', '/api/weapon-skins/:userId/equip', '/api/cosmetics/:userId/buy', '/api/cosmetics/:userId/equip'], skinsOffGuard);
 app.get('/api/skins', (req, res) => {
-    res.json({ success: true, catalog: SKIN_CATALOG });
+    res.json({ success: true, catalog: SKIN_CATALOG, off: SKINS_OFF });
 });
 
 // XARITALAR RO'YXATINI OLISH (nom, tavsif, rang - lobbida ko'rsatish uchun)
@@ -1457,8 +1460,9 @@ io.on('connection', (socket) => {
     socket.on('toggleWeapon', (roomId: string) => {
         if (typeof roomId === 'string') roomManager.toggleWeapon(socket, roomId);
     });
-    socket.on('useSpecial', (roomId: string) => {
-        if (typeof roomId === 'string') roomManager.useSpecial(socket, roomId);
+    socket.on('flyStop', (roomId: string) => { if (typeof roomId === 'string') roomManager.flyStop(socket, roomId); });   // ritsar qo'ndi
+    socket.on('useSpecial', (roomId: string, dir?: number) => {
+        if (typeof roomId === 'string') roomManager.useSpecial(socket, roomId, dir === -1 ? -1 : 1);
     });
 
     // 8b2. EMOTSIYA (o'yinda "1" tugmasi): xonadagi hammaga - kim ko'rsatdi va qaysi emotsiya

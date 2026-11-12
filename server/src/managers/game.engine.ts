@@ -6,8 +6,8 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
-import { TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
+import { bigNearestEnemy, bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { KNIGHT_FLY, hasPerk, SKILLS, TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
 // SKY BATTLE: uchar mashina haydovchisi (robot bot) kuzovdan shuncha px yuqoriga chiqib turadi
@@ -184,8 +184,27 @@ export class GameEngine {
 
                 // DARAJA IMKONIYATLARI: R qobiliyati va archerning qo'shimcha ko'rinmasligi
                 if ((player.specialCooldown || 0) > 0) player.specialCooldown--;
+                // RITSAR UCHISHI: energiya sarflanadi / sekin tiklanadi
+                if (player.characterType === 'knight') {
+                    const fe = player.flyEnergy ?? KNIGHT_FLY.max;
+                    if ((player.specialTicks || 0) > 0) {
+                        player.flyTicks = (player.flyTicks || 0) + 1;
+                        player.flyEnergy = Math.max(0, fe - KNIGHT_FLY.drainPerSec * this.TICK_SECONDS);
+                        if (player.flyEnergy <= 0) { player.specialTicks = 1; player.flyRegenDelay = KNIGHT_FLY.regenDelayTicks; }   // tugadi - shu tikda to'xtaydi
+                    } else if ((player.flyRegenDelay || 0) > 0) player.flyRegenDelay!--;
+                    else if (fe < KNIGHT_FLY.max) player.flyEnergy = Math.min(KNIGHT_FLY.max, fe + KNIGHT_FLY.regenPerSec * this.TICK_SECONDS);
+                }
                 if ((player.specialTicks || 0) > 0) {
                     player.specialTicks--;
+                    // KAMONCHI 17: o'q bo'roni - havoda muallaq turib, aylanib atrofga (360) o'q yog'diradi
+                    if (player.characterType === 'archer' && player.specialTicks % SKILLS.stormEvery === 0) {
+                        const a0 = player.specialTicks * SKILLS.stormSpin;
+                        for (let k = 0; k < SKILLS.stormArrows; k++) {
+                            const a = a0 + k * Math.PI * 2 / SKILLS.stormArrows;
+                            room.bulletIdCounter++;
+                            room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + Math.cos(a) * 20, y: player.y - 8 + Math.sin(a) * 20, vx: Math.cos(a) * 850, vy: Math.sin(a) * 850, color: player.color, lifetime: 28, bulletType: 'arrow', fire: hasPerk(player, 'firearrow'), justSpawned: true });
+                        }
+                    }
                     // Mage: 2 soniya davomida xonadagi barcha tirik qahramonlar davolanadi (~40 HP)
                     if (player.characterType === 'mage') {
                         // PvP da ittifoqchi yo'q - faqat o'zini davolaydi
@@ -350,8 +369,8 @@ export class GameEngine {
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
                     weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { rs: Math.max(0, Math.round((1 - (p.rideUsed || 0) / PET_RIDE.rangePx) * 100)), rc: Math.max(0, Math.ceil(((p.rideLockUntil || 0) - Date.now()) / 1000)), l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,
                     level: p.level || 0, maxStamina: p.maxStamina || 100, sl: p.staminaLevel || 0, weaponMode: p.weaponMode || 'main', shieldCd: Math.ceil((p.shieldCd || 0) * 0.03),
-                    tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03), mineCd: Math.ceil((p.mineCd || 0) * 0.03), invisCd: Math.ceil((p.invisCd || 0) * 0.03),
-                    special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS),
+                    tornadoCd: Math.ceil((p.tornadoCd || 0) * 0.03), ghostCd: Math.ceil((p.ghostCd || 0) * 0.03), mineCd: Math.ceil((p.mineCd || 0) * 0.03), invisCd: Math.ceil((p.invisCd || 0) * 0.03),
+                    special: (p.specialTicks || 0) > 0, specialCd: Math.ceil((p.specialCooldown || 0) * this.TICK_SECONDS), fe: p.characterType === 'knight' ? Math.round(p.flyEnergy ?? KNIGHT_FLY.max) : undefined,
                     ammo: p.ammo ?? 0, maxAmmo: shotgunMagOf(p), reloading: (p.reloadTicks || 0) > 0, reloadSec: Math.ceil((p.reloadTicks || 0) * this.TICK_SECONDS),
                     acid: (p.acidTicks || 0) > 0,
                     curseA: !!p.acidCurse, curseB: !!p.boltCurse, jet: !!p.jetpack, bmap: p.bigMapItem ? 1 : 0,
@@ -380,7 +399,7 @@ export class GameEngine {
                 flyingMines: room.flyingMines || [],
                 redBoxes: room.redBoxes || [],
                 stones: room.stones || [],
-                tornadoes: (room.tornadoes || []).map(tr => ({ id: tr.id, x: Math.round(tr.x), y: Math.round(tr.y), t: tr.t })),
+                tornadoes: (room.tornadoes || []).map(tr => ({ id: tr.id, x: Math.round(tr.x), y: Math.round(tr.y), t: tr.t, k: tr.k || 1 })),
                 big: room.big ? bigPayload(room.big, room) : null,
                 // Toshlar tebranishi uchun server vaqti: klient toshni o'zi har kadr silliq hisoblaydi
                 stonesT: room.stones && room.stones.length ? (room.levelTicks || 0) * 30 : null,
@@ -1003,7 +1022,7 @@ export class GameEngine {
             // faqat melee uchun markazlashtirilar edi, o'q/olov esa yuqori-chap
             // burchagidan hisoblanardi - shu nomuvofiqlik ba'zan o'q botga tegib
             // ham zarar bermay o'tib ketishiga sabab bo'lardi)
-            const isMelee = bullet.bulletType === 'melee' || bullet.bulletType === 'petbite' || bullet.bulletType === 'knife';
+            const isMelee = bullet.bulletType === 'melee' || bullet.bulletType === 'petbite' || bullet.bulletType === 'knife' || bullet.bulletType === 'cut';
             const isTornado = bullet.bulletType === 'tornado';
             const isBlast = bullet.bulletType === 'blast';
             const isSlash = bullet.bulletType === 'slash';   // katana ruhi - baland yoy (tik turgan o'roq)
@@ -1012,8 +1031,8 @@ export class GameEngine {
             const isSmallFast = bullet.bulletType === 'arrow' || bullet.bulletType === 'dart' || bullet.bulletType === 'kunai'
                 || bullet.bulletType === 'fireball' || bullet.bulletType === 'ice' || bullet.bulletType === 'lightning' || bullet.bulletType === 'shield';   // sehr va qalqon ham (10x10 - rasmidan ancha tor edi)
             // katana ruhi: ekrandagi rasm 40x78 (30x58 x 1.35) - quti ham shunday (avval 26x50: rasm tekkan dushmanga zarba tegmasdi)
-            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : isMelee ? 54 : isTornado ? 40 : isSlash ? (bullet.big ? BIG_SPIRIT.hitW : 40) : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
-            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : isMelee ? 44 : isTornado ? 60 : isSlash ? (bullet.big ? BIG_SPIRIT.hitH : 78) : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
+            const hitW = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 64 : bullet.long ? SKILLS.longswordW : bullet.bulletType === 'cut' ? 50 : isMelee ? 54 : isTornado ? 40 : isSlash ? (bullet.big ? BIG_SPIRIT.hitW : 40) : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 18 : 10;
+            const hitH = isBlast ? HUNTER.mineRadius * 2 : bullet.bulletType === 'knife' ? 46 : bullet.long ? SKILLS.longswordH : bullet.bulletType === 'cut' ? 70 : isMelee ? 44 : isTornado ? 60 : isSlash ? (bullet.big ? BIG_SPIRIT.hitH : 78) : bullet.bulletType === 'acid' ? 16 : isSmallFast ? 26 : 10;
             // Oldingi tekshirilgan joydan hozirgi joygacha (supurib o'tgan yo'l) - hech narsa "sakrab" o'tilmaydi
             const fx = bullet.sx ?? bullet.x, fy = bullet.sy ?? bullet.y;
             const hitX = Math.min(fx, bullet.x) - hitW / 2;
@@ -1028,7 +1047,7 @@ export class GameEngine {
             let baseDamage = 20;
             if (bullet.bulletType === 'fireball') baseDamage = 30;       // Sehrgar: kuchli, lekin stamina tez ketadi
             if (bullet.bulletType === 'tornado') baseDamage = TORNADO.damage;   // Sehrgar tornadosi (har 0.4 s)
-            else if (bullet.bulletType === 'arrow') baseDamage = 14;     // Kamonchi: yengil zarba
+            else if (bullet.bulletType === 'arrow') baseDamage = bullet.fire ? SKILLS.fireArrowDamage : 14;     // Kamonchi: yengil zarba (olovli - kuchliroq)
             else if (bullet.bulletType === 'melee') baseDamage = 30;     // Ritsar/Samuray asosiy quroli (qilich / katana): boshqalardan +10, stamina sekin ketadi
             if (bullet.bulletType === 'ice') baseDamage = 40;            // Mage muz shari: olovlidan +10 kuchli va muzlatadi
             else if (bullet.bulletType === 'pellet') baseDamage = 9 + (owner ? weaponUpgradeLevel(owner, 'shotgunDamage') * SHOTGUN_DMG_PER_LEVEL : 0);   // drobovik (+kuchaytirish)
@@ -1290,7 +1309,7 @@ export class GameEngine {
                     }
 
                     bot.hp -= damage;
-                    if (bullet.bulletType === 'ice') bot.freezeDuration = Math.max(bot.freezeDuration, 45); // ~1.3s muzlaydi
+                    if (bullet.bulletType === 'ice') bot.freezeDuration = Math.max(bot.freezeDuration, SKILLS.freezeTicks); // ~1s muzlaydi
                     // OVCHI zaharli drotigi: 1 s dan keyin bir necha soniya jon keta boshlaydi (qayta tegsa - yangilanadi)
                     if (bullet.poison) bot.poison = { delay: HUNTER.poisonDelayTicks, t: HUNTER.poisonTicks, owner: bullet.playerId };
                     // ZANJIRLI CHAQMOQ: tekkan botdan yana 2 ta eng yaqin botga sakraydi (har biri - 60% zarar)
@@ -1349,6 +1368,13 @@ export class GameEngine {
             const minBulletY = room.big ? room.big.w.top - 1200 : map.back ? map.back.topY - 600 : 0, maxBulletY = room.big ? room.big.w.bottom + 400 : 600, maxBulletX = room.big ? room.big.w.width : map.mapWidth;
             if (bulletDestroyed || bullet.lifetime <= 0 || bullet.x < 0 || bullet.x > maxBulletX || bullet.y < minBulletY || bullet.y > maxBulletY) {
                 room.bullets.splice(i, 1);
+                // RITSAR 15: drobovik o'qi tekkanda bitta kichik o'q bo'lib nishon ortiga sachrab chiqadi (bir marta)
+                if (bulletDestroyed && bullet.bulletType === 'pellet' && (bullet.bounce || 0) > 0) {
+                    const sp = Math.hypot(bullet.vx, bullet.vy) || 700, a = Math.atan2(bullet.vy, bullet.vx) + (Math.random() - 0.5) * 0.7;
+                    room.bulletIdCounter++;
+                    room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: bullet.playerId, x: bullet.x + Math.cos(a) * 40, y: bullet.y + Math.sin(a) * 40, vx: Math.cos(a) * sp * 0.8, vy: Math.sin(a) * sp * 0.8,
+                        color: bullet.color, lifetime: 6, bulletType: 'pellet', bounce: 0, dmg: Math.round(damage * SKILLS.splashDmgK), justSpawned: true });
+                }
             }
         }
     }
@@ -3426,10 +3452,17 @@ export class GameEngine {
         const W = room.big ? room.big.w.width : getMapById(room.selectedLevel).mapWidth;   // Big Map - butun dunyo kengligi
         room.tornadoes = room.tornadoes.filter((tr) => {
             if (--tr.t <= 0 || !room.players[tr.owner]) return false;
+            const K = tr.k || 1, HW = TORNADO.halfW * K, HH = TORNADO.height * K;
+            // RAQIBLARNI QUVADI: 700 px ichidagi eng yaqin raqib tomonga buriladi (Big Map - balandligi ham sekin moslashadi)
+            const R = SKILLS.tornadoChase;
+            let tg: { x: number, y: number } | null = null, best = R;
+            room.bots.forEach((b) => { if (b.hp > 0) { const d = Math.hypot(b.x - tr.x, b.y - tr.y); if (d < best) { best = d; tg = { x: b.x, y: b.y + 24 }; } } });
+            if (room.big) { const e = bigNearestEnemy(room.big, tr.x, tr.y - 40, R, 400); if (e && Math.hypot(e.x - tr.x, e.y - tr.y) < best) tg = { x: e.x, y: e.y }; }
+            if (tg) { const t2 = tg as { x: number, y: number }; if (Math.abs(t2.x - tr.x) > 8) tr.dir = t2.x > tr.x ? 1 : -1; if (room.big) tr.y += Math.max(-4, Math.min(4, t2.y - tr.y)); }
             tr.x = Math.max(20, Math.min(W - 20, tr.x + tr.dir * TORNADO.speed * this.TICK_SECONDS));
-            const inside = (x: number, y: number) => Math.abs(x - tr.x) <= TORNADO.halfW && y <= tr.y + 10 && y >= tr.y - TORNADO.height;
+            const inside = (x: number, y: number) => Math.abs(x - tr.x) <= HW && y <= tr.y + 10 && y >= tr.y - HH;
             room.bots.forEach(b => { if (inside(b.x, b.y)) b.x += Math.sign(tr.x - b.x) * Math.min(TORNADO.pull, Math.abs(tr.x - b.x)); });
-            if (room.big) bigPull(room.big, tr.x, tr.y, TORNADO.halfW, TORNADO.height, TORNADO.pull);
+            if (room.big) bigPull(room.big, tr.x, tr.y, HW, HH, TORNADO.pull);
             if (--tr.pulse > 0) return true;
             tr.pulse = TORNADO.pulseTicks;
             const shot = (x: number, y: number) => {
@@ -3439,7 +3472,7 @@ export class GameEngine {
             const hit = room.bots.filter(b => inside(b.x, b.y));
             hit.forEach(b => shot(b.x, b.y));
             // BIG MAP: tornado ichidagi har bir dushmanga (boss ham) - alohida zarba
-            const bigIn = room.big ? bigInside(room.big, tr.x, tr.y, TORNADO.halfW, TORNADO.height) : [];
+            const bigIn = room.big ? bigInside(room.big, tr.x, tr.y, HW, HH) : [];
             bigIn.forEach(q => shot(q.x, q.y));
             if (bigIn.length) return true;
             // Botlar bo'lmasa (boss, ferma maxluqi, quti) - tornado ichida ikki balandlikda

@@ -7,7 +7,7 @@
 // 30 metrdan baland joydan yiqilsa - jonning yarmi ketadi, 60 metrdan - o'lim (klient qo'nishda o'lchaydi). Dushmanlar o'yinchini tepaga/pastga quvadi,
 // 15 m dan uzoqlashib ko'zdan yo'qolsa - izini yo'qotadi.
 import { PlayerState, RoomState, RandQuest } from './types';
-import { bossAI, updateAreas, updateShots, SETPIECE, CREATURE, bossPre } from './bigboss';
+import { bossAI, updateAreas, updateShots, SETPIECE, CREATURE, CREATURE_IDLE, bossPre } from './bigboss';
 
 export const BIG_GEN = 10;
 // VAQTINCHA YOPIQ LOKATSIYALAR (keyingi yangilanishda ochiladi): dunyo o'zgarmaydi (progress saqlanadi) - faqat kirish yopiladi:
@@ -26,7 +26,8 @@ export const bigCpClosed = (w: BigWorld, i: number): boolean => { const c = w.cp
 export const LOC_POWER: { [loc: string]: { hp: [number, number], dmg: number, boss: number, lvl: number } } = {
     // oddiy dushmanlar joni butun dunyoda 100-250 oralig'ida (har lokatsiyada kuchsizi - pastida, kuchlisi - tepasida)
     elf: { hp: [100, 140], dmg: 12, boss: 1200, lvl: 0 }, forest: { hp: [130, 170], dmg: 16, boss: 1500, lvl: 5 }, snow: { hp: [160, 200], dmg: 20, boss: 1800, lvl: 10 },
-    swamp: { hp: [190, 230], dmg: 25, boss: 2100, lvl: 15 }, lava: { hp: [210, 250], dmg: 30, boss: 2400, lvl: 20 } };
+    swamp: { hp: [190, 230], dmg: 25, boss: 2100, lvl: 15 }, lava: { hp: [210, 250], dmg: 30, boss: 2400, lvl: 20 },
+    sky: { hp: [600, 800], dmg: 32, boss: 2800, lvl: 25 } };   // Skyland: botlar joni qattiq, zarbasi kuchli (o'z qiymatlari bilan - powerUp)
 // DARAJA HIMOYASI: har qahramon darajasi dushman zararini kamaytiradi (0 - 100%, 10 - 80%, 20 - 67%, 40 - 50%; 60-darajadan keyin o'smaydi)
 export const bigLevelDefense = (level: number): number => 1 / (1 + 0.025 * Math.max(0, Math.min(60, level || 0)));
 export const SIDE_BOSS = 1.5;
@@ -36,9 +37,11 @@ function powerUp(S: BigState, e: BigEnemy, d: EnemyDef): void {
     const z = S.w.zones.find(q => q.id === e.zone), P = z && LOC_POWER[z.loc];
     if (!P || e.k === 'zvfarm' || e.k === 'hgoal') return;   // ferma boshqaruvchisi - joni = qolgan zombilar soni; xokkey darvozasi - jonsiz (zarbani xokkeychiga o'tkazadi)
     if (d.boss) {
-        const L = BIG_LOCS.find(l => l.id === z!.loc), main = !!L && (L.bosses.includes(e.k) || e.k === 'bullkan') && !d.secret;
+        const L = BIG_LOCS.find(l => l.id === z!.loc), main = !!L && (L.bosses.includes(e.k) || e.k === 'bullkan' || e.k === 'fieryhooves') && !d.secret;
         e.hp = e.mx = Math.round(P.boss * (main ? 1 : SIDE_BOSS)) + BOSS_HP_BONUS;
         e.dk = Math.max(1, (P.dmg + 5) / Math.max(1, d.dmg));
+    } else if (z!.loc === 'sky') {
+        e.hp = e.mx = d.hp; e.dk = 1;   // Skyland botlari: o'z joni (600 / 800) va zarbasi
     } else {
         const t = Math.max(0, Math.min(1, (d.hp - 50) / 250));
         e.hp = e.mx = Math.round(P.hp[0] + (P.hp[1] - P.hp[0]) * t);
@@ -101,13 +104,21 @@ export const BIG_LOCS: { id: string, enemies: string[], extra: string[], bosses:
     // Bosslar: BAHAYBAT GUL (balchiq ko'li o'rtasida, uch qator pog'ona; faqat BOSHIGA tegadi), BALOT MAGI (yengilgach - tinch qo'shni: suhbat, simpatiya,
     // quchoqlash, arg'imchoq), maxfiy - BALOT KRABI (xona polidagi balchiqda toshlar orasida SOXTA TOSH; faqat qobig'iga tegadi)
     { id: 'swamp', enemies: ['wildslave', 'hoodroot', 'wildslave', 'hoodroot', 'wildslave', 'hoodroot'], extra: ['hoodroot', 'wildslave', 'wildslave'], bosses: ['bigflower', 'swampmage'], secretBoss: 'bogcrab', season: ['zveg', 'flower', 'wildslave'], cave: '',   // g'or bossi yo'q (Elder Croc olib tashlangan) - g'orda dushmanlar uyasi
-        npcs: ['fisher', 'herbalist', 'boatman', 'elder', 'kid'] }
+        npcs: ['fisher', 'herbalist', 'boatman', 'elder', 'kid'] },
+    // SKYLAND: Elf qirolligi va O'rmon TEPASIDAGI osmon orollari (oddiy orollar va yo'llar, faqat ko'rinishi zamonaviy) - ularning osmon orollaridan zinapoya bilan chiqiladi.
+    // Har orolda bitta bot: DRON (ko'zidan lazer) yoki STRAJ BOT (qalqon, egri qilich). Bosslar - keyinroq
+    { id: 'sky', enemies: ['guardbot', 'drone', 'guardbot', 'drone', 'drone', 'guardbot'], extra: ['drone', 'guardbot', 'guardbot'], bosses: ['mrwho'], secretBoss: '', season: ['drone', 'guardbot'], cave: '',
+        npcs: ['engineer', 'pilot', 'scientist', 'courier', 'kid'] }
 ];
 // Lokatsiya uslubi: orol / tosh turlari, bezaklar, uylar, lager, boss maydoni, osmon va chuqurlik bezaklari, o'ziga xosliklar
 interface LocStyle { ground: string, sky: string, deep: string, stone: string, ice?: string, slick?: string, decor: string[], houses: string[], shop: string, seller: string,
     tent: string, camp2: string, arena: string, skyProps: string[], deepProps: string[], vines?: boolean, snow?: boolean, castle?: boolean, lava?: boolean, cloud?: string,
     bog?: boolean, lake?: boolean, dy?: number, dyLo?: number, down?: boolean, vineTree?: string }   // dy - yo'l balandligi siljishi (botqoq pastda), lake - kraken ko'li
 export const STYLE: { [loc: string]: LocStyle } = {
+    // SKYLAND: po'lat palubali orollar, uchib turuvchi plitalar, shisha uylar, neon chiroqlar
+    sky: { ground: 'skydeck', sky: 'skydeck2', deep: 'deepdeck', stone: 'skyplate', cloud: 'hoverpad', decor: ['streetlamp', 'bench', 'planter', 'antenna', 'streetlamp', 'vending', 'solar', 'planter'],
+        houses: ['skyhouse', 'skyhouse2', 'skytower', 'streetlamp', 'billboard', 'bench', 'skyhouse', 'planter', 'vending'], shop: 'shopkiosk', seller: 'vendor', tent: 'cargo', camp2: 'barrier', arena: 'pylon',
+        skyProps: ['antenna', 'turbine', 'solar'], deepProps: ['neonlamp', 'server', 'neonlamp', 'cargo'] },
     elf: { ground: 'cobble', sky: 'skyrock', deep: 'deepbrick', stone: 'stone', decor: ['tree', 'lamp', 'banner', 'flowers', 'fence', 'well', 'cart', 'tree', 'bush'],
         houses: ['house', 'house2', 'stall', 'tower', 'well', 'statue', 'banner', 'lamp', 'house', 'stall'], shop: 'shopstall', seller: 'merchant', tent: 'gobtent', camp2: 'crates', arena: 'pillar',
         skyProps: ['flag', 'crystal', 'ruin'], deepProps: ['torch', 'pipe', 'bones', 'barrel', 'crystal'], castle: true },
@@ -126,7 +137,7 @@ export const STYLE: { [loc: string]: LocStyle } = {
         skyProps: ['deadtree', 'swamplamp', 'mushroom'], deepProps: ['glowshroom', 'torch', 'bones', 'crystal'], vines: true, vineTree: 'deadtree', bog: true, lake: true, dy: 360, dyLo: 180, down: true }
 };
 // yuriladigan asosiy orol tepalari (checkpoint shularga qo'yiladi)
-export const GROUND_K = ['cobble', 'grass', 'snow', 'ice', 'basalt', 'mud'];
+export const GROUND_K = ['cobble', 'grass', 'snow', 'ice', 'basalt', 'mud', 'skydeck'];
 // BOTQOQ: kraken ko'li suvi (chuqur - jon oladi), zaharli gaz (zarar + sekinlashadi)
 export const SWAMP = { waterDmg: 6, waterMs: 600, gasDmg: 10, gasSlowMs: 1800 };
 // YER OSTI: lava ko'lida turgan kuyadi (har 0.5 s), olov favvorasi - har ~4 s (oldin belgi)
@@ -143,6 +154,8 @@ export const BIG_SHOP: { id: string, price: number, ms?: number }[] = [
 ];
 // bitta joyda (lager / ekran) eng ko'pi bilan shuncha oddiy dushman
 export const BIG_CAP = 3;
+// SPAWN JOYIDA DUSHMANLAR SONI = xonadagi o'yinchilar soni (1 o'yinchi - 1 ta, 3 o'yinchi - 3 ta), eng ko'pi shuncha. Bosslar va yashirin mimiklar - o'zgarmaydi
+export const BIG_MAX_SPAWN = 6;
 export const buffOn = (p: PlayerState, k: 'battery' | 'strength' | 'feather') => !!p.buffs && (p.buffs[k] || 0) > Date.now();
 export const ARMOR = { add: 150, max: 300 };
 // Dushmanlar: w/h - tana (klientdagi rasm o'lchamiga mos), spd - yurish, jump - sakrash tezligi, shot - otadi, fly - uchadi
@@ -226,6 +239,14 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     magmacrab: { hp: 280, spd: 95,  dmg: 20, w: 56, h: 36, jump: 460, reach: 46, atkMs: 1200, coins: 14, armor: 0.4 },
     magmablob: { hp: 110, spd: 80,  dmg: 12, w: 40, h: 30, jump: 520, reach: 0,  atkMs: 0,    coins: 20, lurk: 140, xp: 15, shot: { spd: 380, cdMs: 1800, dmg: 11, arc: true } },   // lava ko'lmagi bo'lib yotadi
     magmatitan: { hp: 2500, spd: 95, dmg: 30, w: 112, h: 154, jump: 600, reach: 110, atkMs: 1400, coins: 170, boss: true, armor: 0.25 },
+    // SKYLAND (osmon orollari): har orolda bitta bot - yo dron, yo straj bot. O'yinchidan ikki baravar baland, joni qattiq, zarbasi kuchli
+    drone:     { hp: 600, spd: 95,  dmg: 30, w: 48, h: 96, jump: 560,   reach: 0,  atkMs: 0,    coins: 40, armor: 0.2 },   // yumaloq bosh, ikki sim oyoq; qizil oynasidan lazer
+    // MR. WHO (Skyland 1-boss): hologramma - tanasiga zarba o'tmaydi; joni - YURAKLI televizorda (mwheart - zarbani bossga o'tkazadi)
+    mrwho:     { hp: 2800, spd: 0, dmg: 28, w: 60, h: 150, jump: 0, reach: 0, atkMs: 9999, coins: 360, boss: true },
+    mwheart:   { hp: 1, spd: 0, dmg: 0, w: 100, h: 140, jump: 0, reach: 0, atkMs: 9999, coins: 0 },
+    guardbot:  { hp: 800, spd: 105, dmg: 34, w: 50, h: 96, jump: 520, reach: 80, atkMs: 1300, coins: 45, armor: 0.25, guard: [0.65, 1000, 1500] },   // qalqon + egri qilich
+    mrhol:     { hp: 2600, spd: 150, dmg: 26, w: 70, h: 90, jump: 600, reach: 70, atkMs: 1200, coins: 320, boss: true, secret: true, armor: 0.15 },   // yashirin: kaskali ko'r sichqon
+    fieryhooves: { hp: 2400, spd: 270, dmg: 30, w: 110, h: 110, jump: 600, reach: 95, atkMs: 1200, coins: 260, boss: true, armor: 0.2 },   // olovli kiyik (Yer osti)
     boneking:  { hp: 2000, spd: 125, dmg: 24, w: 50, h: 104, jump: 620, reach: 64, atkMs: 1000, coins: 180, boss: true, shot: { spd: 460, cdMs: 2300, dmg: 16 } },
     hellhound: { hp: 3200, spd: 200, dmg: 30, w: 112, h: 64, jump: 700, reach: 74, atkMs: 1000, coins: 340, boss: true, secret: true },
     magmaworm: { hp: 2700, spd: 140, dmg: 28, w: 182, h: 94, jump: 0,   reach: 100, atkMs: 1300, coins: 270, boss: true, armor: 0.2 },    // yer osti g'ori: ulkan magma qurti
@@ -317,7 +338,8 @@ function rng(seed: number) {
 const TOPH = 40;   // orol tepasining qalinligi (to'liq to'qnashuv)
 
 export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorld {
-    const R = rng(seed), B = BIG;
+    let R = rng(seed);
+    const B = BIG;
     const W: BigWorld = { seed, width: 0, top: B.top, bottom: NET.bottom, endX: 0, startCp: 0,
         gates: [], closed: BIG_CLOSED.slice(), locLvl: Object.fromEntries(Object.entries(LOC_POWER).map(([k, v]) => [k, v.lvl])), locs: [], ponds: [], groves: [], wilds: [], fruits: [], signs: [], plats: [], fills: [], fakes: [], isles: [], props: [], vines: [], cps: [], villages: [], npcs: [], zones: [], chests: [], spans: [], shops: [], crates: [], piles: [], lavas: [], vents: [], bogs: [], lakes: [], portals: [], cages: [] };
     let zid = 0, nid = 0, cid = 0, iid = 0;
@@ -528,7 +550,8 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         else if (kind === 'deep') w = R.int(760, 980);
         else if (kind === 'secret') w = R.int(1250, 1400);
         else if (kind === 'fatlair') w = 1500;
-        else if (kind === 'snakecave') w = 1600;   // ixcham zal: olov butun yerni qoplaydi - faqat taxtalarda omon
+        else if (kind === 'snakecave') w = 1600;
+        else if (kind === 'tvarena') w = 1960;   // Mr. Who maydoni: kirish oroli + 15 ta televizor + chiqish oroli   // ixcham zal: olov butun yerni qoplaydi - faqat taxtalarda omon
         return { kind, loc, band, row, w, p, x0: 0, x1: 0, yl: 0, yr: 0, col };
     };
     const buildNode = (n: Node, x: number, y: number) => {
@@ -555,6 +578,21 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
             if (loc === 'elf' && n.kind === 'village2') W.npcs.push({ id: ++nid, x: x + w - 160, y: g, t: 'motherelf', loc, v: vi, fix: 1, q: 'kids' });
             if (n.kind !== 'village2') hubs.push({ loc, top });
             done(x, g, x + w, g); return;
+        }
+        if (n.kind === 'tvarena') {
+            // MR. WHO MAYDONI (Skyland 1-boss): yer va platformalar o'rnida 15 ta TELEVIZOR (100x72, bir tomonlama: ustida turiladi, yonidan / pastidan o'tiladi) - pastda 6, o'rtada 5, tepada 4 (sakrab o'tiladi, ostida - jarlik);
+            // chetlarida kirish / chiqish orollari (checkpoint). Televizorlar tartibi (gp) - klientda ekran kodlari shu tartibda
+            const EW = 300, AW = 1120, TW = 100, TH = 72, ax0 = x + EW + 80, top0 = y + 30, step = (AW - TW) / 5, gp: number[] = [];
+            const a = isle(x, y, EW, K.groundK, loc, 'mid', R.int(150, 190)); rest(a, true, x + 60);
+            const b = isle(ax0 + AW + 80, y, EW, K.groundK, loc, 'mid', R.int(150, 190)); rest(b, true, ax0 + AW + 80 + EW - 60);
+            const tv = (cx: number, ty: number) => { plat(cx - TW / 2, ty, TW, TH, 'tv'); gp.push(W.plats.length - 1); };
+            for (let i = 0; i < 6; i++) tv(ax0 + TW / 2 + step * i, top0);
+            for (let i = 0; i < 5; i++) tv(ax0 + TW / 2 + step * (i + 0.5), top0 - 120);
+            for (let i = 0; i < 4; i++) tv(ax0 + TW / 2 + step * (i + 1), top0 - 240);
+            prop(x + EW - 40, y, 'pylon'); prop(ax0 + AW + 120, y, 'pylon'); prop(x + 120, y, 'billboard');
+            const zb = zone(ax0 - 60, ax0 + AW + 60, top0 - 680, top0 + TH + 60, loc, 'ground', 'boss', { boss: 'mrwho', gp });
+            zb.spawns = [{ x: Math.round(ax0 + TW / 2 + step * 3), y: top0 - 240, k: 'mrwho' }];
+            done(x, y, ax0 + AW + 80 + EW, y); return;
         }
         if (n.kind === 'plain' || n.kind === 'plainlo' || (n.kind === 'extra' && !ST.vines)) {
             const deep = n.kind === 'plainlo' || (n.kind === 'extra' && n.row > 0 && !ST.ice && !ST.lava && !ST.bog);
@@ -1062,6 +1100,35 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
                 return;
             }
         }
+        if (z.boss === 'hellhound' && z.secret) {   // MR. HOL: yashirin xona (tepadagi soxta teshikdan tushiladi); eskizdagidek uchta pog'ona - tepadagi ikkitasi olinadi
+            const f = W.plats.filter(q => q.k.endsWith('floor') && q.y >= z.y0 && q.y <= z.y1 + 40 && q.x + q.w > z.x0 && q.x < z.x1).sort((a, b) => b.w - a.w)[0];
+            if (f) {
+                const g = f.y, dead = W.plats.filter(q => q.k === 'ledge' && q.w >= 140 && q.y <= g - 340 && q.y >= g - 380 && q.x + q.w > z.x0 && q.x < z.x1);
+                const oldIdx = new Map(W.plats.map((q, i) => [q, i] as [BigPlat, number]));
+                W.plats = W.plats.filter(q => !dead.includes(q));
+                const newIdx = new Map(W.plats.map((q, i) => [oldIdx.get(q), i] as [number | undefined, number]));
+                W.zones.forEach((o) => { if (o.gp) o.gp = o.gp.map(i => newIdx.get(i) ?? i); });
+                W.crates = W.crates.filter(q => !(q.x > z.x0 && q.x < z.x1 && q.y > g - 300 && q.y <= g));                Object.assign(z, { boss: 'mrhol', kind: 'boss', secret: true, trig: undefined, dx: undefined, dy: undefined, cx0: z.x0 + 60, cx1: z.x1 - 60 });
+                z.spawns = [{ x: z.x1 - 160, y: g, k: 'mrhol' }];
+                return;
+            }
+        }
+        if (z.boss === 'boneking') {   // FIERY HOOVES maydoni: tekis bazalt pol, uchta pog'ona (chapda past, o'rtada baland, o'ngda past)
+            const f = lavaFloor(z);
+            if (f) {
+                const cx = Math.round((z.x0 + z.x1) / 2), g = f.y, dead = W.plats.filter(q => q.k === 'ledge' && q.y >= g - 300 && q.y < g && q.x + q.w > z.x0 && q.x < z.x1);
+                const oldIdx = new Map(W.plats.map((q, i) => [q, i] as [BigPlat, number]));
+                W.plats = W.plats.filter(q => !dead.includes(q));
+                const newIdx = new Map(W.plats.map((q, i) => [oldIdx.get(q), i] as [number | undefined, number]));
+                W.zones.forEach((o) => { if (o.gp) o.gp = o.gp.map(i => newIdx.get(i) ?? i); });
+                plat(cx - 480, g - 110, 170, 16, 'ledge'); plat(cx - 175, g - 190, 180, 16, 'ledge'); plat(cx + 230, g - 115, 170, 16, 'ledge');
+                W.props = W.props.filter(q => !(q.x > cx - 60 && q.x < cx + 320 && Math.abs(q.y - g) < 4));
+                W.crates = W.crates.filter(q => !(q.x > z.x0 && q.x < z.x1 && q.y > g - 200 && q.y <= g));
+                Object.assign(z, { boss: 'fieryhooves', kind: 'boss', secret: undefined, trig: undefined, dx: undefined, dy: undefined, cx0: Math.max(f.x, z.x0) + 60, cx1: Math.min(f.x + f.w, z.x1) - 60 });
+                z.spawns = [{ x: cx + 150, y: g, k: 'fieryhooves' }];
+                return;
+            }
+        }
         if (z.boss) {
             const f = lavaFloor(z);
             z.boss = undefined; z.secret = undefined; z.trig = undefined; z.dx = undefined; z.dy = undefined; z.kind = 'camp'; z.spawns = [];
@@ -1195,6 +1262,11 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
             W.fruits.push({ id: ++frId, x: sx, y: p.y, loc: 'lava', k: 'redstone' });
         });
     }
+    // KO'LLAR OLIB TASHLANADI: baliq - faqat katta o'rmon daryolarida (Elf, O'rmon) va Qor bazasidagi muz o'yig'ida (muzlagan baliq). Yer ostida suv yo'q.
+    // Eng oxirida: ko'l joyi - oddiy orol yuzasi; atrofidagi qamish / ko'prik bezaklari ham ketadi
+    const POND_DECOR = { dock: 1, fishhole: 1, reeds: 1, cattail: 1, crystal: 1, glowshroom: 1, icecrystal: 1, snowpile: 1 } as { [k: string]: number };
+    W.ponds.filter(p => !p.big && p.loc !== 'snow').forEach((p) => { W.props = W.props.filter(q => !(POND_DECOR[q.k] && q.y === p.y && q.x >= p.x - 30 && q.x <= p.x + p.w + 40)); });
+    W.ponds = W.ponds.filter(p => p.big || p.loc === 'snow');
     // DUSHMANLAR SONI: bitta joyda 3 tadan ko'p chiqmaydi (barcha lokatsiyalar; bosslar - alohida). Avval har xil turlar qoladi.
     // Yonma-yon lagerlar ham: istalgan bir ekranda (900x600) 3 tadan ko'p emas (yashirin mimiklar - birinchi). Eng oxirida va tasodifsiz
     W.zones.forEach((z) => {
@@ -1215,6 +1287,82 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
             kept.push(s); return true;
         });
     });
+    // ===== SKYLAND: ELF QIROLLIGI va O'RMON TEPASIDA - osmondagi zamonaviy orollar (oddiy orollar va yo'llar, faqat ko'rinishi zamonaviy) =====
+    // Dunyo to'rining eng yuqori qavati: ustunlari Elf va O'rmon ustunlari bilan bir xil x da (bosh shahar - Elf qal'asi ustida).
+    // Pastdan - Elf va O'rmonning osmon orollaridan yuqoriga ko'tariluvchi ikkita zinapoya-yo'l (eski orollar / katta o'rmon oroli bilan to'qnashmaydigan joydan).
+    // ENG OXIRIDA va O'Z TASODIFI bilan: avvalgi dunyo (joylar, zona va checkpoint raqamlari, saqlangan progress) siljimaydi. Har orolda bitta bot
+    if (has('sky') && has('forest')) {
+        R = rng((seed ^ 0x5C1A7D3B) >>> 0);
+        const z0 = W.zones.length, r0 = rests.length, h0 = hubs.length, sMid = NET.mid0 - 2420;
+        const cols = bandCols[0].filter(q => q.loc === 'elf' || q.loc === 'forest'), n = cols.length;
+        const hc = Math.max(0, cols.findIndex(q => q.c === hubCol)), vc = n - 4, bc = Math.min(n - 3, hc + 3);   // bc - Mr. Who maydoni
+        const SN = cols.map(({ c }, i) => {
+            const spec = i === n - 1 ? ['plain'] : [i === hc ? 'hub' : i === vc ? 'village2' : i === bc ? 'tvarena' : 'plain', i % 3 === 2 ? 'skyc' : 'sky', i % 3 === 1 ? 'deep' : 'plainlo'];
+            return spec.map((k, j) => planNode(k, 'sky', -1, [0, -1, 1][j], c));
+        });
+        SN.forEach((col, i) => {
+            const c = cols[i].c, ym = sMid + R.int(-40, 40);
+            col.forEach((nd) => {
+                const y = nd.row === 0 ? ym : ym + nd.row * RG + R.int(-30, 30);
+                const x = nd.row === 0 ? midX[c] + (midW[c] - nd.w) / 2 : slotX[c] + (Math.max(slotW[c], nd.w) - nd.w) / 2;
+                buildNode(nd, Math.round(x), Math.round(y));
+            });
+        });
+        SN.forEach((col, i) => {
+            const [m, u, d] = col, nx = SN[i + 1] || [];
+            link(m, u, -R.int(20, 60)); link(m, d, R.int(20, 80));
+            link(u, nx[0], R.int(20, 60)); link(d, nx[0], -R.int(0, 40));
+            if (R.chance(0.55)) link(m, nx[0], R.int(60, 160));
+            if (R.chance(0.45)) link(u, nx[1], R.int(20, 80));
+            if (R.chance(0.45)) link(d, nx[2], R.int(80, 160));
+        });
+        // CHECKPOINTLAR: bosslarsiz qavat - o'rta qatordagi har ikkinchi oddiy orolning chap chetida ham (lager - o'ng tomonida)
+        SN.forEach((col, i) => { const m = col[0]; if (m.kind === 'plain' && i % 2 === 0) rests.push({ x: m.x0 + 50, y: m.yl }); });
+        // ZINAPOYALAR: Elf / O'rmon osmon orolining o'ng chetidan keyingi ustundagi Skyland past oroliga. Yo'l bo'ylab eski orol, tosh, ko'prik bo'lmasin
+        const old: number[][] = [];
+        W.isles.forEach((I) => { if (I.loc !== 'sky') { old.push([I.x, I.y - 60, I.w, 100]); I.r.forEach(r => old.push([r[0], r[1], r[2], r[3]])); } });
+        W.plats.forEach((p) => { if (p.y > sMid + RG + 200) old.push([p.x, p.y - 40, p.w, p.h + 40]); });
+        const blocked = (a0: Node, b0: Node) => {
+            const ax = a0.x1, ay = a0.yr, bx = b0.x0, by = b0.yl, L = bx - ax;
+            if (L < 1200) return 1e9;
+            let hit = 0;
+            for (let t = 280; t < L - 200; t += 90) { const x = ax + t, y = ay + (by - ay) * t / L, box = [x - 150, y - 280, 300, 330]; hit += old.filter(o => o[0] < box[0] + box[2] && o[0] + o[2] > box[0] && o[1] < box[1] + box[3] && o[1] + o[3] > box[1]).length; }
+            return hit;
+        };
+        const stairFrom = (loc: string, aim: number) => {
+            const cand = cols.map((q, i) => i).filter(i => i < n - 1 && cols[i].loc === loc && nodes[key(0, cols[i].c, -1)] && SN[i + 1][2])
+                .map(i => ({ i, h: blocked(nodes[key(0, cols[i].c, -1)], SN[i + 1][2]) })).sort((p, q) => (p.h > 0 ? 1 : 0) - (q.h > 0 ? 1 : 0) || Math.abs(p.i - aim) - Math.abs(q.i - aim) || p.h - q.h);
+            if (cand.length) stair(nodes[key(0, cols[cand[0].i].c, -1)], SN[cand[0].i + 1][2], false);
+        };
+        stairFrom('elf', hc - 1); stairFrom('forest', vc);
+        const xs = W.plats.filter(p => p.y < B.top), minY = Math.min(...xs.map(p => p.y));
+        W.top = Math.min(W.top, minY - 420);
+        const lE = W.locs.find(l => l.id === 'elf'), lF = W.locs.find(l => l.id === 'forest');
+        W.locs.push({ id: 'sky', x0: lE ? lE.x0 : 0, x1: lF ? lF.x1 : W.width, y0: W.top, y1: B.top, my: sMid });
+        // checkpointlar (yangilari - oxirida, eskilari raqami o'zgarmaydi) va bosh shahardagi portal
+        rests.slice(r0).forEach((c) => { if (!W.cps.some(q => Math.hypot(q.x - c.x, q.y - c.y) < 300)) W.cps.push(c); });
+        hubs.slice(h0).forEach((h) => {
+            const ci = W.cps.findIndex(c => c.y === h.top.y && c.x >= h.top.x && c.x <= h.top.x + h.top.w), c = W.cps[ci];
+            if (!c) return;
+            const free = (x: number) => x - 55 >= h.top.x && x + 55 <= h.top.x + h.top.w && !W.shops.some(q => Math.abs(q.x - x) < 120 && Math.abs(q.y - c.y) < 10);
+            const x = [130, -130, 190, -190, 80, -80, 250].map(d => c.x + d).find(free);
+            if (x !== undefined) W.portals.push({ loc: h.loc, x, y: c.y, cp: ci });
+        });
+        W.portals.sort((p, q) => BIG_LOCS.findIndex(l => l.id === p.loc) - BIG_LOCS.findIndex(l => l.id === q.loc));
+        // zamonaviy bezaklar: mash'ala - neon chiroq, gulxan - isitgich
+        W.props.forEach((q) => { if (q.y < B.top && (q.k === 'torch' || q.k === 'campfire')) q.k = q.k === 'torch' ? 'neonlamp' : 'heater'; });
+        // DUSHMANLAR: mimik / uchuvchilar zonasi yo'q; har lager orolida bitta bot (har zonaning o'z tasodifi)
+        const sz = W.zones.slice(z0).filter(z => z.loc === 'sky');
+        W.zones = W.zones.filter(z => !(sz.includes(z) && (z.kind === 'lurk' || z.layer === 'air')));
+        sz.forEach((z) => {
+            if (z.boss || z.kind === 'lurk' || z.layer === 'air') return;
+            const rz = rng((seed ^ Math.imul(z.id, 0x9E3779B1) ^ 0x5C1A) >>> 0);
+            const p = W.plats.filter(q => q.h === TOPH && q.w >= 160 && q.y >= z.y0 && q.y <= z.y1 + 40 && q.x + q.w > z.x0 && q.x < z.x1).sort((a2, b2) => b2.w - a2.w)[0];
+            if (!p) { z.spawns = []; return; }
+            const a0 = Math.max(p.x + 40, z.x0), a1 = Math.min(p.x + p.w - 40, z.x1);
+            z.spawns = [{ x: Math.round(a0 + (a1 - a0) * (0.45 + rz.r() * 0.35)), y: p.y, k: rz.chance(0.5) ? 'drone' : 'guardbot' }];
+        });
+    }
     return W;
 }
 
@@ -1226,6 +1374,14 @@ export interface BigEnemy { np?: number; id: number; k: string; x: number; y: nu
     af?: number;    // oddiy zarba yo'nalishi (tayyorlanganda o'yinchi qaysi tomonda edi)
     fz?: number; fk?: number; fs?: number;   // ferma: zombi qaysi ferma zonasidan (fz); boshqaruvchida - o'ldirilgan (fk) / chiqarilgan (fs)
     iv?: number; dig?: number;
+    lz?: { hit?: string[] };   // dron: oxirgi lazer (tegdimi - qayta otish uchun)
+    // Skyland botlari: tr - o'yinchi izi (bosgan sirtlari), pth - botning o'zi o'tgan sirtlar (qaytish uchun), hpl - uyi (paydo bo'lgan sirt),
+    // ign - shu tikkacha o'yinchini "yo'qotgan", nols - ko'rmagan vaqt, stk - yo'l topolmagan vaqt
+    tr?: { pl: BigPlat, x: number }[]; pth?: BigPlat[]; hpl?: BigPlat | null; ign?: number; nols?: number; stk?: number; ly?: number; bad?: BigPlat[];
+    // Mr. Who: wb - boss turgan televizor, wsc / wsu - ekrandagi rasm (1 olov, 2 qo'l) va qachongacha, wh - yurakli televizor (wht - ko'chish vaqti),
+    // wa - pritsel televizorlari (wat - otish vaqtlari, wam - ko'chish vaqti), tvs - klientga: 15 ta ekran kodi (0 bo'sh, 1 olov, 2 qo'l, 3 pritsel, 4 yurak)
+    wb?: number; wsc?: number[]; wsu?: number[]; wh?: number; wht?: number; wa?: number[]; wat?: number[]; wam?: number; tvs?: string;   // ly - hisoblangan sakrash qo'nadigan sirt balandligi
+    pd?: number[][];   // Mr. Hol: kutilayotgan parmalar [x, qachon (tick)]
     dk?: number;   // zarba koeffitsienti (lokatsiya kuchi): uning har zarbasi, o'qi, olovi shunga ko'paytiriladi              // kaltakesak ko'rinmas (tik); zombi yer ostidan o'yinchi yoniga chiqish kutishi
     // boss holatlari (bigboss.ts): hide - yer ostida / shiftda / g'oyib; shield, vuln - tik (qalqon / zaif); daze - gangib qolgan; ph, bst - hujum bosqichi
     hide?: string; shield?: number; vuln?: number; daze?: number; ph?: number; bst?: string; combo?: number; trail?: number; spin?: boolean; aimX?: number; goX?: number; fy?: number;
@@ -1240,6 +1396,7 @@ export interface BigShot { id: number; x: number; y: number; vx: number; vy: num
     // blast - portlash radiusi; fuse/sit - yerga tushib, pilik; roll - dumalovchi (radius), rmax/grow - o'sadi, bounce - chetdan qaytish; pierce - teshib o'tadi;
     // ret - qaytish tiki; split - tushganda parchalar; area - tushgan joyda dog'; fx - ta'sir; water - suvga tushsa so'nadi; sc - rasm kattaligi
     wait?: number;  // shu tikkacha joyida turadi (ko'rinmaydi, tegmaydi) - gorilla xarsangi shiftda
+    hr?: number;    // tegish radiusi (rasmi katta o'qlar - masalan, olovli shox)
     idle?: boolean; // yerda yotgan shayba (xokkeychi kelib uradi): qimirlamaydi, tegmaydi
     nl?: boolean;   // pog'onalardan o'tib ketadi (maxfiy xona bossining toshi - o'yinchiga yoki polga tushadi)
     splitK?: string;   // tushganda parchalar turi (yo'q - muz)
@@ -1319,7 +1476,7 @@ export function createBigState(seed: number, startCp: number, opened: number[] =
     const sgrid = new Map<number, number[][]>();
     const addSolid = (q: number[]) => { for (let c = Math.floor(q[0] / CELL); c <= Math.floor((q[0] + q[2]) / CELL); c++) { if (!sgrid.has(c)) sgrid.set(c, []); sgrid.get(c)!.push(q); } };
     w.isles.forEach(I => I.r.forEach((q) => { if (!q[4]) addSolid(q); }));
-    w.plats.forEach((p) => { if (p.h > 22) addSolid([p.x, p.y, p.w, p.h]); });
+    w.plats.forEach((p) => { if (p.h > 22 && p.k !== 'tv') addSolid([p.x, p.y, p.w, p.h]); });   // televizor - bir tomonlama (devor emas)
     if (bigCpClosed(w, startCp)) startCp = w.startCp;   // yopiq lokatsiyada qolgan - boshlang'ich qishloqda tug'iladi
     const S: BigState = { w, grid, sgrid, enemies: [], shots: [], hazards: [], pshots: [], seq: 0, tick: 0, cp: Math.max(0, Math.min(w.cps.length - 1, startCp)), zoneState: {}, chests: {}, dead: {}, ended: false, paid: {}, down: {}, gcrush: {}, dkm: {}, best: {}, leash: {}, fell: {}, burn: {}, areas: [], dots: {}, pv: {}, pcp: {}, got: {}, gotN: 0, trigOn: {}, gifts: {}, talkReq: {}, talkDone: {} };
     [w.startCp, S.cp, ...got].forEach(i => { if (Number.isInteger(i) && w.cps[i] && !S.got[i]) { S.got[i] = true; S.gotN++; } });
@@ -1361,7 +1518,7 @@ export function bigShopNear(S: BigState, p: PlayerState, range = 150): boolean {
     return S.w.shops.some(s => Math.abs(p.x - s.x) <= range && Math.abs(p.y + 24 - s.y) < 120);
 }
 // dushman tanasi (markaz x, oyoq y) tosh devorga kiradimi (oyoq / boshdagi 6 px - tepasida turish, shift ostida yurish uchun zaxira)
-function inSolid(S: BigState, x: number, y: number, w: number, h: number): boolean {
+export function inSolid(S: BigState, x: number, y: number, w: number, h: number): boolean {
     const x0 = x - w / 2, x1 = x + w / 2, y0 = y - h + 6, y1 = y - 6;
     for (let c = Math.floor(x0 / CELL); c <= Math.floor(x1 / CELL); c++) {
         const cell = S.sgrid.get(c);
@@ -1383,6 +1540,38 @@ export function bossScale(e: BigEnemy, nPlayers: number): void {
     if (n <= was && e.np) return;
     const k = n / was;
     e.hp = Math.round(e.hp * k); e.mx = Math.round(e.mx * k); e.np = n;
+}
+// O'YINCHILAR SONIGA QARAB spawn ro'yxati: zonaning o'z ro'yxati (turlari aralash) - n tadan ko'p bo'lsa birinchilari, kam bo'lsa
+// o'sha joylar yonida (shu sirtda, 70 px oraliq) nusxalari. Tasodifsiz - har safar bir xil
+function spawnsFor(S: BigState, z: BigZone, n: number): BigZone['spawns'] {
+    const src = z.spawns;
+    if (!src.length) return src;
+    const out: BigZone['spawns'] = [];
+    for (let i = 0; i < n; i++) {
+        const sp = src[i % src.length], k = Math.floor(i / src.length);
+        if (!k) { out.push(sp); continue; }
+        const d = ENEMIES[sp.k], off = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 70;
+        let x = Math.max(z.x0 + 20, Math.min(z.x1 - 20, sp.x + off));
+        if (!d.fly) {
+            const on = (xx: number) => { const g = surfaceBelow(S, xx, sp.y - 6, 14); return !!g && Math.abs(g.y - sp.y) < 2; };
+            if (!on(x)) x = Math.max(z.x0 + 20, Math.min(z.x1 - 20, sp.x - off));
+            if (!on(x)) x = sp.x + (k % 2 ? 24 : -24);
+            if (!on(x)) x = sp.x;
+        }
+        out.push({ x: Math.round(x), y: sp.y, k: sp.k });
+    }
+    return out;
+}
+// NISHON TANLASH (ko'rinib turgan o'yinchilardan): 1) hech bir dushman tanlamagani, 2) o'z guruhidan (spawn joyi) hech kim tanlamagani -
+// bitta guruhdagi dushmanlar doim har xil o'yinchida, 3) eng yaqini. Bosslar - eski tartibda
+const tgtsOf = (S: BigState, e: BigEnemy, same: boolean) => new Set(S.enemies.filter(o => o !== e && o.tgt && !ENEMIES[o.k].boss && (!same || o.zone === e.zone)).map(o => o.tgt));
+function pickTarget(S: BigState, e: BigEnemy, alive: PlayerState[]): PlayerState | null {
+    const d = ENEMIES[e.k];
+    const seen = alive.filter(q => Math.abs(q.x - e.x) < BIG.sight && Math.abs(q.y - (e.y - d.h / 2)) < BIG.sightY);
+    if (!seen.length) return nearest(alive, e);
+    const all = tgtsOf(S, e, false), mine = tgtsOf(S, e, true);
+    const free = seen.filter(q => !all.has(q.id)), freeMine = seen.filter(q => !mine.has(q.id));
+    return nearest(free.length ? free : freeMine.length ? freeMine : seen, e);
 }
 export function spawnEnemy(S: BigState, k: string, x: number, y: number, zone: number): BigEnemy {
     const d = ENEMIES[k];
@@ -1540,9 +1729,10 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
             : alive.some(p => (z.boss ? p.x >= z.x0 + 30 && p.x <= z.x1 - 30 : p.x >= z.x0 - 60 && p.x <= z.x1 + 60) && p.y >= z.y0 + (z.boss && z.layer === 'ground' ? 220 : 0) && p.y <= z.y1 + 60);
         if (!trigger) return;
         S.zoneState[z.id] = { st: 'active', at: now };
-        z.spawns.forEach(sp => {
+        const list = z.boss || z.kind === 'lurk' ? z.spawns : spawnsFor(S, z, Math.max(1, Math.min(BIG_MAX_SPAWN, players.length)));
+        list.forEach(sp => {
             const e = spawnEnemy(S, sp.k, sp.x, sp.y, z.id);
-            if (!camp) { e.st = 'chase'; e.tgt = nearest(alive, e)?.id || null; }
+            if (!camp) { e.st = 'chase'; e.tgt = (z.boss ? nearest(alive, e) : pickTarget(S, e, alive))?.id || null; }
             bossScale(e, players.length);
         });
         if (!camp && z.boss !== 'bogcrab') ctx.emit(z.boss ? 'bigBoss' : 'bigAmbush', { z: z.id, k: z.boss || '', secret: !!z.secret, pts: z.spawns.map(s => [Math.round(s.x), Math.round(s.y)]) });
@@ -1687,8 +1877,11 @@ function enemyAI(S: BigState, e: BigEnemy, d: EnemyDef, alive: PlayerState[], ro
     // KO'RINMAS (kamonchi Shift) o'yinchini dushmanlar ko'rmaydi va quvishni to'xtatadi
     alive = alive.filter(q => !q.isInvisible);
     if (e.st === 'lurk') {
-        const n = alive.find(q => Math.abs(q.x - e.x) < (d.lurk || 100) && Math.abs(q.y + 24 - e.y) < 120);
-        if (!n) return;
+        const nears = alive.filter(q => Math.abs(q.x - e.x) < (d.lurk || 100) && Math.abs(q.y + 24 - e.y) < 120);
+        if (!nears.length) return;
+        // uyg'ondi: yaqindagilardan boshqa dushman tanlamagan o'yinchi (bo'lmasa - eng yaqini)
+        const all = tgtsOf(S, e, false), mine = tgtsOf(S, e, true);
+        const n = nearest(nears.filter(q => !all.has(q.id)), e) || nearest(nears.filter(q => !mine.has(q.id)), e) || nearest(nears, e)!;
         e.st = 'chase'; e.tgt = n.id; e.cd = T(300);
         if (e.k === 'zveg') { e.bst = 'emerge'; e.ph = T(1300); e.move = 'emerge'; }   // yerdan sug'urilib chiqadi
         ctx.emit('bigWake', { id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y) });
@@ -1702,9 +1895,14 @@ function enemyAI(S: BigState, e: BigEnemy, d: EnemyDef, alive: PlayerState[], ro
     let p = e.tgt ? room.players[e.tgt] : null;
     if (p && (p.isDead || p.isInvisible)) { p = null; e.tgt = null; }
     if (!p) {
-        const n = nearest(alive, e);
+        const n = d.boss ? nearest(alive, e) : pickTarget(S, e, alive);   // boshqa dushman tanlamagan o'yinchi
         if (n && (e.fz !== undefined || (Math.abs(n.x - e.x) < BIG.sight && Math.abs(n.y - (e.y - d.h / 2)) < BIG.sightY))) { p = n; e.tgt = n.id; e.st = 'chase'; e.lost = 0; }
         else { e.tgt = null; if (e.st === 'chase') e.st = 'return'; }
+    } else if (!d.boss && S.tick % 15 === e.id % 15 && S.enemies.some(o => o !== e && o.id < e.id && o.tgt === p!.id && !ENEMIES[o.k].boss)) {
+        // ikki dushman bitta o'yinchida: keyingisi (ko'rinib turgan) bo'shroq o'yinchiga o'tadi (avval - hech kim tanlamagan, keyin - o'z guruhidan hech kim)
+        const q = pickTarget(S, e, alive), sameDup = S.enemies.some(o => o !== e && o.zone === e.zone && o.tgt === p!.id && !ENEMIES[o.k].boss);
+        const qAll = q && S.enemies.some(o => o !== e && o.tgt === q.id && !ENEMIES[o.k].boss), qMine = q && S.enemies.some(o => o !== e && o.zone === e.zone && o.tgt === q.id && !ENEMIES[o.k].boss);
+        if (q && q.id !== p.id && (!qAll || (sameDup && !qMine)) && Math.abs(q.x - e.x) < BIG.sight && Math.abs(q.y - (e.y - d.h / 2)) < BIG.sightY) { p = q; e.tgt = q.id; e.lost = 0; e.tr = []; }
     }
     let wantVx = 0;
     if (p) {
@@ -1712,7 +1910,7 @@ function enemyAI(S: BigState, e: BigEnemy, d: EnemyDef, alive: PlayerState[], ro
         // IZ YO'QOLADI: 15 m dan uzoqlashib, boshqa sathda (ko'rinmay) qolsa - 1.5 s dan keyin; 80 m dan uzoq - darhol
         const visible = Math.abs(dyFeet) < 120 || !!d.fly;
         e.lost = dist > BIG.loseDist && !visible ? e.lost + 1 : 0;
-        if (!d.boss && e.fz === undefined && (e.lost > T(1500) || dist > 800)) { e.tgt = null; e.st = 'return'; p = null; }
+        if (!d.boss && e.fz === undefined && !CREATURE_IDLE[e.k] && (e.lost > T(1500) || dist > 800)) { e.tgt = null; e.st = 'return'; p = null; }   // Skyland botlari - o'z yo'qotish qoidasi bilan (botLose)
         else {
             e.f = dx < 0 ? -1 : 1;
             if (d.boss) { bossAI(S, e, d, p, alive, ctx, dt); return; }
@@ -1742,6 +1940,8 @@ function enemyAI(S: BigState, e: BigEnemy, d: EnemyDef, alive: PlayerState[], ro
         if (Math.abs(dx) < d.reach + 18 && Math.abs(dyFeet) < 50) hurtBig(p, d.dmg, ctx);
     }
     if (!p) {
+        const ci = CREATURE_IDLE[e.k];   // o'z "uyga qaytish" yo'li bor maxluqlar (Skyland botlari)
+        if (ci) { ci({ S, e, d, ctx, dt }); return; }
         // nishonsiz qolgan boss (hamma ko'rinmas / uzoqda): yer ostidan, shiftdan chiqadi - yashirin holatda qolib ketmasin
         if (d.boss && (e.hide || e.move !== 'walk')) { e.hide = undefined; e.bst = undefined; e.spin = false; e.goX = undefined; e.move = 'walk'; e.mt = T(800); }
         // QAYTISH / KUZATUV: uyi atrofida yurib turadi
@@ -1831,6 +2031,14 @@ export function damageEnemy(S: BigState, room: RoomState, e: BigEnemy, damage: n
         if (b && damage > 0) { b.gHit = true; try { damageEnemy(S, room, b, damage, owner, ctx); } finally { b.gHit = false; } }
         return;
     }
+    // MR. WHO: hologramma - o'ziga tegmaydi; YURAKLI televizorga tekkan zarba - bossga
+    if (e.k === 'mwheart') {
+        e.flash = 4;
+        const b = S.enemies.find(o => o.k === 'mrwho' && o.zone === e.zone);
+        if (b && damage > 0) { b.gHit = true; try { damageEnemy(S, room, b, damage, owner, ctx); } finally { b.gHit = false; } ctx.emit('bigBossMove', { id: e.id, k: e.k, m: 'mwhit', x: Math.round(e.x), y: Math.round(e.y - 120) }); }
+        return;
+    }
+    if (e.k === 'mrwho' && !e.gHit && damage > 0) { e.poison = undefined; ctx.emit('bigBlock', { id: e.id, x: Math.round(e.x), y: Math.round(e.y - 90), k: 'holo' }); return; }
     if (e.k === 'hockey' && !e.gHit && damage > 0) { e.poison = undefined; ctx.emit('bigBlock', { id: e.id, x: Math.round(e.x + e.f * 30), y: Math.round(e.y - 50), k: 'hockey' }); return; }
     const mult = (e.shield && e.shield > S.tick ? 0.12 : 1) * (e.vuln && e.vuln > S.tick ? 1.6 : 1);
     e.hp -= damage * (1 - (d.armor || 0)) * mult * (owner && buffOn(owner, 'strength') ? 1.4 : 1);   // kuch iksiri - 40% kuchli
@@ -1868,10 +2076,12 @@ export function bigBulletHit(S: BigState, room: RoomState, rect: { x: number, y:
     if (gd && !e.hide) {
         // o'q qaysi tomondan kelyapti: uchish yo'nalishi bo'yicha (qilich zarbasi - o'yinchi turgan tomondan), oddiy xaritalardagidek
         const ox = owner ? owner.x : rect.x + rect.w / 2, fromLeft = fx && fx.dir ? fx.dir > 0 : ox < e.x;
-        if (!(e.block! > 0) && (e.bcd || 0) <= S.tick && e.st !== 'lurk' && Math.abs(ox - e.x) < 350 && Math.random() < gd[0]) { e.block = T(gd[1]); e.f = fromLeft ? -1 : 1; e.atk = 0; }
-        if (e.block! > 0 && fromLeft === (e.f < 0)) { ctx.emit('bigBlock', { id: e.id, x: Math.round(e.x + e.f * 14), y: Math.round(e.y - 26) }); return true; }
+        // straj bot qilich silkitayotganda / otilib chopayotganda qalqon ko'tarolmaydi - o'sha payt ochiq
+        const busy = e.k === 'guardbot' && (e.atk > 0 || e.bst === 'lwind' || e.bst === 'lunge');
+        if (!busy && !(e.block! > 0) && (e.bcd || 0) <= S.tick && e.st !== 'lurk' && Math.abs(ox - e.x) < 350 && Math.random() < gd[0]) { e.block = T(gd[1]); e.f = fromLeft ? -1 : 1; e.atk = 0; }
+        if (e.block! > 0 && fromLeft === (e.f < 0)) { ctx.emit('bigBlock', { id: e.id, x: Math.round(e.x + e.f * Math.max(14, d.w * 0.45)), y: Math.round(e.y - Math.max(26, d.h * 0.5)) }); return true; }
     }
-    if (fx && fx.ice && !d.boss) e.stun = Math.max(e.stun || 0, 45);   // ~1.3 s muzlaydi (bosslar muzlamaydi)
+    if (fx && fx.ice && !d.boss) e.stun = Math.max(e.stun || 0, 33);   // ~1 s muzlaydi (bosslar muzlamaydi)
     if (fx && fx.poison && owner) e.poison = { ...fx.poison, owner: owner.id };
     const chain: BigEnemy[] = [e];
     if (fx && fx.chain) {
@@ -1967,7 +2177,7 @@ export function bigQuestTalk(S: BigState, p: PlayerState, npcId: number, ctx: Bi
 // ===== LAGER TOPSHIRIQLARI (tasodifiy): razvedkachi beradi, bajarilgach o'sha lokatsiyaning istalgan razvedkachisiga topshiriladi =====
 // Mukofot lokatsiya qiyinligiga qarab. item (lokatsiya o'rmonidan): Elf - sariq olma, O'rmon - yovvoyi rezavor, Qor - muz kristali, Botqoq - nilufar, Yer osti - nurli qo'ziqorin. fish - lokatsiya ko'lidan
 export const RQ = {
-    mult: { elf: 1, forest: 1.4, snow: 1.8, swamp: 2.2, lava: 2.6 } as { [l: string]: number },
+    mult: { elf: 1, forest: 1.4, snow: 1.8, swamp: 2.2, lava: 2.6, sky: 3 } as { [l: string]: number },
     item: { elf: 'apple', forest: 'berry', snow: 'crystal', swamp: 'lily', lava: 'redstone' } as { [l: string]: string },
     // bosslardan olib kelinadigan narsalar (o'ldirganda hamma topshiriq egasiga tushadi)
     trophy: { snow: [['bigfootskin', 'bigfoot']], forest: [['gorillafang', 'gorilla']], swamp: [['crabclaw', 'bogcrab']], lava: [['bullkanheart', 'bullkan']] } as { [l: string]: string[][] },
@@ -2206,8 +2416,9 @@ export function bigPayload(S: BigState, room: RoomState) {
         cp: S.cp,
         en: S.enemies.filter(e => near(e.x, e.y)).map(e => ({ id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y), f: e.f, hp: Math.ceil(e.hp), mx: e.mx, ch: e.st === 'chase' ? 1 : 0,
             a: e.atk > 0 ? 1 : 0, fl: e.flash > 0 ? 1 : 0, m: e.move && e.move !== 'walk' ? e.move : '', l: e.st === 'lurk' ? 1 : 0, r: e.p2 ? 1 : 0, s: e.stun && e.stun > 0 ? 1 : 0, pz: e.poison && e.poison.delay <= 0 ? 1 : 0,
-            b: e.block && e.block > 0 ? 1 : 0, u: e.hide === 'under' ? 1 : e.hide === 'up' ? 2 : e.hide === 'blink' ? 3 : 0, sd: e.shield && e.shield > S.tick ? 1 : 0, v: (e.daze || 0) > 0 || (e.vuln || 0) > S.tick ? 1 : 0, sp: e.spin ? 1 : 0, pa: e.para ? 1 : 0, lf: e.life !== undefined ? 1 : 0, j: e.ground === false && !ENEMIES[e.k].fly ? 1 : 0, bh: e.bh ? e.bh.map(Math.round) : undefined, bs: ENEMIES[e.k].boss || e.k === 'lizard' || e.k === 'iceram' || e.k === 'mimicrock' ? e.bst || '' : undefined, iv: e.iv && e.iv > S.tick ? 1 : undefined, hx: e.k === 'rsnake' ? Math.round(e.hx) : undefined })),
-        sh: S.shots.filter(s => near(s.x, s.y)).map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), k: s.k, d: Math.round(Math.atan2(s.vy, s.vx) * 10) / 10, sc: s.roll ? Math.round(s.roll / 13 * 10) / 10 : s.sc || 0, st: s.sit !== undefined || s.idle ? 1 : 0, ...(s.wait && s.t < s.wait ? { wt: 1 } : {}) })),
+            b: e.block && e.block > 0 ? 1 : 0, u: e.hide === 'under' ? 1 : e.hide === 'up' ? 2 : e.hide === 'blink' ? 3 : 0, sd: e.shield && e.shield > S.tick ? 1 : 0, v: (e.daze || 0) > 0 || (e.vuln || 0) > S.tick ? 1 : 0, sp: e.spin ? 1 : 0, pa: e.para ? 1 : 0, lf: e.life !== undefined ? 1 : 0, j: e.ground === false && !ENEMIES[e.k].fly ? 1 : 0, bh: e.bh ? e.bh.map(Math.round) : undefined, bs: ENEMIES[e.k].boss || e.k === 'lizard' || e.k === 'iceram' || e.k === 'mimicrock' || e.k === 'drone' || e.k === 'guardbot' ? e.bst || '' : undefined, iv: e.iv && e.iv > S.tick ? 1 : undefined, hx: e.k === 'rsnake' ? Math.round(e.hx) : undefined, tv: e.k === 'mrwho' ? e.tvs : undefined })),
+        sh: S.shots.filter(s => near(s.x, s.y)).map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), k: s.k, d: Math.round(Math.atan2(s.vy, s.vx) * 10) / 10, sc: s.roll ? Math.round(s.roll / 13 * 10) / 10 : s.sc || 0, st: s.sit !== undefined || s.idle ? 1 : 0, ...(s.wait && s.t < s.wait ? { wt: 1 } : {}),
+            ...(s.sit === undefined && !s.idle && !(s.wait && s.t < s.wait) && (s.vx || s.vy) ? { vx: Math.round(s.vx), vy: s.gnd || s.roll ? 0 : Math.round(s.vy), a: s.arc && !s.gnd && !s.roll ? 1 : 0 } : {}) })),   // klient o'qni haqiqiy joyiga oldinga suradi
         ar: S.areas.filter(a => near(a.x + a.w / 2, a.y + a.h / 2) || (a.x2 !== undefined && near(a.x2, a.y2!))).map(a => ({ id: a.id, k: a.k, x: Math.round(a.x), y: Math.round(a.y), w: Math.round(a.w), h: Math.round(a.h), x2: a.x2 !== undefined ? Math.round(a.x2) : undefined, y2: a.y2 !== undefined ? Math.round(a.y2) : undefined,
             wn: a.warn, t: a.t, f: a.f || 0 })),
         ch: Object.keys(S.chests).map(Number),

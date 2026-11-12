@@ -99,18 +99,19 @@ export interface CropDef {
     growMs: number;    // ekilgandan pishguncha (yomg'irsiz)
     sell: number;      // bozorda bitta hosil narxi
 }
+// FOYDA: bitta hosil urug' narxining ikki baravaridan 1 tanga kam sotiladi (sabzi: urug' 5 - sotish 9, gul: 9 - 17)
 export const CROPS: CropDef[] = [
-    { id: 'carrot', level: 0, seed: 5, growMs: 30000, sell: 13 },
-    { id: 'flower', level: 0, seed: 6, growMs: 40000, sell: 12 },   // GUL: sotsa arzon, lekin Balot Magiga eng yoqimli sovg'a
-    { id: 'tomato', level: 1, seed: 8, growMs: 50000, sell: 24 },
-    { id: 'corn', level: 2, seed: 12, growMs: 75000, sell: 38 },
-    { id: 'strawberry', level: 3, seed: 16, growMs: 100000, sell: 52 },
-    { id: 'pumpkin', level: 4, seed: 22, growMs: 140000, sell: 74 },
-    { id: 'watermelon', level: 5, seed: 30, growMs: 180000, sell: 102 },
-    { id: 'pepper', level: 6, seed: 34, growMs: 190000, sell: 120 },
-    { id: 'eggplant', level: 7, seed: 38, growMs: 200000, sell: 134 },
-    { id: 'pineapple', level: 8, seed: 44, growMs: 210000, sell: 152 },
-    { id: 'grapes', level: 9, seed: 50, growMs: 220000, sell: 170 }
+    { id: 'carrot', level: 0, seed: 5, growMs: 30000, sell: 9 },
+    { id: 'flower', level: 0, seed: 9, growMs: 40000, sell: 17 },   // GUL: Balot Magiga eng yoqimli sovg'a
+    { id: 'tomato', level: 1, seed: 8, growMs: 50000, sell: 15 },
+    { id: 'corn', level: 2, seed: 12, growMs: 75000, sell: 23 },
+    { id: 'strawberry', level: 3, seed: 16, growMs: 100000, sell: 31 },
+    { id: 'pumpkin', level: 4, seed: 22, growMs: 140000, sell: 43 },
+    { id: 'watermelon', level: 5, seed: 30, growMs: 180000, sell: 59 },
+    { id: 'pepper', level: 6, seed: 34, growMs: 190000, sell: 67 },
+    { id: 'eggplant', level: 7, seed: 38, growMs: 200000, sell: 75 },
+    { id: 'pineapple', level: 8, seed: 44, growMs: 210000, sell: 87 },
+    { id: 'grapes', level: 9, seed: 50, growMs: 220000, sell: 99 }
 ];
 // BALIQLAR: og'irligi tasodifiy (kg) - narxi og'irligiga yarasha. Katta baliq tortishda chiziq tezroq yuradi
 export interface FishDef { id: string; chance: number; minKg: number; maxKg: number; base: number; perKg: number; net: boolean; golden?: boolean; }

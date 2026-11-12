@@ -1,10 +1,12 @@
 import { BaseCharacter } from './base.character';
 import { PlayerState, RoomState } from '../types';
-import { shotgunMagOf, SHOTGUN_RELOAD_TICKS, SHIELD_THROW_COOLDOWN_TICKS } from '../perks';
+import { shotgunMagOf, SHOTGUN_RELOAD_TICKS, SHIELD_THROW_COOLDOWN_TICKS, hasPerk, SKILLS } from '../perks';
 
 export class KnightCharacter extends BaseCharacter {
     // Ritsar: zarba 20 ta HP oladi, lekin stamina sekin ketadi
     public attackStaminaCost = 8;
+    // drobovik staminaga bog'liq emas (faqat o'qlar va qayta o'qlash)
+    public attackStamina(player: PlayerState): number { return player.weaponMode === 'alt' ? 0 : this.attackStaminaCost; }
 
     // Drobovik: magazin bo'sh yoki qayta o'qlanayotgan bo'lsa - otmaydi
     canAttack(player: PlayerState): boolean {
@@ -28,6 +30,7 @@ export class KnightCharacter extends BaseCharacter {
         if (player.weaponMode === 'alt') {
             player.ammo = (player.ammo ?? shotgunMagOf(player)) - 1;
             if (player.ammo <= 0) player.reloadTicks = SHOTGUN_RELOAD_TICKS;
+            const far = hasPerk(player, 'shotgun2');   // 15-daraja: uzoqroq va sachraydi
             for (let k = -2; k <= 2; k++) {
                 const a = angle + k * 0.12;
                 room.bulletIdCounter++;
@@ -39,23 +42,26 @@ export class KnightCharacter extends BaseCharacter {
                     vx: Math.cos(a) * 700,
                     vy: Math.sin(a) * 700,
                     color: player.color,
-                    lifetime: 10, // ~210px - faqat yaqinga
+                    lifetime: far ? SKILLS.shotgun2Life : 10, // ~210px - faqat yaqinga (15-darajada ~380px)
+                    bounce: far ? 1 : 0,
                     bulletType: 'pellet',
                     justSpawned: true
                 });
             }
             return;
         }
+        const long = hasPerk(player, 'longsword');   // 17-daraja: qilich uzoqroqqa yetadi
         room.bulletIdCounter++;
         room.bullets.push({
             id: 'bullet_' + room.bulletIdCounter,
             playerId: player.id,
-            x: player.x + (Math.cos(angle) * 15),
+            long,
+            x: player.x + (Math.cos(angle) * (long ? 30 : 15)),
             y: player.y + 2, // Qo'l/qurol balandligi - tanaga mos (avval +10 edi, tana texturasi balandroq bo'lgach pastroq chiqib qolgandi)
             vx: Math.cos(angle) * 150, // Sekin va yaqin masofaga
             vy: Math.sin(angle) * 150,
             color: player.color,
-            lifetime: 9, // Havoda biroz uzoqroq turadi - zarba izchil tegishi uchun
+            lifetime: long ? SKILLS.longswordLife : 9, // Havoda biroz uzoqroq turadi - zarba izchil tegishi uchun
             bulletType: 'melee',
             justSpawned: true
         });

@@ -10,7 +10,7 @@ import { GameEngine } from './game.engine';
 import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN, bigNearestEnemy } from '../bigmap';
 import * as db from '../db';
 import { isLocalTest } from '../testmode';
-import { INVIS_COOLDOWN_TICKS, TORNADO, hasPerk, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE, HUNTER } from '../perks';
+import { KNIGHT_FLY, SKILLS, INVIS_COOLDOWN_TICKS, TORNADO, hasPerk, bonusDamageOf, maxStaminaOf, maxHpOf, BASE_HP, ALT_WEAPON_PERK, SPECIAL_PERK, weaponModesOf, SPECIAL_TICKS, SPECIAL_COOLDOWN_TICKS, INVIS_LINGER_TICKS, shotgunMagOf, PERK_TABLE, HUNTER } from '../perks';
 
 // Har bir personaj turi uchun aniq belgilangan rang
 // (endi tasodifiy rang emas, har doim shu ranglar ishlatiladi - "default" skin rangi)
@@ -261,12 +261,24 @@ export class RoomManager {
     }
 
     // R: maxsus qobiliyat (mage - jamoaviy davolash, knight - uchuvchi etik), 2 soniya, keyin kutish
-    public useSpecial(socket: Socket, roomId: string): void {
+    // ritsar qo'ndi - uchish to'xtaydi (qolgan energiya saqlanadi)
+    public flyStop(socket: Socket, roomId: string): void {
+        const p = this.activeRooms[roomId]?.players[socket.id];
+        if (!p || p.characterType !== 'knight' || !((p.specialTicks || 0) > 0) || (p.flyTicks || 0) < KNIGHT_FLY.minTicks) return;
+        p.specialTicks = 0; p.flyRegenDelay = KNIGHT_FLY.regenDelayTicks;
+    }
+    public useSpecial(socket: Socket, roomId: string, dir = 1): void {
         const room = this.activeRooms[roomId];
         const p = room?.players[socket.id];
         if (!room || !room.isStarted || !p || p.isDead || this.isLoading(room) || RoomManager.frozen(room)) return;
         const perk = SPECIAL_PERK[p.characterType];
         if (!perk || !hasPerk(p, perk) || (p.specialCooldown || 0) > 0) return;
+        if (p.characterType === 'knight') {
+            // UCHISH: energiya yetarli bo'lsa - boshlanadi (vaqt cheklovi yo'q - energiya tugaguncha / qo'nguncha); kutish vaqti yo'q
+            if ((p.specialTicks || 0) > 0 || (p.flyEnergy ?? KNIGHT_FLY.max) < KNIGHT_FLY.startMin) return;
+            p.specialTicks = 1e6; p.flyTicks = 0;
+            return;
+        }
         if (p.characterType === 'hunter') {
             // QOPQON: oyog'i ostiga qo'yiladi (bir vaqtda 2 tagacha), 0.5 s da qurollanadi, 20 s turadi.
             // Yerda yoki platformada turganda (havoda / chuqur ustida - qo'yilmaydi, qayta tiklanish sarflanmaydi)
@@ -279,6 +291,17 @@ export class RoomManager {
             room.hunterTraps.push({ id: room.hunterSeq, owner: p.id, x: p.x, y: gy, arm: HUNTER.trapArmTicks, life: HUNTER.trapLifeTicks });
             p.specialCooldown = Math.round(SPECIAL_COOLDOWN_TICKS * 0.6);
             this.io.to(roomId).emit('trapPlace', { x: Math.round(p.x), y: Math.round(gy) });
+            return;
+        }
+        if (p.characterType === 'samurai') {
+            // KESIB O'TISH: oldinga ~300 px (klient o'zi tez yuradi); yo'ldagi har bir raqibga zarba (yo'l bo'ylab ko'rinmas tig'lar)
+            const d = dir < 0 ? -1 : 1, dmg = SKILLS.cutDamage + bonusDamageOf(p);
+            for (let k = 0; k <= SKILLS.cutRange; k += 55) {
+                room.bulletIdCounter++;
+                room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: p.id, x: p.x + d * k, y: p.y, vx: 0, vy: 0, color: p.color, lifetime: 3, bulletType: 'cut', dmg, justSpawned: false });
+            }
+            p.specialCooldown = SKILLS.cutCdTicks;
+            this.io.to(roomId).emit('samuraiCut', { id: p.id, x: Math.round(p.x), y: Math.round(p.y), dir: d });
             return;
         }
         p.specialTicks = SPECIAL_TICKS;
@@ -694,15 +717,29 @@ export class RoomManager {
             const dir = faceDir || (Math.cos(player.lastAttackAngle || 0) < 0 ? -1 : 1);
             room.tornadoes = room.tornadoes || [];
             room.bulletIdCounter++;
-            room.tornadoes.push({ id: 'tor' + room.bulletIdCounter, owner: player.id, x: player.x + dir * 50, y: player.y + 24, dir, t: TORNADO.lifeTicks, pulse: 0 });
+            room.tornadoes.push({ id: 'tor' + room.bulletIdCounter, owner: player.id, x: player.x + dir * 50, y: player.y + 24, dir, t: TORNADO.lifeTicks, pulse: 0, k: hasPerk(player, 'bigtornado') ? SKILLS.tornadoBig : 1 });
             this.io.to(roomId).emit('tornadoCast', { x: Math.round(player.x + dir * 50), y: Math.round(player.y + 24) });
             return;
         }
-        // KAMONCHI: Shift - bir bosishda 2 s ko'rinmas (10-darajadan 4 s), tugagach 15 s qayta tiklanadi; bosib turish shart emas
+        // SAMURAY: Shift - ikki yonga (oldi va orqasiga) bir vaqtda sharpa zarba; 1.5 s da bir
+        if (player.characterType === 'samurai') {
+            if ((player.ghostCd || 0) > 0) return;
+            if (player.stamina < BaseCharacter.staminaCost(player, SKILLS.ghostStamina)) { this.io.to(player.id).emit('noStamina'); return; }
+            BaseCharacter.spendStamina(player, SKILLS.ghostStamina);
+            player.ghostCd = SKILLS.ghostCdTicks;
+            const big = hasPerk(player, 'bigspirit');
+            [1, -1].forEach((d) => {
+                room.bulletIdCounter++;
+                room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + d * 24, y: player.y + (big ? -25 : -2), vx: d * 640, vy: 0, color: player.color, lifetime: 18, bulletType: 'slash', big, justSpawned: true });
+            });
+            this.io.to(roomId).emit('ghostSlash', { id: player.id, x: Math.round(player.x), y: Math.round(player.y) });
+            return;
+        }
+        // KAMONCHI: Shift - bir bosishda 2 s ko'rinmas, tugagach 14 s qayta tiklanadi; staminaga bog'liq emas
         if (player.characterType === 'archer') {
             if ((player.invisCd || 0) > 0 || (player.invisLinger || 0) > 0) return;
             player.isInvisible = true;
-            player.invisLinger = INVIS_LINGER_TICKS * (hasPerk(player, 'invis2') ? 2 : 1);
+            player.invisLinger = INVIS_LINGER_TICKS;
             player.invisCd = INVIS_COOLDOWN_TICKS;
             return;
         }

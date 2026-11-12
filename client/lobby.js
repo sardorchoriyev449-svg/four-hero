@@ -304,6 +304,8 @@ const gameoverOkBtn = document.getElementById('gameover-ok-btn');
 let currentRoomId = null;
 let currentUser = null; // { id, fullName, nickname, coins, ownedSkins, equippedSkins, defaultCharacter }
 let skinCatalog = null;
+// SKINLAR VAQTINCHA O'CHIQ (server/src/skins.ts dagi bilan bir xil): garderob yashirin, oldindan ko'rinish - standart
+const SKINS_OFF = false;
 let weaponSkinCatalog = null;
 let cosCatalog = null;          // detallar katalogi: { head: [...], face: [...], weapons: { knight: { sword: [...] } } }
 let selectedCosSlot = 'head';   // "Detallar" bo'limida ochiq turgan tab
@@ -613,6 +615,7 @@ document.getElementById('reset-progress-btn').onclick = async () => {
 // GARDEROB: bosh menyudan ham, "Mening personajim" ichidan ham ochiladi (alohida oyna - wardrobe.js)
 document.getElementById('nav-wardrobe-btn').onclick = () => Wardrobe.open({ fromMenu: true });
 document.getElementById('char-wardrobe-btn').onclick = () => Wardrobe.open();
+if (SKINS_OFF) ['nav-wardrobe-btn', 'char-wardrobe-btn'].forEach((id) => { const b = document.getElementById(id); if (b) b.style.display = 'none'; });
 // Sozlamalar: bosh menyudan ham, xona (lobbi) ichidan ham ochiladi - "Orqaga" qayerdan ochilgan bo'lsa o'sha yerga qaytaradi
 let settingsReturnPanel = null;
 function openSettings(returnPanel) {
@@ -2409,9 +2412,9 @@ function drawCharPreview() {
         const skin = list.find(s => s.id === id) || list[0];
         return skin ? '#' + (skin.color + (skin.accent || 0) * 0x1000000).toString(16).padStart(6, '0') : null;
     };
-    const body = pick(skinCatalog, currentUser.equippedSkins) || '#1e88e5';
+    const body = pick(skinCatalog, SKINS_OFF ? {} : currentUser.equippedSkins) || '#1e88e5';
     ctx.clearRect(0, 0, 64, 48);
-    drawHero(ctx, type, body, (currentUser.equippedCosmetics || {})[type], 0, 0);
+    drawHero(ctx, type, body, SKINS_OFF ? {} : (currentUser.equippedCosmetics || {})[type], 0, 0);
 }
 
 // Qahramon rasmi - o'yindagi bilan bir xil (cosmetics.js): tana skin rangi, visor, quroli va

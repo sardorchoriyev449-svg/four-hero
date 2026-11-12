@@ -14,6 +14,9 @@ export interface SkinInfo {
 }
 // Kunlik kirishning 7-kuni beriladigan eksklyuziv skin (har qahramonda bitta)
 export const DAILY_SKIN_ID = 'daybreak';
+// SKINLAR VAQTINCHA O'CHIQ (yangi personaj dizayni tayyorlanguncha): o'yinda hamma - standart ko'rinishda (tana, qurol, bosh / yuz detallari,
+// effektlar); sotib olish va kiyish yopiq. Sotib olingan skinlar hisobda SAQLANADI - false qilinsa hammasi qaytadi (client/lobby.js da ham)
+export const SKINS_OFF = false;
 
 export const SKIN_CATALOG: { [characterType: string]: SkinInfo[] } = {
     // Har personajga 9 tadan; har biri o'z rang kombinatsiyasi (tana + visor/belbog')
@@ -110,6 +113,7 @@ export const SKIN_CATALOG: { [characterType: string]: SkinInfo[] } = {
 };
 // Afsonaviy / eksklyuziv skin effekti ('' - yo'q)
 export function getSkinFx(characterType: string, skinId: string): string {
+    if (SKINS_OFF) return '';
     const skin = (SKIN_CATALOG[characterType] || []).find(s => s.id === skinId);
     return (skin && skin.fx) || '';
 }
@@ -133,7 +137,7 @@ export function isKnownSkin(characterType: unknown, skinId: unknown, weapon = fa
 export function getSkinColor(characterType: string, skinId: string): number {
     const list = SKIN_CATALOG[characterType];
     if (!list) return 0xffffff;
-    const skin = list.find(s => s.id === skinId) || list[0];
+    const skin = (!SKINS_OFF && list.find(s => s.id === skinId)) || list[0];
     return packSkinColor(skin);
 }
 
@@ -201,12 +205,13 @@ export const WEAPON_SKIN_CATALOG: { [characterType: string]: SkinInfo[] } = {
 export function getWeaponSkinColor(characterType: string, skinId: string): number {
     const list = WEAPON_SKIN_CATALOG[characterType];
     if (!list) return 0xffffff;
-    const skin = list.find(s => s.id === skinId) || list[0];
+    const skin = (!SKINS_OFF && list.find(s => s.id === skinId)) || list[0];
     return skin.color;
 }
 
 // Qurol skini effekti ('' - yo'q)
 export function getWeaponSkinFx(characterType: string, skinId: string): string {
+    if (SKINS_OFF) return '';
     const skin = (WEAPON_SKIN_CATALOG[characterType] || []).find(s => s.id === skinId);
     return (skin && skin.wfx) || '';
 }

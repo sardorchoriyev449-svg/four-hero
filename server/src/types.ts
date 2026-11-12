@@ -75,8 +75,12 @@ export interface PlayerState {
     weaponMode: 'main' | 'alt' | 'alt2';   // alt2 - 16-darajadagi uchinchi qurol
     shieldCd?: number;            // knight: qalqon otishdan keyingi kutish (tik)    // Q: ikkinchi qurol (mage muz, knight drobovik, samurai kunai)
     tornadoCd?: number;            // sehrgar: tornado qayta tiklanmoqda (tik)
+    ghostCd?: number;              // samuray: Shift sharpa zarbasi qayta tiklanmoqda (tik)
     specialTicks: number;          // R qobiliyati (mage davolash / knight uchish) qolgan vaqti
     specialCooldown: number;       // R qayta tayyor bo'lguncha
+    flyEnergy?: number;            // ritsar: uchish energiyasi (0..100; yo'q - to'la)
+    flyRegenDelay?: number;        // ritsar: tiklanish boshlanguncha (tik)
+    flyTicks?: number;             // ritsar: shu uchish necha tikdan beri (juda tez to'xtatilmasin)
     invisLinger: number;           // archer: Shift bosilgach ko'rinmas qoladigan vaqt (tik)
     invisCd?: number;              // archer: ko'rinmaslik qayta tiklanmoqda (tik)
     ammo?: number;                 // knight drobovigi: magazindagi o'qlar
@@ -224,14 +228,16 @@ export interface BulletState {
     vy: number;
     color: number;
     lifetime: number;
-    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'slash' | 'lightning' | 'shield' | 'tornado' | 'acid' | 'petbite' | 'knife' | 'dart' | 'blast';
+    bulletType: 'normal' | 'arrow' | 'fireball' | 'melee' | 'ice' | 'pellet' | 'kunai' | 'slash' | 'lightning' | 'shield' | 'tornado' | 'acid' | 'petbite' | 'knife' | 'dart' | 'blast' | 'cut';
     poison?: boolean;     // ovchining zaharli drotigi
     dmg?: number;         // qat'iy zarar (hamroh Pushistikning kislotasi / zarbasi) - egasining kuchaytirishlari qo'shilmaydi
     justSpawned: boolean; // Birinchi tikda to'qnashuv tekshirilmaydi - klient ko'rish uchun ulgurishi kerak
     sx?: number;          // oxirgi tekshirilgan joy - shu yerdan hozirgi joygacha butun yo'l tekshiriladi
     sy?: number;
     fire?: boolean;       // kamonchi 4-daraja: olovli o'q
-    big?: boolean;        // samuray 16-daraja: katta katana ruhi
+    big?: boolean;        // samuray 15-daraja: katta katana ruhi
+    long?: boolean;       // ritsar 17-daraja: uzun qilich zarbasi
+    bounce?: number;      // ritsar 15-daraja: drobovik o'qi tekkanda sachraydi (necha marta)
 }
 
 // Sindiriladigan quti: markaz (x, y), sindirilsa sindirgan o'yinchiga tanga beradi
@@ -322,7 +328,7 @@ export interface RoomState {
     critterNextAt?: number;
     // Jangdagi hamrohlar (egasi id si bo'yicha): follow - egasi yonida, dash - raqibga uchib boradi, back - qaytadi
     pets?: { [ownerId: string]: { x: number, y: number, face: number, st: 'follow' | 'dash' | 'back' | 'perch' | 'ride', tx: number, ty: number, spitAt: number, dashAt: number, hitFlash: number, idle?: number, spot?: 'head' | 'ground' } };
-    tornadoes?: { id: string, owner: string, x: number, y: number, dir: number, t: number, pulse: number }[];   // sehrgar tornadolari
+    tornadoes?: { id: string, owner: string, x: number, y: number, dir: number, t: number, pulse: number, k?: number }[];   // sehrgar tornadolari
     id: string;
     name: string;
     hostId: string;

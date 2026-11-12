@@ -47,13 +47,10 @@ export class SamuraiCharacter extends BaseCharacter {
         });
     }
 
-    // Samuray uchun SHIFT = tezlik boost. Bosib turilgancha tez yuradi,
-    // qo'yib yuborilsa yoki stamina tugasa oddiy tezlikka qaytadi.
-    applyHeldAbility(player: PlayerState, room: RoomState): void {
-        player.speedMultiplier = 1.8;
-    }
+    // SHIFT endi bir martalik ikki yonga sharpa zarba (room.manager startAbility) - bosib turish effekti yo'q
+    applyHeldAbility(_player: PlayerState, _room: RoomState): void { }
 
-    releaseHeldAbility(player: PlayerState, room: RoomState): void {
+    releaseHeldAbility(player: PlayerState, _room: RoomState): void {
         player.speedMultiplier = 1;
     }
 }

@@ -522,6 +522,8 @@ function launchGame(socket, roomId, mapData, continued) {
     let farmRootGfx = null;
     let zTongueGfx = null;
     let airJumpsLeft = 0;      // samurai 10-daraja: havoda ikkinchi sakrash
+    // DESH: kamonchi (A/D ikki marta, 2 s da bir) va samuray kesib o'tishi (R) - qisqa vaqt juda tez, sharpadek
+    let dashSt = { l: false, r: false, lt: -1e9, rt: -1e9, cd: 0, until: 0, dir: 1, sp: 900, on: false, trailAt: 0 }, lastJumpTapAt = -1e9, stormG = null, stormWas = false;
     let jumpWasDown = false;
     let wasFlying = false;     // knight 10-daraja: uchuvchi etik (R)
     let perkFxGfx = null;      // uchuvchi etik alangasi va davolash effektlari
@@ -678,6 +680,61 @@ function launchGame(socket, roomId, mapData, continued) {
         [[0, 1], [2, 0], [4, 1]].forEach(([x, y0]) => { for (let y = y0; y < 5; y++) { g[y][x] = WH; g[y][x + 1] = SH; } });   // barmoqlar
         for (let y = 6; y < 10; y++) g[y][W - 1] = SH;   // bosh barmoq chizig'i
         return gridOutline(g, 0x0a0a0a);
+    }
+    // YANGI QAHRAMON: kadr tanlash - zarba (0.09 s qo'l ko'tarish, keyin zarba), havoda (sakrash / tushish), yurish (5 kadr), turish (nafas)
+    // boshqa o'yinchilar - tezlik pozitsiya o'zgarishidan (silliqlangan)
+    function heroFrame(scene, sprite) {
+        const now = scene.time.now, atk = now - (sprite.lastAtkAt || -1e9), cut = now - (sprite.cutAt || -1e9);
+        const type = sprite.characterType, gun = type === 'archer' || (type === 'knight' && sprite.weaponMode === 'alt');   // arbalet / drobovik - ikki qo'llab nishonga olish
+        let vx, vy, ground;
+        if (sprite.body && sprite.body.velocity) { vx = sprite.body.velocity.x; vy = sprite.body.velocity.y; ground = sprite.body.blocked.down || sprite.body.touching.down; }
+        else {
+            const dt = Math.max(8, now - (sprite.hpT || now - 16)) / 1000;
+            const rvx = sprite.hpX === undefined ? 0 : (sprite.x - sprite.hpX) / dt, rvy = sprite.hpY === undefined ? 0 : (sprite.y - sprite.hpY) / dt;
+            sprite.hpX = sprite.x; sprite.hpY = sprite.y; sprite.hpT = now;
+            sprite.hvx = (sprite.hvx || 0) * 0.75 + rvx * 0.25; sprite.hvy = (sprite.hvy || 0) * 0.75 + rvy * 0.25;
+            vx = sprite.hvx; vy = sprite.hvy; ground = Math.abs(vy) < 45;
+        }
+        if (type === 'samurai') {
+            // NINJA: otilib kesish (R) - otilish, keyin cho'kib qo'nish; oddiy zarba - tayyor -> otilish -> qo'llar orqada; havoda - yuqoriga kesish
+            if (cut < 230) return 14;
+            if (cut < 430) return 17;
+            if (atk < 300) return !ground ? 16 : atk < 70 ? 13 : atk < 180 ? 14 : 15;
+        } else if (gun) {
+            if (atk < 110) return 11;   // tepki
+            if (atk < 420) return 10;   // otgandan keyin biroz nishonda turadi
+        } else {
+            if (atk < 90) return 8;
+            if (atk < 280) return 9;
+        }
+        if (!ground) return vy < 0 ? 6 : 7;   // havoda: sakrash / tushish
+        if (Math.abs(vx) > 25) return 2 + Math.floor(now / 120) % 4;   // yurish: 4 kadr (oyoqlar navbatlashadi)
+        if (type === 'knight' && sprite.weaponMode === 'alt') return 10;   // drobovik qo'lda - nishonga olib turadi
+        return Math.floor(now / 650) % 2;
+    }
+    function heroTexKey(scene, packed, f) {
+        const key = 'hero_' + packed + '_' + f;
+        if (!scene.textures.exists(key)) scene.textures.addCanvas(key, Cosmetics.heroCanvas(packed, f));
+        return key;
+    }
+    // tana: yangi rasm (yuklangan bo'lsa); fizika qutisi 32x48 o'zgarmaydi, rasmning oyog'i - qutining pastida
+    function updateHeroBody(scene, sprite) {
+        if (sprite.heroColor === undefined || !Cosmetics.heroReady()) return;
+        const hf = sprite.heroF = heroFrame(scene, sprite);
+        const key = heroTexKey(scene, sprite.heroColor, hf);
+        if (sprite.texture.key !== key) sprite.setTexture(key);
+        if (!sprite.heroFit) {
+            const H = Cosmetics.HERO;
+            sprite.heroFit = true;
+            sprite.setOrigin(0.5, (H.h - 24) / H.h);
+            if (sprite.body) { sprite.body.setSize(32, 48, false); sprite.body.setOffset((H.w - 32) / 2, H.h - 48); }
+        }
+    }
+    // o'ng musht (qurol shu yerda) - qahramon nuqtasiga nisbatan, o'ngga qaraganda; yangi rasm yo'q bo'lsa - null
+    function heroHand(sprite, left = false) {
+        if (!sprite.heroFit || sprite.heroF === undefined) return null;
+        const H = Cosmetics.HERO, T = left ? H.lhands : H.hands, h = T[sprite.heroF] || T[0];
+        return h ? [h[0] + 0.5 - H.w / 2, h[1] + 0.5 - (H.h - 24)] : null;
     }
     function createPlayerTexture(scene, key, color) {
         if (scene.textures.exists(key)) return;
@@ -869,8 +926,14 @@ function launchGame(socket, roomId, mapData, continued) {
         img.setVisible(!hidden);
         if (hidden) return;
         // Tana 32x48 (markazda); detal kataklari tana kataklariga (ax, ay) bog'langan, 1 katak = 2px
-        const dx = -16 + 2 * tex.art.ax + img.width / 2;
-        const dy = -24 + 2 * tex.art.ay + img.height / 2;
+        let dx = -16 + 2 * tex.art.ax + img.width / 2;
+        let dy = -24 + 2 * tex.art.ay + img.height / 2;
+        if (sprite.heroFit && sprite.heroF !== undefined) {
+            // YANGI QAHRAMON: shu kadrdagi boshga ergashadi, bosh o'lchamida
+            const H = Cosmetics.HERO, pl = Cosmetics.heroHeadPlace(sprite.heroF, slot, dx, dy);
+            dx = pl.x - H.w / 2; dy = pl.y - (H.h - 24);
+            img.setScale(pl.k);
+        } else img.setScale(1);
         img.setFlipX(!facingRight);
         img.setPosition(sprite.x + (facingRight ? dx : -dx), sprite.y + dy * sprite.scaleY);
         img.setAlpha(sprite.alpha);
@@ -881,6 +944,7 @@ function launchGame(socket, roomId, mapData, continued) {
     // yo'qolish animatsiyasi), bosh kiyimi va yuz buyumi, tana qarash tomoniga buriladi
     function updateHeroWeaponVisuals(scene, sprite, characterType, facingRight) {
         ensureWeaponTextures(scene);
+        updateHeroBody(scene, sprite);   // yangi qahramon rasmi (kadr animatsiyasi)
         if (!sprite.weaponSpr) sprite.weaponSpr = scene.add.image(sprite.x, sprite.y, 'w_sword').setDepth(3.1);
         if (!sprite.shieldSpr) sprite.shieldSpr = scene.add.image(sprite.x, sprite.y, 'w_shield').setDepth(3.2).setScale(0).setVisible(false);
         if (!sprite.atk) sprite.atk = { angle: 0, dx: 0, dy: 0 };
@@ -899,12 +963,29 @@ function launchGame(socket, roomId, mapData, continued) {
             const ang = ((custom && custom.art.angle !== undefined) ? custom.art.angle : pose.angle) + sprite.atk.angle;
             w.setFlipX(!facingRight).setOrigin(facingRight ? ox : 1 - ox, oy);
             w.angle = facingRight ? ang : -ang;
-            w.setPosition(sprite.x + dir * (pose.hand[0] + sprite.atk.dx), sprite.y + pose.hand[1] + sprite.atk.dy);
+            const hh = heroHand(sprite), ws = hh ? Cosmetics.HERO.wpn : 1;   // yangi qahramon: qurol kichikroq, o'ng mushtda
+            w.setScale(ws);
+            let wa = hh ? Cosmetics.HERO.wang[sprite.heroF] : undefined;   // nishonga olish / ninja kadrlari - qurol shu burchakda
+            if (hh && wa === undefined) wa = Cosmetics.heroRest(sprite.heroF, pose.kind);   // turish / yurish / sakrash - qurol tabiiy holatda
+            if (wa !== undefined) { w.angle = facingRight ? wa : -wa; w.setPosition(sprite.x + dir * hh[0], sprite.y + hh[1]); }
+            else if (hh) w.setPosition(sprite.x + dir * (hh[0] + sprite.atk.dx * ws), sprite.y + hh[1] + sprite.atk.dy * ws);
+            else w.setPosition(sprite.x + dir * (pose.hand[0] + sprite.atk.dx), sprite.y + pose.hand[1] + sprite.atk.dy);
             w.setAlpha(sprite.alpha);
             if (characterType === 'mage' && sprite.weaponMode === 'alt') w.setTint(0x80d8ff);
             else if (characterType === 'mage' && sprite.weaponMode === 'alt2') w.setTint(0xfff176);   // chaqmoq - sariq
             else w.clearTint();
         }
+        // MUSHT qurol ustida: qahramon bilan bir xil joy / ko'rinish, faqat musht piksellari - barmoqlar dastani o'rab turadi
+        if (sprite.heroFit && !hidden && w.visible && heroHand(sprite)) {
+            const fk = 'herofist_' + sprite.heroColor + '_' + sprite.heroF;
+            if (!scene.textures.exists(fk)) scene.textures.addCanvas(fk, Cosmetics.heroFistCanvas(sprite.heroColor, sprite.heroF));
+            if (!sprite.fistSpr) sprite.fistSpr = scene.add.image(sprite.x, sprite.y, fk).setDepth(3.15);
+            const fsp = sprite.fistSpr;
+            if (fsp.texture.key !== fk) fsp.setTexture(fk);
+            fsp.setVisible(true).setOrigin(sprite.originX, sprite.originY).setFlipX(sprite.flipX).setPosition(sprite.x, sprite.y)
+                .setScale(sprite.scaleX, sprite.scaleY).setAngle(sprite.angle).setAlpha(sprite.alpha);
+            if (sprite.isTinted) fsp.setTint(sprite.tintTopLeft); else fsp.clearTint();
+        } else if (sprite.fistSpr) sprite.fistSpr.setVisible(false);
         updateHeroOverlay(scene, sprite, 'faceSpr', 'face', 3.04, facingRight, hidden);
         updateHeroOverlay(scene, sprite, 'hatSpr', 'head', 3.05, facingRight, hidden);
         // RANETS (S2 map-9): orqasida
@@ -922,7 +1003,7 @@ function launchGame(socket, roomId, mapData, continued) {
             sprite.shieldOn = true;
             scene.tweens.killTweensOf(sh);
             sh.setVisible(true).setScale(0.2).setAlpha(1);
-            scene.tweens.add({ targets: sh, scale: 1, duration: 170, ease: 'Back.Out' });
+            scene.tweens.add({ targets: sh, scale: sprite.heroFit ? 0.72 : 1, duration: 170, ease: 'Back.Out' });
             for (let k = 0; k < 6; k++) {
                 const spark = scene.add.rectangle(sprite.x + dir * 16, sprite.y, 4, 4, 0x90caf9).setDepth(3.3);
                 scene.tweens.add({ targets: spark, x: spark.x + dir * Phaser.Math.Between(6, 26), y: spark.y + Phaser.Math.Between(-24, 24),
@@ -935,7 +1016,8 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         if (sh.visible) {
             sh.setFlipX(!facingRight);
-            sh.setPosition(sprite.x + dir * 15, sprite.y + 2 + Math.sin(scene.time.now / 180) * 1.5);
+            const hs = heroHand(sprite, true);   // yangi qahramon: qalqon mushti oldida
+            sh.setPosition(sprite.x + dir * (hs ? hs[0] + 3 : 15), sprite.y + (hs ? hs[1] - 6 : 2) + Math.sin(scene.time.now / 180) * 1.5);
             if (sprite.shieldOn) sh.setAlpha(sprite.alpha);
         }
         // tana aylantirilgan (Big Map: sambochi "na progib" otyapti) - qurol, qalqon, yuz / bosh buyumi, ranets tana bilan birga aylanadi
@@ -987,12 +1069,13 @@ function launchGame(socket, roomId, mapData, continued) {
         sfxAt(shotName, c.x, 1);
         if (bt === 'melee') {
             const key = c.characterType === 'samurai' ? 'melee_samurai' : 'melee_knight';
-            const sl = scene.add.sprite(c.x + dir * 26, c.y - 2, key).setDepth(4).setFlipX(facingLeft)
-                .setOrigin(facingLeft ? 0.7 : 0.3, 0.5).setAlpha(0.95).setScale(0.6);
+            const lng = c.characterType === 'knight' && hasPerkClient('knight', c.level, 'longsword') ? 1.5 : 1;   // ritsar 17: uzun qilich
+            const sl = scene.add.sprite(c.x + dir * 26 * lng, c.y - 2, key).setDepth(4).setFlipX(facingLeft)
+                .setOrigin(facingLeft ? 0.7 : 0.3, 0.5).setAlpha(0.95).setScale(0.6 * lng);
             if (me && me.weaponColor) sl.setTint(me.weaponColor);
             if (c.weaponFx) weaponTrail(scene, c.x + dir * 46, c.y - 2, c.weaponFx, true);
-            scene.tweens.add({ targets: sl, scale: 1.1, alpha: 0, duration: key === 'melee_knight' ? 220 : 160, ease: 'Quad.Out',
-                onUpdate: () => { if (c.active) { sl.x = c.x + dir * 26; sl.y = c.y - 2; } }, onComplete: () => sl.destroy() });
+            scene.tweens.add({ targets: sl, scale: 1.1 * lng, alpha: 0, duration: key === 'melee_knight' ? 220 : 160, ease: 'Quad.Out',
+                onUpdate: () => { if (c.active) { sl.x = c.x + dir * 26 * lng; sl.y = c.y - 2; } }, onComplete: () => sl.destroy() });
             return;
         }
         if (bt === 'pellet') return;   // drobovik: og'izdan olov (playHeroAttack) yetarli, sochmalar serverdan
@@ -1061,7 +1144,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const now = performance.now();
         if (!sp.scene || now - (sp.ghostAt || 0) < 40) return;
         sp.ghostAt = now;
-        const gh = sp.scene.add.image(sp.x, sp.y, sp.texture.key).setDepth(3.9).setFlipX(sp.flipX).setAlpha(0.55).setScale(sp.scaleX * 0.95, sp.scaleY).setBlendMode(Phaser.BlendModes.ADD);
+        const gh = sp.scene.add.image(sp.x, sp.y, sp.texture.key).setOrigin(sp.originX, sp.originY).setDepth(3.9).setFlipX(sp.flipX).setAlpha(0.55).setScale(sp.scaleX * 0.95, sp.scaleY).setBlendMode(Phaser.BlendModes.ADD);
         if (sp.tintTopLeft !== 0xffffff) gh.setTint(sp.tintTopLeft);
         sp.scene.tweens.add({ targets: gh, alpha: 0, scaleX: gh.scaleX * 0.7, duration: 220, onComplete: () => gh.destroy() });
     }
@@ -9762,6 +9845,8 @@ function launchGame(socket, roomId, mapData, continued) {
     const HUD_X = 10, HUD_Y = 10;
     const HP_BAR = { x: HUD_X + 32, y: HUD_Y + 12, w: 160, h: 12 };
     const ST_BAR = { x: HUD_X + 32, y: HUD_Y + 36, w: 160, h: 8 };
+    const FLY_BAR = { x: HUD_X + 32, y: HUD_Y + 47, w: 160, h: 4 };   // ritsar: uchish energiyasi (stamina ostida)
+    const FLY_PALETTE = { fill: 0x40c4ff, light: 0xb3e5fc, dark: 0x0277bd, empty: 0x0b1f2e };
 
     function gridFromRows(rows, palette) {
         return rows.map(r => r.split('').map(ch => (ch === '.' ? null : palette[ch])));
@@ -9852,10 +9937,13 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         if (c.characterType === 'hunter' && hasPerkClient('hunter', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_mine') + ' ' + (c.mineCd > 0 ? c.mineCd + 's' : t('hud_r_ready')));
         if (c.characterType === 'archer' && hasPerkClient('archer', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_invis') + ' ' + (c.isInvisible ? '!!' : c.invisCd > 0 ? c.invisCd + 's' : t('hud_r_ready')));
+        if (c.characterType === 'samurai' && hasPerkClient('samurai', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_ghost') + ' ' + (c.ghostCd > 0 ? c.ghostCd + 's' : t('hud_r_ready')));
+        if (c.characterType === 'archer' && hasPerkClient('archer', c.level, 'dash')) parts.push('[A A / D D] ' + t('hud_dash'));
         if (c.characterType === 'mage' && hasPerkClient('mage', c.level, 'shift')) parts.push('[SHIFT] ' + t('hud_shift_tornado') + ' ' + (c.tornadoCd > 0 ? c.tornadoCd + 's' : t('hud_r_ready')));
         const sp = SPECIAL_PERK[c.characterType];
         if (sp && hasPerkClient(c.characterType, c.level, sp)) {
-            parts.push('[R] ' + t('hud_r_' + sp) + ' ' + (c.special ? '!!' : c.specialCd > 0 ? c.specialCd + 's' : t('hud_r_ready')));
+            if (sp === 'fly') parts.push('[W W] ' + t('hud_r_fly') + ' ' + (c.special ? '!!' : Math.round(c.flyEnergy ?? 100) + '%'));   // ritsar: energiya
+            else parts.push('[R] ' + t('hud_r_' + sp) + ' ' + (c.special ? '!!' : c.specialCd > 0 ? c.specialCd + 's' : t('hud_r_ready')));
         }
         // La'natlar (do'kondan davo sotib olinmaguncha)
         if (c.curseA) parts.push(t('hud_curse_acid'));
@@ -9865,7 +9953,7 @@ function launchGame(socket, roomId, mapData, continued) {
 
     // Hozirgi maqsad ("nima qilish kerak") - HUD da emas, pauza menyusida ko'rsatiladi
     let hudObjective = '';
-    function drawHUD(scene, hp, stamina, progressText, perkText = '', maxHp = 100, acid = false) {
+    function drawHUD(scene, hp, stamina, progressText, perkText = '', maxHp = 100, acid = false, fly = null) {
         hudObjective = progressText || '';
         if (!scene.hud) {
             buildHudTextures(scene);
@@ -9903,12 +9991,13 @@ function launchGame(socket, roomId, mapData, continued) {
             drawHudPanel(H.panel, HUD_X, HUD_Y, panelW, panelH);
         }
 
-        if (hpFrac !== H.lastHp || safeSt !== H.lastSt || acid !== H.lastAcid) {
-            H.lastHp = hpFrac; H.lastSt = safeSt; H.lastAcid = acid;
+        if (hpFrac !== H.lastHp || safeSt !== H.lastSt || acid !== H.lastAcid || fly !== H.lastFly) {
+            H.lastHp = hpFrac; H.lastSt = safeSt; H.lastAcid = acid; H.lastFly = fly;
             H.bars.clear();
             drawPixelBar(H.bars, HP_BAR, hpFrac, hpPalette(hpFrac), 10);
             // Kislota tekkan: stamina yashil (tiklanmaydi)
             drawPixelBar(H.bars, ST_BAR, safeSt / 100, acid ? ACID_STAMINA_PALETTE : STAMINA_PALETTE, 10);
+            if (fly !== null) drawPixelBar(H.bars, FLY_BAR, Math.max(0, Math.min(1, fly / 100)), FLY_PALETTE, 10);
         }
 
         // Jon kam qolganda yurakcha lipillaydi
@@ -10317,6 +10406,7 @@ function launchGame(socket, roomId, mapData, continued) {
             createPlayerTexture(this, textureKey, data.color, 32);
 
             currentCharacter = this.physics.add.sprite(data.x, data.y, textureKey).setDepth(3);
+            currentCharacter.heroColor = data.color;   // yangi qahramon rasmi shu rangga bo'yaladi
             currentCharacter.setCollideWorldBounds(true);
             this.physics.add.collider(currentCharacter, platforms);
             // Arvoh (o'lgan) o'yinchi botlar orasidan erkin o'tadi
@@ -10727,11 +10817,18 @@ function launchGame(socket, roomId, mapData, continued) {
                 () => { if (currentCharacter) socket.emit('stopAbilityInRoom', roomId); }
             ],
             weapon: [() => { if (canAct()) socket.emit('toggleWeapon', roomId); }],
-            special: [() => { if (canAct()) socket.emit('useSpecial', roomId); }],
+            special: [() => { if (canAct()) doSpecial(); }],
             // E: dialogda ham ishlaydi (keyingi gap)
             interact: [() => interact()]
         };
 
+        // R: maxsus qobiliyat (ritsar uchishi - R emas, sakrash ikki marta); samuray kesib o'tishi - o'zi tez oldinga yuradi
+        const doSpecial = () => {
+            const c = currentCharacter; if (!c || c.characterType === 'knight') return;
+            const dir = lastDirection === 'left' ? -1 : 1;
+            if (c.characterType === 'samurai' && hasPerkClient('samurai', c.level, 'cut') && !(c.specialCd > 0) && !rideOn) { c.cutAt = this.time.now; dashSt.until = this.time.now + 200; dashSt.dir = dir; dashSt.sp = 1500; sfx('katana', 1); }
+            socket.emit('useSpecial', roomId, dir);
+        };
         // DARAJA IMKONIYATLARI: Q - ikkinchi qurol (almashtirish/qaytarish), R - maxsus qobiliyat
         this.input.keyboard.on('keydown-Q', () => {
             if (!currentCharacter || dialog || pauseMenuOpen || currentCharacter.isDead) return;
@@ -10739,7 +10836,7 @@ function launchGame(socket, roomId, mapData, continued) {
         });
         this.input.keyboard.on('keydown-R', () => {
             if (!currentCharacter || dialog || pauseMenuOpen || currentCharacter.isDead) return;
-            socket.emit('useSpecial', roomId);
+            doSpecial();
         });
 
         // EMOTSIYA: "1" - rasmli (bosh ustida), "2" - qo'l ishorasi (tana oldida) - xonadagi hammaga ko'rinadi
@@ -12098,6 +12195,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 currentCharacter.shieldCd = myData.shieldCd || 0;
                 currentCharacter.special = !!myData.special;
                 currentCharacter.specialCd = myData.specialCd || 0;
+                currentCharacter.flyEnergy = myData.fe;   // ritsar: uchish energiyasi (%)
                 currentCharacter.tornadoCd = myData.tornadoCd || 0;
                 currentCharacter.mineCd = myData.mineCd || 0;
                 currentCharacter.invisCd = myData.invisCd || 0;          // kamonchi: ko'rinmaslik qayta tiklanishi
@@ -12160,6 +12258,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (!otherPlayers[id]) {
                     // Yangi o'yinchini ekranga qo'shish
                     let p = this.add.sprite(pData.x, pData.y, textureKey).setDepth(3);
+                    p.heroColor = pData.color; p.charKey = textureKey;
                     p.targetX = pData.x;
                     p.targetY = pData.y;
                     p.hp = pData.hp;
@@ -12167,8 +12266,9 @@ function launchGame(socket, roomId, mapData, continued) {
                     otherPlayers[id] = p;
                 } else {
                     // Mavjud o'yinchi ma'lumotlarini yangilash
-                    if (otherPlayers[id].texture.key !== textureKey) {
-                        otherPlayers[id].setTexture(textureKey);
+                    if (otherPlayers[id].charKey !== textureKey) {   // qahramon / rang o'zgardi (yangi rasm bo'lsa - kadr animatsiyasi o'zi qo'yadi)
+                        otherPlayers[id].charKey = textureKey; otherPlayers[id].heroColor = pData.color;
+                        if (!Cosmetics.heroReady()) otherPlayers[id].setTexture(textureKey);
                     }
                     otherPlayers[id].targetX = pData.x;
                     otherPlayers[id].targetY = pData.y;
@@ -12221,6 +12321,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     if (otherPlayers[id].healthBar) otherPlayers[id].healthBar.destroy();
                     if (otherPlayers[id].shieldSpr) otherPlayers[id].shieldSpr.destroy();
                     if (otherPlayers[id].weaponSpr) otherPlayers[id].weaponSpr.destroy();
+                    if (otherPlayers[id].fistSpr) otherPlayers[id].fistSpr.destroy();
                     if (otherPlayers[id].hatSpr) otherPlayers[id].hatSpr.destroy();
                     if (otherPlayers[id].faceSpr) otherPlayers[id].faceSpr.destroy();
                     if (otherPlayers[id].basketGfx) otherPlayers[id].basketGfx.destroy();
@@ -12353,7 +12454,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     o = tornadoSprites[tr.id] = this.add.image(tr.x, tr.y, 'px_tornado0').setOrigin(0.5, 1).setDepth(3.7).setAlpha(0);
                     this.tweens.add({ targets: o, alpha: 0.92, duration: 200 });
                 }
-                o.tx = tr.x; o.ty = tr.y; o.left = tr.t;
+                o.tx = tr.x; o.ty = tr.y; o.left = tr.t; o.k = tr.k || 1;   // k - 17-darajada kattaroq
             });
             Object.keys(tornadoSprites).forEach((id) => {
                 if (tids.has(id)) return;
@@ -12386,8 +12487,9 @@ function launchGame(socket, roomId, mapData, continued) {
                 const posX = (isMeleeType && ownerSprite) ? ownerSprite.x + dir * 26 : bData.x;
                 const posY = (isMeleeType && ownerSprite) ? ownerSprite.y - 2 : bData.y;
 
-                if (!bulletSprites[bData.id] && bData.bulletType === 'petbite') { bulletSprites[bData.id] = this.add.rectangle(bData.x, bData.y, 1, 1, 0, 0).setVisible(false); return; }
-                if (bulletSprites[bData.id] && bData.bulletType === 'petbite') return;
+                if (!bulletSprites[bData.id] && bData.bulletType === 'cut' && bData.playerId !== socket.id && otherPlayers[bData.playerId]) otherPlayers[bData.playerId].cutAt = this.time.now;   // samuray otilib kesdi (ninja kadrlari)
+                if (!bulletSprites[bData.id] && (bData.bulletType === 'petbite' || bData.bulletType === 'cut')) { bulletSprites[bData.id] = this.add.rectangle(bData.x, bData.y, 1, 1, 0, 0).setVisible(false); return; }   // cut - samuray kesib o'tishi (ko'rinmas tig'lar)
+                if (bulletSprites[bData.id] && (bData.bulletType === 'petbite' || bData.bulletType === 'cut')) return;
                 if (!bulletSprites[bData.id] && bData.bulletType === 'acid') {
                     ensureCritterTextures(this);
                     const s = this.add.image(bData.x, bData.y, 'px_pet_acid').setDepth(4.05);
@@ -12542,7 +12644,9 @@ function launchGame(socket, roomId, mapData, continued) {
             const fx = sp.skinFx, vis = sp.visible && sp.alpha > 0.35 && !sp.isDead;
             if (fx === 'rainbow') { if (vis) { sp.setTint(Phaser.Display.Color.HSVToRGB((t / 2200) % 1, 0.65, 1).color); sp.rainbowTint = true; } return; }
             if (!vis) return;
-            const cx = sp.x, top = sp.y - sp.displayHeight * sp.originY, feet = top + sp.displayHeight;
+            const cx = sp.x, feet = sp.y - sp.displayHeight * sp.originY + sp.displayHeight;
+            const hdT = sp.heroFit && Cosmetics.HERO.heads && Cosmetics.HERO.heads[sp.heroF];   // yangi qahramon: bosh tepasi
+            const top = hdT ? sp.y + hdT[1] - (Cosmetics.HERO.h - 24) : sp.y - sp.displayHeight * sp.originY;
             if (fx === 'aura' || fx === 'crown' || fx === 'frost') {
                 const col = fx === 'crown' ? 0xffd54f : fx === 'frost' ? 0xb2ebf2 : 0x40c4ff, r = 30 + Math.sin(t / 220) * 3;
                 g.fillStyle(col, 0.12); g.fillCircle(cx, sp.y, r + 8);
@@ -12659,7 +12763,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!o.active) return;
             o.x += (o.tx - o.x) * 0.3; o.y += (o.ty - o.y) * 0.3;
             o.setTexture('px_tornado' + (Math.floor(this.time.now / 70) % 3));
-            o.scaleX = 1 + Math.sin(this.time.now / 90) * 0.06;
+            o.scaleX = (o.k || 1) * (1 + Math.sin(this.time.now / 90) * 0.06); o.scaleY = o.k || 1;
             if (Math.random() < 0.5) {
                 const d = this.add.rectangle(o.x + Phaser.Math.Between(-50, 50), o.y - Phaser.Math.Between(0, 30), Phaser.Math.Between(3, 6), Phaser.Math.Between(3, 6),
                     [0x8d6e63, 0x9e9e9e, 0x6d4c41, 0xbdbdbd][Phaser.Math.Between(0, 3)]).setDepth(3.75);
@@ -13206,7 +13310,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 progressText = t('hud_bots') + ': ' + botsKilled + ' / ' + currentCharacter.killsToWin;
             }
             const stPct = 100 * (currentCharacter.stamina || 0) / (currentCharacter.maxStamina || 100);
-            drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText(), currentCharacter.maxHp, !!currentCharacter.acid);
+            const flyPct = currentCharacter.characterType === 'knight' && hasPerkClient('knight', currentCharacter.level, 'fly') ? Math.round(currentCharacter.flyEnergy ?? 100) : null;
+            drawHUD(this, currentCharacter.hp, stPct, progressText, perkHudText(), currentCharacter.maxHp, !!currentCharacter.acid, flyPct);
             updateTouchLocks();
 
             // Qurol, ritsar qalqoni va qarash tomoni - "postupdate" da (fizika qahramonni surgandan keyin) joylashadi
@@ -13247,6 +13352,38 @@ function launchGame(socket, roomId, mapData, continued) {
         } else if (levelFrozen) {
             levelFrozen = false;
             currentCharacter.body.setAllowGravity(true);
+        }
+        // KAMONCHI 10-daraja: A/D (yoki joystik) ikki marta tez bosilsa - shu tomonga sharpadek desh (~2 qahramon bo'yi), 2 s da bir
+        if (!rideOn && currentCharacter.characterType === 'archer' && hasPerkClient('archer', currentCharacter.level, 'dash') && !currentCharacter.isDead && !dialog) {
+            const kb = this.input.keyboard, lD = cursors.left.isDown || kb.addKey('A').isDown || touchState.left, rD = cursors.right.isDown || kb.addKey('D').isDown || touchState.right, tn = this.time.now;
+            if (lD && !dashSt.l) { if (tn - dashSt.lt < 260 && tn >= dashSt.cd) { dashSt.until = tn + 140; dashSt.dir = -1; dashSt.sp = 900; dashSt.cd = tn + 2000; sfx('whoosh', 0.6); } dashSt.lt = tn; }
+            if (rD && !dashSt.r) { if (tn - dashSt.rt < 260 && tn >= dashSt.cd) { dashSt.until = tn + 140; dashSt.dir = 1; dashSt.sp = 900; dashSt.cd = tn + 2000; sfx('whoosh', 0.6); } dashSt.rt = tn; }
+            dashSt.l = lD; dashSt.r = rD;
+        }
+        if (dashSt.until > this.time.now && !currentCharacter.isDead) {
+            const c = currentCharacter;
+            if (!dashSt.on) { dashSt.on = true; c.body.setAllowGravity(false); }
+            c.setVelocity(dashSt.dir * dashSt.sp, 0); c.setAlpha(0.45); lastDirection = dashSt.dir < 0 ? 'left' : 'right';
+            if (this.time.now >= dashSt.trailAt) {   // sharpa izi
+                dashSt.trailAt = this.time.now + 30;
+                const g = this.add.image(c.x, c.y, c.texture.key, c.frame && c.frame.name).setFlipX(c.flipX).setScale(c.scaleX, c.scaleY).setAlpha(0.45).setTint(0x9fe7ff).setDepth(c.depth - 0.01);
+                this.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
+            }
+            if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y }); }
+            return;
+        } else if (dashSt.on) { dashSt.on = false; currentCharacter.body.setAllowGravity(true); currentCharacter.setAlpha(currentCharacter.isInvisible ? currentCharacter.alpha : 1); currentCharacter.setVelocityX(0); }
+        // KAMONCHI 17-daraja: O'Q BO'RONI (R) - 2 s havoda muallaq turadi, atrofida arbalet aylanadi (o'qlarni server otadi)
+        { const c = currentCharacter, storm = c.characterType === 'archer' && c.special && !c.isDead;
+            if (storm) {
+                if (!stormWas) { c.body.setAllowGravity(false); stormWas = true; }
+                c.setVelocity(0, -6);
+                if (!stormG || !stormG.active) stormG = this.add.graphics().setDepth(4.2);
+                stormG.clear(); const a0 = this.time.now / 60;
+                for (let k = 0; k < 3; k++) { const a = a0 + k * Math.PI * 2 / 3, x1 = c.x + Math.cos(a) * 34, y1 = c.y - 8 + Math.sin(a) * 34; stormG.lineStyle(4, 0x000000, 1).lineBetween(c.x, c.y - 8, x1, y1); stormG.lineStyle(2, 0xbcaaa4, 1).lineBetween(c.x, c.y - 8, x1, y1); stormG.fillStyle(0xffcc80, 1).fillCircle(x1, y1, 3); }
+                stormG.lineStyle(3, 0x8d6e63, 1).strokeCircle(c.x, c.y - 8, 12);
+                if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y }); }
+                return;
+            } else if (stormWas) { stormWas = false; c.body.setAllowGravity(true); if (stormG) { stormG.destroy(); stormG = null; } }
         }
         // AJDARXODA UCHISH: 4 tomonga, o'yinchidan 2x tez; kuchi tugasa pastga tushadi; sakrash (Space / tugma) - tushish
         if (rideOn && currentCharacter.body) {
@@ -13337,12 +13474,16 @@ function launchGame(socket, roomId, mapData, continued) {
         const jumpPressed = jumpDown && !jumpWasDown;
         jumpWasDown = jumpDown;
         const c = currentCharacter;
-        // KNIGHT 10-daraja: uchuvchi etik (R, 2 soniya): W / ↑ / Space BOSIB TURILSA - tepaga uchadi; qo'yib yuborilsa - oddiy tushadi; S - tezroq pastga
+        // KNIGHT 10-daraja: uchuvchi etik - W / ↑ / Space IKKI MARTA bosilsa yoqiladi (2 soniya); BOSIB TURILSA - tepaga uchadi; qo'yib yuborilsa - oddiy tushadi; S - tezroq pastga
+        if (jumpPressed && c.characterType === 'knight' && !c.isDead && !c.special && (c.flyEnergy ?? 100) >= 15 && hasPerkClient('knight', c.level, 'fly') && this.time.now - lastJumpTapAt < 380) { socket.emit('useSpecial', roomId); c.flyStartAt = this.time.now; }   // energiya yetarli bo'lsa
+        if (jumpPressed) lastJumpTapAt = this.time.now;
         const flying = c.characterType === 'knight' && c.special && !c.isDead;
         if (flying) {
             const down = !(dialog && (!dialog.opts.free || dialog.cho)) && (cursors.down.isDown || this.input.keyboard.addKey('S').isDown);   // dialog / variant tanlash paytida - pastga uchmaydi
             if (jumpDown) { c.body.setAllowGravity(false); c.setVelocityY(-230); }
             else { c.body.setAllowGravity(true); if (down && c.body.velocity.y < 330) c.setVelocityY(330); }
+            // qo'ndi - uchish to'xtaydi (energiya tejaladi)
+            if (!jumpDown && (c.body.blocked.down || c.body.touching.down) && this.time.now - (c.flyStartAt || 0) > 300 && this.time.now - (c.flyStopAt || 0) > 250) { c.flyStopAt = this.time.now; socket.emit('flyStop', roomId); }
         } else if (wasFlying) {
             c.body.setAllowGravity(true);
         }
