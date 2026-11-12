@@ -1419,7 +1419,7 @@ io.on('connection', (socket) => {
     });
 
     // 6. HARAKAT KOORDINATALARINI SERVER BILAN SINXRONLASH
-    socket.on('playerMoveInRoom', (data: { roomId: string, x: number, y: number }) => {
+    socket.on('playerMoveInRoom', (data: { roomId: string, x: number, y: number, t?: number }) => {
         // Klientdan kelgan son emas/NaN qiymat bot AI'ga tushsa, botlar
         // koordinatalari ham NaN bo'lib, butunlay "yo'qolib" qolardi
         if (!data || !Number.isFinite(data.x) || !Number.isFinite(data.y)) return;
@@ -1430,6 +1430,7 @@ io.on('connection', (socket) => {
         if (room && room.players[socket.id]) {
             room.players[socket.id].x = data.x;
             room.players[socket.id].y = data.y;
+            room.players[socket.id].mt = Number.isFinite(data.t) ? data.t : undefined;
         }
     });
 

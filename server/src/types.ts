@@ -32,6 +32,7 @@ export interface PlayerState {
     isAdmin?: boolean;            // admin panel orqali kirgan - lobbida va o'yinda "ADMIN" belgisi
     x: number;
     y: number;
+    mt?: number;                  // shu joy klientda qachon o'lchangan (klient vaqti, ms) - boshqalarda silliq ijro uchun
     characterType: string;
     color: number;
     hp: number;

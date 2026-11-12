@@ -364,7 +364,7 @@ export class GameEngine {
             const players: { [id: string]: object } = {};
             Object.values(room.players).forEach(p => {
                 players[p.id] = {
-                    x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
+                    x: p.x, y: p.y, mt: p.mt, hp: p.hp, maxHp: p.maxHp || BASE_HP, stamina: p.stamina, kills: p.kills, isDead: p.isDead,
                     respawnTimer: p.respawnTimer, speedMultiplier: p.speedMultiplier, isInvisible: p.isInvisible,
                     isHoldingAbility: p.isHoldingAbility, characterType: p.characterType, color: p.color,
                     weaponColor: p.weaponColor, look: p.look || '', skinFx: p.skinFx || '', weaponFx: p.weaponFx || '', pt: Math.min(CRITTER.trustMax, p.petTrust || 0), pet: p.pet && (p.petTrust || 0) >= CRITTER.trustMax ? { rs: Math.max(0, Math.round((1 - (p.rideUsed || 0) / PET_RIDE.rangePx) * 100)), rc: Math.max(0, Math.ceil(((p.rideLockUntil || 0) - Date.now()) / 1000)), l: p.pet.lvl, hp: Math.ceil(p.pet.hp), mx: petMaxHp(p.pet.up), r: p.pet.resting || !!p.pet.home, k: (p.pet.c === 'default' ? '' : p.pet.c || '') + '|' + (p.pet.h || '') + '|' + (p.pet.b || ''), n: p.pet.name || '' } : null, nickname: p.nickname, apples: p.apples,

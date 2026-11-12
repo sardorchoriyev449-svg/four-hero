@@ -717,7 +717,7 @@ function launchGame(socket, roomId, mapData, continued) {
     }
     function heroTexKey(scene, packed, f) {
         const key = 'hero_' + packed + '_' + f;
-        if (!scene.textures.exists(key)) scene.textures.addCanvas(key, Cosmetics.heroCanvas(packed, f));
+        if (!scene.textures.exists(key)) scene.textures.addImage(key, Cosmetics.heroCanvas(packed, f));   // addImage - piksellarni qayta o'qimaydi (tez)
         return key;
     }
     // tana: yangi rasm (yuklangan bo'lsa); fizika qutisi 32x48 o'zgarmaydi, rasmning oyog'i - qutining pastida
@@ -981,7 +981,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // MUSHT qurol ustida: qahramon bilan bir xil joy / ko'rinish, faqat musht piksellari - barmoqlar dastani o'rab turadi
         if (sprite.heroFit && !hidden && w.visible && heroHand(sprite)) {
             const fk = 'herofist_' + sprite.heroColor + '_' + sprite.heroF;
-            if (!scene.textures.exists(fk)) scene.textures.addCanvas(fk, Cosmetics.heroFistCanvas(sprite.heroColor, sprite.heroF));
+            if (!scene.textures.exists(fk)) scene.textures.addImage(fk, Cosmetics.heroFistCanvas(sprite.heroColor, sprite.heroF));
             if (!sprite.fistSpr) sprite.fistSpr = scene.add.image(sprite.x, sprite.y, fk).setDepth(3.15);
             const fsp = sprite.fistSpr;
             if (fsp.texture.key !== fk) fsp.setTexture(fk);
@@ -3817,7 +3817,8 @@ function launchGame(socket, roomId, mapData, continued) {
             const img = (k) => tex && tex.exists(k) ? `<img class="shop-pxicon" src="${tex.getBase64(k)}" alt="" style="max-width:64px;max-height:72px">` : '';
             const hv = U.hive, hn = Number(mfBag && mfBag.hive) || 0, hmax = hv.max || 1, hFull = hn >= hmax;
             const hLvl = hv.levels ? hv.levels[Math.min(hn, hmax - 1)] : hv.level, hPrice = hv.prices ? hv.prices[Math.min(hn, hmax - 1)] : hv.price, hLock = !hFull && fl < hLvl;
-            const hiveCard = card2('hive', img('px_note_hive'), t('item_hive') + ' ' + hn + '/' + hmax, t('item_hive_desc').replace('{p}', Math.round((hn ? hv.more || hv.boost : hv.boost) * 100)),
+            const hSteps = hFull ? '' : '<br><span style="color:#ffe082">' + t('item_hive_steps').replace('{m}', hmax).replace('{lv}', (hv.levels || [hv.level]).map((l, k) => k < hn ? '<s>' + l + '</s>' : k === hn ? '<b>' + l + '</b>' : l).join(' · ')) + '</span>';
+            const hiveCard = card2('hive', img('px_note_hive'), t('item_hive') + ' ' + hn + '/' + hmax, t('item_hive_desc').replace('{p}', Math.round((hn ? hv.more || hv.boost : hv.boost) * 100)) + hSteps,
                 hFull ? t('shop_owned') : hLock ? t('mf_need_level_now').replace('{n}', hn + 1).replace('{l}', hLvl).replace('{c}', fl) : t('shop_for_farm'), !hFull, hFull ? '-' : hPrice, hFull || hLock);
             const nx = U.mill[ml], mLock = nx && fl < nx.level;
             const millCard = card2('mill', img('px_mill_tower'), t('item_mill') + (ml ? ' ' + ml + '/' + U.mill.length : ''),
@@ -12276,7 +12277,19 @@ function launchGame(socket, roomId, mapData, continued) {
                     const sn = o.snaps || (o.snaps = []);
                     const last = sn[sn.length - 1];
                     if (last && Math.hypot(pData.x - last.x, pData.y - last.y) > 400) sn.length = 0;   // teleport - bufer tozalanadi
-                    sn.push({ t: nowR, x: pData.x, y: pData.y });
+                    let t = nowR;
+                    if (Number.isFinite(pData.mt)) {
+                        // YUBORUVCHI VAQTI: joy qachon o'lchangan bo'lsa - o'sha paytga qo'yiladi. off - eng tez kelgan paketdagi farq
+                        // (tarmoq + soat farqi); sekin ko'tariladi (yo'l uzaysa moslashadi), keskin o'zgarsa (qayta ulangan) - qayta o'rnatiladi
+                        const off = nowR - pData.mt;
+                        if (o.mtOff === undefined || off < o.mtOff || off - o.mtOff > 2000) o.mtOff = off; else o.mtOff += Math.min(0.5, off - o.mtOff);
+                        t = pData.mt + o.mtOff;
+                        if (last && pData.mt === last.mt) {
+                            if (pData.x === last.x && pData.y === last.y) return;   // yangi ma'lumot yo'q
+                            sn.length = 0; t = nowR - 1000;                       // server o'zi surgan (yangi o'lchov yo'q) - darhol
+                        } else if (last && t <= last.t) return;                   // eskirgan / tartibsiz paket
+                    }
+                    sn.push({ t, x: pData.x, y: pData.y, mt: pData.mt });
                     while (sn.length > 40 || (sn.length > 2 && nowR - sn[0].t > 1500)) sn.shift();
                 };
                 if (!otherPlayers[id]) {
@@ -13125,18 +13138,23 @@ function launchGame(socket, roomId, mapData, continued) {
             pickupHint.setVisible(false);
         }
 
-        // O'yinchilarni siljitish va joni: bufer bo'yicha 100 ms orqada - ikki holat orasida silliq
-        const renderT = performance.now() - 100;
+        // O'yinchilarni siljitish va joni: bufer bo'yicha orqada (yuboruvchi vaqti bilan - 150 ms, eski klient - 100 ms) - holatlar orasida silliq
+        const nowP = performance.now();
         Object.keys(otherPlayers).forEach((id) => {
             let p = otherPlayers[id];
             if (p && p.active && p.targetX !== undefined) {
                 const prevX = p.x;
                 const sn = p.snaps;
+                const renderT = nowP - (p.mtOff !== undefined ? 150 : 100);
                 if (sn && sn.length) {
                     let k = sn.length - 1;
                     while (k > 0 && sn[k].t > renderT) k--;
                     const a = sn[k], b = sn[k + 1];
-                    if (!b || renderT <= a.t) { p.x = a.x; p.y = a.y; }
+                    if (!b && k > 0 && renderT > a.t) {
+                        // bufer tugadi (paket kechikdi) - 80 ms gacha o'sha tezlikda davom etadi (to'xtab, keyin sakramaydi)
+                        const pr = sn[k - 1], dt = Math.max(1, a.t - pr.t), ex = Math.min(renderT - a.t, 80);
+                        p.x = a.x + (a.x - pr.x) / dt * ex; p.y = a.y + (a.y - pr.y) / dt * ex;
+                    } else if (!b || renderT <= a.t) { p.x = a.x; p.y = a.y; }
                     else { const f = Math.min(1, (renderT - a.t) / Math.max(1, b.t - a.t)); p.x = a.x + (b.x - a.x) * f; p.y = a.y + (b.y - a.y) * f; }
                 } else {
                     p.x = Phaser.Math.Linear(p.x, p.targetX, 0.22);
@@ -13393,7 +13411,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 const g = this.add.image(c.x, c.y, c.texture.key, c.frame && c.frame.name).setFlipX(c.flipX).setScale(c.scaleX, c.scaleY).setAlpha(0.45).setTint(0x9fe7ff).setDepth(c.depth - 0.01);
                 this.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
             }
-            if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y }); }
+            if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y, t: Math.round(performance.now()) }); }
             return;
         } else if (dashSt.on) { dashSt.on = false; currentCharacter.body.setAllowGravity(true); currentCharacter.setAlpha(currentCharacter.isInvisible ? currentCharacter.alpha : 1); currentCharacter.setVelocityX(0); }
         // KAMONCHI 17-daraja: O'Q BO'RONI (R) - 2 s havoda muallaq turadi, atrofida arbalet aylanadi (o'qlarni server otadi)
@@ -13405,7 +13423,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 stormG.clear(); const a0 = this.time.now / 60;
                 for (let k = 0; k < 3; k++) { const a = a0 + k * Math.PI * 2 / 3, x1 = c.x + Math.cos(a) * 34, y1 = c.y - 8 + Math.sin(a) * 34; stormG.lineStyle(4, 0x000000, 1).lineBetween(c.x, c.y - 8, x1, y1); stormG.lineStyle(2, 0xbcaaa4, 1).lineBetween(c.x, c.y - 8, x1, y1); stormG.fillStyle(0xffcc80, 1).fillCircle(x1, y1, 3); }
                 stormG.lineStyle(3, 0x8d6e63, 1).strokeCircle(c.x, c.y - 8, 12);
-                if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y }); }
+                if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y, t: Math.round(performance.now()) }); }
                 return;
             } else if (stormWas) { stormWas = false; c.body.setAllowGravity(true); if (stormG) { stormG.destroy(); stormG = null; } }
         }
@@ -13424,7 +13442,7 @@ function launchGame(socket, roomId, mapData, continued) {
             const jp = spaceJump() || touchState.jump, ground = c.body.blocked.down || c.body.touching.down;
             if ((jp && !rideOn.jumpWas) || (rideOn.out && ground)) { socket.emit('petRide', { roomId, on: false }); endRide(); }
             else rideOn.jumpWas = jp;
-            if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y }); }
+            if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: c.x, y: c.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: c.x, y: c.y, t: Math.round(performance.now()) }); }
             jumpWasDown = true;
             return;
         }
@@ -13435,7 +13453,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 jump: cursors.up.isDown || kb.addKey('W').isDown || spaceJump() || touchState.jump };
             if (BigMap.vineControl(this, keys, Math.min(0.05, this.game.loop.delta / 1000))) {
                 if (keys.left) lastDirection = 'left'; else if (keys.right) lastDirection = 'right';
-                if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: currentCharacter.x, y: currentCharacter.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y }); }
+                if (this.time.now - lastSentMove.t >= 30) { lastSentMove = { x: currentCharacter.x, y: currentCharacter.y, t: this.time.now }; socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y, t: Math.round(performance.now()) }); }
                 jumpWasDown = keys.jump;
                 return;
             }
@@ -13445,7 +13463,7 @@ function launchGame(socket, roomId, mapData, continued) {
             skyFly(this);
             if (this.time.now - lastSentMove.t >= 30 && (Math.abs(currentCharacter.x - lastSentMove.x) > 0.5 || Math.abs(currentCharacter.y - lastSentMove.y) > 0.5 || this.time.now - lastSentMove.t >= 250)) {
                 lastSentMove = { x: currentCharacter.x, y: currentCharacter.y, t: this.time.now };
-                socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y });
+                socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y, t: Math.round(performance.now()) });
             }
             return;
         }
@@ -13458,7 +13476,7 @@ function launchGame(socket, roomId, mapData, continued) {
             lastDirection = 'right';
             if (this.time.now - lastSentMove.t >= 30) {
                 lastSentMove = { x: fc.x, y: fc.y, t: this.time.now };
-                socket.emit('playerMoveInRoom', { roomId: roomId, x: fc.x, y: fc.y });
+                socket.emit('playerMoveInRoom', { roomId: roomId, x: fc.x, y: fc.y, t: Math.round(performance.now()) });
             }
             return;
         }
@@ -13555,7 +13573,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const moved = Math.abs(currentCharacter.x - lastSentMove.x) > 0.5 || Math.abs(currentCharacter.y - lastSentMove.y) > 0.5;
         if ((moved && now - lastSentMove.t >= 30) || now - lastSentMove.t >= 250) {
             lastSentMove = { x: currentCharacter.x, y: currentCharacter.y, t: now };
-            socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y });
+            socket.emit('playerMoveInRoom', { roomId: roomId, x: currentCharacter.x, y: currentCharacter.y, t: Math.round(performance.now()) });
         }
     }
 }

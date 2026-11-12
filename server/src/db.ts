@@ -1769,9 +1769,14 @@ export async function decorStore(userId: string, id: string, stored: boolean): P
 export async function buyFarmBooster(userId: string, what: 'hive' | 'mill' | 'greenhouse' | 'sprinkler' | 'scarecrow', price: number, curMill: number): Promise<FarmResult> {
     // Bir martalik (uya, issiqxona) yoki sanaladigan (tegirmon bosqichi, sug'orgich, qo'rqinchoq - joriy son o'zgarmagan bo'lsa +1)
     const flag: any = { greenhouse: 'farmGreenhouse' }, cnt: any = { hive: 'farmHive', mill: 'farmMill', sprinkler: 'farmSprinklers', scarecrow: 'farmScarecrows' };
-    // uya: eski hisoblarda true (=1) saqlangan bo'lishi mumkin
-    const filter: any = flag[what] ? { [flag[what]]: { $ne: true } }
-        : what === 'hive' && curMill === 1 ? { farmHive: { $in: [1, true] } } : { [cnt[what]]: curMill ? curMill : { $in: [0, null, false] } };
+    // uya: eski hisoblarda true / false (son emas) saqlangan bo'lishi mumkin - Mongoose filtri ularni songa aylantirib, bazadagi
+    // true / false ni topolmasdi (2-uya "tanga yetmaydi" deb rad etilardi). Avval xom drayver bilan songa aylantiramiz
+    if (what === 'hive' && mongoose.Types.ObjectId.isValid(userId)) {
+        const _id = new mongoose.Types.ObjectId(userId);
+        await UserModel.collection.updateOne({ _id, farmHive: true }, { $set: { farmHive: 1 } });
+        await UserModel.collection.updateOne({ _id, farmHive: false }, { $set: { farmHive: 0 } });
+    }
+    const filter: any = flag[what] ? { [flag[what]]: { $ne: true } } : { [cnt[what]]: curMill ? curMill : { $in: [0, null] } };
     const set: any = flag[what] ? { [flag[what]]: true } : { [cnt[what]]: curMill + 1 };
     const r = await farmUpdate(userId, { coins: { $gte: price }, ...filter }, { $inc: { coins: -price }, $set: set });
     if (r) return { success: true, ...r };

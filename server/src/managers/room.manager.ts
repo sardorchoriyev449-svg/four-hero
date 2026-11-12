@@ -1489,7 +1489,7 @@ export class RoomManager {
             const def = item === 'hive' ? (f.hive < FARM_HIVE.max ? { price: FARM_HIVE.prices[f.hive], level: FARM_HIVE.levels[f.hive] } : null) : item === 'greenhouse' ? FARM_GREENHOUSE : item === 'mill' ? FARM_MILL[f.mill]
                 : item === 'sprinkler' ? (f.sprinklers < FARM_SPRINKLER.max ? FARM_SPRINKLER : null) : (f.scarecrows < FARM_SCARECROW.max ? FARM_SCARECROW : null);
             if (!def) { reply({ success: false, item, message: 'shop_not_needed' }); return; }
-            if (lv < def.level) { reply({ success: false, item, message: 'mf_zone_level|' + def.level }); return; }
+            if (lv < def.level) { reply({ success: false, item, message: 'mf_need_farm_level|' + def.level }); return; }
             const t = await db.buyFarmBooster(p.userId, item, def.price, cur);
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
             reply({ success: true, item, coins: t.coins, mill: t.farm!.mill, hive: t.farm!.hive, sprinklers: t.farm!.sprinklers, scarecrows: t.farm!.scarecrows, greenhouse: t.farm!.greenhouse });
@@ -1512,7 +1512,7 @@ export class RoomManager {
         if (item === 'rake') {
             const f = await db.getFarm(p.userId);
             if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
-            if (farmLevel(f.xp) < MEADOW.rake.level) { reply({ success: false, item, message: 'mf_zone_level|' + MEADOW.rake.level }); return; }
+            if (farmLevel(f.xp) < MEADOW.rake.level) { reply({ success: false, item, message: 'mf_need_farm_level|' + MEADOW.rake.level }); return; }
             const t = await db.buyRake(p.userId, MEADOW.rake.price);
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
             reply({ success: true, item, coins: t.coins });
@@ -1541,7 +1541,7 @@ export class RoomManager {
             const f = await db.getFarm(p.userId);
             if (!f) { reply({ success: false, item, message: 'err_server' }); return; }
             if (f.elves.length >= FARM_ELF.max) { reply({ success: false, item, message: 'shop_not_needed' }); return; }
-            if (farmLevel(f.xp) < FARM_ELF.level) { reply({ success: false, item, message: 'mf_zone_level|' + FARM_ELF.level }); return; }
+            if (farmLevel(f.xp) < FARM_ELF.level) { reply({ success: false, item, message: 'mf_need_farm_level|' + FARM_ELF.level }); return; }
             const price = FARM_ELF.prices[f.elves.length];
             const t = await db.buyElf(p.userId, f.elves.length, price);
             if (!t.success) { reply({ success: false, item, message: t.message }); return; }
