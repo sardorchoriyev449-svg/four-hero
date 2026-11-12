@@ -955,23 +955,23 @@ window.Cosmetics = (() => {
     // ===== YANGI QAHRAMON (Gemini rasmi, /public/hero/hero.png): kulrang varaq, 11 kadr 42x55 - qahramon rangiga bo'yaladi =====
     // 0/1 turish, 2/3 yurish (yaqin / uzoq oyoq oldinda - navbat bilan), 4 sakrash, 5 tushish, 6 qo'l ko'tarish, 7 zarba. Yuklanmaguncha / yuklanmasa - eski tana (bodyGrid)
     // 0/1 turish, 2-5 yurish, 6 sakrash, 7 tushish, 8 qo'l ko'tarish, 9 zarba, 10 nishonga olish (arbalet / drobovik), 11 tepki, 12 yuqoriga nishon,
-    // 13 ninja tayyor, 14 otilish, 15 zarbadan keyin (qo'llar orqada), 16 yuqoriga kesish, 17 cho'kib qo'nish
+    // 13 ninja tayyor, 14 otilish, 15 zarbadan keyin (qo'llar orqada), 16 yuqoriga kesish, 17 cho'kib qo'nish, 18 o'tirish (ajdarda)
     // fistR2 - musht doirasi (radius^2): shu piksellar qurol ustidan qayta chiziladi
     // hands - har kadrda O'NG musht (qurol shu yerda; turish kadrida ekranning chap tomonidagi qo'l), lhands - chap musht (qalqon) (kadr kataklarida), wang - shu kadrlarda qurol burchagi (o'ngga qaraganda, gradus)
-    const HERO = { src: '/public/hero/hero.png?v=3', w: 64, h: 58, n: 18, mid: 196, wpn: 0.6, fistR2: 10, hands: [[20,42],[20,43],[18,37],[22,40],[19,35],[21,37],[17,32],[13,33],[20,9],[45,31],[52,22],[49,18],[49,14],[19,31],[51,30],[6,29],[29,6],[21,44]],
-        lhands: [[41,41],[41,41],[38,36],[37,40],[40,37],[39,36],[40,32],[48,33],[47,36],[45,31],[52,22],[49,18],[49,14],[42,35],[51,30],[6,29],[43,5],[36,42]],
+    const HERO = { src: '/public/hero/hero.png?v=4', w: 64, h: 58, n: 19, mid: 196, wpn: 0.6, fistR2: 10, hands: [[20,42],[20,43],[18,37],[22,40],[19,35],[21,37],[17,32],[13,33],[20,9],[45,31],[52,22],[49,18],[49,14],[19,31],[51,30],[6,29],[29,6],[21,44],[20,48]],
+        lhands: [[41,41],[41,41],[38,36],[37,40],[40,37],[39,36],[40,32],[48,33],[47,36],[45,31],[52,22],[49,18],[49,14],[42,35],[51,30],[6,29],[43,5],[36,42],[41,47]],
         wang: { 10: 0, 11: -8, 12: -45, 13: -50, 14: 0, 15: 170, 16: -90, 17: 150 },
         // rest - qo'l tana yonida (0-7 kadrlar) qurol burchagi: qilich pastga-orqaga, tayoq tik, arbalet / drobovik pastga
         rest: { sword: 125, katana: 152, staff: -88, bow: 110, shotgun: 110, kunai: 120, hknife: 120, blowpipe: 60 } };
     // BOSH har kadrda: [markaz x, tepasi, visor qatori, kengligi, visor x0, x1, y0, y1] (kadr kataklarida)
-    HERO.heads = [[31.5,5,16,20,29,40,15,17],[31.5,5,16,20,29,40,15,17],[32,6,14,15,31,38,13,15],[32,9,17,15,31,38,16,17],[32,5,13,15,30,38,12,14],[32,4,12,15,31,38,11,13],[31.5,3,13,18,30,39,12,14],[31.5,5,15,18,29,39,14,16],[35.5,5,16,20,33,44,14,17],[31.5,6,18,20,29,40,16,19],[32,6,14,15,30,38,13,15],[31.5,6,14,14,30,37,13,15],[28,6,14,15,26,34,13,15],[31.5,8,16,14,30,37,15,17],[32,14,23,15,31,38,22,23],[32,9,17,15,30,38,16,18],[34.5,7,15,20,30,38,14,15],[31.5,15,24,14,31,37,23,24]];
+    HERO.heads = [[31.5,5,16,20,29,40,15,17],[31.5,5,16,20,29,40,15,17],[32,6,14,15,31,38,13,15],[32,9,17,15,31,38,16,17],[32,5,13,15,30,38,12,14],[32,4,12,15,31,38,11,13],[31.5,3,13,18,30,39,12,14],[31.5,5,15,18,29,39,14,16],[35.5,5,16,20,33,44,14,17],[31.5,6,18,20,29,40,16,19],[32,6,14,15,30,38,13,15],[31.5,6,14,14,30,37,13,15],[28,6,14,15,26,34,13,15],[31.5,8,16,14,30,37,15,17],[32,14,23,15,31,38,22,23],[32,9,17,15,30,38,16,18],[34.5,7,15,20,30,38,14,15],[31.5,15,24,14,31,37,23,24],[31.5,11,22,20,29,40,21,23]];
     // eski tana (32x48 quti) uchun chizilgan bosh kiyimi / yuz buyumi -> shu kadrdagi boshga: masshtab k = bosh kengligi / 32,
     // bosh kiyimi - bosh tepasiga, yuz buyumi - visorga (eski visor markazi: tana tepasidan 14 px). Natija - kadr kataklarida markaz va k
     function heroHeadPlace(f, slot, dxOld, dyOld) {
         const h = HERO.heads[f] || HERO.heads[0], k = h[3] / 32;
         return { x: h[0] + 0.5 + k * dxOld, y: slot === 'face' ? h[2] + 0.5 + k * 0.75 * (dyOld + 10) : h[1] + k * (dyOld + 24), k };   // yuz pastki qismi qisqa - 0.75
     }
-    const heroRest = (f, kind) => (f < 8 && HERO.rest[kind] !== undefined ? HERO.rest[kind] : undefined);
+    const heroRest = (f, kind) => ((f < 8 || f === 18) && HERO.rest[kind] !== undefined ? HERO.rest[kind] : undefined);
     let heroImg = null, heroOk = false;
     const heroCache = new Map();
     function loadHero() {

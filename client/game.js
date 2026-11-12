@@ -683,7 +683,10 @@ function launchGame(socket, roomId, mapData, continued) {
     }
     // YANGI QAHRAMON: kadr tanlash - zarba (0.09 s qo'l ko'tarish, keyin zarba), havoda (sakrash / tushish), yurish (5 kadr), turish (nafas)
     // boshqa o'yinchilar - tezlik pozitsiya o'zgarishidan (silliqlangan)
+    const RIDE_LIFT = 22;   // ajdarda o'tirganda ajdar shuncha yuqoriroq (chavandoz tos qismi uning orqasida)
     function heroFrame(scene, sprite) {
+        // AJDARDA: o'tirib boradi (o'zi - rideOn, boshqalar - hamrohi "ride" holatida)
+        if ((sprite === currentCharacter && rideOn) || scene.time.now - (sprite.rideAt || -1e9) < 300) return 18;
         const now = scene.time.now, atk = now - (sprite.lastAtkAt || -1e9), cut = now - (sprite.cutAt || -1e9);
         const type = sprite.characterType, gun = type === 'archer' || (type === 'knight' && sprite.weaponMode === 'alt');   // arbalet / drobovik - ikki qo'llab nishonga olish
         let vx, vy, ground;
@@ -7739,13 +7742,15 @@ function launchGame(socket, roomId, mapData, continued) {
             }
             const k = q.st === 'dash' ? 0.6 : 0.25;
             o.x = Math.abs(o.x - q.x) > 300 ? q.x : Phaser.Math.Linear(o.x, q.x, k);
-            o.y = Math.abs(o.y - q.y) > 300 ? q.y : Phaser.Math.Linear(o.y, q.y, k);
+            const qy = q.y - (q.st === 'ride' ? RIDE_LIFT : 0);   // minilganda - chavandoz orqasiga o'tiradi
+            o.y = Math.abs(o.y - qy) > 300 ? qy : Phaser.Math.Linear(o.y, qy, k);
             const pk = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet ? lastPlayersState[q.id].pet.k : '';
             const plv = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet ? lastPlayersState[q.id].pet.l : 1, gk = petGrowth(plv);
             const perch = q.st === 'perch' && Math.hypot(o.x - q.x, o.y - q.y) < 6;
             o.setTexture(petTex(scene, perch ? (t0 % 3600 < 180 ? 'blink' : 'sit') : q.st === 'dash' ? 'scared' : (Math.floor(t0 / (q.st === 'back' ? 70 : 120)) % 2 ? 'fly0' : 'fly1'), pk)).setFlipX(q.f < 0)
                 .setAngle(q.st === 'dash' ? q.f * 10 : 0).setScale((q.st === 'dash' ? 0.6 : 0.55) * gk);
-            if (q.st === 'ride') { const mine = q.id === socket.id && currentCharacter; if (mine) o.setPosition(currentCharacter.x, currentCharacter.y + 26); o.setDepth(mine ? currentCharacter.depth - 0.01 : 2.4); } else o.setDepth(4.18);
+            if (q.st === 'ride') { const rider = q.id === socket.id ? currentCharacter : otherPlayers[q.id]; if (rider) rider.rideAt = t0; }   // chavandoz - o'tirish kadri
+            if (q.st === 'ride') { const mine = q.id === socket.id && currentCharacter; if (mine) o.setPosition(currentCharacter.x, currentCharacter.y + 26 - RIDE_LIFT); o.setDepth(mine ? currentCharacter.depth - 0.01 : 2.4); } else o.setDepth(4.18);
             if (q.fl) o.setTintFill(0xff5252); else if (o.happyUntil && t0 < o.happyUntil) o.setTint(0xffd1e8); else o.clearTint();
             if (q.st === 'dash' && Math.random() < 0.6) { const tr = scene.add.rectangle(o.x, o.y, 5, 5, 0xd1c4e9, 0.8).setDepth(4.17); scene.tweens.add({ targets: tr, alpha: 0, scale: 0.2, duration: 220, onComplete: () => tr.destroy() }); }
             const pd = lastPlayersState && lastPlayersState[q.id] && lastPlayersState[q.id].pet;
