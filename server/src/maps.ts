@@ -442,7 +442,7 @@ export const CRITTER = {
 // Darajasi: hujumlar va ovqatdan tajriba oladi (1..10). Kuchaytirishlar (zarar, jon, tezlik) - tanga bilan, daraja ochadi.
 // Fermadagi PUSHISTIK UYCHASI: dam olayotganda jonini o'zi asta tiklaydi
 export const PET = {
-    baseHp: 80, hpPerUp: 25, baseDmg: 10, dmgPerLvl: 2, dmgPerUp: 5, dashK: 2.2,
+    baseHp: 70, hpPerUp: 20, baseDmg: 8, dmgPerLvl: 1.5, dmgPerUp: 4, dashK: 1.8,   // (pasaytirilgan: 15-darajada max zarar 63 -> 49, uchib urish 139 -> 88, jon 205 -> 170)
     spitMs: 1500, spitPerUp: 140, dashMs: 4600, dashPerUp: 380,
     range: 470, dashRange: 340, spitSpeed: 560, dashSpeed: 950, followSpeed: 420, dashHurt: 5,
     returnPct: 0.4, maxLevel: 15, upMax: 5, upPrices: [300, 600, 1000, 1500, 2200],
@@ -464,7 +464,7 @@ export const petGrowth = (lvl: number) => lvl >= 15 ? 3 : lvl >= 10 ? 1.3 : lvl 
 // AJDARXOGA MINISH (15-darajadan): yerga o'tirganda yoniga borib E; 300 m (3000 px) uchadi, kuchi tugasa pastga tushadi va 15 s dam oladi; o'yinchidan 2x tez, sakrash tugmasi - tushish
 export const PET_RIDE = { lvl: 15, rangePx: 3000, cdMs: 15000, near: 130, dy: 26 };
 export const petMaxHp = (up: { hp?: number }) => PET.baseHp + PET.hpPerUp * (up.hp || 0);
-export const petDamage = (lvl: number, up: { dmg?: number }) => PET.baseDmg + PET.dmgPerLvl * (lvl - 1) + PET.dmgPerUp * (up.dmg || 0);
+export const petDamage = (lvl: number, up: { dmg?: number }) => Math.round(PET.baseDmg + PET.dmgPerLvl * (lvl - 1) + PET.dmgPerUp * (up.dmg || 0));
 export const petSpitMs = (up: { spd?: number }) => PET.spitMs - PET.spitPerUp * (up.spd || 0);
 export const petDashMs = (up: { spd?: number }) => PET.dashMs - PET.dashPerUp * (up.spd || 0);
 // Ovqat (ferma omboridan): ekin va mevalar - bozordagi narxiga yarasha jon tiklaydi
