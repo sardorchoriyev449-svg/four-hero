@@ -9,7 +9,7 @@
     const hero = () => selectedCharTab;
     const cats = () => ['skin', 'wskin', ...cosSlotsFor(hero())];
     const catLabel = (c) => c === 'skin' ? t('char_skins_title') : c === 'wskin' ? t('wd_cat_wskin') : t('slot_' + c);
-    const catIcon = { skin: 'fa-shirt', wskin: 'fa-palette', head: 'fa-hat-cowboy', face: 'fa-glasses' };
+    const catIcon = { skin: 'fa-shirt', wskin: 'fa-palette', head: 'fa-hat-cowboy', face: 'fa-glasses', body: 'fa-vest' };
     const coinsHtml = (n) => `<i class="fa-solid fa-coins"></i> ${n}`;
     // Sotib olishdan oldin tasdiq (narxlar 10 000 gacha - adashib bosilsa pul ketib qolmasin)
     const confirmBuy = (name, price) => new Promise(r => pxConfirm(t('cos_buy_confirm').replace('{name}', name).replace('{price}', price), () => r(true), () => r(false)));
@@ -54,7 +54,7 @@
         const it = cosItems(c).find(x => x.id === id);
         return it ? cosName(c, it) : id;
     }
-    const cosItems = (c) => c === 'head' ? cosCatalog.head : c === 'face' ? cosCatalog.face : ((cosCatalog.weapons[hero()] || {})[c] || []);
+    const cosItems = (c) => c === 'head' ? cosCatalog.head : c === 'face' ? cosCatalog.face : c === 'body' ? (cosCatalog.body || []) : ((cosCatalog.weapons[hero()] || {})[c] || []);
 
     // Bitta amal (sotib olish/kiyish): tugma "band", tugagach oyna yangilanadi
     async function act(btn, fn) {
@@ -156,7 +156,7 @@
             ct.appendChild(b);
         });
         const note = el.querySelector('.wd-cat-note');
-        note.innerText = (cat === 'head' || cat === 'face') ? t('cos_note') : cat === 'wskin' ? t('wd_wskin_note') : '';
+        note.innerText = (cat === 'head' || cat === 'face' || cat === 'body') ? t('cos_note') : cat === 'wskin' ? t('wd_wskin_note') : '';
         renderGrid(el.querySelector('.wd-grid'));
         drawPreview();
     }

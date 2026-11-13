@@ -16,13 +16,19 @@ export interface CosmeticItem {
 export const HEAD_ITEMS: CosmeticItem[] = [
     { id: 'bucket', name: 'Bucket', price: 250 },
     { id: 'chef', name: 'Chef Hat', price: 400 },
+    { id: 'bow', name: 'Big Bow', price: 450 },
+    { id: 'backcap', name: 'Backwards Cap', price: 450 },
     { id: 'cowboy', name: 'Cowboy Hat', price: 550 },
     { id: 'kasa', name: 'Japanese Hat', price: 700 },
     { id: 'bunny', name: 'Bunny Ears', price: 900 },
+    { id: 'flowercrown', name: 'Flower Crown', price: 1000 },
+    { id: 'headphones', name: 'Gamer Headphones', price: 1000 },
     { id: 'safari', name: 'Robinson Hat', price: 1100 },
     { id: 'cat', name: 'Cat Ears', price: 1400 },
     { id: 'pirate', name: 'Pirate Hat', price: 1700 },
     { id: 'crown', name: 'Royal Crown', price: 2100 },
+    { id: 'tiara', name: 'Princess Tiara', price: 2400 },
+    { id: 'spiky', name: 'Spiky Hair', price: 2400 },
     { id: 'punk', name: 'Punk Hair', price: 2600 },
     { id: 'viking', name: 'Viking Helmet', price: 3200 },
     { id: 'wizard', name: 'Wizard Hat', price: 3900 },
@@ -32,14 +38,37 @@ export const HEAD_ITEMS: CosmeticItem[] = [
 export const FACE_ITEMS: CosmeticItem[] = [
     { id: 'clown', name: 'Clown Nose', price: 250 },
     { id: 'glasses', name: 'Glasses', price: 400 },
+    { id: 'blush', name: 'Rosy Cheeks', price: 500 },
+    { id: 'bandana', name: 'Bandit Bandana', price: 500 },
     { id: 'mustache', name: 'Mustache', price: 550 },
     { id: 'hockey', name: 'Hockey Mask', price: 700 },
     { id: 'goggles', name: 'Ski Goggles', price: 900 },
     { id: 'eyepatch', name: 'Eye Patch', price: 1100 },
     { id: 'shades', name: 'Sunglasses', price: 1400 },
+    { id: 'butterfly', name: 'Butterfly Mask', price: 1500 },
+    { id: 'heromask', name: 'Hero Mask', price: 1500 },
     { id: 'heart', name: 'Heart Glasses', price: 1700 },
     { id: 'cyber', name: 'Cyber Glasses', price: 2100 },
     { id: 'ninja', name: 'Ninja Mask', price: 2600 }
+];
+
+// KIYIM (tana ustidan): hamma personajga umumiy (bosh / yuz kabi). Rasmi - client/cosmetics.js (CLOTHES)
+export const BODY_ITEMS: CosmeticItem[] = [
+    { id: 'pinkdress', name: 'Pink Dress', price: 600 },
+    { id: 'hoodie', name: 'Blue Hoodie', price: 600 },
+    { id: 'school', name: 'School Uniform', price: 700 },
+    { id: 'pinktee', name: 'Pink Tee & Jeans', price: 700 },
+    { id: 'tracksuit', name: 'Tracksuit', price: 800 },
+    { id: 'plaid', name: 'Plaid Shirt & Jeans', price: 900 },
+    { id: 'flowerdress', name: 'Flower Dress', price: 1000 },
+    { id: 'football', name: 'Football Kit', price: 1000 },
+    { id: 'sweater', name: 'Mint Sweater & Skirt', price: 1400 },
+    { id: 'leather', name: 'Leather Jacket', price: 1400 },
+    { id: 'suit', name: 'Business Suit', price: 1800 },
+    { id: 'tutu', name: 'Ballerina Tutu', price: 1900 },
+    { id: 'camo', name: 'Camo Suit', price: 1900 },
+    { id: 'gown', name: 'Princess Gown', price: 3000 },
+    { id: 'tuxedo', name: 'Tuxedo', price: 3000 }
 ];
 
 // Har personajning qurol turlari (slot) va ularning ko'rinishlari
@@ -124,7 +153,7 @@ export const WEAPON_ITEMS: { [characterType: string]: { [slot: string]: Cosmetic
 };
 
 // Kiyilgan detallarni bitta qisqa satrda yuborish tartibi (o'yin holati har 30ms da ketadi)
-export const LOOK_SLOTS = ['head', 'face', 'sword', 'shield', 'shotgun', 'staff', 'bow', 'katana', 'kunai'];
+export const LOOK_SLOTS = ['head', 'face', 'sword', 'shield', 'shotgun', 'staff', 'bow', 'katana', 'kunai', 'body'];   // body - oxirida (eski satrlar buzilmaydi)
 
 // Shu personaj uchun shu slotda bor buyum (yo'q bo'lsa - null)
 export function findCosmetic(characterType: string, slot: string, itemId: string): CosmeticItem | null {
@@ -132,13 +161,14 @@ export function findCosmetic(characterType: string, slot: string, itemId: string
     let list: CosmeticItem[] | undefined;
     if (slot === 'head') list = HEAD_ITEMS;
     else if (slot === 'face') list = FACE_ITEMS;
+    else if (slot === 'body') list = BODY_ITEMS;
     else list = WEAPON_ITEMS[characterType] && WEAPON_ITEMS[characterType][slot];
     return (list && list.find(i => i.id === itemId)) || null;
 }
 
 // Egalik kaliti: bosh/yuz - umumiy ("head:cowboy"), qurol - personajga ("knight.sword:bat")
 export function cosmeticKey(characterType: string, slot: string, itemId: string): string {
-    return (slot === 'head' || slot === 'face') ? slot + ':' + itemId : characterType + '.' + slot + ':' + itemId;
+    return (slot === 'head' || slot === 'face' || slot === 'body') ? slot + ':' + itemId : characterType + '.' + slot + ':' + itemId;
 }
 
 // Personajning kiyilgan detallari -> "cowboy|hockey|bat|..." (LOOK_SLOTS tartibida, bo'shi - "")

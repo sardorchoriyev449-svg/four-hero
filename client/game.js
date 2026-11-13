@@ -715,16 +715,16 @@ function launchGame(socket, roomId, mapData, continued) {
         if (type === 'knight' && sprite.weaponMode === 'alt') return 10;   // drobovik qo'lda - nishonga olib turadi
         return Math.floor(now / 650) % 2;
     }
-    function heroTexKey(scene, packed, f) {
-        const key = 'hero_' + packed + '_' + f;
-        if (!scene.textures.exists(key)) scene.textures.addImage(key, Cosmetics.heroCanvas(packed, f));   // addImage - piksellarni qayta o'qimaydi (tez)
+    function heroTexKey(scene, packed, f, body) {
+        const key = 'hero_' + packed + '_' + f + (body ? '_' + body : '');   // body - kiyim
+        if (!scene.textures.exists(key)) scene.textures.addImage(key, Cosmetics.heroCanvas(packed, f, body));   // addImage - piksellarni qayta o'qimaydi (tez)
         return key;
     }
     // tana: yangi rasm (yuklangan bo'lsa); fizika qutisi 32x48 o'zgarmaydi, rasmning oyog'i - qutining pastida
     function updateHeroBody(scene, sprite) {
         if (sprite.heroColor === undefined || !Cosmetics.heroReady()) return;
         const hf = sprite.heroF = heroFrame(scene, sprite);
-        const key = heroTexKey(scene, sprite.heroColor, hf);
+        const key = heroTexKey(scene, sprite.heroColor, hf, sprite.look && sprite.look.body && Cosmetics.has('body', sprite.look.body) ? sprite.look.body : '');
         if (sprite.texture.key !== key) sprite.setTexture(key);
         if (!sprite.heroFit) {
             const H = Cosmetics.HERO;

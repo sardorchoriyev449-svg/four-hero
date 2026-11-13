@@ -2062,8 +2062,8 @@ function renderShop() {
 }
 
 // ===== DETALLAR: bosh kiyimi, yuz buyumi (hamma personajga umumiy), qurol ko'rinishlari (personajga) =====
-const cosSlotsFor = (charType) => ['head', 'face', ...Object.keys((cosCatalog && cosCatalog.weapons[charType]) || {})];
-const cosKey = (charType, slot, id) => (slot === 'head' || slot === 'face') ? slot + ':' + id : charType + '.' + slot + ':' + id;
+const cosSlotsFor = (charType) => ['head', 'face', ...(cosCatalog && cosCatalog.body ? ['body'] : []), ...Object.keys((cosCatalog && cosCatalog.weapons[charType]) || {})];
+const cosKey = (charType, slot, id) => (slot === 'head' || slot === 'face' || slot === 'body') ? slot + ':' + id : charType + '.' + slot + ':' + id;
 function cosName(slot, item) {
     const k = 'cos_' + slot + '_' + item.id, v = t(k);
     return v === k ? item.name : v;
@@ -2086,7 +2086,7 @@ function renderCosmetics() {
         tabs.appendChild(b);
     });
 
-    const items = selectedCosSlot === 'head' ? cosCatalog.head : selectedCosSlot === 'face' ? cosCatalog.face : cosCatalog.weapons[charType][selectedCosSlot];
+    const items = selectedCosSlot === 'head' ? cosCatalog.head : selectedCosSlot === 'face' ? cosCatalog.face : selectedCosSlot === 'body' ? (cosCatalog.body || []) : cosCatalog.weapons[charType][selectedCosSlot];
     const owned = currentUser.ownedCosmetics || [];
     const equipped = ((currentUser.equippedCosmetics || {})[charType] || {})[selectedCosSlot];
     items.forEach((item) => {

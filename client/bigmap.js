@@ -940,7 +940,10 @@ window.BigMap = (function () {
             }
             F.y = feet; F.air = false;
         } else {
-            if (F.y === null) F.y = feet;
+            // yiqilish BALANDLIGI - oxirgi eng baland nuqtadan (yerdan uzilgan joydan emas): ko'tarilayotganda (sakrash, ikkinchi sakrash)
+            // va ritsar uchayotganda o'lchov qaytadan boshlanadi - havoda uchib / sakrab tushishni sekinlatgan o'yinchiga zarar yo'q
+            const flying = hero.characterType === 'knight' && hero.special;
+            if (F.y === null || hero.body.velocity.y <= 0 || flying) F.y = feet;
             F.air = true;
         }
     }

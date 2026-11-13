@@ -12,7 +12,7 @@ import { RoomManager } from './managers/room.manager';
 import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin, SKINS_OFF } from './skins';
-import { HEAD_ITEMS, FACE_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
+import { HEAD_ITEMS, FACE_ITEMS, BODY_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
 import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS, homeMax, homeSellPrice } from './maps';
 import { BIG_GEN, BIG_CLOSED } from './bigmap';
 import { config } from 'dotenv';
@@ -343,6 +343,7 @@ app.get('/api/admin/catalog', requireAdmin, (_req, res) => {
     const items: { value: string, label: string, group: string }[] = [];
     HEAD_ITEMS.forEach(i => items.push({ value: 'cos|head|' + i.id, label: i.name, group: 'Bosh' }));
     FACE_ITEMS.forEach(i => items.push({ value: 'cos|face|' + i.id, label: i.name, group: 'Yuz' }));
+    BODY_ITEMS.forEach(i => items.push({ value: 'cos|body|' + i.id, label: i.name, group: 'Kiyim' }));
     Object.keys(WEAPON_ITEMS).forEach(c => Object.keys(WEAPON_ITEMS[c]).forEach(slot => WEAPON_ITEMS[c][slot].forEach(i =>
         items.push({ value: 'cos|' + c + '.' + slot + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Qurol detali' }))));
     Object.keys(SKIN_CATALOG).forEach(c => SKIN_CATALOG[c].forEach(i => { if (i.id !== 'default') items.push({ value: 'skin|' + c + '|' + i.id, label: i.name + ' (' + c + ')', group: 'Personaj skini' }); }));
@@ -906,7 +907,7 @@ app.post('/api/weapon-skins/:userId/equip', async (req, res) => {
 
 // DETALLAR (bosh kiyimi, yuz buyumi, qurol ko'rinishlari): katalog, sotib olish, kiyish/yechish
 app.get('/api/cosmetics', (req, res) => {
-    res.json({ success: true, head: HEAD_ITEMS, face: FACE_ITEMS, weapons: WEAPON_ITEMS });
+    res.json({ success: true, head: HEAD_ITEMS, face: FACE_ITEMS, body: BODY_ITEMS, weapons: WEAPON_ITEMS });
 });
 
 // Kiyilgan detal o'zgarsa - shu hisob hozir biror xonada bo'lsa, u yerdagi ko'rinishi ham darhol yangilanadi
@@ -938,7 +939,7 @@ app.post('/api/cosmetics/:userId/equip', async (req, res) => {
         return;
     }
     // itemId: null - yechish (slot shu personajga tegishli bo'lishi kerak)
-    const validSlot = slot === 'head' || slot === 'face' || !!(WEAPON_ITEMS[characterType] && WEAPON_ITEMS[characterType][slot]);
+    const validSlot = slot === 'head' || slot === 'face' || slot === 'body' || !!(WEAPON_ITEMS[characterType] && WEAPON_ITEMS[characterType][slot]);
     const item = itemId === null ? null : findCosmetic(characterType, slot, itemId);
     if (!validSlot || (itemId !== null && !item)) {
         res.status(400).json({ success: false, message: 'err_not_found' });
