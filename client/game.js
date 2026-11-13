@@ -4113,22 +4113,55 @@ function launchGame(socket, roomId, mapData, continued) {
         }
         return gridOutline(g, 0x0a0a0a);
     }
-    // Yuz: uxlayotgan (ko'zlar yumuq) yoki g'azabli (qizil ko'z, tishli ochiq og'iz)
+    // Yuz (KO'ZSIZ): uxlayotganda - yumuq og'iz (tishlar uchi chiqib turadi), uyg'onganda - katta yirtqich og'iz:
+    // yog'och lab, ichi qorong'i qizil, turli kattalikdagi suyak rang tishlar (burchaklarda qoziq tishlar), til
     function gtFaceGrid(angry) {
         const W = 50, H = 76, g = gridNew(W, H);
-        const set = (x, y, c) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
-        [[12, 14], [38, 14]].forEach(([ex, ey]) => {
-            if (angry) {
-                for (let y = -4; y <= 4; y++) for (let x = -6; x <= 6; x++) if ((x / 6) ** 2 + (y / 4) ** 2 <= 1) set(ex + x, ey + y, 0x1a0000);
-                for (let y = -2; y <= 2; y++) for (let x = -3; x <= 3; x++) if ((x / 3) ** 2 + (y / 2) ** 2 <= 1) set(ex + x, ey + y, y < 0 ? 0xff8a80 : 0xff1744);
-                for (let k = -7; k <= 7; k++) set(ex + k, ey - 6 - Math.round((ex < 25 ? k : -k) * 0.35), 0x1a0f08);   // qovoq qoshlar
-            } else for (let k = -6; k <= 6; k++) { set(ex + k, ey + Math.round(Math.abs(k) * 0.3), 0x1a0f08); set(ex + k, ey + 1 + Math.round(Math.abs(k) * 0.3), 0x1a0f08); }
-        });
+        const set = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (y >= 0 && y < H && x >= 0 && x < W) g[y][x] = c; };
+        const LIP = [0x3e2717, 0x5a3a22, 0x7b5332, 0x9c7048], TOOTH = [0xa89a78, 0xd8ccae, 0xf3ead2, 0xfffbef];
+        // tish: uchi (tx, ty) dan asosga (yuqori tishlar - pastga qaragan), kengligi w, uzunligi h; chap tomoni yorug', o'ng - soya
+        const tooth = (tx, baseY, w, h, down) => {
+            for (let d = 0; d < h; d++) {
+                const half = Math.max(0, (w / 2) * (1 - d / h)), y = down ? baseY + d : baseY - d;
+                for (let x = Math.round(tx - half); x <= Math.round(tx + half); x++) {
+                    const t = (x - (tx - half)) / Math.max(1, 2 * half);
+                    set(x, y, d >= h - 1 ? TOOTH[1] : t < 0.3 ? TOOTH[3] : t > 0.75 ? TOOTH[0] : TOOTH[2]);
+                }
+            }
+        };
         if (angry) {
-            for (let y = 30; y < 74; y++) for (let x = 2; x < 48; x++) if (((x - 25) / 23) ** 2 + ((y - 52) / 21) ** 2 <= 1) set(x, y, y < 40 ? 0x4a0000 : 0x1a0000);
-            for (let k = 0; k < 7; k++) { const tx = 6 + k * 6; for (let d = 0; d < 6; d++) { set(tx + (d < 3 ? d : 5 - d), 32 + d, 0xfff8e1); set(tx + (d < 3 ? d : 5 - d), 72 - d, 0xfff8e1); } }
-            for (let y = 56; y < 66; y++) for (let x = 18; x < 32; x++) if (((x - 25) / 7) ** 2 + ((y - 61) / 5) ** 2 <= 1) set(x, y, 0xb71c1c);
-        } else for (let x = 8; x < 42; x++) { set(x, 52 + Math.round(Math.sin((x - 8) / 34 * Math.PI) * 3), 0x1a0f08); set(x, 53 + Math.round(Math.sin((x - 8) / 34 * Math.PI) * 3), 0x1a0f08); }
+            const cx = 25, cy = 50, rx = 23, ry = 21;
+            const rim = (x) => { const a = Math.max(0, 1 - ((x - cx) / rx) ** 2); return Math.sqrt(a); };
+            // og'iz ichi: chekkasi notekis (yog'och yirtig'i), yuqorisi qizg'ish, pasti qora
+            for (let y = cy - ry; y <= cy + ry; y++) for (let x = cx - rx; x <= cx + rx; x++) {
+                const jag = Math.sin(x * 1.7) * 1.2 + Math.sin(y * 2.3) * 0.8;
+                const r = ((x - cx) / (rx + jag * 0.4)) ** 2 + ((y - cy) / (ry + jag * 0.4)) ** 2;
+                if (r > 1) continue;
+                const v = (y - (cy - ry)) / (2 * ry);
+                set(x, y, r > 0.82 ? LIP[r > 0.92 ? 2 : 1] : v < 0.25 ? 0x5a0a0a : v < 0.55 ? 0x2a0303 : 0x170101);
+                if (r > 0.92 && y < cy) set(x, y, LIP[3]);   // yuqori lab - yorug'
+            }
+            // til
+            for (let y = cy + 8; y <= cy + 18; y++) for (let x = cx - 11; x <= cx + 11; x++) {
+                const r = ((x - cx) / 11) ** 2 + ((y - (cy + 15)) / 6) ** 2;
+                if (r <= 1 && g[y] && g[y][x] !== undefined && g[y][x] !== LIP[1] && g[y][x] !== LIP[2] && g[y][x] !== LIP[3]) set(x, y, x === cx ? 0x5c0d0d : r < 0.35 && y < cy + 14 ? 0xd84343 : 0x9e1f1f);
+            }
+            // yuqori tishlar (lab chizig'idan pastga), burchaklarda katta qoziq tishlar
+            const upper = [[6.5, 5, 13], [12, 5, 8], [17.5, 5, 9], [22.5, 4, 7], [27.5, 4, 7], [32.5, 5, 9], [38, 5, 8], [43.5, 5, 13]];
+            upper.forEach(([x, w, h]) => tooth(x, Math.round(cy - ry * rim(x) * 0.93) + 1, w + (h > 8 ? 1 : 0), h, true));
+            // pastki tishlar (pastdan yuqoriga), qisqaroq, ikki qoziq
+            const lower = [[10, 5, 11], [16, 4, 6], [21, 4, 5], [29, 4, 5], [34, 4, 6], [40, 5, 11]];
+            lower.forEach(([x, w, h]) => tooth(x, Math.round(cy + ry * rim(x) * 0.93) - 1, w + (h > 7 ? 1 : 0), h, false));
+        } else {
+            // yumuq og'iz: egri chok, ustida va ostida lab, chokdan tishlar uchi chiqib turadi
+            const seam = (x) => 50 + Math.round(Math.sin((x - 6) / 38 * Math.PI) * 4 + Math.sin(x * 0.9) * 0.6);
+            for (let x = 5; x < 45; x++) {
+                const y = seam(x);
+                set(x, y - 2, LIP[3]); set(x, y - 1, LIP[2]); set(x, y, 0x140a05); set(x, y + 1, 0x140a05); set(x, y + 2, LIP[1]);
+            }
+            [[8, true], [14, false], [20, true], [30, false], [36, true], [42, false]].forEach(([x, up]) => tooth(x, up ? seam(x) - 1 : seam(x) + 2, 4, 4, !up));
+            set(4, seam(5), 0x140a05); set(45, seam(44), 0x140a05);
+        }
         return g;
     }
     function gtAppleGrid(spiky) {
