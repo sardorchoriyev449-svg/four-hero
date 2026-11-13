@@ -920,7 +920,7 @@ function refreshUserInRooms(userId: string): void {
 app.post('/api/cosmetics/:userId/buy', async (req, res) => {
     const { characterType, slot, itemId } = req.body || {};
     const item = findCosmetic(characterType, slot, itemId);
-    if (!item) {
+    if (!item || item.secret) {   // maxfiy buyum - sotilmaydi
         res.status(400).json({ success: false, message: 'err_not_found' });
         return;
     }

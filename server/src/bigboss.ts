@@ -623,7 +623,7 @@ export function updateAreas(S: BM.BigState, alive: PlayerState[], ctx: BM.BigCtx
         dd.next = S.tick + T(500);
         const q = alive.find(p => p.id === pid); if (!q) return;
         BM.hurtBig(q, dd.dps * 0.5, ctx, 'ground');
-        ctx.emitTo(pid, 'bigBurn', { x: Math.round(q.x), y: Math.round(q.y + 24), p: dd.k === 'poison' ? 1 : 0 });
+        ctx.emitTo(pid, 'bigBurn', { x: Math.round(q.x), y: Math.round(q.y + 24), p: dd.k === 'poison' ? 1 : 0, f: dd.k === 'burn' ? 1 : 0 });   // f - olovli hujumdan (lava emas)
     });
 }
 // semiz elf olovi (konus): maydon tepasidan og'izgacha mouth px; markaz kd (ulush) masofada drop px pastga egiladi, keyin tekis; qalinligi h0 -> h1 (yarmi)
@@ -1820,6 +1820,139 @@ function mrwhoAI(c: SP): void {
     e.tvs = s;
 }
 SETPIECE.mrwho = mrwhoAI;
+// T-REX1000 (Skyland 2-boss, eskiz bo'yicha): robot T-Rex - ko'zi, burni yo'q, faqat og'iz; belida o'tkir nishlar. Hujumlari:
+//  1) DUM: o'yinchi yaqinida (yerda) - orqasini o'girib, dumi bilan uradi (uchirib yuboradi)
+//  2) OLOV: o'yinchi yerda, lekin uzoqda - maydon o'rtasiga borib, bir tomonga 0 dan 90 gradusgacha (yoki 180 dan 90 gacha) olov purkaydi:
+//     past (yer bo'ylab) boshlab tepaga ko'tariladi - o'yinchi uning ORQA tomoniga o'tib qutuladi
+//  3) NISHLAR: o'yinchi tepada (platformada) - belidan o'tkir uchli nishlar otadi (3 tadan, 3 marta)
+// tailRange - dumga o'girilish masofasi, tailReach - dum yetadigan joy (gavda markazidan orqaga, rasmdagi dum uzunligi), tailUp - shundan baland (platformadagi) tegmaydi
+export const REX = { tailRange: 170, tailReach: 175, tailUp: 60, tailWind: 520, tailMs: 320, tailDmg: 34, tailCd: 1400, fireNear: 360, fireEvery: 6500, fireWind: 2000, fireMs: 2600, fireLen: 1100, fireW: 70,
+    fireDmg: 10, fireA0: -40, fireA1: 90, mouthX: 95, mouthY: 198, spikeEvery: 3000, spikeWind: 520, spikeGap: 300, spikeN: 1, spikeFan: [0, -0.34, 0.18, 0.4], spikeV: 640, spikeDmg: 18, upDy: 80, restMs: 800 };
+function trexAI(c: SP): void {
+    const { S, e, d } = c, K = REX, z = zoneOf(S, e);
+    if (!z) return;
+    const now = S.tick, rage = spRage(c), sp = rage ? 1.25 : 1, inA = c.alive.filter(q => inZ(z, q));
+    const lo = z.x0 + d.w / 2, hi = z.x1 - d.w / 2, mid = (z.x0 + z.x1) / 2;
+    if (e.bst === undefined) { e.bst = 'run'; e.tA = now + T(900); e.tB = now + T(1800); e.cd = 0; spSay(c, 'rxstart'); }
+    let vx = 0;
+    const endFire = () => { const a = S.areas.findIndex(o => o.id === e.rxa); if (a >= 0) S.areas.splice(a, 1); e.rxa = undefined; };
+    if (!inA.length) { if (e.bst !== 'run') { endFire(); e.bst = 'run'; e.move = ''; } BM.moveEnemy(S, e, d, 0, null, c.dt); return; }
+    const ground = (o: PlayerState) => feetOf(o) > e.y - K.upDy, gq = inA.filter(ground), up = inA.filter(o => !ground(o));
+    const q = BM.nearest(gq.length ? gq : inA, e)!;
+    if (e.bst === 'twind') {
+        if (--e.ph! <= 0) {   // DUM: orqasidagilar (o'yinchi tomoni) uchib ketadi
+            // faqat dum yetadigan joy: gavda orqasida (o'yinchi tanasining yaqin cheti) tailReach gacha, yerda (platformadagiga yetmaydi)
+            inA.forEach((o) => { const back = (o.x - e.x) * -e.f; if (back < 0 || back - 14 > K.tailReach || feetOf(o) < e.y - K.tailUp || feetOf(o) > e.y + 20) return; BM.hurtBig(o, K.tailDmg, c.ctx); safeKnock(S, z, o, -e.f * 620, -380, c.ctx); });
+            e.bst = 'tail'; e.ph = T(K.tailMs); e.move = 'tail'; spSay(c, 'rxtail', { f: -e.f });
+        }
+    } else if (e.bst === 'gomid') {
+        vx = Math.sign(mid - e.x) * d.spd * 1.4 * sp;   // O'RTAGA YURADI
+        if (Math.abs(mid - e.x) < 24) {
+            e.rxs = (q.x - e.x) >= 0 ? 1 : -1; e.f = e.rxs; vx = 0;
+            e.bst = 'fwind'; e.ph = T(K.fireWind / sp); e.move = 'fwind'; spSay(c, 'rxfwind', { s: e.rxs });
+        }
+    } else if (e.bst === 'fwind') {
+        e.f = e.rxs!;
+        if (--e.ph! <= 0) {
+            e.bst = 'fire'; e.ph = T(K.fireMs / sp); e.move = 'fire'; spSay(c, 'rxfire', { s: e.rxs });
+            const a = spAr(c, { k: 'flame:rex', x: e.x, y: e.y, w: K.fireW, h: K.fireW, x2: e.x, y2: e.y, t: T(K.fireMs / sp) + 2, dmg: K.fireDmg, every: T(250), fx: 'burn', dk: 'hit' });
+            e.rxa = a.id;
+        }
+    } else if (e.bst === 'fire') {
+        // 0 dan 90 gradusgacha (o'ngga) yoki 180 dan 90 gacha (chapga): pastdan (biroz yerga qarab) boshlab tepaga ko'tariladi
+        e.f = e.rxs!;
+        const total = T(K.fireMs / sp), k = 1 - Math.max(0, e.ph!) / total, ang = (K.fireA0 + (K.fireA1 - K.fireA0) * k) * Math.PI / 180;
+        const a = S.areas.find(o => o.id === e.rxa);
+        if (a) { a.x = e.x + e.rxs! * K.mouthX; a.y = e.y - K.mouthY; a.x2 = a.x + e.rxs! * Math.cos(ang) * K.fireLen; a.y2 = a.y - Math.sin(ang) * K.fireLen; }
+        if (--e.ph! <= 0) { endFire(); e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'rest'; e.tA = now + T(K.fireEvery / sp); }
+    } else if (e.bst === 'swind') {
+        if (--e.ph! <= 0) { e.bst = 'shoot'; e.mi = 0; e.ph = 0; e.move = 'shoot'; }
+    } else if (e.bst === 'shoot') {
+        if (--e.ph! <= 0) {   // BELIDAN NISHLAR: 3 tadan, yelpig'ich shaklida, tepadagi o'yinchiga
+            const tq = up.length ? BM.nearest(up, e)! : q, bx = e.x - e.f * 30, by = e.y - 150, a0 = Math.atan2(tq.y - by, tq.x - bx);
+            for (const da of K.spikeFan) S.shots.push({ id: ++S.seq, owner: e.id, x: bx, y: by, vx: Math.cos(a0 + da) * K.spikeV * sp, vy: Math.sin(a0 + da) * K.spikeV * sp, arc: false, t: 0, k: 'rspike', hr: 12, dmg: K.spikeDmg, life: T(2400) });
+            c.ctx.emit('bigShoot', { id: e.id }); e.f = tq.x < e.x ? -1 : 1;
+            e.mi = (e.mi || 0) + 1; e.ph = T(K.spikeGap / sp);
+            if (e.mi >= K.spikeN) { e.mi = 0; e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'rest'; e.tB = now + T(K.spikeEvery / sp); }
+        }
+    } else if (e.bst === 'tail' || e.bst === 'rest') {
+        if (--e.ph! <= 0) { e.bst = 'run'; e.move = ''; }
+    } else {
+        const dx = q.x - e.x;
+        e.f = dx < 0 ? -1 : 1;
+        if (gq.length && Math.abs(dx) < K.tailRange && e.cd <= 0) {   // yaqin - orqasini o'girib dum
+            e.bst = 'twind'; e.ph = T(K.tailWind / sp); e.move = 'twind'; e.f = dx < 0 ? 1 : -1; e.cd = T(K.tailCd); c.ctx.emit('bigWind', { id: e.id });
+        } else if (gq.length && Math.abs(dx) > K.fireNear && now >= e.tA!) { e.bst = 'gomid'; e.move = ''; spSay(c, 'rxgo'); }   // uzoq - o'rtaga, olov
+        else if (up.length && now >= e.tB!) { e.bst = 'swind'; e.ph = T(K.spikeWind / sp); e.move = 'swind'; e.f = BM.nearest(up, e)!.x < e.x ? -1 : 1; c.ctx.emit('bigWind', { id: e.id }); spSay(c, 'rxspike'); }
+        else if (gq.length) { if (Math.abs(dx) > K.tailRange - 60) vx = Math.sign(dx) * d.spd * sp; }
+        else if (Math.abs(dx) > 140) vx = Math.sign(dx) * d.spd * 0.7;
+    }
+    BM.moveEnemy(S, e, d, vx, null, c.dt);
+    if (e.x < lo || e.x > hi) e.x = Math.max(lo, Math.min(hi, e.x));
+}
+SETPIECE.trex = trexAI;
+// QORA RITSAR (Skyland maxfiy bossi): Shohning tojini olishganda Farzin Qora Ritsarga aylanadi (orqasidan katta qilich) va dialog bo'ladi
+// ("Men senga buni qilishga yo'l qo'ymayman!"), keyin jang:
+//  1) DESH: chopib keladi - urilgan o'yinchini itarib (uloqtirib) zarar beradi
+//  2) QILICH: yaqinda - ikki marta zarba
+//  3) SHARPA: o'yinchi tepada (platformada / Shoh ustida) - qilichni havoda silkitib, unga arvoh-to'lqin (sharpa) otadi
+export const BK = { transMs: 1700, talkMax: 15000, slashRange: 150, slashWind: 460, slashMs: 230, slashGap: 280, slashDmg: 30, comboN: 2, slashCd: 1100,
+    upDy: 125, ghostEvery: 2600, ghostWind: 520, ghostV: 560, ghostDmg: 24, ghostR: 26, dashNear: 260, dashEvery: 3600, dashWind: 520, dashV: 1050, dashMs: 950, dashDmg: 32, restMs: 700 };
+function bkAI(c: SP): void {
+    const { S, e, d } = c, K = BK, z = zoneOf(S, e);
+    if (!z) return;
+    const now = S.tick, rage = spRage(c), sp = rage ? 1.25 : 1, inA = c.alive.filter(q => inZ(z, q));
+    const lo = z.x0 + d.w / 2, hi = z.x1 - d.w / 2;
+    if (e.bst === undefined) { e.bst = 'trans'; e.ph = T(K.transMs); e.move = 'trans'; e.fy = e.y; e.tA = now + T(1500); e.tB = now + T(900); e.cd = 0; spSay(c, 'bktrans'); }
+    let vx = 0;
+    if (e.bst === 'trans') {   // Farzin -> Qora Ritsar, orqasidan qilichni oladi
+        if (--e.ph! <= 0) { e.bst = 'talk'; e.ph = T(K.talkMax); e.move = ''; S.talkDone[e.zone] = {}; c.ctx.emit('bigTalk', { id: e.id, zone: e.zone, k: e.k }); }
+        BM.moveEnemy(S, e, d, 0, null, c.dt); return;
+    }
+    if (e.bst === 'talk') {   // dialog: hamma o'qib bo'lguncha (ko'pi bilan 15 s)
+        const done = S.talkDone[e.zone] || {};
+        if (--e.ph! <= 0 || (inA.length > 0 && inA.every(q => done[q.id]))) { e.bst = 'run'; c.ctx.emit('bigTalkEnd', { id: e.id, zone: e.zone }); spSay(c, 'bkfight'); }
+        BM.moveEnemy(S, e, d, 0, null, c.dt); return;
+    }
+    if (!inA.length) { if (e.bst !== 'run') { e.bst = 'run'; e.move = ''; } BM.moveEnemy(S, e, d, 0, null, c.dt); return; }
+    const q = BM.nearest(inA, e) || inA[0];
+    if (e.bst === 'swind') {
+        if (--e.ph! <= 0) {   // QILICH ZARBASI
+            inA.forEach((o) => { const fx = (o.x - e.x) * e.f; if (fx < -30 || fx > K.slashRange + 30 || Math.abs(feetOf(o) - e.y) > 120) return; BM.hurtBig(o, K.slashDmg, c.ctx); safeKnock(S, z, o, e.f * 560, -340, c.ctx); });
+            e.bst = 'slash'; e.ph = T(K.slashMs); e.move = 'slash'; e.mi = (e.mi || 0) + 1; spSay(c, 'bkslash', { f: e.f });
+        }
+    } else if (e.bst === 'slash') {
+        if (--e.ph! <= 0) {
+            if ((e.mi || 0) < K.comboN) { e.bst = 'swind'; e.ph = T(K.slashGap / sp); e.move = 'swind'; if (q) e.f = q.x < e.x ? -1 : 1; }
+            else { e.mi = 0; e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'rest'; e.cd = T(K.slashCd); }
+        }
+    } else if (e.bst === 'gwind') {
+        if (--e.ph! <= 0) {   // SHARPA: qilich havoda silkitiladi - arvoh-to'lqin tepadagi o'yinchiga (g'azabda - ikkita, biroz yoyilib)
+            const ups = inA.filter(o => feetOf(o) < e.y - K.upDy), tq = ups.length ? BM.nearest(ups, e)! : q!, bx = e.x + e.f * 40, by = e.y - 110, a0 = Math.atan2(tq.y - by, tq.x - bx);
+            (rage ? [-0.12, 0.12] : [0]).forEach(da => S.shots.push({ id: ++S.seq, owner: e.id, x: bx, y: by, vx: Math.cos(a0 + da) * K.ghostV * sp, vy: Math.sin(a0 + da) * K.ghostV * sp, arc: false, t: 0, k: 'bkghost', hr: K.ghostR, dmg: K.ghostDmg, life: T(2600), pierce: true }));
+            e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'ghost'; e.tA = now + T(K.ghostEvery / sp); spSay(c, 'bkghost', { f: e.f }); e.f = tq.x < e.x ? -1 : 1;
+        }
+    } else if (e.bst === 'dwind') {
+        if (--e.ph! <= 0) { e.bst = 'dash'; e.ph = T(K.dashMs); e.move = 'dash'; e.cc = {}; spSay(c, 'bkdash'); }
+    } else if (e.bst === 'dash') {
+        vx = e.f * K.dashV * sp;   // SANCHISH: qilich oldinda
+        inA.forEach((o) => { const fx = (o.x - e.x) * e.f; if (e.cc![o.id] || fx < -20 || fx > 110 || Math.abs(feetOf(o) - e.y) > K.upDy + 10) return; BM.hurtBig(o, K.dashDmg, c.ctx); safeKnock(S, z, o, e.f * 640, -360, c.ctx); e.cc![o.id] = 1; });
+        if (--e.ph! <= 0 || (e.f > 0 && e.x >= hi - 2) || (e.f < 0 && e.x <= lo + 2)) { e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'rest'; e.tB = now + T(K.dashEvery / sp); }
+    } else if (e.bst === 'rest') {
+        if (--e.ph! <= 0) { e.bst = 'run'; e.move = ''; }
+    } else if (q) {
+        // yerdagilar va birinchi qavat platformalaridagilar (ritsar bo'yi 150 px - qilich / desh yetadi) va undan balanddagilar (sharpa)
+        const gq = inA.filter(o => feetOf(o) >= e.y - K.upDy), up = inA.filter(o => feetOf(o) < e.y - K.upDy), g = gq.length ? BM.nearest(gq, e)! : null;
+        const tq = g || q, dx = tq.x - e.x; e.f = dx < 0 ? -1 : 1;
+        if (g && Math.abs(dx) < K.slashRange && e.cd <= 0) { e.bst = 'swind'; e.ph = T(K.slashWind / sp); e.move = 'swind'; e.mi = 0; c.ctx.emit('bigWind', { id: e.id }); }
+        else if (up.length && now >= e.tA!) { e.bst = 'gwind'; e.ph = T(K.ghostWind / sp); e.move = 'gwind'; e.f = BM.nearest(up, e)!.x < e.x ? -1 : 1; c.ctx.emit('bigWind', { id: e.id }); }
+        else if (g && Math.abs(dx) > K.dashNear && now >= e.tB!) { e.bst = 'dwind'; e.ph = T(K.dashWind / sp); e.move = 'dwind'; c.ctx.emit('bigWind', { id: e.id }); }
+        else if (g ? Math.abs(dx) > K.slashRange - 50 : Math.abs(dx) > 120) vx = Math.sign(dx) * d.spd * sp * (g ? 1 : 0.6);
+    }
+    BM.moveEnemy(S, e, d, vx, null, c.dt);
+    if (e.x < lo || e.x > hi) e.x = Math.max(lo, Math.min(hi, e.x));
+}
+SETPIECE.blackknight = bkAI;
 SETPIECE.mwheart = () => { /* bossning AI si joylashtiradi */ };
 
 // ===== BOTQOQ =====
@@ -1997,7 +2130,8 @@ CREATURE.hoodroot = hoodrootAI;
 type BC = { S: BM.BigState; e: BM.BigEnemy; d: BM.EnemyDef; ctx: BM.BigCtx; dt: number };
 export const BOTNAV = { loseDist: 700, loseSee: 3000, loseStuck: 4000, ignore: 4000, leapX: 420, gap: 300, up: 190, down: 520 };   // up - sakrash kuchi yetadigan balandlik (straj bot ~196 px)
 const botFoot = (S: BM.BigState, e: BM.BigEnemy) => BM.surfaceBelow(S, e.x, e.y - 2, 8);
-const surfOf = (S: BM.BigState, x: number, feet: number) => { const s = BM.surfaceBelow(S, x, feet - 6, 14); return s && s.k !== 'scloud' && s.k !== 'crabtop' && s.k !== 'crabshell' ? s : null; };
+// (maxfiy bulut pog'onalar - scloud - ham sirt: o'yinchi ularga chiqsa, bot ham hisoblab sakrab chiqadi)
+const surfOf = (S: BM.BigState, x: number, feet: number) => { const s = BM.surfaceBelow(S, x, feet - 6, 14); return s && s.k !== 'crabtop' && s.k !== 'crabshell' ? s : null; };
 const insetOf = (pl: BM.BigPlat, d: BM.EnemyDef) => Math.min(d.w / 2 + 8, pl.w / 2);   // moveEnemy chetni d.w/2+6 oldinda tekshiradi - undan ichkarida
 const spotOn = (pl: BM.BigPlat, d: BM.EnemyDef, x: number) => Math.max(pl.x + insetOf(pl, d), Math.min(pl.x + pl.w - insetOf(pl, d), x));
 const canReach = (f: BM.BigPlat, to: BM.BigPlat) => { const gap = Math.max(0, to.x - (f.x + f.w), f.x - (to.x + to.w)); return gap <= BOTNAV.gap && f.y - to.y <= BOTNAV.up && to.y - f.y <= BOTNAV.down; };
@@ -2075,8 +2209,28 @@ function botStep(c: BC, to: BM.BigPlat, wantX: number, remember = true): { vx: n
         }
     }
     if (to === f) return { vx: 0, leapt: false };
+    // shu joydan sakrab bo'lmadi (masalan, nishon tepasida, yoki yo'lda boshqa pog'ona to'sadi): o'z sirtida SAKRASH JOYINI qidiradi va o'sha yerga yuradi
+    const ko = botTakeoff(c, f, to, tx0, maxV);
+    if (ko !== null) return { vx: Math.abs(ko - e.x) > 6 ? Math.sign(ko - e.x) * d.spd : 0, leapt: false };
     const ex = spotOn(f, d, tx0);   // shu sirt ichida yaqin chetga (tor toshda yurib bo'lmaydi - 0: "qotib qoldi" sanaladi)
     return { vx: Math.abs(ex - e.x) > 6 && f.w > 2 * insetOf(f, d) + 4 ? Math.sign(ex - e.x) * d.spd : 0, leapt: false };
+}
+// SAKRASH JOYI: f sirtidagi qaysi nuqtadan 'to' ga hisoblangan sakrash chiqadi (eng yaqini); 1 s eslab qoladi (har tik qayta hisoblanmaydi)
+function botTakeoff(c: BC, f: BM.BigPlat, to: BM.BigPlat, tx: number, maxV: number): number | null {
+    const { S, e, d } = c;
+    if (e.tko && e.tko.to === to && S.tick - e.tko.at < T(1000)) return e.tko.x !== null && Math.abs(e.tko.x - e.x) > 6 ? e.tko.x : null;
+    const x0 = e.x, xs: number[] = [];
+    for (const o of [70, 110, 150, 200, 250, 300, 360]) for (const x of [to.x - o, to.x + to.w + o]) { const sx = spotOn(f, d, x); if (Math.abs(sx - x0) > 10 && !xs.includes(sx)) xs.push(sx); }
+    xs.sort((a, b) => Math.abs(a - x0) - Math.abs(b - x0));
+    let best: number | null = null;
+    for (const x of xs) {
+        if (Math.abs(x - x0) > 700) break;
+        e.x = x;
+        const ok = [70, 140, 210].some(ex => leapOk(S, e, d, to, tx, maxV, ex) || leapOk(S, e, d, to, to.x + to.w / 2, maxV, ex));
+        if (ok) { best = x; break; }
+    }
+    e.x = x0; e.tko = { to, x: best, at: S.tick };
+    return best;
 }
 // o'yinchi izini yozib borish
 function botTrack(c: CR): void {
@@ -2120,7 +2274,7 @@ function botLose(c: CR, far = BOTNAV.loseDist): boolean {
 // YO'L QIDIRISH: from sirtidan to sirtigacha sakrab boriladigan sirtlar ketma-ketligi (atrofdagi sirtlar orasida, eng qisqa; bad - sakrab bo'lmagan sirtlar)
 function botRoute(S: BM.BigState, from: BM.BigPlat, to: BM.BigPlat, bad: BM.BigPlat[] = []): BM.BigPlat[] | null {
     const x0 = Math.min(from.x, to.x) - 800, x1 = Math.max(from.x + from.w, to.x + to.w) + 800, y0 = Math.min(from.y, to.y) - 700, y1 = Math.max(from.y, to.y) + 700;
-    const pool = S.w.plats.filter(q => q.x < x1 && q.x + q.w > x0 && q.y > y0 && q.y < y1 && q.w >= 40 && q.k !== 'scloud' && q.k !== 'crabtop' && q.k !== 'crabshell' && !q.k.endsWith('bed') && !q.k.endsWith('floor') && !bad.includes(q));
+    const pool = S.w.plats.filter(q => q.x < x1 && q.x + q.w > x0 && q.y > y0 && q.y < y1 && q.w >= 40 && q.k !== 'crabtop' && q.k !== 'crabshell' && !q.k.endsWith('bed') && !q.k.endsWith('floor') && !bad.includes(q));
     if (!pool.includes(to)) pool.push(to);
     const par = new Map<BM.BigPlat, BM.BigPlat | null>([[from, null]]), Q = [from];
     for (let i = 0; i < Q.length && i < 400; i++) {
@@ -2248,6 +2402,7 @@ function guardbotAI(c: CR): void {
                 if (v === null) {   // yetib bo'lmaydi (havoda / yo'l yo'q): qalqon ko'tarib kutadi
                     e.stk = (e.stk || 0) + 1;
                     if (dist < 420 && (e.bcd || 0) <= S.tick) { e.block = T(K.guardMs); e.f = dx < 0 ? -1 : 1; }
+                    else { const f2 = botFoot(S, e); if (f2) { const ux = spotOn(f2, d, p.x); if (Math.abs(ux - e.x) > 24) vx = Math.sign(ux - e.x) * d.spd; } }   // qotib turmaydi: o'yinchi ostiga (o'z sirtida) boradi
                 } else { vx = v * K.chase; e.stk = 0; }   // izidan - tezroq
             }
         }

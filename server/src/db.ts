@@ -1766,6 +1766,12 @@ export async function decorStore(userId: string, id: string, stored: boolean): P
     return r ? { success: true, ...r } : { success: false, message: 'home_not_owned' };
 }
 // O'SISH TEZLATGICHLARI: nota uyasi (bir marta) va tegirmon (keyingi bosqich, ketma-ket)
+// KOSMETIKA SOVG'ASI (o'yinda topilgan - masalan, Shohning qora toji): bor bo'lsa - qo'shilmaydi
+export async function grantCosmetic(userId: string, key: string): Promise<{ added: boolean }> {
+    if (!mongoose.Types.ObjectId.isValid(userId)) return { added: false };
+    const r = await UserModel.updateOne({ _id: userId, ownedCosmetics: { $ne: key } }, { $push: { ownedCosmetics: key } });
+    return { added: r.modifiedCount > 0 };
+}
 export async function buyFarmBooster(userId: string, what: 'hive' | 'mill' | 'greenhouse' | 'sprinkler' | 'scarecrow', price: number, curMill: number): Promise<FarmResult> {
     // Bir martalik (uya, issiqxona) yoki sanaladigan (tegirmon bosqichi, sug'orgich, qo'rqinchoq - joriy son o'zgarmagan bo'lsa +1)
     const flag: any = { greenhouse: 'farmGreenhouse' }, cnt: any = { hive: 'farmHive', mill: 'farmMill', sprinkler: 'farmSprinklers', scarecrow: 'farmScarecrows' };

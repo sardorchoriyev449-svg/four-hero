@@ -123,6 +123,7 @@
             Cosmetics.drawIcon(cv, cat, it.id);
             grid.appendChild(card({
                 icon: cv, name: cosName(cat, it), equipped: eqId === it.id, canRemove: true, owned: owned.includes(cosKey(type, cat, it.id)), price: it.price,
+                locked: it.secret && !owned.includes(cosKey(type, cat, it.id)) ? t('cos_secret_lock') : '',   // o'yinda topiladi (sotilmaydi)
                 trying: tryOn && tryOn.cat === cat && tryOn.id === it.id, tryKey: { cat, id: it.id },
                 equip: () => equipCosmetic(type, cat, it.id), remove: () => equipCosmetic(type, cat, null), buy: () => buyCosmetic(type, cat, it)
             }));

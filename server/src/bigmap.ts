@@ -38,7 +38,7 @@ function powerUp(S: BigState, e: BigEnemy, d: EnemyDef): void {
     if (!P || e.k === 'zvfarm' || e.k === 'hgoal') return;   // ferma boshqaruvchisi - joni = qolgan zombilar soni; xokkey darvozasi - jonsiz (zarbani xokkeychiga o'tkazadi)
     if (d.boss) {
         const L = BIG_LOCS.find(l => l.id === z!.loc), main = !!L && (L.bosses.includes(e.k) || e.k === 'bullkan' || e.k === 'fieryhooves') && !d.secret;
-        e.hp = e.mx = Math.round(P.boss * (main ? 1 : SIDE_BOSS)) + BOSS_HP_BONUS;
+        e.hp = e.mx = Math.round(P.boss * (main ? 1 : SIDE_BOSS) * (e.k === 'trex' ? 1.3 : 1)) + BOSS_HP_BONUS;   // T-Rex1000 - Skylandning 2-bossi, kuchliroq
         e.dk = Math.max(1, (P.dmg + 5) / Math.max(1, d.dmg));
     } else if (z!.loc === 'sky') {
         e.hp = e.mx = d.hp; e.dk = 1;   // Skyland botlari: o'z joni (600 / 800) va zarbasi
@@ -107,7 +107,7 @@ export const BIG_LOCS: { id: string, enemies: string[], extra: string[], bosses:
         npcs: ['fisher', 'herbalist', 'boatman', 'elder', 'kid'] },
     // SKYLAND: Elf qirolligi va O'rmon TEPASIDAGI osmon orollari (oddiy orollar va yo'llar, faqat ko'rinishi zamonaviy) - ularning osmon orollaridan zinapoya bilan chiqiladi.
     // Har orolda bitta bot: DRON (ko'zidan lazer) yoki STRAJ BOT (qalqon, egri qilich). Bosslar - keyinroq
-    { id: 'sky', enemies: ['guardbot', 'drone', 'guardbot', 'drone', 'drone', 'guardbot'], extra: ['drone', 'guardbot', 'guardbot'], bosses: ['mrwho'], secretBoss: '', season: ['drone', 'guardbot'], cave: '',
+    { id: 'sky', enemies: ['guardbot', 'drone', 'guardbot', 'drone', 'drone', 'guardbot'], extra: ['drone', 'guardbot', 'guardbot'], bosses: ['mrwho', 'trex'], secretBoss: 'blackknight', season: ['drone', 'guardbot'], cave: '',
         npcs: ['engineer', 'pilot', 'scientist', 'courier', 'kid'] }
 ];
 // Lokatsiya uslubi: orol / tosh turlari, bezaklar, uylar, lager, boss maydoni, osmon va chuqurlik bezaklari, o'ziga xosliklar
@@ -244,6 +244,8 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     // MR. WHO (Skyland 1-boss): hologramma - tanasiga zarba o'tmaydi; joni - YURAKLI televizorda (mwheart - zarbani bossga o'tkazadi)
     mrwho:     { hp: 2800, spd: 0, dmg: 28, w: 60, h: 150, jump: 0, reach: 0, atkMs: 9999, coins: 360, boss: true },
     mwheart:   { hp: 1, spd: 0, dmg: 0, w: 100, h: 140, jump: 0, reach: 0, atkMs: 9999, coins: 0 },
+    blackknight: { hp: 3000, spd: 170, dmg: 37, w: 70, h: 150, jump: 0, reach: 0, atkMs: 9999, coins: 420, boss: true, secret: true },   // SKYLAND MAXFIY BOSSI: Qora Ritsar (shaxmat zali)
+    trex:      { hp: 3600, spd: 150, dmg: 37, w: 210, h: 200, jump: 0, reach: 0, atkMs: 9999, coins: 450, boss: true },   // SKYLAND 2-BOSS: robot T-Rex (ko'zi, burni yo'q - faqat og'iz)
     guardbot:  { hp: 800, spd: 105, dmg: 34, w: 50, h: 96, jump: 520, reach: 80, atkMs: 1300, coins: 45, armor: 0.25, guard: [0.65, 1000, 1500] },   // qalqon + egri qilich
     mrhol:     { hp: 2600, spd: 150, dmg: 26, w: 70, h: 90, jump: 600, reach: 70, atkMs: 1200, coins: 320, boss: true, secret: true, armor: 0.15 },   // yashirin: kaskali ko'r sichqon
     fieryhooves: { hp: 2400, spd: 270, dmg: 30, w: 110, h: 110, jump: 600, reach: 95, atkMs: 1200, coins: 260, boss: true, armor: 0.2 },   // olovli kiyik (Yer osti)
@@ -1362,6 +1364,71 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
             const a0 = Math.max(p.x + 40, z.x0), a1 = Math.min(p.x + p.w - 40, z.x1);
             z.spawns = [{ x: Math.round(a0 + (a1 - a0) * (0.45 + rz.r() * 0.35)), y: p.y, k: rz.chance(0.5) ? 'drone' : 'guardbot' }];
         });
+        // ===== T-REX1000 MAYDONI (Skyland 2-boss, eskiz bo'yicha): oxirgi orol USTIDA - undan zigzag pog'onalar bilan 900 px yuqoriga
+        // (har pog'ona 100 px: sakrash ~130 px), kirish oroli (checkpoint) va keng pol, ustida 4 ta platforma: chapda past, o'rtada baland, o'ngda past.
+        // ENG OXIRIDA (o'z tasodifi): eski orollar, zonalar, checkpoint raqamlari siljimaydi; dunyo kengligi o'zgarmaydi
+        const base = SN[n - 1][0];
+        if (base && base.x1 > 0) {
+            R = rng((seed ^ 0x7E3A1000) >>> 0);
+            const K = kit('sky'), AW = 1500, gy = base.yr - 900, ax0 = Math.round(Math.min(base.x1 + 40, W.width - AW - 60));
+            for (let i = 1; i <= 8; i++) plat(i % 2 ? ax0 - 700 : ax0 - 460, base.yr - i * 100, 170, 22, 'hoverpad');
+            prop(ax0 - 600, base.yr, 'signpost');
+            const ent = isle(ax0 - 260, gy, 260, K.groundK, 'sky', 'mid', 70);
+            rest(ent, true, ax0 - 130); W.cps.push({ x: ax0 - 130, y: gy });   // checkpoint (oxirida - eskilari raqami o'zgarmaydi)
+            isle(ax0, gy, AW, K.groundK, 'sky', 'mid', 190);
+            [[180, 110, 210], [470, 220, 230], [870, 200, 230], [1190, 105, 210]].forEach(([dx, h, w]) => plat(ax0 + dx, gy - h, w, 22, STYLE.sky.stone));
+            prop(ax0 - 230, gy, 'neonlamp'); prop(ax0 + 40, gy, 'pylon'); prop(ax0 + AW - 50, gy, 'pylon'); prop(ax0 + AW - 160, gy, 'barrier');
+            const zr = zone(ax0 + 20, ax0 + AW - 20, gy - 760, gy + 60, 'sky', 'ground', 'boss', { boss: 'trex' });
+            zr.spawns = [{ x: Math.round(ax0 + AW * 0.62), y: gy, k: 'trex' }];
+            W.top = Math.min(W.top, gy - 900);
+            const ls = W.locs.find(l => l.id === 'sky'); if (ls) ls.y0 = W.top;
+        }
+        // ===== QORA RITSAR ZALI (Skyland maxfiy bossi): poytaxt ustunining tepa orolidan 900 px yuqorida qalin tosh orol; ustidagi SOXTA bo'lakdan
+        // yashirin zalga tushiladi (tashqaridan qopqoq bilan yopiq). Zal - shaxmat taxtasi: chapda katta FARZIN, o'ngda SHOH (oldida E - qora tojni olish:
+        // Farzin Qora Ritsarga aylanadi). ENG OXIRIDA (o'z tasodifi): eski narsalar siljimaydi, dunyo kengligi o'zgarmaydi
+        const hub = SN[hc] && SN[hc][1];
+        if (hub && hub.x1 > 0) {
+            R = rng((seed ^ 0xB1AC4E17) >>> 0);
+            // eski narsalar bilan to'qnashmaydigan joy: zinapoya ustuni (sx) va zal (x) - bir nechta variantdan birinchisi
+            const OLD: number[][] = [];
+            W.plats.forEach(p => OLD.push([p.x, p.y - 60, p.w, p.h + 60])); W.isles.forEach(I => { OLD.push([I.x, I.y - 30, I.w, 70]); I.r.forEach(q => OLD.push([q[0], q[1], q[2], q[3]])); });
+            const hit = (a: number[]) => OLD.some(o => a[0] < o[0] + o[2] && a[0] + a[2] > o[0] && a[1] < o[1] + o[3] && a[1] + a[3] > o[1]);
+            const K = kit('sky'), DW = 1300, deep = 420;
+            // balandlik (zal poytaxt tepa orolidan H px yuqorida, zinapoya - H/100 pog'ona), zal va zinapoya joyi - to'qnashmaydigan birinchi variant
+            let sx = hub.x1 - 330, x = Math.round(hub.x1 + 120), H = 900;
+            const CAND: number[][] = []; for (let h = 900; h <= 1400; h += 100) for (let dxr = 0; dxr <= 900; dxr += 60) for (let ds = 0; ds >= -700; ds -= 40) CAND.push([h, ds, dxr]);
+            for (const [h, ds, dxr] of CAND) {
+                const s2 = hub.x1 - 330 + ds, x2 = Math.round(hub.x1 + 120 + dxr), n2 = h / 100;
+                const steps = Array.from({ length: n2 - 1 }, (_, i) => [i % 2 === 0 ? s2 : s2 + 240, hub.yl - (i + 1) * 100 - 90, 160, 112]);
+                const room = [x2 - 40, hub.yl - h - 120, DW + 80, deep + 260];
+                if (!steps.some(hit) && !hit(room)) { sx = s2; x = x2; H = h; break; }
+            }
+            const top = hub.yl - H, hx = x + 150, holeW = 110, left = x + 80, right = x + DW - 80, roomW = right - left, r: number[][] = [], fy = top + deep;
+            for (let i = 1; i < H / 100; i++) plat(i % 2 ? sx : sx + 240, hub.yl - i * 100, 160, 22, 'hoverpad');   // zinapoya (poytaxt tepa orolidan)
+            prop(sx + 80, hub.yl, 'signpost');
+            plat(x, top, hx - x, TOPH, K.deepK); const roof = plat(hx + holeW, top, x + DW - hx - holeW, TOPH, K.deepK);
+            rest(roof, true, x + DW - 160); W.cps.push({ x: x + DW - 160, y: top });   // CHECKPOINT zal tomida (yiqilsa - shu yerda tiriladi; oxirida - eskilari raqami o'zgarmaydi)
+            W.fakes.push({ x: hx, y: top, w: holeW, h: TOPH, k: K.deepK });
+            r.push([x + 10, top + TOPH, left - x - 10, deep + 40]);
+            r.push([right, top + TOPH, x + DW - 10 - right, deep + 40]);
+            r.push([left, top + TOPH, roomW, deep - TOPH, 1]);
+            r.push([left, fy, roomW, 40]);
+            under(x + 30, x + DW - 30, fy + 40, R.int(70, 110), r);
+            W.isles.push({ id: ++iid, x, y: top, w: DW, k: K.deepK, loc: 'sky', band: 'lo', r });
+            plat(left, fy, roomW, 30, 'chessfloor');
+            for (let s = 1; s * 85 < deep; s++) plat(hx + (s % 2 ? 6 : 44), fy - s * 85, 60, 14, 'ledge');   // chiqish uchun (teshik ostida)
+            const qx = Math.round(left + roomW * 0.4), kx = Math.round(left + roomW * 0.78);
+            prop(qx, fy, 'chessqueen'); prop(kx, fy, 'chessking');
+            plat(kx - 34, fy - 168, 68, 16, 'kingtop');   // Shoh haykali ustida turish mumkin (ko'rinmas tokcha)
+            // osma platformalar - poldan bir sakrashda (100 px) chiqiladi, ulardan - yuqoridagisiga; tepadagi o'yinchiga ritsar sharpa otadi
+            plat(left + 250, fy - 100, 150, 16, 'ledge'); plat(left + 430, fy - 200, 170, 16, 'ledge');
+            plat(left + 640, fy - 105, 150, 16, 'ledge'); plat(left + 975, fy - 105, 130, 16, 'ledge');
+            prop(left + 30, fy, 'torch'); prop(right - 30, fy, 'torch');
+            const zb = zone(left + 40, right - 40, top + TOPH + 10, fy + 40, 'sky', 'under', 'boss', { boss: 'blackknight', secret: true, trig: 'e', dx: kx, dy: fy });
+            zb.spawns = [{ x: qx, y: fy, k: 'blackknight' }];
+            W.top = Math.min(W.top, top - 700);
+            const ls = W.locs.find(l => l.id === 'sky'); if (ls) ls.y0 = W.top;
+        }
     }
     return W;
 }
@@ -1377,11 +1444,12 @@ export interface BigEnemy { np?: number; id: number; k: string; x: number; y: nu
     lz?: { hit?: string[] };   // dron: oxirgi lazer (tegdimi - qayta otish uchun)
     // Skyland botlari: tr - o'yinchi izi (bosgan sirtlari), pth - botning o'zi o'tgan sirtlar (qaytish uchun), hpl - uyi (paydo bo'lgan sirt),
     // ign - shu tikkacha o'yinchini "yo'qotgan", nols - ko'rmagan vaqt, stk - yo'l topolmagan vaqt
-    tr?: { pl: BigPlat, x: number }[]; pth?: BigPlat[]; hpl?: BigPlat | null; ign?: number; nols?: number; stk?: number; ly?: number; bad?: BigPlat[];
+    tr?: { pl: BigPlat, x: number }[]; pth?: BigPlat[]; hpl?: BigPlat | null; ign?: number; nols?: number; stk?: number; ly?: number; bad?: BigPlat[]; tko?: { to: BigPlat, x: number | null, at: number };
     // Mr. Who: wb - boss turgan televizor, wsc / wsu - ekrandagi rasm (1 olov, 2 qo'l) va qachongacha, wh - yurakli televizor (wht - ko'chish vaqti),
     // wa - pritsel televizorlari (wat - otish vaqtlari, wam - ko'chish vaqti), tvs - klientga: 15 ta ekran kodi (0 bo'sh, 1 olov, 2 qo'l, 3 pritsel, 4 yurak)
     wb?: number; wsc?: number[]; wsu?: number[]; wh?: number; wht?: number; wa?: number[]; wat?: number[]; wam?: number; tvs?: string;   // ly - hisoblangan sakrash qo'nadigan sirt balandligi
     pd?: number[][];   // Mr. Hol: kutilayotgan parmalar [x, qachon (tick)]
+    rxa?: number; rxs?: number;   // T-Rex1000: olov maydoni (id) va purkash tomoni (1 - o'ngga, -1 - chapga)
     dk?: number;   // zarba koeffitsienti (lokatsiya kuchi): uning har zarbasi, o'qi, olovi shunga ko'paytiriladi              // kaltakesak ko'rinmas (tik); zombi yer ostidan o'yinchi yoniga chiqish kutishi
     // boss holatlari (bigboss.ts): hide - yer ostida / shiftda / g'oyib; shield, vuln - tik (qalqon / zaif); daze - gangib qolgan; ph, bst - hujum bosqichi
     hide?: string; shield?: number; vuln?: number; daze?: number; ph?: number; bst?: string; combo?: number; trail?: number; spin?: boolean; aimX?: number; goX?: number; fy?: number;
@@ -1443,6 +1511,7 @@ export interface BigCtx {
     hurt(p: PlayerState, dmg: number): void;
     kill(p: PlayerState): void;
     reward(p: PlayerState, coins: number, xp?: number, boost?: boolean): void;   // boost - XP kuchaytirgich bonusi qo'shiladi
+    giveCos?(p: PlayerState, slot: string, id: string): void;                   // kosmetika sovg'asi (Shohning qora toji) - hisobga, bir marta
     knock(p: PlayerState, vx: number, vy: number): void;                         // o'yinchini uloqtirish / tortish (klient tezligi)
     saveCp(p: PlayerState, cp: number): void;      // o'yinchining oxirgi tekkan checkpointi (keyingi o'yin shu joydan)
     saveGot(cp: number): void;                     // dunyo egasiga: checkpoint ochildi
@@ -1692,11 +1761,11 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
         if (zs && zs.st === 'active') {
             if (!S.enemies.some(e => e.zone === z.id)) { S.zoneState[z.id] = { st: 'done', at: now }; if (z.boss) return; }
             if (z.boss) {
-                // JANG MAYDONIDAN CHIQIB KETILSA (devor yo'q - chiqish mumkin): ~1.2 s dan keyin jang to'xtaydi, boss to'liq jon bilan joyiga qaytadi
-                const near = alive.some(p => p.x > z.x0 - 80 && p.x < z.x1 + 80 && p.y + 24 >= z.y0 - 120 && p.y + 24 <= z.y1 + 140)
+                // JANG MAYDONIDAN CHIQIB KETILSA (devor yo'q - chiqish mumkin; yonidagi orolcha ham - maydon emas): 1.5 s dan keyin jang to'xtaydi, boss to'liq jon bilan joyiga qaytadi
+                const near = alive.some(p => inArena(S, z, p))
                     || (z.boss === 'zvfarm' && alive.length > 0);   // ferma: chegara yo'q - zombilar o'yinchi qayerda bo'lmasin quvadi (hamma o'lsa - qayta tiklanadi)
                 S.leash[z.id] = near ? 0 : (S.leash[z.id] || 0) + 1;
-                if (S.leash[z.id] > T(1200)) {
+                if (S.leash[z.id] > T(1500)) {
                     dropZoneShots(S, z.id);   // boss otgan minalar / sovg'alar / shaybalar ham (aks holda keyin kelganda portlardi)
                     S.enemies = S.enemies.filter(e => e.zone !== z.id);
                     S.areas = S.areas.filter(a => a.zone !== z.id); delete S.zoneState[z.id]; S.leash[z.id] = 0; delete S.trigOn[z.id]; delete S.gifts[z.id]; delete S.talkReq[z.id]; if (S.gcrush[z.id]) { ctx.emit('bigCrush', { i: S.gcrush[z.id].i, st: 'idle' }); delete S.gcrush[z.id]; }
@@ -2018,11 +2087,31 @@ export function moveEnemy(S: BigState, e: BigEnemy, d: EnemyDef, wantVx: number,
 }
 // O'yinchi zarbasi uchun nishon: kichik jonzotlarga ham o'q / qilich bemalol tegsin - kamida 46x60 (yerdagilarga oyoq ostidan ham)
 const hitRect = (e: BigEnemy, d: EnemyDef) => { const w = Math.max(d.w + 10, 46), h = Math.max(d.h + 8, 60); return { x: e.x - w / 2, y: e.y - h + (d.fly ? h / 2 - d.h / 2 : 6), w, h }; };
+// BOSS MAYDONI ICHIDA: maydon chegarasida yoki arena polining o'zida (masalan, devor yonidagi chekkada); yonidagi alohida orolcha / ko'prik /
+// kirish oroli - maydon emas (ularning sirti maydonga kirmaydi) - u yerdan jang qilib bo'lmaydi
+export function inArena(S: BigState, z: BigZone, p: { x: number, y: number }): boolean {
+    const feet = p.y + 24;
+    if (feet < z.y0 - 20 || feet > z.y1 + 80) return false;
+    if (p.x > z.x0 - 10 && p.x < z.x1 + 10) return true;
+    if (p.x < z.x0 - 450 || p.x > z.x1 + 450) return false;
+    const g = surfaceBelow(S, p.x, feet - 6, 40);
+    return !!g && g.x < z.x1 - 40 && g.x + g.w > z.x0 + 40;
+}
 export function damageEnemy(S: BigState, room: RoomState, e: BigEnemy, damage: number, owner: PlayerState | undefined | null, ctx: BigCtx): void {
     const d = ENEMIES[e.k];
     // yashiringan mimik / haykalga tegsa - uyg'onadi
     if (e.st === 'lurk') { e.st = 'chase'; e.tgt = owner ? owner.id : null; ctx.emit('bigWake', { id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y) }); }
     if (e.hide) return;   // yer ostida / shiftda - tegmaydi
+    if (e.k === 'blackknight' && (e.bst === 'trans' || e.bst === 'talk')) { ctx.emit('bigBlock', { id: e.id, x: Math.round(e.x), y: Math.round(e.y - 80) }); return; }   // Qora Ritsar: aylanish / dialog paytida tegmaydi
+    // BOSS: faqat jang maydoni ichidagi o'yinchi zarari o'tadi (tashqaridan - orolcha, ko'prik, kirish - to'siladi)
+    if (d.boss && owner && damage > 0 && e.k !== 'zvfarm') {
+        const bz = S.w.zones.find(q => q.id === e.zone);
+        if (bz && bz.boss && !inArena(S, bz, owner)) {
+            ctx.emit('bigBlock', { id: e.id, x: Math.round(e.x), y: Math.round(e.y - 80), k: 'far' });
+            ctx.emitTo(owner.id, 'bigFar', {});
+            return;
+        }
+    }
     if (e.iv) e.iv = 0;   // ko'rinmas kaltakesak - tegsa ko'rinib qoladi
     // MUZ XOKKEYCHI: o'zi (klyushkasi bilan) hamma zarbani qaytaradi - joni faqat DARVOZAGA tekkanda ketadi
     if (e.k === 'hgoal') {
@@ -2060,6 +2149,8 @@ export function damageEnemy(S: BigState, room: RoomState, e: BigEnemy, damage: n
         ctx.emit('bigBossDown', { k: e.k, secret: !!d.secret, coins, again: !first });
         Object.values(room.players).forEach(q => { ctx.reward(q, coins, xp); if (first) ctx.bossKill(q); if (ctx.daily) ctx.daily(q, 'bosses', 1); });
         if (first) { ctx.saveKill(e.zone); bigProgressAll(S, Object.values(room.players), ctx); }
+        // QORA RITSAR yengildi: Shohning QORA TOJI - jang maydonidagi har bir o'yinchiga (va zarba bergan o'yinchiga)
+        if (e.k === 'blackknight' && bz && ctx.giveCos) Object.values(room.players).forEach((q) => { if (q === owner || (!q.isDead && inArena(S, bz, q))) ctx.giveCos!(q, 'head', 'blackcrown'); });
         bigQuestBoss(S, room, e.k, ctx);
         rqTrophy(S, room, e.k, ctx);
     } else if (owner) { ctx.reward(owner, d.coins, killXp(d), true); if (ctx.daily) ctx.daily(owner, 'kills', 1); if (!e.life) rqKill(S, owner, e, ctx); }
@@ -2397,6 +2488,7 @@ export function bigTrigger(S: BigState, p: PlayerState, room?: RoomState, ctx?: 
         if (ctx) ctx.emit('bigGift', { z: z.id, id: p.id, n, need, x: Math.round(p.x), y: Math.round(p.y) });
         if (n < need) return true;
     }
+    if (z.boss === 'blackknight' && ctx) ctx.emit('bigBossMove', { id: 0, k: 'blackknight', m: 'bkcrown', x: z.dx, y: z.dy, pid: p.id });   // tojga qo'l uzatdi - ritsar uyg'onadi (toj - faqat g'alabadan keyin)
     S.trigOn[z.id] = true;
     return true;
 }

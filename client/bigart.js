@@ -480,6 +480,10 @@ window.BigArt = (function () {
             a.r(10, 14, 5, 3, C.iron[3]); a.p(12, 15, OUT);                                                    // qulf
         }],
         kidcage_open: [26, 30, 3, (a) => { a.s(1, 26, 24, 4, C.wood); a.s(1, 0, 24, 3, C.wood, 0.05); a.r(1, 3, 24, 1, C.iron[1]); for (let x = 2; x < 13; x += 3) a.r(x, 3, 1, 23, C.iron[2]); for (let k = 0; k < 5; k++) a.line(15 + k * 2, 4, 22 + k, 25, C.iron[1]); }],
+        // SHAXMAT HAYKALLARI (Qora Ritsar zali): qora marmar, binafsha yaltirash; Shoh - qora toj bilan / tojsiz (toj olingach)
+        chessqueen: [30, 58, 3, (a) => chessPiece(a, 'queen')],
+        chessking: [30, 60, 3, (a) => chessPiece(a, 'king')],
+        chessking0: [30, 60, 3, (a) => chessPiece(a, 'king0')],
         snakeden: [46, 52, 3, (a) => {
             a.e(23, 30, 22, 22, C.stone, -0.05); a.e(23, 31, 16, 18, [0x050406, 0x0c0a10, 0x16121c]);           // devordagi teshik
             for (let k = 0; k < 9; k++) { const an = Math.PI + k / 8 * Math.PI; a.e(23 + Math.cos(an) * 18, 31 + Math.sin(an) * 19, 2.4, 2.4, C.iron, 0.1); }   // temir ramka
@@ -780,6 +784,27 @@ window.BigArt = (function () {
 
     // ===== DUSHMANLAR / BOSSLAR / NPC (3 kadr: 0 - turish, 1 - qadam, 2 - zarba) =====
     // IKKI OYOQLI: o - { W, H, skin, torso, legs, boots, headW, headH, torsoW, torsoH, legH, ears, eyes, hat, weapon, ... }
+    // shaxmat figurasi: poydevor, torayib boruvchi tana, yoqa, bosh; Farzin - tishli toj, Shoh - xochli QORA TOJ (king0 - tojsiz)
+    function chessPiece(a, kind) {
+        const DK = [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e, 0x6e6e86], H = a.H, cx = 15, base = H - 1;
+        a.s(2, base - 7, 26, 7, DK, 0.05); a.r(1, base - 8, 28, 2, DK[3]); a.r(2, base - 1, 26, 1, DK[0]);
+        a.s(5, base - 12, 20, 5, DK, 0.05); a.r(5, base - 12, 20, 1, DK[4]);
+        const t0 = base - 38, t1 = base - 12;
+        for (let y = t0; y < t1; y++) { const w = Math.round(8 + (y - t0) * 0.42), x0 = Math.round(cx - w / 2); for (let x = x0; x < x0 + w; x++) a.p(x, y, shade(0.9 - (x - x0) / w * 0.65, x, y, DK)); }
+        a.e(cx, t0 - 1, 7, 2.2, DK, 0.1); a.r(cx - 2, t0 - 6, 4, 5, DK[2]);
+        const hy = t0 - 11; a.e(cx, hy, 5.5, 5.5, DK, 0.12);
+        [[cx - 3, hy - 2], [cx - 2, t0 + 6], [cx - 3, t0 + 14]].forEach(([x, y]) => a.p(x, y, 0x9a8ac8));   // binafsha yaltirash
+        if (kind === 'queen') {
+            for (let k = -2; k <= 2; k++) a.roof(cx + k * 2.4, hy - 9, 4, 1, 2, DK);
+            a.r(cx - 6, hy - 6, 12, 2, DK[3]); a.e(cx, hy - 10, 1.4, 1.4, DK, 0.2);
+        } else if (kind === 'king') {
+            const BL = [0x050508, 0x14141c, 0x2a2a38, 0x55556a];
+            a.s(cx - 6, hy - 9, 12, 4, BL, 0.1);
+            [cx - 5, cx, cx + 5].forEach((x, i) => a.roof(x, hy - 13 + (i === 1 ? -1 : 0), 4, 1, 3, BL));
+            a.r(cx - 1, hy - 16, 2, 3, BL[2]); a.e(cx, hy - 18, 1.6, 1.6, [0x4a148c, 0x7e57c2, 0xb39ddb], 0.2);   // o'rtada - binafsha tosh (xochsiz)
+            a.p(cx - 4, hy - 7, 0xb71c1c); a.p(cx, hy - 7, 0xe53935); a.p(cx + 4, hy - 7, 0xb71c1c);
+        } else if (kind === 'king0') { a.r(cx - 5, hy - 6, 10, 2, DK[1]); }   // toj yo'q - tepasi tekis
+    }
     function biped(o, f) {
         return art(o.W, o.H, (a) => {
             const W = o.W, H = o.H, cx = Math.floor(W / 2) - (o.shift || 0);
@@ -1681,6 +1706,63 @@ window.BigArt = (function () {
     }
     // MR. WHO (o'ngga qaragan): yuzsiz ko'k HOLOGRAMMA - shlyapa, uzun plash, qo'lida pult; skan chiziqlari. Kadrlar: 0/1 turish (muallaq),
     // 2 pultni bosish (qo'li oldinga, qizil tugma yonadi), 3 o'chib-yonish (qatorlar siljigan)
+    // T-REX1000 (Skyland 2-boss): robot T-Rex - ko'zi, burni YO'Q, faqat katta og'iz (tishlar); belida va dumida qizil o'tkir nishlar.
+    // Kadrlar: 0 turish, 1 yurish (yaqin oyoq oldinda), 6 o'tish, 2 yurish (uzoq oyoq oldinda), 7 o'tish, 3 dum zarbasi (dum ko'tarilgan),
+    // 4 olov (og'iz ochiq, yonib turibdi), 5 nish otish (belidagi nishlar yonadi)
+    function trexArt(f) {
+        return art(90, 64, (a) => {
+            const MET = [0x1a212c, 0x2f3a49, 0x4c5b70, 0x7b8da6, 0xb4c3d6], DK = [0x11161e, 0x1e2632, 0x2c3644, 0x3d4a5c];
+            const RED = [0x5a0c08, 0xa81c10, 0xe8401c, 0xff9a5a], GLOW = [0x8a3a00, 0xff8a00, 0xffd54f, 0xfff4c0], MOUTH = 0x2a0606, TOOTH = 0xeef2f6;
+            const open = f === 4, tailUp = f === 3, spk = f === 5, by = f === 1 || f === 2 ? 1 : 0;   // qadam tushganda tana biroz pastda
+            // OYOQ: tos (39, 38) -> tizza -> to'piq; up - oyoq yerdan ko'tarilgan (oldinga o'tmoqda). [tizza x, to'piq x, ko'tarilish]
+            const POSE = { 0: [[38, 37, 0], [43, 44, 0]], 1: [[48, 53, 0], [32, 26, 0]], 6: [[40, 39, 0], [43, 44, 8]], 2: [[32, 26, 0], [48, 53, 0]], 7: [[43, 44, 8], [40, 39, 0]] };
+            const [nearP, farP] = POSE[f] || POSE[0];
+            const leg = ([kx, ax, up], pal, thick) => {
+                const hx = 39, hy = 37 + by, ky = 48 + by - Math.round(up / 2), ay = 58 - up;
+                a.e((hx + kx) / 2, (hy + ky) / 2, thick, 8, pal, 0.06);   // son (qalin)
+                for (let d = -2; d <= 2; d++) a.line(kx + d, ky, ax + d, ay, d < 0 ? pal[3] : d > 1 ? pal[1] : pal[2]);   // boldir
+                a.e(kx, ky, 2.5, 2.5, [pal[1], pal[2], pal[3]]);   // tizza bo'g'imi
+                a.r(ax - 4, ay, 12, 4, pal[1]); a.r(ax - 4, ay, 12, 1, pal[3]); a.r(ax + 7, ay + 1, 3, 2, pal[3]);   // panja va tirnog'i
+            };
+            leg(farP, DK, 5.5);   // uzoq oyoq (qorong'iroq) - tana orqasida
+            // DUM: bo'g'imli, uchiga torayadi (dum zarbasida - tepaga ko'tarilgan)
+            const tail = tailUp ? [[30, 31, 8, 6.5], [22, 26, 6.6, 5.2], [15, 20, 5.2, 4.2], [10, 14, 3.8, 3.2], [6, 9, 2.6, 2.2], [3, 5, 1.6, 1.4]]
+                : [[30, 34, 8, 6.5], [22, 37, 6.6, 5.2], [15, 40, 5.2, 4.2], [9, 43, 3.8, 3.2], [4, 46, 2.6, 2.2], [1, 48, 1.6, 1.4]];
+            tail.forEach(([x, y, rx, ry]) => a.e(x, y, rx, ry, MET, 0.04));
+            tail.slice(1, 5).forEach(([x, y, , ry]) => a.roof(x, Math.round(y - ry - 3), 3, 1, 3, RED));
+            if (tailUp) { a.line(1, 2, 0, 14, MET[4]); a.line(4, 0, 2, 12, MET[3]); }   // tez harakat chiziqlari
+            // TANA
+            a.e(42, 31 + by, 17, 13, MET, 0.06);
+            a.e(47, 36 + by, 9, 7, [MET[2], MET[3], MET[4]], 0.05);   // ko'krak plastinkasi
+            [[36, 27], [44, 25], [50, 29], [40, 35]].forEach(([x, y]) => a.p(x, y + by, MET[0]));   // parchinlar
+            // BELIDAGI NISHLAR (nish otishda - yonib, cho'zilgan)
+            [[27, 22], [32, 19], [38, 18], [44, 17], [50, 18]].forEach(([x, y], i) => a.roof(x, y + by - (spk ? 9 : 7), spk ? 9 : 7, 1, 5, spk ? GLOW : RED));
+            // BO'YIN va BOSH (ko'z, burun yo'q - faqat og'iz)
+            a.s(50, 15 + by, 9, 15, MET, 0.05);
+            a.e(58, 9 + by, 6, 6, MET, 0.08);
+            a.s(56, 3 + by, 24, 11, MET, 0.12);
+            a.s(72, 6 + by, 12, 8, MET, 0.05);
+            a.r(57, 4 + by, 20, 1, MET[4]); a.r(73, 7 + by, 9, 1, MET[3]);
+            [[60, 7], [66, 6], [76, 9]].forEach(([x, y]) => a.p(x, y + by, MET[1]));
+            if (open) {
+                // OG'IZ OCHIQ: pastki jag' tushgan, ichida olov
+                a.r(61, 14 + by, 23, 6, MOUTH);
+                a.r(66, 15 + by, 18, 4, GLOW[1]); a.r(70, 16 + by, 14, 2, GLOW[2]); a.r(76, 16 + by, 8, 1, GLOW[3]);
+                a.s(60, 20 + by, 21, 5, MET, -0.05);
+                for (let x = 63; x < 84; x += 3) { a.p(x, 14 + by, TOOTH); a.p(x + 1, 19 + by, TOOTH); }
+            } else {
+                // og'iz yopiq: uzun jag' chizig'i, tishlar
+                a.r(60, 14 + by, 25, 1, MOUTH);
+                a.s(60, 15 + by, 22, 5, MET, -0.04);
+                for (let x = 62; x < 84; x += 3) { a.p(x, 13 + by, TOOTH); a.p(x + 1, 15 + by, TOOTH); }
+                a.r(60, 13 + by, 1, 3, MOUTH);
+            }
+            // KICHKINA QO'LLAR
+            a.line(57, 29 + by, 62, 33 + by, MET[2]); a.line(58, 29 + by, 63, 33 + by, MET[3]); a.p(64, 34 + by, MET[4]); a.p(63, 35 + by, MET[4]);
+            // yaqin oyoq (tana oldida)
+            leg(nearP, MET, 6.5); a.e(39, 37 + by, 3, 3, [MET[1], MET[2], MET[3]]);   // tos bo'g'imi
+        });
+    }
     function mrwhoArt(f) {
         const g = art(28, 52, (a) => {
             const H = [0x0a3a7a, 0x1a66c8, 0x3f9cff, 0xa8dcff], L = 0x7ee8ff, by = f === 1 ? 1 : 0;
@@ -1854,6 +1936,9 @@ window.BigArt = (function () {
         fieryhooves: [3, (f) => fieryArt(f), 7],
         mrhol: [3, (f) => mrholArt(f), 6],
         mrwho: [3, (f) => mrwhoArt(f), 4],
+        trex: [3, (f) => trexArt(f), 8],
+        // QORA RITSAR (zaxira rasm; qilich - alohida, klient buradi): 0 turish, 1 qadam, 2 zarba
+        blackknight: [5, (f) => biped({ skin: C.dark, eyes: false, W: 22, H: 30, headW: 8, headH: 8, torsoW: 11, torsoH: 11, legH: 10, torso: [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], armor: [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], legs: [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], hat: HAT.darkhelm, cape: [0x3a0008, 0x6a0010, 0x9a1020, 0xc0303a], boots: 0x08080c }, f)],
         mwheart: [1, () => art(2, 2, () => {}, null), 1],
         drone: [3, (f) => droneArt(f), 5],
         guardbot: [3, (f) => guardbotArt(f), 6],
@@ -2216,6 +2301,23 @@ window.BigArt = (function () {
         Object.entries(PROPS).forEach(([k, [w, h, P, draw, outline]]) => { if (!scene.textures.exists('bm_p_' + k)) tex(scene, 'bm_p_' + k, art(w, h, draw, outline === null ? null : OUT), P); });
         // dushman o'qlari (o'ngga qaragan - klient burchakka buradi) va yerdan otilib chiqadigan tikan / ildiz
         tex(scene, 'bm_sh_arrow', art(12, 3, (a) => { a.r(0, 1, 10, 1, C.wood[3]); a.roof(11, 0, 3, 1, 1, C.iron); a.r(10, 0, 2, 3, C.iron[3]); a.r(0, 0, 2, 1, 0xf4efe2); a.r(0, 2, 2, 1, 0xf4efe2); }), 2);
+        // T-REX1000 OLOVI: piksel olov sharlari (nur bo'ylab oqib chiqadi) - markazi oq-sariq, chetiga qizil, Bayer bilan; konturisiz
+        const FIRE = [0x5a0c08, 0xa81c10, 0xe8401c, 0xff8a00, 0xffd54f, 0xfff4c0];
+        [[5, 0], [8, 1], [11, 2], [15, 3]].forEach(([s, id]) => [0, 1].forEach((vi) => tex(scene, 'bm_fx_rexfire' + id + (vi ? 'b' : 'a'), art(s, s, (a) => {
+            const c = (s - 1) / 2;
+            for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+                const r = Math.hypot((x - c) / (c + 0.5), (y - c) / (c + 0.5)) + (hash(x, y, s * 13 + vi * 7) - 0.5) * 0.45;
+                if (r > 1) continue;
+                a.p(x, y, shade(1.02 - r * 0.95, x + vi, y, FIRE));
+            }
+        }, null), 4)));
+        // QORA RITSAR: katta qilich (dastasi chapda), SHARPA (binafsha arvoh-o'roq), shaxmat poli / devori, dialog portreti
+        tex(scene, 'bm_bk_sword', art(50, 7, (a) => { a.r(0, 2, 6, 3, 0x2a1a10); a.r(0, 2, 6, 1, 0x4a3020); a.s(6, 0, 3, 7, [0x1c1c26, 0x3a3a48, 0x5a5a6e], 0.1); a.r(9, 2, 37, 3, 0x14141c); a.r(9, 2, 37, 1, 0x4a4a5e); a.r(9, 4, 37, 1, 0x8a0f14); a.roof(47, 2, 1, 1, 1, [0x14141c]); a.r(46, 3, 3, 1, 0x2e2e3c); a.p(48, 3, 0xb71c1c); a.p(2, 3, 0x9575cd); }), 3);
+        tex(scene, 'bm_sh_bkghost', art(16, 20, (a) => { for (let y = 0; y < 20; y++) for (let x = 0; x < 16; x++) { const d1 = Math.hypot((x - 4) / 11, (y - 9.5) / 9.5), d2 = Math.hypot((x - 0.5) / 10, (y - 9.5) / 8.2); if (d1 > 1 || d2 <= 1) continue; a.p(x, y, shade(1.05 - (1 - d1) * 1.6, x, y, [0x2a0a4a, 0x6a1aa8, 0xb388ff, 0xf0e0ff])); } }), 3);
+        tex(scene, 'bm_chessfloor', art(24, 7, (a) => { for (let x = 0; x < 24; x++) for (let y = 0; y < 7; y++) { const wht = x < 12, pal = wht ? [0x9a9aae, 0xc8c8d8, 0xe6e6f0, 0xffffff] : [0x08080c, 0x14141c, 0x24242e, 0x3a3a48]; a.p(x, y, shade(0.85 - y / 9 - (x % 12) / 40, x, y, pal)); } a.r(0, 0, 24, 1, 0x6e6e86); a.r(11, 0, 1, 7, 0x2e2e3c); a.r(23, 0, 1, 7, 0x2e2e3c); }, null), 4);
+        tex(scene, 'bm_chesswall', art(24, 24, (a) => { for (let y = 0; y < 24; y++) for (let x = 0; x < 24; x++) { const dark = (x < 12) !== (y < 12); a.p(x, y, shade(0.7 - (y % 12) / 30, x, y, dark ? [0x0e0c14, 0x16131e, 0x1e1a28] : [0x24203a, 0x2e2946, 0x383254])); } for (let k = 0; k < 24; k++) { a.p(k, 0, 0x0a0810); a.p(0, k, 0x0a0810); a.p(k, 12, 0x0a0810); a.p(12, k, 0x0a0810); } }, null), 4);
+        tex(scene, 'bm_bk_face', art(18, 13, (a) => { a.s(2, 0, 14, 13, [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], 0.12); a.r(4, 5, 10, 2, 0x050508); a.r(5, 5, 3, 1, 0xff1744); a.r(10, 5, 3, 1, 0xff1744); a.r(8, 8, 2, 4, 0x050508); a.roof(9, 0, 3, 1, 4, [0x6a0010, 0x9a1020, 0xc0303a]); }), 6);
+        tex(scene, 'bm_sh_rspike', art(18, 5, (a) => { a.r(0, 1, 11, 3, 0x4c5b70); a.r(0, 1, 11, 1, 0x7b8da6); a.roof(14, 0, 1, 1, 1, [0xa81c10]); a.r(11, 1, 3, 3, 0xa81c10); a.r(14, 2, 3, 1, 0xff9a5a); a.p(17, 2, 0xfff4c0); a.r(0, 0, 2, 5, 0x2f3a49); }), 2);
         tex(scene, 'bm_sh_orb', art(8, 8, (a) => a.e(3.5, 3.5, 3.6, 3.6, [0x4a148c, 0x7c4dff, 0xb388ff, 0xf0e0ff], 0.25)), 2);
         tex(scene, 'bm_sh_dark', art(10, 10, (a) => { a.e(4.5, 4.5, 4.6, 4.6, [0x0a0414, 0x2a0a4a, 0x6a1aa8, 0xd8a8ff], 0.2); a.p(3, 3, 0xffffff); a.p(8, 1, 0x9a4aff); a.p(1, 8, 0x9a4aff); }), 2);
         // ROBOT ILON MINASI (S1 dagidek): temir disk, qizil chiroq (yerda yotganda lipillaydi)

@@ -5583,6 +5583,10 @@ if (p) {
             takeItem: (p, item, cb) => { if (!p.userId) { cb(-1); return; } db.farmTakeOne(p.userId, item).then(cb).catch((err) => { console.error('farmTakeOne xatosi:', err); cb(-1); }); },
             mageHome: (p) => { if (p.userId) db.mageMoveIn(p.userId).catch(err => console.error('mageMoveIn xatosi:', err)); },
             curse: (p) => this.curse(p, 'acid'),
+            giveCos: (p, slot, id) => {   // o'yinda topilgan kosmetika: hisobga (bir marta), klientga xabar
+                if (!p.userId) { this.io.to(p.id).emit('cosGift', { slot, id, guest: true }); return; }
+                db.grantCosmetic(p.userId, slot + ':' + id).then(r => this.io.to(p.id).emit('cosGift', { slot, id, added: r.added })).catch(err => console.error('grantCosmetic xatosi:', err));
+            },
             saveGot: (cp) => this.bigOwners(roomId).forEach(p => { p.bigGot = [...(p.bigGot || []), cp]; if (p.userId) db.bigSaveDone(p.userId, 'bigGot', cp).catch(err => console.error('bigSaveDone xatosi:', err)); }),
             saveChest: (id) => this.bigOwners(roomId).forEach(p => { p.bigOpened = [...(p.bigOpened || []), id]; if (p.userId) db.bigSaveDone(p.userId, 'bigOpened', id).catch(err => console.error('bigSaveDone xatosi:', err)); }),
             saveKill: (zone) => this.bigOwners(roomId).forEach(p => { p.bigKilled = [...(p.bigKilled || []), zone]; if (p.userId) db.bigSaveDone(p.userId, 'bigKilled', zone).catch(err => console.error('bigSaveDone xatosi:', err)); }),

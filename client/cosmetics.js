@@ -260,6 +260,17 @@ window.Cosmetics = (() => {
             p.px(4, 4, CD); p.px(13, 4, CD);
             return { g: p.g, ax: 0, ay: -4 };
         },
+        blackcrown() {   // QORA TOJ (Skyland: Qora Ritsarni yenggach): qora metall, to'q qizil toshlar, o'rtada baland tig' va binafsha tosh (xochsiz)
+            const p = painter(16, 10), BL = [0x050508, 0x14141c, 0x2a2a38, 0x55556a];
+            p.rect(0, 7, 16, 3, (x, y) => shade(0.85 - x / 30 - (y - 7) / 8, x, y, BL));
+            const peak = (cx, top) => { for (let y = top; y < 7; y++) { const k = Math.floor((y - top) / 2); p.rect(cx - k, y, 1 + 2 * k, 1, BL[2]); } };
+            peak(1, 3); peak(14, 3); peak(4, 5); peak(11, 5);
+            for (let y = 2; y < 7; y++) { const k = Math.floor((y - 2) / 2); p.rect(7 - k, y, 2 + 2 * k, 1, BL[2]); p.px(7 - k, y, BL[3]); }   // o'rta tig'
+            p.rect(7, 0, 2, 2, 0x7e57c2); p.px(7, 0, 0xb39ddb);   // binafsha tosh
+            p.px(3, 8, 0xb71c1c); p.rect(7, 8, 2, 1, 0xe53935); p.px(12, 8, 0xb71c1c);
+            p.rect(0, 7, 16, 1, BL[3]);
+            return { g: p.g, ax: -1, ay: -8 };
+        },
         crown() {
             const p = painter(16, 8), GO = [0xc79100, 0xffca28, 0xffe082];
             p.rect(0, 5, 16, 3, (x, y) => shade(0.85 - x / 30 - (y - 5) / 8, x, y, GO));

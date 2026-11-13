@@ -8,6 +8,7 @@ export interface CosmeticItem {
     id: string;
     name: string;
     price: number;
+    secret?: boolean;   // do'konda sotilmaydi - o'yinda topiladi (masalan, Shohning qora toji)
 }
 
 // Narxlar: har ro'yxatda arzonidan qimmatiga qarab o'sib boradi (do'konda ham shu tartibda)
@@ -24,7 +25,8 @@ export const HEAD_ITEMS: CosmeticItem[] = [
     { id: 'crown', name: 'Royal Crown', price: 2100 },
     { id: 'punk', name: 'Punk Hair', price: 2600 },
     { id: 'viking', name: 'Viking Helmet', price: 3200 },
-    { id: 'wizard', name: 'Wizard Hat', price: 3900 }
+    { id: 'wizard', name: 'Wizard Hat', price: 3900 },
+    { id: 'blackcrown', name: 'Black Crown', price: 0, secret: true }   // Skyland: shaxmat zalidagi Shohdan olinadi
 ];
 
 export const FACE_ITEMS: CosmeticItem[] = [
