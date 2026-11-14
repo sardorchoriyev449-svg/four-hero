@@ -6,7 +6,7 @@
 //    bo'linadigan, yerga tushganda dog' qoldiradigan
 //  - HOLATLAR: yer ostiga kirish, shiftga chiqish, tosh qalqon, hushdan ketish (zaif), aylanib dumalash, g'azab izlari
 // Ta'sirlar o'yinchiga: sekinlashish, ildiz (qimirlay olmaydi), kuyish / zahar (asta jon oladi), ko'r bo'lish (siyoh), tortish, uloqtirish
-import { PlayerState } from './types';
+import { PlayerState, RoomState } from './types';
 import * as BM from './bigmap';
 
 const T = (ms: number) => Math.round(ms / 30);
@@ -649,6 +649,7 @@ function applyFx(S: BM.BigState, a: { fx?: string, owner?: number, x: number, w:
     else if (fx === 'blind') ctx.emitTo(q.id, 'bigBlind', { ms: 2600 });
     else if (fx === 'burn' || fx === 'poison') S.dots[q.id] = { until: S.tick + T(2500), dps: 8, next: S.tick + T(500), k: fx };
     else if (fx === 'curse') { S.dots[q.id] = { until: S.tick + T(2500), dps: 8, next: S.tick + T(500), k: 'poison' }; ctx.curse(q); }   // semiz elf so'lagi: jon tiklanmaydi
+    else if (fx === 'anchor') { const o = S.enemies.find(e => e.id === a.owner); if (o) { ctx.knock(q, Math.max(-980, Math.min(980, (o.x - q.x) * 2.8)), -320); ctx.emitTo(q.id, 'bigRoot', { ms: 450 }); ctx.emit('bigBossMove', { id: o.id, k: o.k, m: 'plhook', x: Math.round(q.x), y: Math.round(q.y) }); } }   // PALUNDRA langari: kema tomonga tortadi
     else if (fx === 'pull') { const o = S.enemies.find(e => e.id === a.owner); if (o) { ctx.knock(q, Math.max(-780, Math.min(780, (o.x - q.x) * 2.4)), -240); ctx.emitTo(q.id, 'bigRoot', { ms: 500 }); } }
 }
 
@@ -724,7 +725,7 @@ export function updateShots(S: BM.BigState, alive: PlayerState[], ctx: BM.BigCtx
 const ENEMIES_H = (o: BM.BigEnemy) => (BM.ENEMIES[o.k] ? BM.ENEMIES[o.k].h * 0.55 : 40);
 
 // ===== SET-PIECE BOSSLAR: S1 / S2 xaritalaridagi asl bosslar - o'sha miya, o'sha hujumlar (oddiy "yurib, navbat bilan" emas) =====
-type SP = { S: BM.BigState; e: BM.BigEnemy; d: BM.EnemyDef; alive: PlayerState[]; ctx: BM.BigCtx; dt: number };
+type SP = { S: BM.BigState; e: BM.BigEnemy; d: BM.EnemyDef; alive: PlayerState[]; ctx: BM.BigCtx; dt: number; room?: RoomState };
 const zoneOf = (S: BM.BigState, e: BM.BigEnemy) => S.w.zones.find(q => q.id === e.zone);
 const inZ = (z: BM.BigZone | undefined, q: PlayerState) => !z || (q.x > z.x0 - 20 && q.x < z.x1 + 20 && feetOf(q) >= z.y0 - 40 && feetOf(q) <= z.y1 + 80);
 const spAr = (c: SP, o: Partial<BM.BigArea> & { k: string, x: number, y: number, w: number, h: number }) => area(c.S, { zone: c.e.zone, owner: c.e.id, ...o });
@@ -1891,6 +1892,171 @@ function trexAI(c: SP): void {
     if (e.x < lo || e.x > hi) e.x = Math.max(lo, Math.min(hi, e.x));
 }
 SETPIECE.trex = trexAI;
+// PALUNDRA (Skyland 3-boss): o'rgimchak oyoqli bahaybat qaroqchi kemasi - ko'zi yo'q, tumshug'ida yovuz og'iz. Hujumlari:
+//  1) TO'PLAR: korpusidagi 3 ta to'p tuynugidan (oldin tutun - ogohlantirish) o'yinchilar tomonga yoy bo'ylab tosh-yadrolar (g'azabda - 5 ta)
+//  2) LANGAR: tumshug'idan o'yinchiga zanjirli langar otadi - tegsa zarar va KEMA TOMONGA TORTADI
+//  3) GEYZER: og'zini ochadi (ko'k nuqtali chiziq - qayerga otishi), keyin 1 s davomida kuchli suv oqimi (itarib yuboradi)
+// Kema o'yinchidan masofa saqlaydi: uzoqlashsa - yaqinlashadi, juda yaqin kelsa - orqaga chekinadi (yuzi o'yinchiga qarab)
+// spread - yadrolar: birinchisi aniq (oldindan mo'ljal bilan), keyingilari ikki yonidan "qisqich" - bir joyda turib ham, bir tomonga qochib ham qutulib bo'lmaydi
+export const PAL = { keep: 330, cannonEvery: 2800, cannonWind: 700, cannonGap: 200, cannonN: 4, ballDmg: 24, ballBlast: 62, ports: [-31, -4, 23], portY: 106, spread: [0, -60, 60, 0, -30, 30],
+    anchorEvery: 3800, anchorWind: 600, anchorV: 1000, anchorDmg: 30, anchorMin: 150, anchorMax: 820, bowX: 147, bowY: 129,
+    geyserEvery: 5200, geyserWind: 900, geyserLock: 300, geyserMs: 1000, geyserLen: 680, geyserW: 46, geyserDmg: 10, mouthX: 111, mouthY: 104, restMs: 600 };
+function palundraAI(c: SP): void {
+    const { S, e, d } = c, K = PAL, z = zoneOf(S, e);
+    if (!z) return;
+    const now = S.tick, rage = spRage(c), sp = rage ? 1.25 : 1, inA = c.alive.filter(q => inZ(z, q));
+    const lo = z.x0 + d.w / 2, hi = z.x1 - d.w / 2;
+    if (e.bst === undefined) { e.bst = 'run'; e.tA = now + T(1500); e.tB = now + T(3000); e.tC = now + T(4600); e.cd = 0; spSay(c, 'plstart'); }
+    let vx = 0;
+    if (!inA.length) { if (e.bst !== 'run') { e.bst = 'run'; e.move = ''; } BM.moveEnemy(S, e, d, 0, null, c.dt); return; }
+    const q = BM.nearest(inA, e)!, dx = q.x - e.x;
+    const gAim = (t: PlayerState) => {   // geyzer yo'nalishi: og'izdan o'yinchiga (pastga ko'p egilmaydi); polga yetsa - o'sha yerda to'xtaydi
+        const mx = e.x + e.f * K.mouthX, my = e.y - K.mouthY, a = Math.max(-1.05, Math.min(0.45, Math.atan2(t.y - my, (t.x - mx) * e.f)));
+        let x2 = mx + e.f * Math.cos(a) * K.geyserLen, y2 = my + Math.sin(a) * K.geyserLen;
+        if (y2 > e.y - 6) { const k = (e.y - 6 - my) / (y2 - my); x2 = mx + (x2 - mx) * k; y2 = e.y - 6; }
+        return { mx, my, x2, y2 };
+    };
+    if (e.bst === 'cwind') { if (--e.ph! <= 0) { e.bst = 'cannon'; e.mi = 0; e.ph = 0; e.move = 'cannon'; } }
+    else if (e.bst === 'cannon') {
+        if (--e.ph! <= 0) {   // TO'P: navbatdagi tuynukdan, navbatdagi o'yinchiga (biroz yoyilib)
+            const port = K.ports[e.mi! % K.ports.length], sx = e.x + e.f * port, sy = e.y - K.portY, tq = inA[e.mi! % inA.length];
+            const tv = S.pv[tq.id], fly = (x: number) => Math.max(1, Math.min(2, 0.9 + Math.abs(x - sx) / 900));
+            let lx = tq.x; for (let k = 0; k < 2; k++) lx = tq.x + Math.max(-320, Math.min(320, (tv ? tv.vx : 0) * fly(lx) * 0.9));   // yugurayotgan bo'lsa - yetib boradigan joyiga
+            const tx = lx + K.spread[e.mi! % K.spread.length], ty = feetOf(tq) - 10, tt = fly(tx);   // baland yoy: uzoqqa - balandroq (supachalar ustidan o'tadi, tushguncha qochib ulguriladi)
+            S.shots.push({ id: ++S.seq, owner: e.id, x: sx, y: sy, ...lob(sx, sy, tx, ty, tt), arc: true, t: 0, k: 'cannon', sc: 1.6, blast: K.ballBlast, dmg: K.ballDmg, nl: true, life: T(4000) });   // nl - kema tagidagi supachalarga urilib qolmaydi
+            spSay(c, 'plboom', { x: Math.round(sx), y: Math.round(sy), f: e.f });
+            e.mi = (e.mi || 0) + 1; e.ph = T(K.cannonGap / sp);
+            if (e.mi >= K.cannonN + (rage ? 2 : 0)) { e.mi = 0; e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'rest'; e.tA = now + T(K.cannonEvery / sp); }
+        }
+    } else if (e.bst === 'awind') {
+        e.f = dx < 0 ? -1 : 1;
+        if (--e.ph! <= 0) {   // LANGAR: o'yinchi turgan joyga to'g'ri chiziq bo'ylab
+            const bx = e.x + e.f * K.bowX, by = e.y - K.bowY, aim = leadAt(c, q, bx, by, K.anchorV * sp), a = Math.atan2(aim.y - by, aim.x - bx);
+            S.shots.push({ id: ++S.seq, owner: e.id, x: bx, y: by, vx: Math.cos(a) * K.anchorV * sp, vy: Math.sin(a) * K.anchorV * sp, arc: false, t: 0, k: 'anchor', hr: 18, dmg: K.anchorDmg, fx: 'anchor', nl: true, life: T(1100) });
+            spSay(c, 'planchor', { f: e.f });
+            e.bst = 'rest'; e.ph = T(900); e.move = 'anchor'; e.tB = now + T(K.anchorEvery / sp);
+        }
+    } else if (e.bst === 'gwind') {
+        e.f = e.rxs!;
+        if (e.ph! > T(K.geyserMs) + T(K.geyserLock) && (q.x - e.x) * e.f > 0) {   // hali qotmagan: og'iz o'yinchini kuzatib boradi (ko'k chiziq ham)
+            const ar = S.areas.find(o => o.id === e.rxa); if (ar) { const g = gAim(q); ar.x2 = g.x2; ar.y2 = g.y2; }
+        }
+        if (--e.ph! <= 0) { e.bst = 'rest'; e.ph = T(K.restMs); e.move = 'rest'; e.tC = now + T(K.geyserEvery / sp); }
+        else if (e.ph! <= T(K.geyserMs) && e.move !== 'geyser') { e.move = 'geyser'; spSay(c, 'plgeyser', { f: e.f }); }
+    } else if (e.bst === 'rest') { if (--e.ph! <= 0) { e.bst = 'run'; e.move = ''; } }
+    else {
+        e.f = dx < 0 ? -1 : 1;
+        const dist = Math.abs(dx);
+        if (now >= e.tC! && dist < K.geyserLen - 60 && Math.abs(feetOf(q) - e.y) < 280) {
+            // GEYZER: og'izdan o'yinchi tomon (yo'nalishi shu zahoti qotadi - ko'k nuqtali chiziq; qochib ulguriladi), 1 s suv oqimi
+            const { mx, my, x2, y2 } = gAim(q);
+            e.rxa = spAr(c, { k: 'geyser:water', x: mx, y: my, x2, y2, w: K.geyserW, h: K.geyserW, warn: T(K.geyserWind / sp), t: T(K.geyserMs), dmg: K.geyserDmg, every: T(200), kb: [460, -300], dk: 'hit' }).id;   // og'izdan uzoqlashtiradi
+            e.rxs = e.f; e.bst = 'gwind'; e.ph = T(K.geyserWind / sp) + T(K.geyserMs); e.move = 'gwind';
+            c.ctx.emit('bigWind', { id: e.id }); spSay(c, 'plgwind', { f: e.f });
+        } else if (now >= e.tB! && dist > K.anchorMin && dist < K.anchorMax) {
+            e.bst = 'awind'; e.ph = T(K.anchorWind / sp); e.move = 'awind'; c.ctx.emit('bigWind', { id: e.id }); spSay(c, 'plawind', { f: e.f });
+        } else if (now >= e.tA!) {
+            e.bst = 'cwind'; e.ph = T(K.cannonWind / sp); e.move = 'cwind'; c.ctx.emit('bigWind', { id: e.id }); spSay(c, 'plcwind', { f: e.f });
+        } else if (dist > K.keep + 60) vx = e.f * d.spd * sp;
+        else if (dist < K.keep - 140) vx = -e.f * d.spd * 0.7 * sp;   // juda yaqin - orqaga chekinadi (yuzi o'yinchiga)
+    }
+    BM.moveEnemy(S, e, d, vx, null, c.dt);
+    if (e.x < lo || e.x > hi) e.x = Math.max(lo, Math.min(hi, e.x));
+}
+SETPIECE.palundra = palundraAI;
+// ===== KO'ZGU (Skyland 4-boss): o'yinchining egizagi. Qahramoni qanday bo'lsa - o'shaning qobiliyatlari:
+//  RITSAR - qilich, drobovik (yaqinga sochma), qalqon (o'q kelsa ko'taradi), qalqon otish; SAMURAY - katana, katana ruhi, otilib kesish (R), ikki yonga sharpa zarba;
+//  KAMONCHI - uzoqdan aniq o'qlar, uchtalik o'q, yaqin kelsa orqaga sakraydi, ko'rinmas bo'ladi; SEHRGAR - olov shari, muz shari (sekinlashtiradi), chaqmoq;
+//  OVCHI - uzun pichoq, zaharli drotik, yopishqoq mina. Hammasi: o'yinchi tepaga chiqsa - sakrab ergashadi, o'q uchib kelsa - sakrab qochadi.
+// Har egizak O'Z EGASINI ovlaydi (u maydonda bo'lmasa - eng yaqin o'yinchini)
+export const MIR: { [ct: string]: { keep: number, run: number } } = { knight: { keep: 55, run: 1 }, samurai: { keep: 55, run: 1.1 }, archer: { keep: 380, run: 1 }, mage: { keep: 330, run: 0.95 }, hunter: { keep: 150, run: 1 } };
+// EGIZAK - O'YINCHI QOIDALARI BILAN: o'qlari faqat QARAGAN TOMONGA GORIZONTAL uchadi (o'yinchi qanday otsa - shunday; tepadan / pastdan qiya otmaydi) -
+// shuning uchun avval o'yinchi bilan bir sathga chiqadi / tushadi. SHIFT qobiliyati ham bor. Hammasi STAMINA sarflaydi (ko'rinmaydi, o'yinchidagidek
+// tiklanadi: oxirgi harakatdan 1.35 s keyin, ~10.5 / s); narxlari o'yinchinikidan qimmatroq - boss tez-tez dam oladi (o'yinchi uchun ochiq payt)
+export const MIR_ST = { regen: 0.35, delayMs: 1350, cost: { melee: 16, pellet: 16, shield_throw: 20, slash: 24, cut: 24, arrow: 18, arrow3: 26, fireball: 25, ice: 25, lightning: 25,
+    knife: 16, dart: 14, shield: 30, ghost: 20, invis: 20, tornado: 20, mine: 18, roll: 12 } as { [k: string]: number } };
+function mirrorAI(c: SP): void {
+    const { S, e, d, ctx } = c, z = zoneOf(S, e);
+    if (!z || !e.pl) return;
+    const now = S.tick, rage = spRage(c), sp = rage ? 1.3 : 1, inA = c.alive.filter(q => inZ(z, q)), ct = e.pl.ct in MIR ? e.pl.ct : 'knight', K = MIR[ct];
+    const cd = e.mcd || (e.mcd = {}), ready = (k: string) => (cd[k] || 0) <= now, wait = (k: string, ms: number) => { cd[k] = now + T(ms / sp); };
+    if (e.stam === undefined) e.stam = 100;
+    if (e.bst === undefined) { e.bst = 'run'; spSay(c, 'mrstart', { n: e.pl.n }); ['a', 'b', 'c', 'd', 'e', 'g'].forEach((k, i) => { cd[k] = now + T(600 + i * 400); }); }
+    if (!inA.length) { e.bst = 'run'; BM.moveEnemy(S, e, d, 0, null, c.dt); return; }
+    const q = inA.find(o => o.id === e.own) || BM.nearest(inA, e)!, dx = q.x - e.x, dist = Math.abs(dx), qf = feetOf(q), dir = dx < 0 ? -1 : 1;
+    const say = (bt: string, extra: object = {}) => spSay(c, 'mratk', { bt, f: e.f, ...extra });
+    let acted = false;
+    const can = (k: string) => e.stam! >= MIR_ST.cost[k];
+    const use = (k: string, bt = k) => { e.stam = e.stam! - MIR_ST.cost[k]; acted = true; wait('s', MIR_ST.delayMs); say(bt); };
+    // O'Q: qaragan tomonga gorizontal (yelpig'ich - o'yinchidagidek kichik burchak bilan)
+    const shoot = (k: string, v: number, dmg: number, o: Partial<BM.BigShot> = {}, da = 0) => {
+        const sx = e.x + e.f * 18, sy = e.y - 32, a = (e.f > 0 ? 0 : Math.PI) + da * e.f;
+        S.shots.push({ id: ++S.seq, owner: e.id, x: sx, y: sy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, arc: false, t: 0, k, dmg, nl: true, life: T(1600), ...o });
+    };
+    const melee = (reach: number, dmg: number, kb: number, both = false) => {   // zarba: oldidagi (both - ikki yonidagi) o'yinchilarga, o'z sathida
+        inA.forEach(o => { const ox = o.x - e.x; if ((both || ox * e.f > -14) && Math.abs(ox) < reach && Math.abs(feetOf(o) - e.y) < 50) { BM.hurtBig(o, dmg, ctx, 'hit'); safeKnock(S, z, o, Math.sign(ox || e.f) * kb, -220, ctx); } });
+    };
+    const incoming = !!c.room && c.room.bullets.some(b => { const bx = e.x - b.x, by = e.y - 24 - b.y; return Math.hypot(bx, by) < 190 && (b.vx * bx + b.vy * by) > 0; });
+    // ---- holatlar: otilib kesish (samuray R) / orqaga sakrash (kamonchi) ----
+    if (e.bst === 'dash' || e.bst === 'roll') {
+        if (e.bst === 'dash') inA.forEach(o => { if (!e.mdh!.includes(o.id) && Math.abs(o.x - e.x) < 40 && Math.abs(feetOf(o) - e.y) < 60) { e.mdh!.push(o.id); BM.hurtBig(o, 32, ctx, 'hit'); safeKnock(S, z, o, e.f * 380, -260, ctx); } });
+        if (--e.ph! <= 0 || e.x < z.x0 + 30 || e.x > z.x1 - 30) { e.bst = 'run'; e.lvx = undefined; e.move = ''; }
+        else { e.x = Math.max(z.x0 + 20, Math.min(z.x1 - 20, e.x + e.vx * c.dt)); BM.moveEnemy(S, e, d, 0, null, c.dt); return; }
+    }
+    if (e.bst === 'cwind') {   // samuray: otilishdan oldin cho'kadi
+        if (--e.ph! <= 0) { e.bst = 'dash'; e.ph = T(330); e.vx = e.f * 920; e.mdh = []; e.move = 'cut'; say('cut'); }
+        BM.moveEnemy(S, e, d, 0, null, c.dt); return;
+    }
+    e.f = dir;
+    // ---- QOBILIYATLAR: gorizontal o'qlar faqat o'yinchi bilan BIR SATHDA (o'yinchi tanasi balandligida) ----
+    const lvl = Math.abs(qf - e.y) < 40, near = dist < 70 && lvl, gap = ready('g');
+    if (ct === 'knight') {
+        if (incoming && ready('d') && can('shield')) { e.shield = now + T(1100); wait('d', 3200); use('shield'); }   // SHIFT: QALQON
+        else if (gap && near && ready('a') && can('melee')) { melee(78, 26, 300); wait('a', 950); use('melee'); }
+        else if (gap && lvl && dist > 110 && dist < 300 && ready('b') && can('pellet')) { for (let k = -2; k <= 2; k++) shoot('p_pellet', 700, 9, { life: T(420) }, k * 0.1); wait('b', 2600); use('pellet'); }   // DROBOVIK
+        else if (gap && lvl && dist > 260 && dist < 700 && ready('c') && can('shield_throw')) { shoot('p_shield', 680, 30, { hr: 16, life: T(1000) }); wait('c', 6500); use('shield_throw'); }   // QALQON OTISH
+    } else if (ct === 'samurai') {
+        if (gap && dist < 115 && lvl && ready('e') && can('ghost')) { melee(115, 20, 320, true); wait('e', 4000); use('ghost'); }   // SHIFT: ikki yonga sharpa zarba
+        else if (gap && near && ready('a') && can('melee')) { melee(74, 22, 260); wait('a', 800); use('melee'); }
+        else if (gap && lvl && dist > 150 && dist < 460 && ready('c') && can('cut')) { e.bst = 'cwind'; e.ph = T(260 / sp); wait('c', 4800); e.move = 'cwind'; e.stam = e.stam! - MIR_ST.cost.cut; acted = true; wait('s', MIR_ST.delayMs); }   // OTILIB KESISH
+        else if (gap && lvl && dist > 120 && dist < 520 && ready('b') && can('slash')) { shoot('p_slash', 640, 22, { pierce: true, hr: 16, life: T(750) }); wait('b', 2100); use('slash'); }   // KATANA RUHI
+    } else if (ct === 'archer') {
+        if (dist < 150 && lvl && ready('d') && e.ground && can('roll')) { e.bst = 'roll'; e.ph = T(260); e.vx = -dir * 640; e.vy = -360; e.ground = false; wait('d', 2400); use('roll'); }   // orqaga sakrash
+        else if (gap && dist > 200 && ready('e') && can('invis')) { e.iv = now + T(2200); wait('e', 10000); use('invis'); }   // SHIFT: KO'RINMAS
+        else if (gap && lvl && dist < 900 && ready('c') && can('arrow3')) { for (let k = -1; k <= 1; k++) shoot('p_arrow', 980, 16, { hr: 10 }, k * 0.12); wait('c', 4200); wait('a', 900); use('arrow3', 'arrow'); }   // UCHTALIK O'Q
+        else if (gap && lvl && dist < 900 && ready('a') && can('arrow')) { shoot('p_arrow', 980, 18, { hr: 10 }); wait('a', 1300); use('arrow'); }
+    } else if (ct === 'mage') {
+        if (gap && lvl && dist < 520 && ready('e') && can('tornado')) { shoot('p_tornado', 200, 22, { hr: 52, pierce: true, kb: 1, life: T(3000), y: e.y - 40 } as Partial<BM.BigShot>); wait('e', 12000); use('tornado'); }   // SHIFT: TORNADO (qaragan tomonga sekin yuradi)
+        else if (gap && lvl && dist < 850 && ready('c') && can('lightning')) { shoot('p_lightning', 1100, 20, { hr: 10, life: T(900) }); wait('c', 2600); wait('a', 700); use('lightning'); }   // CHAQMOQ
+        else if (gap && lvl && dist < 750 && ready('b') && can('ice')) { shoot('p_ice', 700, 14, { hr: 12, fx: 'slow' }); wait('b', 3600); wait('a', 700); use('ice'); }   // MUZ SHARI
+        else if (gap && lvl && dist < 800 && ready('a') && can('fireball')) { shoot('p_fireball', 620, 24, { hr: 13 }); wait('a', 1500); use('fireball'); }   // OLOV SHARI
+    } else if (ct === 'hunter') {
+        if (gap && lvl && dist < 230 && ready('a') && can('knife')) { shoot('p_knife', 520, 26, { hr: 14, life: T(320), pierce: true }); wait('a', 1100); use('knife'); }   // UZUN PICHOQ
+        else if (gap && dist < 520 && ready('c') && can('mine')) {   // SHIFT: YOPISHQOQ MINA - qaragan tomonga otiladi (o'yinchidagidek), yerga yopishib portlaydi
+            const sx = e.x + e.f * 18, sy = e.y - 32, tt = Math.max(0.35, Math.min(0.9, dist / 560));
+            S.shots.push({ id: ++S.seq, owner: e.id, x: sx, y: sy, vx: e.f * Math.min(560, dist / tt), vy: -150, arc: true, k: 'mine', t: 0, dmg: 26, blast: 60, fuse: T(1600), life: T(6000) });
+            wait('c', 6000); use('mine');
+        }
+        else if (gap && lvl && dist > 180 && dist < 900 && ready('b') && can('dart')) { shoot('p_dart', 1100, 12, { hr: 9, fx: 'poison' }); wait('b', 2000); use('dart'); }   // ZAHARLI DROTIK
+    }
+    if (acted) wait('g', 550 + Math.random() * 300);   // zarbalar orasida pauza
+    else if (ready('s')) e.stam = Math.min(100, e.stam! + MIR_ST.regen);
+    // ---- HARAKAT: o'yinchi bilan bir sathga (tepada - sakraydi, pastda - chetdan tushadi), keyin kerakli masofa; o'q kelsa - sakrab qochadi ----
+    let vx = 0;
+    if (!lvl && qf > e.y + 40) vx = dir * d.spd * sp;                                  // o'yinchi pastda - uning tomonga yurib, supachadan tushadi
+    else if (!lvl && qf < e.y - 40 && dist > 280) vx = dir * d.spd * sp;               // tepada - sakrash masofasigacha yaqinlashadi
+    else if (dist > K.keep + 40) vx = dir * d.spd * K.run * sp;
+    else if (K.keep > 100 && dist < K.keep - 80 && e.x > z.x0 + 60 && e.x < z.x1 - 60) vx = -dir * d.spd * 0.8 * sp;
+    if (e.ground && !acted) {
+        if (qf < e.y - 40 && dist < 330) {   // o'yinchi supachada - unga sakraydi
+            const s = BM.surfaceBelow(S, q.x, qf - 8, 40);
+            if (s && s.y < e.y - 30 && BM.leapTo(e, Math.max(s.x + 16, Math.min(s.x + s.w - 16, q.x - dir * (K.keep > 100 ? 60 : 30))), s.y, 1150)) say('jump');
+        } else if (incoming && ct !== 'knight' && ready('j')) { e.vy = -560; e.ground = false; e.lvx = vx || dir * 120; wait('j', 1400); say('jump'); }
+    }
+    BM.moveEnemy(S, e, d, vx, q, c.dt);
+    e.x = Math.max(z.x0 + 16, Math.min(z.x1 - 16, e.x));
+}
+SETPIECE.mirror = mirrorAI;
 // QORA RITSAR (Skyland maxfiy bossi): Shohning tojini olishganda Farzin Qora Ritsarga aylanadi (orqasidan katta qilich) va dialog bo'ladi
 // ("Men senga buni qilishga yo'l qo'ymayman!"), keyin jang:
 //  1) DESH: chopib keladi - urilgan o'yinchini itarib (uloqtirib) zarar beradi

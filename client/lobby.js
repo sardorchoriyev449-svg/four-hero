@@ -2064,6 +2064,12 @@ function renderShop() {
 
 // ===== DETALLAR: bosh kiyimi, yuz buyumi (hamma personajga umumiy), qurol ko'rinishlari (personajga) =====
 const cosSlotsFor = (charType) => ['head', 'face', ...(cosCatalog && cosCatalog.body ? ['body'] : []), ...Object.keys((cosCatalog && cosCatalog.weapons[charType]) || {})];
+// qahramonning kiyilgan buyumlari (serverdagi heroEquip bilan bir xil): kiyim shu qahramonda yo'q bo'lsa - boshqasiga kiyilgani
+function heroEquip(type) {
+    const all = (currentUser && currentUser.equippedCosmetics) || {}, e = Object.assign({}, all[type] || {});
+    if (!e.body) for (const k of Object.keys(all)) if (all[k] && all[k].body) { e.body = all[k].body; break; }
+    return e;
+}
 const cosKey = (charType, slot, id) => (slot === 'head' || slot === 'face' || slot === 'body') ? slot + ':' + id : charType + '.' + slot + ':' + id;
 function cosName(slot, item) {
     const k = 'cos_' + slot + '_' + item.id, v = t(k);
@@ -2089,7 +2095,7 @@ function renderCosmetics() {
 
     const items = selectedCosSlot === 'head' ? cosCatalog.head : selectedCosSlot === 'face' ? cosCatalog.face : selectedCosSlot === 'body' ? (cosCatalog.body || []) : cosCatalog.weapons[charType][selectedCosSlot];
     const owned = currentUser.ownedCosmetics || [];
-    const equipped = ((currentUser.equippedCosmetics || {})[charType] || {})[selectedCosSlot];
+    const equipped = heroEquip(charType)[selectedCosSlot];
     items.forEach((item) => {
         const isOwned = owned.includes(cosKey(charType, selectedCosSlot, item.id));
         const isEquipped = equipped === item.id;
@@ -2415,7 +2421,7 @@ function drawCharPreview() {
     };
     const body = pick(skinCatalog, SKINS_OFF ? {} : currentUser.equippedSkins) || '#1e88e5';
     ctx.clearRect(0, 0, 64, 48);
-    drawHero(ctx, type, body, SKINS_OFF ? {} : (currentUser.equippedCosmetics || {})[type], 0, 0);
+    drawHero(ctx, type, body, SKINS_OFF ? {} : heroEquip(type), 0, 0);
 }
 
 // Qahramon rasmi - o'yindagi bilan bir xil (cosmetics.js): tana skin rangi, visor, quroli va

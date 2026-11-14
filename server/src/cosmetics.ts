@@ -184,6 +184,12 @@ export function validCustomOutfit(code: unknown): code is string {
 }
 // Personajning kiyilgan detallari -> "cowboy|hockey|bat|..." (LOOK_SLOTS tartibida, bo'shi - "").
 // Kiyim "custom" (konstruktor) - o'yinchining o'z kodi bilan almashtiriladi (boshqalar ham shu kiyimni ko'radi)
+// qahramonning kiyilgan buyumlari; KIYIM (body) shu qahramonda bo'lmasa - boshqa qahramonga kiyilgani (avval kiyim har qahramonga alohida kiyilardi)
+export function heroEquip(all: { [ct: string]: { [slot: string]: string } } | undefined, ct: string): { [slot: string]: string } {
+    const e = { ...((all || {})[ct] || {}) };
+    if (!e.body) for (const k of Object.keys(all || {})) { const b = all![k] && all![k].body; if (b) { e.body = b; break; } }
+    return e;
+}
 export function lookString(equipped: { [slot: string]: string } | undefined, characterType: string, custom: string = ''): string {
     const e = SKINS_OFF ? {} as { [slot: string]: string } : (equipped || {});   // skinlar o'chiq - detallarsiz
     return LOOK_SLOTS.map(slot => {

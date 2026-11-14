@@ -1218,6 +1218,42 @@ function launchGame(socket, roomId, mapData, continued) {
         }
     }
 
+    // KO'ZGU BOSS (Big Map): o'yinchining egizagi - boshqa o'yinchilar chiziladigan kod bilan (tana, kiyim, qurol, zarba animatsiyalari).
+    // bigmap.js chaqiradi: make (bir marta), update (har kadr), attack (zarba / o'q), destroy
+    const PUP_PARTS = ['weaponSpr', 'shieldSpr', 'fistSpr', 'faceSpr', 'hatSpr', 'jetSpr'];
+    window.HeroPuppet = {
+        make(scene, pl) {
+            const key = 'char_' + pl.ct + '_' + pl.c;
+            createPlayerTexture(scene, key, pl.c);
+            const s = scene.add.sprite(0, 0, key).setDepth(2.62);
+            s.heroColor = pl.c; s.charKey = key; s.characterType = pl.ct; s.weaponMode = 'main'; s.level = pl.lv || 0; s.isPuppet = true;
+            setHeroLook(s, pl.lk);
+            return s;
+        },
+        update(scene, s, x, y, facingRight, o) {   // o: { alpha, shield, tint }
+            s.setPosition(x, y).setAlpha(o.alpha);
+            if (o.tint) s.setTint(o.tint); else s.clearTint();
+            s.shieldActive = !!o.shield;
+            updateHeroWeaponVisuals(scene, s, s.characterType, facingRight);
+            PUP_PARTS.forEach((f) => { if (s[f] && s[f].visible) s[f].setAlpha(Math.min(s[f].alpha, o.alpha)); });
+        },
+        attack(scene, s, bt) {
+            if (bt === 'cut') { s.cutAt = scene.time.now; return; }   // samuray: otilib kesish kadrlari
+            const melee = bt === 'melee' || bt === 'ghost';
+            playHeroAttack(scene, s, melee ? undefined : bt === 'shield_throw' ? 'shield' : bt);
+            if (melee) {   // qilich / katana izi - o'yinchi zarbasidagi rasm, qisqa uchib so'nadi
+                const tex = s.characterType === 'samurai' ? 'melee_samurai' : s.characterType === 'hunter' ? 'melee_hunter' : 'melee_knight', dir = s.flipX ? -1 : 1;
+                [dir].concat(bt === 'ghost' ? [-dir] : []).forEach((d) => {
+                    if (!scene.textures.exists(tex)) return;
+                    const im = scene.add.image(s.x + d * 26, s.y + 2, tex).setDepth(4).setFlipX(d < 0).setTint(0xc9b8ff);
+                    scene.tweens.add({ targets: im, x: im.x + d * 34, alpha: 0, duration: 230, onComplete: () => im.destroy() });
+                });
+            }
+        },
+        tornadoTex(scene) { ensureTornadoTextures(scene); },   // sehrgar egizagining tornadosi - o'yinchinikidek rasm
+        destroy(s) { PUP_PARTS.forEach((f) => { if (s[f]) s[f].destroy(); }); s.destroy(); }
+    };
+
     // RETRO PIKSEL KALLA IKONKASI (emoji o'rniga) - "arvoh" holatida ko'rsatiladi
     function drawSkullIcon(scene, x, y) {
         const g = scene.add.graphics().setScrollFactor(0).setDepth(1002);
@@ -13424,6 +13460,8 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (isPvp) {
                     const secs = pvpState && pvpState.respawn ? pvpState.respawn[socket.id] : null;
                     this.respawnText.setText(t('pvp_respawn').replace('{s}', secs !== null && secs !== undefined ? secs : '...'));
+                } else if (isBig && (currentCharacter.respawnTimer || 0) > 0) {   // THE WORLD: arvoh - checkpointga qaytguncha qolgan vaqt
+                    this.respawnText.setText(t('ghost_line1') + '\n' + t('big_ghost_back').replace('{s}', Math.ceil(currentCharacter.respawnTimer * 0.03)));
                 } else this.respawnText.setText(t('ghost_line1') + '\n' + t('ghost_line2'));
             } else {
                 this.respawnText.setText('');

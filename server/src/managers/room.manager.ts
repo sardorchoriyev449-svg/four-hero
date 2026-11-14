@@ -5,7 +5,7 @@ import { RoomState, PlayerState } from '../types';
 import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
 import { getSkinColor, getSkinFx, getWeaponSkinColor, getWeaponSkinFx } from '../skins';
-import { lookString } from '../cosmetics';
+import { lookString, heroEquip } from '../cosmetics';
 import { MAPS, WORLD_SHOP, getMapById, SEASON_MAP_COUNT, WORLD_MAP, farmPlotX, farmZoneCenter, farmGrown, farmIsRaining, rollFish, FARM_PLOTS, FARM_ZONES, CROPS, FRUIT_TREES, ORCHARD_SLOTS, FISH, farmLevel, farmRaidK, farmCapacity, dailyOffer, FARM_DECOR, currentFarmSeason, SEASON_GROWTH, farmSpeed, FARM_HIVE, FARM_MILL, FARM_SPRINKLER, FARM_SCARECROW, FARM_GREENHOUSE, orchardSlotsFor, HOME_ITEMS, HOME_SLOTS, homeMax, CHEST_CAP, CRITTER, PET, FARM_ELF, MEADOW, MEADOW_DECOR, FARM_BEDS_BASE, surfaceBelow, meadowSpotFree, meadowFreeSpot } from '../maps';
 import { GameEngine } from './game.engine';
 import { createBigState, bigSpawnPoint, bigSurfaceY, bigShopNear, BIG_SHOP, ARMOR, BIG_GEN, bigNearestEnemy } from '../bigmap';
@@ -201,7 +201,7 @@ export class RoomManager {
             weaponFx: getWeaponSkinFx(characterType, equippedWeaponSkins[characterType] || 'default'),
             equippedWeaponSkins: equippedWeaponSkins,
             equippedCosmetics: equippedCosmetics,
-            look: lookString(equippedCosmetics[characterType], characterType, customOutfit), customOutfit,
+            look: lookString(heroEquip(equippedCosmetics, characterType), characterType, customOutfit), customOutfit,
             isDead: false,
             respawnTimer: 0,
             isReady: false,
@@ -441,7 +441,7 @@ export class RoomManager {
             player.skinId = skinId;
             player.color = getSkinColor(characterType, skinId) ?? CHARACTER_COLORS[characterType];
             player.skinFx = getSkinFx(characterType, skinId);
-            player.look = lookString((player.equippedCosmetics || {})[characterType], characterType, player.customOutfit || '');
+            player.look = lookString(heroEquip(player.equippedCosmetics, characterType), characterType, player.customOutfit || '');
             // MUHIM: yaxshilashlar HAR BIR PERSONAJGA ALOHIDA tegishli - shu personajga
             // almashganda, uning o'z damage/stamina darajasini keshdan olamiz
             const charUpgrades = player.accountUpgrades[characterType] || { damage: 0, stamina: 0 };
@@ -487,7 +487,7 @@ export class RoomManager {
         player.weaponFx = getWeaponSkinFx(player.characterType, weaponSkinId);
         player.equippedCosmetics = user.equippedCosmetics;
         player.customOutfit = user.customOutfit || '';
-        player.look = lookString(user.equippedCosmetics[player.characterType], player.characterType, player.customOutfit);
+        player.look = lookString(heroEquip(user.equippedCosmetics, player.characterType), player.characterType, player.customOutfit);
         const charUpgrades = user.upgrades[player.characterType] || { damage: 0, stamina: 0 };
         player.damageLevel = charUpgrades.damage || 0;
         player.staminaLevel = charUpgrades.stamina || 0;

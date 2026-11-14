@@ -458,6 +458,8 @@ window.BigArt = (function () {
         cargo: [26, 16, 4, (a) => { a.s(0, 2, 26, 14, [0x0d3a5c, 0x13588a, 0x1f7ab8, 0x58a8e0], 0.05); for (let x = 2; x < 26; x += 3) a.r(x, 3, 1, 12, 0x0d3a5c); a.r(0, 2, 26, 1, 0x58a8e0); a.r(13, 3, 1, 13, 0x0a2a44); a.r(11, 7, 1, 5, STL[3]); a.r(15, 7, 1, 5, STL[3]); a.r(3, 5, 7, 2, AMB); a.r(0, 15, 26, 1, 0x0a2a44); }],
         barrier: [20, 10, 3, (a) => { a.r(2, 4, 2, 6, STL[1]); a.r(16, 4, 2, 6, STL[1]); a.r(1, 9, 4, 1, STL[0]); a.r(15, 9, 4, 1, STL[0]); for (let x = 0; x < 20; x++) a.r(x, 2, 1, 3, ((x >> 1) % 2) ? AMB : 0x1a1a1a); a.r(0, 2, 20, 1, 0xfff2b0); }],
         pylon: [10, 40, 3, (a) => { a.s(3, 8, 4, 32, STL, 0.1); a.r(2, 36, 6, 4, STL[1]); a.r(2, 10, 6, 1, NEON); a.r(2, 20, 6, 1, NEON); a.r(2, 30, 6, 1, NEON); a.e(5, 4, 3, 3, [0x0a6a8a, 0x10a8d0, 0x40e0ff, 0xd8fbff], 0.1); }],
+        // KO'ZGU ZALI: kumush romli baland ko'zgu, oynasida qiya yaltiroq chiziqlar
+        mirrorpane: [16, 40, 3, (a) => { a.s(0, 0, 16, 38, [0x5a6070, 0x8a92a4, 0xc0c8d8, 0xeef2f8], 0.1); a.r(2, 2, 12, 34, 0x24304a); for (let y = 3; y < 36; y++) for (let x = 3; x < 13; x++) { const k = (x + y) % 11; a.p(x, y, k < 2 ? 0xb8d8ff : k < 3 ? 0x6a88b8 : y < 18 ? 0x2e4468 : 0x283a5a); } a.r(6, 0, 4, 2, 0xd8b84a); a.r(3, 38, 10, 2, 0x5a6070); }],
         neonlamp: [8, 20, 3, (a) => { a.r(3, 7, 2, 12, STL[1]); a.r(1, 18, 6, 2, STL[1]); a.r(2, 0, 4, 7, NEON); a.r(3, 1, 2, 5, 0xd8fbff); }],
         server: [12, 22, 3, (a) => { a.s(0, 0, 12, 22, [0x0e1014, 0x181b22, 0x23272f, 0x2f343e], 0.05); for (let y = 2; y < 20; y += 3) { a.r(1, y, 10, 2, 0x0a0c10); a.p(2, y, (y % 2) ? 0x40ff80 : NEON); a.p(4, y, AMB); a.r(6, y + 1, 4, 1, 0x2f343e); } }],
         heater: [10, 22, 3, (a) => { a.s(4, 8, 2, 12, STL); a.e(5, 20, 4, 2, STL, 0.1); a.r(1, 2, 8, 2, STL[2]); a.r(1, 2, 8, 1, STL[3]); a.e(5, 6, 3, 2, [0x7a1a00, 0xd84300, 0xff8a00, 0xffd23f], 0.2); a.p(5, 5, 0xfff2b0); }],
@@ -1763,6 +1765,126 @@ window.BigArt = (function () {
             leg(nearP, MET, 6.5); a.e(39, 37 + by, 3, 3, [MET[1], MET[2], MET[3]]);   // tos bo'g'imi
         });
     }
+    // PALUNDRA (96x68, x3): o'rgimchak oyoqli qaroqchi kemasi. Ko'zi yo'q - tumshug'ida tishli yovuz og'iz. Kadrlar:
+    // 0-3 yurish (o'rgimchak yurishi: A guruh - yaqin 1,3 + uzoq 2,4 oyoqlar; B guruh - qolganlari; B A dan yarim sikl keyin),
+    // 4 to'p otish (tuynuklar yonadi), 5 langarni silkitadi, 6 langar otilgan, 7 og'iz ochiq (geyzer), 8 o'lim
+    function palundraArt(f) {
+        return art(96, 80, (a) => {
+            const WD = [0x24130a, 0x3e2412, 0x5e3a1e, 0x7f522a, 0xa47240], IR = [0x1a1d22, 0x2f343b, 0x4b525b, 0x737b86], SL = [0x0c0c10, 0x18181e, 0x26262e, 0x363640];
+            const LN = [0x23170f, 0x3b281b, 0x58402c, 0x7a5c42], LF = [0x120b07, 0x1e140c, 0x2c1e13, 0x3a2a1b];
+            const GOLD = 0xc8962e, GOLD2 = 0xf0c25a, MOUTH = 0x220404, GUM = 0x8e1c1c, TONG = 0xc8463c, TOOTH = 0xf0e8d4, BONE = 0xd8d0bc, ROPE = 0x2e2014, WAT = [0x1e88e5, 0x64b5f6, 0xe3f2fd];
+            const dead = f === 8, walk = f <= 3, by = dead ? 22 : walk && f % 2 ? 1 : 0;   // bir guruh oyoq ko'tarilganda korpus 1 px cho'kadi; o'limda - yerga tushadi
+            const hc = (x, y) => hash(x, y, 31);
+            const Lx = (y) => Math.round(6 + Math.pow((y - 22) / 23, 2) * 15), Rx = (y) => Math.round(86 - Math.pow((y - 22) / 23, 1.5) * 12);
+            // ---- O'RGIMCHAK OYOQLARI (har tomonda 4 ta): son (3 px) korpus tagidan tashqariga, TIZZA (temir bo'g'im, tikanli) - oyoqning eng chetki burchagi,
+            // boldir (2 px) deyarli tik pastga, panja (1 px) biroz tashqariga - uchida suyak tirnoq. Old oyoqlar tizzasi oldinga, orqa oyoqlarniki orqaga bukilgan
+            const HIP = [[26, 42], [38, 45], [52, 45], [64, 42]], DIR = [-1, -1, 1, 1], KN = [[15, 38], [9, 48], [9, 48], [14, 47]];
+            const PH = [[5, 0], [0, 0], [-5, 0], [0, 8]];   // fazalar: [oyoq uchi siljishi, ko'tarilish] - 0..2 yerda (orqaga suriladi), 3 havoda (oldinga o'tadi)
+            const leg = (i, far) => {
+                const grpA = far ? i % 2 === 1 : i % 2 === 0, ph = walk ? (grpA ? f : (f + 2) % 4) : 0, [gdx, lift] = PH[ph];
+                const sh = far ? 3 : 0, up = far ? 2 : 0, hx = HIP[i][0] + sh, hy = HIP[i][1] + by - up, d = DIR[i];
+                let kx = hx + d * KN[i][0] + Math.round(gdx / 2), ky = KN[i][1] + by - up - Math.round(lift / 2);
+                let fx = hx + d * (KN[i][0] + 5) + gdx, fy = 79 - lift, ax = kx + d * 3 + Math.round(gdx / 2), ay = fy - 9;
+                if (dead) { kx = hx + d * (KN[i][0] + 8); ky = 70 - up; ax = kx + d * 6; ay = 76 - up; fx = ax + d * 3; fy = 79 - up; }
+                const P = far ? LF : LN;
+                for (let o = -1; o <= 1; o++) a.line(hx, hy + o, kx, ky + o, o < 0 ? P[3] : o > 0 ? P[1] : P[2]);   // son
+                a.line(kx, ky, ax, ay, P[2]); a.line(kx + d, ky, ax + d, ay, P[1]);   // boldir (2 px)
+                a.line(ax, ay, fx, fy - 1, P[2]); a.p(fx, fy, far ? 0x6e6250 : BONE); a.p(fx + d, fy - 1, far ? 0x5a5040 : BONE);   // panja va tirnoq
+                a.r(Math.round(kx + (ax - kx) * 0.45) - 1, Math.round(ky + (ay - ky) * 0.45), 3, 1, far ? IR[0] : IR[2]);   // boldirdagi temir halqa
+                a.e(ax, ay, 1.2, 1.2, far ? [IR[0], IR[1]] : [IR[1], IR[2]]);   // to'piq
+                a.e(kx, ky, 2.2, 2.2, far ? [IR[0], IR[1], IR[1]] : [IR[1], IR[2], IR[3]]);   // tizza bo'g'imi
+                a.p(kx, ky - 3, P[2]); a.p(kx + d, ky - 4, far ? LF[2] : LN[3]);   // tizzadagi qayrilgan tikan
+            };
+            for (let i = 0; i < 4; i++) leg(i, true);   // uzoq tomondagi oyoqlar - korpus orqasida, to'qroq
+            // ---- MACHTALAR, ARQONLAR, YELKANLAR ----
+            if (!dead) { a.line(45, 1 + by, 86, 20 + by, ROPE); a.line(45, 1 + by, 8, 14 + by, ROPE); }
+            a.r(15, (dead ? 9 : 4) + by, 2, dead ? 6 : 11, WD[3]);   // bizan machta
+            a.r(44, (dead ? 12 : 0) + by, 2, dead ? 10 : 22, WD[3]); a.r(45, (dead ? 12 : 0) + by, 1, dead ? 10 : 22, WD[2]);   // asosiy machta
+            // YIRTIQ YELKAN: pastga kengayadi, oldinga (shamolga) bo'rtgan, tikuv chiziqlari, 2x2 teshiklar, pastki cheti "tishli" yirtiq
+            const sail = (x0, x1, y0, y1, seed) => {
+                for (let y = y0; y <= y1; y++) {
+                    const k = (y - y0) / Math.max(1, y1 - y0), xa = Math.round(x0 - k * 2), xb = Math.round(x1 + k * 2 + Math.sin(k * Math.PI) * 2);
+                    for (let x = xa; x <= xb; x++) {
+                        if (hash(x >> 1, (y >> 1) + seed, 11) < 0.07) continue;   // teshiklar
+                        if (y >= y1 - 2 && (x + seed) % 5 < (y - (y1 - 3))) continue;   // yirtiq pastki chet (tishli)
+                        const r = (x - xa) / Math.max(1, xb - xa);
+                        a.p(x, y + by, (x - xa) % 5 === 2 ? SL[0] : r < 0.12 ? SL[1] : r > 0.55 && r < 0.8 ? SL[3] : SL[2]);
+                    }
+                }
+            };
+            if (!dead) {
+                a.line(7, 15 + by, 21, 3 + by, WD[1]);   // bizan: qiya yelkan (uchburchak)
+                for (let y = 5; y <= 14; y++) for (let x = 7 + (15 - y) + 1; x <= 15; x++) if (!(y === 14 && x % 3 === 0) && hash(x >> 1, y >> 1, 4) > 0.08) a.p(x, y + by, x === 15 ? SL[1] : (x + y) % 6 === 0 ? SL[0] : SL[2]);
+                a.r(33, 7 + by, 25, 1, WD[1]); sail(34, 56, 8, 19, 0);
+                a.line(40, 10 + by, 50, 16 + by, BONE); a.line(50, 10 + by, 40, 16 + by, BONE);   // bayroqdagi kesishgan suyaklar
+                [[39, 9], [41, 9], [49, 9], [51, 9], [39, 17], [41, 17], [49, 17], [51, 17]].forEach(([x, y]) => a.p(x, y + by, BONE));
+                a.s(41, 4 + by, 8, 3, WD, 0.05);   // kuzatuv savati
+                const wv = f % 2; a.r(46, by, 6, 2, SL[1]); a.p(52, by + wv, SL[1]); a.p(53, by + 1 - wv, SL[0]); a.p(48, by, BONE);   // qora bayroq
+            } else {
+                a.line(45, 12 + by, 58, 7 + by, WD[3]); a.line(45, 13 + by, 58, 8 + by, WD[2]);   // singan machta
+                for (let y = 14; y <= 22; y++) for (let x = 47; x <= 56; x++) if (hc(x, y) > 0.2 && (y < 21 || hc(x, 3) > 0.5)) a.p(x, y + by, SL[(x + y) % 2 ? 1 : 2]);   // osilgan yelkan
+            }
+            // ---- KORPUS: taxtalar, chocklar, tuzalgan tagi (chig'anoqlar) ----
+            a.s(5, 15 + by, 22, 7, WD, 0.05); a.r(5, 15 + by, 22, 1, WD[4]); a.r(5, 18 + by, 22, 1, GOLD);   // kema orqasi (ko'tarilgan)
+            a.line(5, 15 + by, 2, 11 + by, IR[1]); a.r(1, 10 + by, 3, 3, 0xffb300); a.p(2, 11 + by, 0xfff59d);   // fonar
+            for (let y = 22; y <= 45; y++) {
+                const L = Lx(y), R = Rx(y);
+                for (let x = L; x <= R; x++) {
+                    let c = y === 22 ? WD[4] : y < 25 ? WD[3] : y % 4 === 1 ? WD[1] : (x + (Math.floor(y / 4) % 2) * 7) % 13 === 0 ? WD[1] : y > 39 ? WD[1] : WD[2];
+                    if (x === L || x === R || y === 45) c = WD[0];
+                    else if (hc(x, y) < 0.02) c = WD[0];
+                    if (y >= 41 && hc(x, y + 5) < 0.05) c = 0x8a968e;   // chig'anoqlar
+                    if (dead && hash(x, y, 3) < 0.03) c = 0x0a0503;
+                    a.p(x, y + by, c);
+                }
+            }
+            [25, 26].forEach((y) => { for (let x = Lx(y) + 1; x < Rx(y); x++) a.p(x, y + by, y === 25 ? GOLD2 : GOLD); });   // oltin belbog'
+            for (let x = 27; x <= 82; x += 5) a.r(x, 19 + by, 1, 3, WD[3]); a.r(27, 19 + by, 56, 1, WD[4]);   // panjara
+            a.line(84, 21 + by, 95, 13 + by, WD[3]); a.line(84, 22 + by, 95, 14 + by, WD[1]);   // tumshuq yog'ochi
+            // ---- TO'P TUYNUKLARI ----
+            [26, 41, 57].forEach((x0) => {
+                a.r(x0 - 1, 27 + by, 6, 6, IR[1]); a.r(x0, 28 + by, 4, 4, 0x0a0604);
+                a.e(x0 + 1.5, 29.5 + by, 1.6, 1.6, [IR[1], IR[2], IR[3]]);
+                if (f === 4) { a.r(x0 + 1, 29 + by, 2, 2, 0xffb300); a.p(x0 + 1, 29 + by, 0xfff59d); a.p(x0 + 1, 24 + by, 0x9e9e9e); a.p(x0 + 3, 23 + by, 0xbdbdbd); a.p(x0, 22 + by, 0x8a8a8a); }
+                else a.r(x0 + 1, 29 + by, 2, 2, 0x050302);
+            });
+            // ---- OG'IZ (tumshug'ida; ko'z yo'q) ----
+            const jaw = (y, end, c) => { const R = Rx(y); if (end > R) a.r(R, y + by, end - R + 1, 1, c); a.p(end, y + by, WD[0]); };
+            const mode = dead ? 2 : f === 7 ? 3 : f === 5 || f === 6 ? 2 : 1;
+            if (mode === 1) {   // yopiq: yovuz tirjayish, zigzag tishlar
+                [[29, 86], [30, 88], [31, 89], [32, 89]].forEach(([y, e]) => jaw(y, e, WD[3])); [[35, 87], [36, 86], [37, 84], [38, 81]].forEach(([y, e]) => jaw(y, e, WD[2]));
+                a.r(66, 32 + by, 23, 1, GUM); a.r(66, 35 + by, 21, 1, GUM);
+                for (let x = 65; x <= 88; x++) { a.p(x, 33 + by, x % 3 === 0 ? TOOTH : MOUTH); a.p(x, 34 + by, x % 3 === 1 ? TOOTH : MOUTH); }
+                a.p(64, 32 + by, MOUTH); a.p(63, 31 + by, MOUTH); a.p(62, 30 + by, GUM);   // og'iz burchagi tepaga qayrilgan - yovuz tirjayish
+                [70, 82].forEach((x) => { a.r(x, 33 + by, 2, 2, TOOTH); a.p(x, 35 + by, TOOTH); });   // qoziq tishlar
+            } else if (mode === 2) {   // irillash (langar) / o'lim - og'iz yarim ochiq
+                [[29, 86], [30, 88], [31, 89]].forEach(([y, e]) => jaw(y, e, WD[3])); [[37, 86], [38, 85], [39, 82]].forEach(([y, e]) => jaw(y, e, WD[2]));
+                a.r(65, 31 + by, 25, 1, GUM); a.r(65, 37 + by, 22, 1, GUM);
+                a.r(64, 32 + by, 26, 5, MOUTH);
+                for (let x = 66; x <= 88; x++) { if (x % 4 === 0) { a.p(x, 32 + by, TOOTH); a.p(x, 33 + by, TOOTH); } if (x % 4 === 2) { a.p(x, 36 + by, TOOTH); a.p(x, 35 + by, TOOTH); } }
+                a.r(71, 36 + by, 9, 1, TONG); if (dead) { a.r(80, 37 + by, 4, 3, TONG); a.p(81, 40 + by, TONG); }
+                a.p(63, 31 + by, MOUTH); a.p(62, 30 + by, GUM);
+            } else {   // keng ochiq: ichidan suv otilmoqda
+                [[28, 86], [29, 89], [30, 90]].forEach(([y, e]) => jaw(y, e, WD[3]));
+                for (let y = 41; y <= 45; y++) a.r(62 + (y - 41), y + by, 86 - (y - 41) * 2 - 62 - (y - 41), 1, y === 41 ? GUM : y === 45 ? WD[0] : WD[2]);   // tushgan pastki jag'
+                a.r(63, 31 + by, 28, 10, MOUTH); a.r(67, 39 + by, 14, 2, TONG);
+                for (let x = 65; x <= 89; x++) { if (x % 4 === 0) for (let k = 0; k < 3; k++) a.p(x, 31 + k + by, TOOTH); if (x % 4 === 2) for (let k = 0; k < 3; k++) a.p(x, 40 - k + by, TOOTH); }
+                for (let y = 34; y <= 37; y++) for (let x = 72; x <= 91; x++) a.p(x, y + by, (x + y) % 5 === 0 ? WAT[2] : y === 34 || y === 37 ? WAT[0] : WAT[1]);   // suv
+                a.p(92, 35 + by, WAT[2]); a.p(93, 36 + by, WAT[1]); a.p(92, 33 + by, WAT[1]);
+            }
+            // ---- LANGAR: tumshuq yonidagi teshikda osilgan / silkitilgan / otilgan ----
+            a.e(69, 20 + by, 1.6, 1.6, [IR[0], IR[1], IR[2]]); a.p(69, 20 + by, 0x050302);
+            const anchor = (cx, ty) => {   // halqa, tana, ko'ndalang, ikki tirnoq
+                a.p(cx, ty, IR[3]); a.r(cx, ty + 1, 1, 7, IR[2]); a.r(cx - 3, ty + 2, 7, 1, IR[3]);
+                a.r(cx - 3, ty + 8, 7, 1, IR[2]); a.p(cx - 4, ty + 7, IR[2]); a.p(cx + 4, ty + 7, IR[2]); a.p(cx - 4, ty + 6, IR[3]); a.p(cx + 4, ty + 6, IR[3]);
+            };
+            if (f === 5) { for (let k = 0; k <= 4; k++) a.p(69 + k * 3, 20 + by - k * 3, k % 2 ? IR[1] : IR[3]); anchor(82, 4 + by); }
+            else if (f === 6) { for (let x = 70; x <= 76; x++) a.p(x, 20 + by, x % 2 ? IR[1] : IR[3]); }
+            else if (!dead) anchor(69, 21 + by);
+            for (let i = 0; i < 4; i++) leg(i, false);   // yaqin oyoqlar - korpus oldida
+            for (let i = 0; i < 4; i++) a.e(HIP[i][0], HIP[i][1] + by, 2.2, 2.2, [IR[0], IR[1], IR[2]]);   // son bo'g'imlari (korpusga temir halqa)
+        });
+    }
     function mrwhoArt(f) {
         const g = art(28, 52, (a) => {
             const H = [0x0a3a7a, 0x1a66c8, 0x3f9cff, 0xa8dcff], L = 0x7ee8ff, by = f === 1 ? 1 : 0;
@@ -1937,9 +2059,11 @@ window.BigArt = (function () {
         mrhol: [3, (f) => mrholArt(f), 6],
         mrwho: [3, (f) => mrwhoArt(f), 4],
         trex: [3, (f) => trexArt(f), 8],
+        palundra: [3, (f) => palundraArt(f), 9],
         // QORA RITSAR (zaxira rasm; qilich - alohida, klient buradi): 0 turish, 1 qadam, 2 zarba
         blackknight: [5, (f) => biped({ skin: C.dark, eyes: false, W: 22, H: 30, headW: 8, headH: 8, torsoW: 11, torsoH: 11, legH: 10, torso: [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], armor: [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], legs: [0x0e0e14, 0x1c1c26, 0x2e2e3c, 0x4a4a5e], hat: HAT.darkhelm, cape: [0x3a0008, 0x6a0010, 0x9a1020, 0xc0303a], boots: 0x08080c }, f)],
         mwheart: [1, () => art(2, 2, () => {}, null), 1],
+        mirror: [1, () => art(2, 2, () => {}, null), 1],   // KO'ZGU - qahramon qo'g'irchog'i bilan chiziladi
         drone: [3, (f) => droneArt(f), 5],
         guardbot: [3, (f) => guardbotArt(f), 6],
         // BOTQOQ: yovvoyi qul (3), qora kapishon (3), mimik to'nka (4)
@@ -2379,6 +2503,11 @@ window.BigArt = (function () {
         tex(scene, 'bm_sh_fugu', art(13, 11, (a) => { a.e(6, 5.5, 5, 4, [0x8a6a1a, 0xc8a02a, 0xf2d050, 0xfff0a0], 0.1); for (let k = 0; k < 6; k++) { const ang = k / 6 * Math.PI * 2; a.p(6 + Math.cos(ang) * 5.6, 5.5 + Math.sin(ang) * 4.6, 0x5a4a1a); } a.p(9, 4, OUT); a.r(0, 4, 2, 3, 0xc8a02a); a.p(11, 6, 0xd84a4a); }), 3);
         tex(scene, 'bm_sh_fugu_big', art(18, 18, (a) => { a.e(9, 9, 8, 8, [0x8a6a1a, 0xc8a02a, 0xf2d050, 0xfff0a0], 0.15); for (let k = 0; k < 12; k++) { const ang = k / 12 * Math.PI * 2; a.line(9 + Math.cos(ang) * 7, 9 + Math.sin(ang) * 7, 9 + Math.cos(ang) * 9, 9 + Math.sin(ang) * 9, 0x5a4a1a); } a.r(11, 6, 2, 2, OUT); a.r(5, 6, 2, 2, OUT); a.r(7, 12, 4, 1, 0xd84a4a); }), 3);
         tex(scene, 'bm_sh_missile', art(16, 6, (a) => { a.s(3, 1, 10, 4, C.iron, 0.1); a.roof(14, 1, 2, 4, 1, [0xc62f2f]); a.r(13, 2, 2, 2, C.red[2]); a.r(4, 0, 3, 1, C.iron[1]); a.r(4, 5, 3, 1, C.iron[1]); a.r(0, 2, 3, 2, 0xffc35a); a.p(0, 1, 0xff7a1a); }), 2);
+        tex(scene, 'bm_sh_anchor', art(15, 11, (a) => {   // PALUNDRA langari (o'ngga qaragan - aylantiriladi)
+            const I = [0x2f343b, 0x4b525b, 0x737b86, 0xa0a8b2];
+            a.r(0, 4, 3, 3, I[1]); a.p(1, 5, null); a.r(3, 5, 9, 1, I[2]); a.r(3, 4, 9, 1, I[3]); a.r(5, 2, 1, 7, I[2]);
+            a.p(12, 5, I[2]); a.p(12, 4, I[2]); a.p(12, 6, I[2]); a.line(12, 4, 9, 1, I[2]); a.line(12, 6, 9, 9, I[2]); a.p(8, 0, I[3]); a.p(8, 10, I[3]); a.p(13, 5, I[1]);
+        }), 3);
         tex(scene, 'bm_sh_cannon', art(9, 9, (a) => { a.e(4, 4, 4, 4, [0x14141c, 0x2a2a36, 0x44445a, 0x6a6a80], 0.2); a.p(2, 2, 0x9a9ab0); }), 3);
         tex(scene, 'bm_sh_iceboulder', art(14, 13, (a) => { const pal = [0x2a6a9a, 0x4a9ac8, 0x7ac4e6, 0xc0ecff]; a.e(7, 7, 6.5, 5.6, pal, 0.1); a.line(3, 4, 7, 7, 0xe8fbff); a.line(7, 7, 10, 3, pal[0]); a.p(4, 3, 0xffffff); }), 3);
         tex(scene, 'bm_sh_flame', art(16, 14, (a) => { for (let x = 0; x < 16; x++) { const h = Math.round(5 + 8 * Math.sin(x / 15 * Math.PI) + (x % 3)); for (let y = 14 - h; y < 14; y++) a.p(x, y, y < 14 - h + 3 ? 0xffc35a : y < 14 - h / 2 ? 0xff7a1a : 0xb3261e); } }, 0x5a0c06), 3);

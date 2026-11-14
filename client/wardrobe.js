@@ -29,7 +29,7 @@
         const cv = el && el.querySelector('#wd-preview');
         if (!cv) return;
         const type = hero(), ctx = cv.getContext('2d');
-        let body = equippedSkin(type), look = Object.assign({}, (currentUser.equippedCosmetics || {})[type] || {});
+        let body = equippedSkin(type), look = typeof heroEquip === 'function' ? heroEquip(type) : Object.assign({}, (currentUser.equippedCosmetics || {})[type] || {});
         if (tryOn && tryOn.cat === 'skin') body = (skinCatalog[type] || []).find(s => s.id === tryOn.id) || body;
         else if (tryOn && tryOn.cat !== 'wskin') { if (tryOn.id) look[tryOn.cat] = tryOn.id; else delete look[tryOn.cat]; }
         ctx.clearRect(0, 0, 64, 48);
@@ -117,7 +117,7 @@
             return;
         }
         const owned = currentUser.ownedCosmetics || [];
-        const eqId = ((currentUser.equippedCosmetics || {})[type] || {})[cat];
+        const eqId = (typeof heroEquip === 'function' ? heroEquip(type) : ((currentUser.equippedCosmetics || {})[type] || {}))[cat];
         cosItems(cat).forEach((it) => {
             const cv = document.createElement('canvas'); cv.width = 44; cv.height = 36; cv.className = 'cos-icon';
             Cosmetics.drawIcon(cv, cat, it.id);

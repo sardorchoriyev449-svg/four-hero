@@ -780,9 +780,9 @@ export async function equipCosmetic(userId: string, characterType: string, slot:
         return { success: false, message: 'err_skin_not_owned' };
     }
     const all = { ...((doc as any).equippedCosmetics || {}) };
-    const mine = { ...(all[characterType] || {}) };
-    if (itemId === null) delete mine[slot]; else mine[slot] = itemId;
-    all[characterType] = mine;
+    // KIYIM (body) - hamma qahramonga birdan: kiyim qahramonga bog'liq emas (bir marta sotib olinadi), qaysi qahramon bilan o'ynasa ham ko'rinadi
+    const types = slot === 'body' ? Array.from(new Set([characterType, ...HERO_TYPES])) : [characterType];
+    types.forEach((ct) => { const mine = { ...(all[ct] || {}) }; if (itemId === null) delete mine[slot]; else mine[slot] = itemId; all[ct] = mine; });
     (doc as any).equippedCosmetics = all;
     doc.markModified('equippedCosmetics');
     await doc.save();
@@ -2000,7 +2000,7 @@ export async function setCustomOutfit(userId: string, code: string, characterTyp
     if (!doc) return { success: false, message: 'err_user_not_found' };
     if (!(doc.ownedCosmetics || []).includes('body:custom')) return { success: false, message: 'err_om_locked' };
     const set: any = { customOutfit: code };
-    if (HERO_TYPES.includes(characterType as any)) set['equippedCosmetics.' + characterType + '.body'] = 'custom';
+    if (HERO_TYPES.includes(characterType as any)) HERO_TYPES.forEach((ct) => { set['equippedCosmetics.' + ct + '.body'] = 'custom'; });   // o'z kiyimi - hamma qahramonga
     const upd = await UserModel.findByIdAndUpdate(userId, { $set: set }, { returnDocument: 'after' });
     return upd ? { success: true, user: docToUser(upd) } : { success: false, message: 'err_user_not_found' };
 }
