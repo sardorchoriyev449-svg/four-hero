@@ -2166,11 +2166,11 @@ window.BigMap = (function () {
         const el = document.createElement('div');
         el.id = 'bm-map';
         el.style.cssText = 'position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(5,3,10,.72);font-family:"Press Start 2P",monospace';
-        el.innerHTML = `<div style="background:#1d1430;border:4px solid #58546a;box-shadow:0 0 0 4px #0a0a0a;padding:10px;max-width:96%;color:#fff">
+        el.innerHTML = `<div style="background:#1d1430;border:4px solid #58546a;box-shadow:0 0 0 4px #0a0a0a;padding:10px;width:788px;max-width:96%;box-sizing:border-box;color:#fff">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><span style="color:#ffe082;font-size:13px">${t('big_map_title')}</span>
             <span style="display:flex;gap:6px"><button data-a="in" class="bmm-b">+</button><button data-a="out" class="bmm-b">-</button><button data-a="me" class="bmm-b">${t('big_map_me')}</button><button data-a="clear" class="bmm-b">${t('big_map_clear')}</button><button data-a="close" class="bmm-b">X</button></span></div>
-            <canvas width="760" height="400" style="display:block;width:100%;max-width:760px;image-rendering:pixelated;cursor:crosshair;background:#0b0816;touch-action:none"></canvas>
-            <div class="bmm-info" style="font-size:8px;color:#b3e5fc;margin-top:6px;min-height:12px">${t('big_map_hint')}</div></div>`;
+            <canvas width="760" height="400" style="display:block;width:100%;image-rendering:pixelated;cursor:crosshair;background:#0b0816;touch-action:none"></canvas>
+            <div class="bmm-info" style="font-size:8px;line-height:12px;color:#b3e5fc;margin-top:6px;height:24px;overflow:hidden;overflow-wrap:anywhere">${t('big_map_hint')}</div></div>`;
         el.querySelectorAll('.bmm-b').forEach(b => { b.style.cssText = 'font-family:inherit;font-size:9px;padding:6px 8px;background:#3a2d55;color:#fff;border:2px solid #0a0a0a;cursor:pointer'; });
         host.appendChild(el);
         el.onpointerdown = (e) => e.stopPropagation();
