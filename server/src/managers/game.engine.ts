@@ -6,7 +6,7 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bigNearestEnemy, bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigQuestCancel, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { bigNearestEnemy, bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigQuestCancel, bigCpTravel, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
 import { KNIGHT_FLY, hasPerk, SKILLS, TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
@@ -387,7 +387,7 @@ export class GameEngine {
                 pets: room.pets ? Object.entries(room.pets).map(([id, q]) => ({ id, x: Math.round(q.x), y: Math.round(q.y), f: q.face, st: q.st, fl: q.hitFlash > 0 })) : [],
                 players,
                 bots: room.bots,
-                bullets: room.bullets,
+                bullets: room.goneBullets && room.goneBullets.length ? (room.bullets as object[]).concat(room.goneBullets.splice(0)) : room.bullets,
                 snake: room.snake,
                 crates: room.big ? room.crates.filter(c => this.nearAnyPlayer(room, c.x, c.y)) : room.crates,
                 coins: room.big ? room.coins.filter(c => this.nearAnyPlayer(room, c.x, c.y)) : room.coins,
@@ -1368,6 +1368,8 @@ export class GameEngine {
             const minBulletY = room.big ? room.big.w.top - 1200 : map.back ? map.back.topY - 600 : 0, maxBulletY = room.big ? room.big.w.bottom + 400 : 600, maxBulletX = room.big ? room.big.w.width : map.mapWidth;
             if (bulletDestroyed || bullet.lifetime <= 0 || bullet.x < 0 || bullet.x > maxBulletX || bullet.y < minBulletY || bullet.y > maxBulletY) {
                 room.bullets.splice(i, 1);
+                // tekkan o'q: klient uni (yoki oldindan chizgan bashoratini) shu joyda o'chirsin - aks holda nishon ortidan uchib ketayotgandek ko'rinardi
+                if (bulletDestroyed && bullet.bulletType !== 'melee' && (room.goneBullets || (room.goneBullets = [])).length < 40) room.goneBullets.push({ ...bullet, x: Math.round(bullet.x), y: Math.round(bullet.y), gone: 1 });
                 // RITSAR 15: drobovik o'qi tekkanda bitta kichik o'q bo'lib nishon ortiga sachrab chiqadi (bir marta)
                 if (bulletDestroyed && bullet.bulletType === 'pellet' && (bullet.bounce || 0) > 0) {
                     const sp = Math.hypot(bullet.vx, bullet.vy) || 700, a = Math.atan2(bullet.vy, bullet.vx) + (Math.random() - 0.5) * 0.7;
@@ -5628,6 +5630,7 @@ if (p) {
         else if (act === 'rq') bigRqTalk(S, p, arg, ctx);
         else if (act === 'rqsync') bigRqSync(S, p, ctx);
         else if (act === 'qcancel') bigQuestCancel(S, p, item, ctx);   // o'yinchi questni bekor qildi
+        else if (act === 'cptp') bigCpTravel(S, p, arg, ctx);         // xaritada checkpoint bosildi - teleport
         else if (act === 'fishcast') this.bigFishCast(room, S, p, arg, ctx).catch(err => console.error('bigFishCast xatosi:', err));
         else if (act === 'fishreel') this.bigFishReel(room, S, p, item, ctx).catch(err => console.error('bigFishReel xatosi:', err));
         else if (act === 'cage') bigCage(S, p, ctx);

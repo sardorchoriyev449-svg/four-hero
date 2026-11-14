@@ -339,6 +339,7 @@ export interface RoomState {
     players: { [key: string]: PlayerState };
     bots: BotState[];
     bullets: BulletState[];
+    goneBullets?: (BulletState & { gone: 1 })[];   // shu tikda nishonga TEGIB yo'qolgan o'qlar - keyingi paketda bir marta (klient rasmini tekkan joyida o'chiradi)
     bulletIdCounter: number;
     isStarted: boolean;
     isOver: boolean;              // O'yin g'olib chiqqach true bo'ladi (yangi round kutiladi)

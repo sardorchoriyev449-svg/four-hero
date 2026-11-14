@@ -1121,8 +1121,8 @@ function launchGame(socket, roomId, mapData, continued) {
             ATK_PREDICT.sprites.push(sp);
         });
         // Server javob bermasa (masalan, stamina yetmadi) - bashorat o'qi o'zi so'nadi
-        scene.time.delayedCall(400, () => ATK_PREDICT.sprites.forEach(p => {
-            if (p && p.active && performance.now() - p.ex.t >= 380) scene.tweens.add({ targets: p, alpha: 0, duration: 120, onComplete: () => p.destroy() });
+        scene.time.delayedCall(260, () => ATK_PREDICT.sprites.forEach(p => {
+            if (p && p.active && !p.adopted && performance.now() - p.ex.t >= 240) scene.tweens.add({ targets: p, alpha: 0, duration: 120, onComplete: () => p.destroy() });
         }));
     }
     // Bashorat o'qlarini harakatlantirish (update() da har kadrda)
@@ -1218,6 +1218,8 @@ function launchGame(socket, roomId, mapData, continued) {
         }
     }
 
+    // KAMERA EFFEKTI XAVFSIZ: socket hodisasi o'yin sahnasi yopilgandan keyin (o'yinchi menyuda) kelsa - kamera yo'q, jim o'tkazib yuboriladi
+    function camFx(scene, k, ...args) { const c = scene && scene.cameras && scene.cameras.main; if (c && typeof c[k] === 'function') c[k](...args); }
     // KO'ZGU BOSS (Big Map): o'yinchining egizagi - boshqa o'yinchilar chiziladigan kod bilan (tana, kiyim, qurol, zarba animatsiyalari).
     // bigmap.js chaqiradi: make (bir marta), update (har kadr), attack (zarba / o'q), destroy
     const PUP_PARTS = ['weaponSpr', 'shieldSpr', 'fistSpr', 'faceSpr', 'hatSpr', 'jetSpr'];
@@ -11040,13 +11042,13 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('achievement');
         socket.on('achievement', (d) => { showAchievement(d.key, d.xp); sfx('win'); });
         socket.off('doorsEnter');
-        socket.on('doorsEnter', () => { this.cameras.main.flash(400, 0, 0, 0); sfx('thud'); });
+        socket.on('doorsEnter', () => { camFx(this, 'flash', 400, 0, 0, 0); sfx('thud'); });
         socket.off('leverPulled');
-        socket.on('leverPulled', () => { if (drObj) drObj.lever.setTexture('px_lever_down'); sfx('click'); sfx('thud'); this.cameras.main.shake(300, 0.006); });
+        socket.on('leverPulled', () => { if (drObj) drObj.lever.setTexture('px_lever_down'); sfx('click'); sfx('thud'); camFx(this, 'shake', 300, 0.006); });
         socket.off('elfCrushed');
         socket.on('elfCrushed', () => { elfCrushFx(this); sfx('squish'); sfx('roar'); });
         socket.off('monsterLanded');
-        socket.on('monsterLanded', () => { sfx('bossStart'); this.cameras.main.shake(400, 0.012); oqJumpscare(this); this.time.delayedCall(700, () => arenaBanner(t('oqyuz_name'), '#fafafa', t('oqyuz_sub'))); });
+        socket.on('monsterLanded', () => { sfx('bossStart'); camFx(this, 'shake', 400, 0.012); oqJumpscare(this); this.time.delayedCall(700, () => arenaBanner(t('oqyuz_name'), '#fafafa', t('oqyuz_sub'))); });
         // G'OR: yo'l teshiklari ochildi, maxluq malikani olib ketdi; devordagi teshikdan bosh, tunnel, qo'llar
         socket.off('floorOpen');
         socket.on('floorOpen', () => drOpenFloor(this, false));
@@ -11058,7 +11060,7 @@ function launchGame(socket, roomId, mapData, continued) {
             const spr = drObj.monster;
             this.tweens.add({ targets: [spr, drObj.elf], y: '+=110', alpha: 0, duration: 650, ease: 'Quad.In', onComplete: () => { spr.setVisible(false); drObj.elf.setVisible(false); drObj.diving = false; } });
             gDust(this, d.x, 566, 14, 0x3e2723);
-            sfxAt('roar', d.x); sfx('thud'); this.cameras.main.shake(500, 0.012);
+            sfxAt('roar', d.x); sfx('thud'); camFx(this, 'shake', 500, 0.012);
         });
         socket.off('headWarn');
         socket.on('headWarn', (d) => { const w = map.doors.wallHoles[d.i]; if (w) { sfxAt('roar', w.x, 0.35); sfxAt('rumble', w.x, 0.5); } });
@@ -11072,7 +11074,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (d.id === socket.id && currentCharacter) {
                 // Skrimer - aynan tortib ketgan paytda (kamdan-kam: 25 s da bir)
                 oqJumpscare(this);
-                this.cameras.main.flash(250, 140, 0, 0);
+                camFx(this, 'flash', 250, 140, 0, 0);
                 currentCharacter.setPosition(w.x, w.y);
                 if (currentCharacter.body) { currentCharacter.setVelocity(0, 0); currentCharacter.body.enable = false; }
                 currentCharacter.setAlpha(0);
@@ -11087,24 +11089,24 @@ function launchGame(socket, roomId, mapData, continued) {
                 if (currentCharacter.body) currentCharacter.body.enable = true;
                 currentCharacter.setAlpha(1);
                 if (drObj) { drObj.meSwallowed = false; drObj.spitAt = this.time.now; }
-                this.cameras.main.shake(400, 0.014);
-                this.cameras.main.flash(200, 120, 0, 0);
+                camFx(this, 'shake', 400, 0.014);
+                camFx(this, 'flash', 200, 120, 0, 0);
             }
         });
         socket.off('grabbed');
-        socket.on('grabbed', (d) => { rootUntil = this.time.now + d.ms; this.cameras.main.shake(200, 0.008); });
+        socket.on('grabbed', (d) => { rootUntil = this.time.now + d.ms; camFx(this, 'shake', 200, 0.008); });
         // Malikani qoldirib ketdi: OQ YUZ oldindagi qorong'idan yugurib keladi
         socket.off('oqHunt');
         socket.on('oqHunt', (d) => {
-            sfxAt('roar', d.x, 1); sfx('rumble'); this.cameras.main.shake(900, 0.01);
+            sfxAt('roar', d.x, 1); sfx('rumble'); camFx(this, 'shake', 900, 0.01);
         });
         // Ushladi: majburiy skrimer + uzun baqiriq, so'ng o'yin tugaydi
         socket.off('oqCaught');
         socket.on('oqCaught', (d) => {
             oqJumpscare(this, true);
             sfx('deathScream', 1); sfx('scream', 1);
-            this.cameras.main.flash(400, 160, 0, 0);
-            this.cameras.main.shake(1200, 0.025);
+            camFx(this, 'flash', 400, 160, 0, 0);
+            camFx(this, 'shake', 1200, 0.025);
             if (drObj) this.time.delayedCall(700, () => { if (drObj && drObj.dark) { drObj.dark.setAlpha(1); } });
         });
         socket.off('doorsLocked');
@@ -11120,16 +11122,16 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         });
         socket.off('shroomBite');
-        socket.on('shroomBite', (d) => { sfxAt('chomp', d.x, 0.7); if (d.id === socket.id) this.cameras.main.flash(120, 140, 0, 0); });
+        socket.on('shroomBite', (d) => { sfxAt('chomp', d.x, 0.7); if (d.id === socket.id) camFx(this, 'flash', 120, 140, 0, 0); });
         socket.off('pitFall');
-        socket.on('pitFall', (d) => { sfxAt('scream', d.x, 0.8); if (d.id === socket.id) this.cameras.main.flash(300, 0, 0, 0); });
+        socket.on('pitFall', (d) => { sfxAt('scream', d.x, 0.8); if (d.id === socket.id) camFx(this, 'flash', 300, 0, 0, 0); });
         socket.off('handGrab');
-        socket.on('handGrab', (d) => { sfxAt('chomp', d.x); if (d.id === socket.id) this.cameras.main.flash(160, 120, 0, 0); });
+        socket.on('handGrab', (d) => { sfxAt('chomp', d.x); if (d.id === socket.id) camFx(this, 'flash', 160, 120, 0, 0); });
         socket.off('monsterBuried');
         socket.on('monsterBuried', (d) => {
             if (!drObj) return;
             drObj.buried = true;
-            sfx('explosion'); sfx('bossDown'); this.cameras.main.shake(1400, 0.02);
+            sfx('explosion'); sfx('bossDown'); camFx(this, 'shake', 1400, 0.02);
             // Shiftdan toshlar qulab, maxluqni bosib qoladi
             const pile = this.add.graphics().setDepth(3.6);
             for (let k = 0; k < 14; k++) {
@@ -11227,17 +11229,17 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('climbQuake');
         socket.on('climbQuake', (d) => {
             if (drObj && d && d.rocks) drObj.localWave = { rocks: d.rocks, start: this.time.now, ms: d.ms, sent: {} };
-            this.cameras.main.shake(400, 0.005); sfx('rumble');
+            camFx(this, 'shake', 400, 0.005); sfx('rumble');
         });
         socket.off('rockHit');
         socket.on('rockHit', (d) => {
             sfxAt('thud', d.x); gDust(this, d.x, d.y, 6, 0x9e9e9e);
-            if (d.id === socket.id) { this.cameras.main.shake(300, 0.015); this.cameras.main.flash(150, 140, 0, 0); }
+            if (d.id === socket.id) { camFx(this, 'shake', 300, 0.015); camFx(this, 'flash', 150, 140, 0, 0); }
         });
         socket.off('climbRocks');
         socket.on('climbRocks', (d) => {
             sfx('explosion', 0.7);
-            this.cameras.main.shake(250, 0.01);
+            camFx(this, 'shake', 250, 0.01);
             const cam = this.cameras.main;
             climbDoomed(d.safes).forEach((pi) => {
                 const pl = map.platforms[pi];
@@ -11248,7 +11250,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('climbSegment', (d) => {
             sfx('xp');
             // Yana bir qavat yuqoriga: qoya bir butun ekran pastga suriladi (tepaga chiqib borayotgandek)
-            this.cameras.main.flash(200, 255, 255, 255);
+            camFx(this, 'flash', 200, 255, 255, 255);
             if (drObj) this.tweens.add({ targets: drObj.cliff, tilePositionY: drObj.cliff.tilePositionY - 572, duration: 700, ease: 'Sine.Out' });
             arenaBanner(t('dr_climb_banner').replace('{m}', d.segment * map.doors.segMeters), '#69f0ae', null);
         });
@@ -11261,7 +11263,7 @@ function launchGame(socket, roomId, mapData, continued) {
             if (map.squid) waterSplash(this, map.squid.baseX, 24);
         });
         socket.off('squidSlam');
-        socket.on('squidSlam', (d) => { this.cameras.main.shake(250, 0.01); sfxAt('thud', d.x); sfxAt('whip', d.x, 0.7); });
+        socket.on('squidSlam', (d) => { camFx(this, 'shake', 250, 0.01); sfxAt('thud', d.x); sfxAt('whip', d.x, 0.7); });
         socket.off('squidSplash');
         socket.on('squidSplash', (d) => { waterSplash(this, d.x, 16); sfxAt('whoosh', d.x); sfxAt('thud', d.x, 0.6); });
         socket.off('squidFishBoom');
@@ -11270,7 +11272,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('squidDown', () => {
             sqDying = true;
             sfx('bossDown');
-            this.cameras.main.shake(900, 0.012);
+            camFx(this, 'shake', 900, 0.012);
             if (sqObj) {
                 sqObj.eye.setTint(0x5d4037);
                 this.tweens.add({ targets: sqObj, wallRise: 0, delay: 1000, duration: 1400 });
@@ -11289,20 +11291,20 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('farmRoot', (d) => {
             sfxAt('roots', d.x);
             gDust(this, d.x, 566, 8, 0x4e342e);
-            this.cameras.main.shake(200, 0.005);
+            camFx(this, 'shake', 200, 0.005);
             if (d.id === socket.id) rootUntil = this.time.now + 300;
         });
         socket.off('farmDog');
         socket.on('farmDog', () => {
             if (map.farm) sfxAt('bark', map.farm.kennelX);
             if (!map.farm) return;
-            this.cameras.main.shake(300, 0.006);
+            camFx(this, 'shake', 300, 0.006);
             gDust(this, map.farm.kennelX - 40, 566, 6, 0x6d4c41);
         });
         socket.off('liftEmerge');
         socket.on('liftEmerge', () => {
             sfx('rumble');
-            this.cameras.main.shake(900, 0.008);
+            camFx(this, 'shake', 900, 0.008);
             if (map.lift) gDust(this, map.lift.x + map.lift.w / 2, 566, 14, 0x4e342e);
         });
         socket.off('liftWait');
@@ -11332,7 +11334,7 @@ function launchGame(socket, roomId, mapData, continued) {
             arenaBanner(t('gf_banner'), '#ff4081', t('gf_banner_sub'));
         });
         socket.off('gflowerBite');
-        socket.on('gflowerBite', () => { this.cameras.main.shake(180, 0.008); sfx('chomp'); });
+        socket.on('gflowerBite', () => { camFx(this, 'shake', 180, 0.008); sfx('chomp'); });
         socket.off('gflowerDown');
         socket.on('gflowerDown', () => { gfDeathAnim(this); sfx('bossDown'); });
         socket.off('gflowerThorns');
@@ -11361,7 +11363,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('cursed', (d) => {
             if (!d) return;
             if (typeof showTopToast === 'function') showTopToast(t(d.kind === 'acid' ? 'curse_acid_toast' : 'curse_bolt_toast'));
-            this.cameras.main.flash(250, d.kind === 'acid' ? 120 : 255, d.kind === 'acid' ? 255 : 235, d.kind === 'acid' ? 60 : 60);
+            camFx(this, 'flash', 250, d.kind === 'acid' ? 120 : 255, d.kind === 'acid' ? 255 : 235, d.kind === 'acid' ? 60 : 60);
         });
         socket.off('myFarmState');
         socket.on('myFarmState', (d) => {
@@ -11375,7 +11377,7 @@ function launchGame(socket, roomId, mapData, continued) {
         ['mfWorld', 'mfSpore', 'mfShroomDown', 'mfShroomsCame', 'mfAte', 'treeBossStart', 'treeBossDown', 'treeAttack', 'mfTreeWatered', 'mfPlotFx'].forEach(e => socket.off(e));
         socket.on('mfWorld', (d) => { if (isMyFarm) { mfWorldState = d; if (d) d.at = performance.now(); } });
         socket.off('farmLevelUp'); socket.off('mfGoldfish');
-        socket.on('farmLevelUp', (d) => { if (!d) return; sfx('win'); this.cameras.main.flash(300, 255, 240, 160); if (typeof showTopToast === 'function') showTopToast(t('mf_level_up').replace('{l}', d.level).replace('{c}', d.cap)); });
+        socket.on('farmLevelUp', (d) => { if (!d) return; sfx('win'); camFx(this, 'flash', 300, 255, 240, 160); if (typeof showTopToast === 'function') showTopToast(t('mf_level_up').replace('{l}', d.level).replace('{c}', d.cap)); });
         socket.on('mfGoldfish', (d) => { if (d && typeof showTopToast === 'function') showTopToast(t('mf_goldfish_all').replace('{n}', d.nick)); });
         const puff = (x, y, color, n) => { for (let i = 0; i < n; i++) { const r = this.add.rectangle(x + (Math.random() - 0.5) * 30, y, 6, 6, color).setDepth(3.5); this.tweens.add({ targets: r, x: r.x + (Math.random() - 0.5) * 120, y: y - 30 - Math.random() * 60, alpha: 0, duration: 700 + Math.random() * 400, onComplete: () => r.destroy() }); } };
         socket.on('mfSpore', (d) => { if (!d) return; sfxAt('spit', d.x, 0.7); puff(d.x, 530, 0x9ccc65, 12); });
@@ -11388,10 +11390,10 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!d || !isMyFarm) return;
             if (mfHouse) mfExitHouse();   // hujum boshlandi - uydan chiqib, jangga
             sfx(d.kind === 'slime' ? 'roar' : 'scream', 0.7);
-            this.cameras.main.shake(500, 0.008);
+            camFx(this, 'shake', 500, 0.008);
             if (typeof showTopToast === 'function') showTopToast(t('mf_raid_' + d.kind));
         });
-        socket.on('mfSlimeLand', (d) => { if (!d) return; sfxAt('thud', d.x, 0.8); puff(d.x, 568, 0x66bb6a, 8); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) this.cameras.main.shake(120, 0.004); });
+        socket.on('mfSlimeLand', (d) => { if (!d) return; sfxAt('thud', d.x, 0.8); puff(d.x, 568, 0x66bb6a, 8); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) camFx(this, 'shake', 120, 0.004); });
         // ELFLAR: baqirib qochish, "Hai!", hosil, ajdarchaga tayoq otish
         socket.off('mfElfScream'); socket.off('mfElfHai'); socket.off('mfElfHarvest'); socket.off('mfElfThrow');
         socket.off('mfMageJoy'); socket.on('mfMageJoy', (d) => { if (d && !mfIsHost() && mfMage && window.MageTalk) MageTalk.FX.gift(mfMage, d.item, this.time.now); });   // ferma egasi magga sovg'a berdi
@@ -11461,20 +11463,20 @@ function launchGame(socket, roomId, mapData, continued) {
             sfxAt('block', d.x, 1); sfxAt('hit', d.x, 0.7);
             for (let k = 0; k < 8; k++) { const s = this.add.rectangle(d.x, d.y - 6, 3, 3, k % 2 ? 0xffffff : 0xb0bec5).setDepth(4.3); this.tweens.add({ targets: s, x: s.x + Phaser.Math.Between(-24, 24), y: s.y - Phaser.Math.Between(4, 26), alpha: 0, duration: 320, onComplete: () => s.destroy() }); }
         });
-        socket.on('tornadoCast', (d) => { if (!d) return; sfxAt('whoosh', d.x, 1); sfxAt('roar', d.x, 0.35); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) this.cameras.main.shake(180, 0.004); });
+        socket.on('tornadoCast', (d) => { if (!d) return; sfxAt('whoosh', d.x, 1); sfxAt('roar', d.x, 0.35); if (currentCharacter && Math.abs(currentCharacter.x - d.x) < 500) camFx(this, 'shake', 180, 0.004); });
         socket.off('mfCrows'); socket.off('mfCrowAte'); socket.off('mfCropsLost'); socket.off('mfWelcomeRaid');
-        socket.on('mfCropsLost', (d) => { if (!d || !d.n) return; sfx('lose'); this.cameras.main.shake(400, 0.01); if (typeof showTopToast === 'function') showTopToast(t('mf_crops_lost').replace('{n}', d.n)); });
+        socket.on('mfCropsLost', (d) => { if (!d || !d.n) return; sfx('lose'); camFx(this, 'shake', 400, 0.01); if (typeof showTopToast === 'function') showTopToast(t('mf_crops_lost').replace('{n}', d.n)); });
         socket.on('mfWelcomeRaid', () => { if (typeof showTopToast === 'function') showTopToast(t('mf_welcome_raid')); });
         socket.on('mfCrows', (d) => { if (d && typeof showTopToast === 'function') showTopToast(t('mf_crows_came').replace('{n}', d.n)); sfx('whoosh', 0.6); });
         socket.on('mfCrowAte', (d) => { if (d && typeof showTopToast === 'function') showTopToast(t('mf_crow_ate').replace('{c}', t('crop_' + d.crop))); });
         socket.on('mfRaidCleared', () => { sfx('win'); if (typeof showTopToast === 'function') showTopToast(t('mf_raid_cleared')); });
         socket.on('mfShroomsCame', (d) => { if (typeof showTopToast === 'function') showTopToast(t('mf_shrooms_came').replace('{n}', (d && d.n) || 5)); });
         socket.on('mfAte', (d) => { if (d && typeof showTopToast === 'function') showTopToast(t('mf_shroom_ate').replace('{c}', t('crop_' + d.crop))); });
-        socket.on('treeBossStart', () => { sfx('roar'); this.cameras.main.shake(900, 0.01); if (typeof showTopToast === 'function') showTopToast(t('mf_tree_awake')); });
-        socket.on('treeBossDown', (d) => { sfx('bossDown'); mfWorldState = null; this.cameras.main.flash(400, 200, 255, 200); if (typeof showTopToast === 'function') showTopToast(t('mf_tree_beaten').replace('{c}', d ? d.coins : 0)); });
+        socket.on('treeBossStart', () => { sfx('roar'); camFx(this, 'shake', 900, 0.01); if (typeof showTopToast === 'function') showTopToast(t('mf_tree_awake')); });
+        socket.on('treeBossDown', (d) => { sfx('bossDown'); mfWorldState = null; camFx(this, 'flash', 400, 200, 255, 200); if (typeof showTopToast === 'function') showTopToast(t('mf_tree_beaten').replace('{c}', d ? d.coins : 0)); });
         socket.on('treeAttack', (d) => { if (d && d.kind === 'pillars') sfx('rumble', 0.8); else if (d && d.kind === 'roots') sfx('roots', 0.8); else sfx('whoosh', 0.7); });
         socket.on('mfTreeWatered', () => { sfx('drip'); puff(map.myFarm.tree.x, 300, 0x4fc3f7, 24); });
-        socket.on('mfPlotFx', (d) => { if (!d) return; if (d.kind === 'cut') { const ox = map.myFarm.orchardX[d.k]; if (ox !== undefined) { puff(ox, 520, 0x6d4c41, 14); puff(ox, 470, 0x43a047, 10); this.cameras.main.shake(150, 0.004); } return; } const x = mfPlotX(d.k); if (d.kind === 'dig') { puff(x, 560, 0x6d4c41, 16); this.cameras.main.shake(90, 0.003); return; } if (d.kind === 'water') { for (let i = 0; i < 8; i++) { const r = this.add.rectangle(x - 16 + i * 4, 500, 2, 6, 0x4fc3f7).setDepth(3.5); this.tweens.add({ targets: r, y: 560, alpha: 0.2, delay: i * 50, duration: 420, onComplete: () => r.destroy() }); } } else puff(x, 555, 0x8d6e63, 10); });
+        socket.on('mfPlotFx', (d) => { if (!d) return; if (d.kind === 'cut') { const ox = map.myFarm.orchardX[d.k]; if (ox !== undefined) { puff(ox, 520, 0x6d4c41, 14); puff(ox, 470, 0x43a047, 10); camFx(this, 'shake', 150, 0.004); } return; } const x = mfPlotX(d.k); if (d.kind === 'dig') { puff(x, 560, 0x6d4c41, 16); camFx(this, 'shake', 90, 0.003); return; } if (d.kind === 'water') { for (let i = 0; i < 8; i++) { const r = this.add.rectangle(x - 16 + i * 4, 500, 2, 6, 0x4fc3f7).setDepth(3.5); this.tweens.add({ targets: r, y: 560, alpha: 0.2, delay: i * 50, duration: 420, onComplete: () => r.destroy() }); } } else puff(x, 555, 0x8d6e63, 10); });
         socket.off('mfElfWork');
         socket.on('mfElfWork', (d) => {
             if (!d || d.task !== 'plant') return;
@@ -11544,13 +11546,13 @@ function launchGame(socket, roomId, mapData, continued) {
             if (!d) return;
             sfx(d.blocked ? 'thud' : 'hit', 0.6);
             gDust(this, d.x, d.y - 10, d.blocked ? 3 : 5, d.blocked ? 0x90caf9 : 0xff5252);
-            if (d.id === socket.id) this.cameras.main.flash(90, 255, 60, 60);
+            if (d.id === socket.id) camFx(this, 'flash', 90, 255, 60, 60);
         });
         socket.off('pvpKill');
         socket.on('pvpKill', (d) => {
             if (!d) return;
             if (typeof showTopToast === 'function') showTopToast(t('pvp_kill').replace('{a}', d.killer || '?').replace('{b}', d.victim || '?'));
-            if (d.killerId === socket.id) sfx('coin'); else if (d.victimId === socket.id) { sfx('explosion', 0.6); this.cameras.main.shake(250, 0.01); }
+            if (d.killerId === socket.id) sfx('coin'); else if (d.victimId === socket.id) { sfx('explosion', 0.6); camFx(this, 'shake', 250, 0.01); }
         });
         socket.off('pvpRespawn');
         socket.on('pvpRespawn', (d) => { if (d && d.id === socket.id) sfx('banner', 0.6); });
@@ -11567,9 +11569,9 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('skyStrikeWarn');
         socket.on('skyStrikeWarn', () => sfx('rumble', 0.6));
         socket.off('skyStrike');
-        socket.on('skyStrike', (d) => { if (!d) return; sfx('explosion', 0.7); this.cameras.main.flash(120, 255, 255, 220); if (skyObj) skyObj.bolts.push({ x: d.x, t: this.time.now }); });
+        socket.on('skyStrike', (d) => { if (!d) return; sfx('explosion', 0.7); camFx(this, 'flash', 120, 255, 255, 220); if (skyObj) skyObj.bolts.push({ x: d.x, t: this.time.now }); });
         socket.off('skyBoss');
-        socket.on('skyBoss', () => { sfx('banner'); sfx('rumble'); this.cameras.main.shake(700, 0.01); skyBanner(this, t('sky_boss_name'), '#ff5252'); });
+        socket.on('skyBoss', () => { sfx('banner'); sfx('rumble'); camFx(this, 'shake', 700, 0.01); skyBanner(this, t('sky_boss_name'), '#ff5252'); });
         socket.off('skyBossAct');
         socket.on('skyBossAct', (d) => { if (d && d.act === 'fan') sfx('whoosh'); });
         socket.off('skyBossDrop');
@@ -11581,7 +11583,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('vendAngry');
         socket.on('vendAngry', () => {
             sfx('rumble'); sfx('banner');
-            this.cameras.main.shake(900, 0.012);
+            camFx(this, 'shake', 900, 0.012);
             if (dialog) closeDialog();
             const b = this.add.text(400, 230, t('vend_angry'), { fontFamily: PIXEL_FONT, fontSize: '22px', color: '#ff5252', stroke: '#000000', strokeThickness: 6 }).setOrigin(0.5).setScrollFactor(0).setDepth(1400);
             this.tweens.add({ targets: b, scale: 1.15, duration: 160, yoyo: true, repeat: 5 });
@@ -11598,8 +11600,8 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('vendLand');
         socket.off('vendSitWarn'); socket.off('vendSit');
         socket.on('vendSitWarn', (d) => { if (!d) return; sfxAt('jump', d.x, 0.8); });
-        socket.on('vendSit', (d) => { if (!d) return; this.cameras.main.shake(260, 0.014); sfxAt('thud', d.x, 1); gDust(this, d.x, 568, 12, 0x8d6e63); });
-        socket.on('vendLand', (d) => { if (!d) return; this.cameras.main.shake(300, 0.016); sfx('thud'); gDust(this, d.x, 568, 14, 0x8d6e63); });
+        socket.on('vendSit', (d) => { if (!d) return; camFx(this, 'shake', 260, 0.014); sfxAt('thud', d.x, 1); gDust(this, d.x, 568, 12, 0x8d6e63); });
+        socket.on('vendLand', (d) => { if (!d) return; camFx(this, 'shake', 300, 0.016); sfx('thud'); gDust(this, d.x, 568, 14, 0x8d6e63); });
         socket.off('vendDown');
         socket.on('vendDown', () => {
             sfx('explosion');
@@ -11630,13 +11632,13 @@ function launchGame(socket, roomId, mapData, continued) {
 
         // IRON GIANT hodisalari
         socket.off('robotWake');
-        socket.on('robotWake', () => { robotLockArena(this); this.cameras.main.shake(700, 0.01); sfx('rumble'); sfx('banner'); });
+        socket.on('robotWake', () => { robotLockArena(this); camFx(this, 'shake', 700, 0.01); sfx('rumble'); sfx('banner'); });
         socket.off('robotAim');
         socket.on('robotAim', () => sfx('whoosh'));
         socket.off('robotSmash');
-        socket.on('robotSmash', (d) => { if (!d) return; this.cameras.main.shake(260, 0.014); sfx('thud'); gDust(this, d.x, d.y, 10, 0xa1887f); });
+        socket.on('robotSmash', (d) => { if (!d) return; camFx(this, 'shake', 260, 0.014); sfx('thud'); gDust(this, d.x, d.y, 10, 0xa1887f); });
         socket.off('robotLaser');
-        socket.on('robotLaser', () => { sfx('fire'); this.cameras.main.shake(200, 0.006); });
+        socket.on('robotLaser', () => { sfx('fire'); camFx(this, 'shake', 200, 0.006); });
         socket.off('robotThrow');
         socket.on('robotThrow', (d) => {
             sfx('thud');
@@ -11650,7 +11652,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('robotOff');
         socket.on('robotOff', () => { sfx('rumble'); });
         socket.off('robotOn');
-        socket.on('robotOn', () => { sfx('banner'); this.cameras.main.flash(200, 120, 200, 255); });
+        socket.on('robotOn', () => { sfx('banner'); camFx(this, 'flash', 200, 120, 200, 255); });
         socket.off('robotDown');
         socket.on('robotDown', () => robotFall(this, false));
 
@@ -11660,7 +11662,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.off('tntSlam');
         socket.on('tntSlam', (d) => {
             if (!d) return;
-            this.cameras.main.shake(320, 0.012);
+            camFx(this, 'shake', 320, 0.012);
             sfx('thud'); gDust(this, d.x, d.y, 10, 0x8d6e63);
         });
         // QARSAK: avval ogohlantirish (shu qavat bo'ylab qizil chiziq), keyin zarba to'lqini - faqat shu balandlikda
@@ -11677,7 +11679,7 @@ function launchGame(socket, roomId, mapData, continued) {
         socket.on('tntClap', (d) => {
             if (!d) return;
             sfx('explosion', 0.6); sfx('thud');
-            this.cameras.main.shake(380, 0.018);
+            camFx(this, 'shake', 380, 0.018);
             [-1, 1].forEach((dir) => {
                 const w = this.add.rectangle(d.x, d.y - 18, 40, 36, 0xffffff, 0.7).setDepth(2.95);
                 this.tweens.add({ targets: w, x: d.x + dir * 420, scaleX: 3, alpha: 0, duration: 420, ease: 'Quad.Out', onComplete: () => w.destroy() });
@@ -11685,7 +11687,7 @@ function launchGame(socket, roomId, mapData, continued) {
             gDust(this, d.x, d.y, 14, 0xbdbdbd);
         });
         socket.off('tntPush');
-        socket.on('tntPush', (d) => { if (d && d.id === socket.id) this.cameras.main.shake(220, 0.012); });
+        socket.on('tntPush', (d) => { if (d && d.id === socket.id) camFx(this, 'shake', 220, 0.012); });
         socket.off('tntSkyThrow');
         socket.on('tntSkyThrow', (d) => {
             if (!d) return;
@@ -11697,7 +11699,7 @@ function launchGame(socket, roomId, mapData, continued) {
             }
         });
         socket.off('tntFuse');
-        socket.on('tntFuse', () => { sfx('banner'); sfx('roar'); this.cameras.main.flash(250, 255, 60, 0); });
+        socket.on('tntFuse', () => { sfx('banner'); sfx('roar'); camFx(this, 'flash', 250, 255, 60, 0); });
         socket.off('tntBoom');
         socket.on('tntBoom', () => tntCollapse(this, false));
 
@@ -11879,7 +11881,7 @@ function launchGame(socket, roomId, mapData, continued) {
                 const talkOpts = { elfName: t('gorilla_speaker'), voice: 'deep' };
                 if (backState.state === 'talk1' && !backTalked[1] && currentCharacter) {
                     backTalked[1] = true;
-                    this.cameras.main.shake(700, 0.012);
+                    camFx(this, 'shake', 700, 0.012);
                     sfx('roar');
                     startDialog(this, [
                         { who: 'elf', text: t('back_t1_1'), fx: 'shake' },
@@ -11987,13 +11989,13 @@ function launchGame(socket, roomId, mapData, continued) {
                 }
                 // Jang boshlandi (hamma o'qib bo'ldi yoki vaqt tugadi) - ochiq qolgan suhbat yopiladi
                 if (prev === 'talk' && st !== 'talk' && dialog) closeDialog();
-                if (prev !== st && st === 'spit') { this.cameras.main.shake(140, 0.004); sfxAt('spit', fatElfState.x); }
+                if (prev !== st && st === 'spit') { camFx(this, 'shake', 140, 0.004); sfxAt('spit', fatElfState.x); }
                 if (prev !== st && st === 'fcharge') sfxAt('roar', fatElfState.x, 0.5);
-                if (prev !== st && st === 'flame') { this.cameras.main.shake(200, 0.005); sfxAt('fireball', fatElfState.x, 1); }
+                if (prev !== st && st === 'flame') { camFx(this, 'shake', 200, 0.005); sfxAt('fireball', fatElfState.x, 1); }
                 if (prev !== st && st === 'down') sfx('bossDown');
                 bossHitSound('fatelf', fatElfState.hp, fatElfState.x);
                 if (prev !== st && st === 'down') {
-                    this.cameras.main.shake(400, 0.012);
+                    camFx(this, 'shake', 400, 0.012);
                     gDust(this, fatElfState.x, 566, 8);
                 }
                 if (data.doorOpen && !doorIsOpen) {
@@ -12039,13 +12041,13 @@ function launchGame(socket, roomId, mapData, continued) {
                     const sp = gPlatSprites[st.id];
                     if (!sp || sp.state === 'fallen') return;
                     if (st.state === 'hold' && sp.state !== 'hold') {
-                        this.cameras.main.shake(300, 0.015);
+                        camFx(this, 'shake', 300, 0.015);
                         gDust(this, sp.x, map.gorilla.ceilingY + 6, 8);
                         // Men ustida edim - shiftga ezildim
                         if (gRideId === st.id && currentCharacter) {
                             this.tweens.add({ targets: currentCharacter, scaleY: 0.3, duration: 80 });
                             currentCharacter.setTint(0xff5252);
-                            this.cameras.main.flash(200, 255, 60, 60);
+                            camFx(this, 'flash', 200, 255, 60, 60);
                         }
                     }
                     // Otilish boshlandi va server meni ustida qolganlar ro'yxatiga kiritdi - platformaga "yopishaman"
@@ -12067,7 +12069,7 @@ function launchGame(socket, roomId, mapData, continued) {
                         o.spike = this.add.image(sp.x, 700, 'px_gspike').setOrigin(0.5, 1).setDepth(3);
                         this.tweens.add({ targets: o.spike, y: 576, duration: 110, ease: 'Back.Out' });
                         gDust(this, sp.x, 566, 6);
-                        this.cameras.main.shake(200, 0.01);
+                        camFx(this, 'shake', 200, 0.01);
                     }
                 });
                 Object.keys(gSpikeObjs).forEach((id) => {
@@ -12580,6 +12582,17 @@ function launchGame(socket, roomId, mapData, continued) {
 
             // O'QLAR VA QILICH ZARBALARINI CHIZISH
             serverBullets.forEach((bData) => {
+                // NISHONGA TEKKAN o'q (server bir marta yuboradi): rasmi shu yerda o'chadi; hali ko'rsatilmagan o'z o'qimiz bo'lsa - unga mos bashorat o'qi o'chadi
+                if (bData.gone) {
+                    const gs = bulletSprites[bData.id];
+                    if (gs) { gs.destroy(); delete bulletSprites[bData.id]; }
+                    else if (bData.playerId === socket.id && ATK_PREDICT.sprites.length) {
+                        let best = null, bd = 1e9;
+                        ATK_PREDICT.sprites.forEach((p) => { if (!p || !p.active || !p.ex || Math.sign(p.ex.vx || 1) !== Math.sign(bData.vx || 1)) return; const dd = Math.abs(p.y - bData.y); if (dd < bd) { bd = dd; best = p; } });
+                        if (best && bd < 60) { best.destroy(); ATK_PREDICT.sprites = ATK_PREDICT.sprites.filter(p => p !== best); ATK_PREDICT.pending = false; }
+                    }
+                    return;
+                }
                 const facingLeft = bData.vx < 0;
                 const dir = facingLeft ? -1 : 1;
 
@@ -12674,7 +12687,18 @@ function launchGame(socket, roomId, mapData, continued) {
                         if (ATK_PREDICT.batch === this.game.loop.frame) predicted = true;
                         else if (ATK_PREDICT.pending && nowP - ATK_PREDICT.at < 800) {
                             predicted = true; ATK_PREDICT.pending = false; ATK_PREDICT.batch = this.game.loop.frame;
-                            ATK_PREDICT.sprites.forEach(p => p && p.active && p.destroy()); ATK_PREDICT.sprites = [];
+                        }
+                    }
+                    // BASHORAT O'QINI BIRIKTIRISH: oldindan chizilgan o'q (shu tomonga, shu balandlikda uchayotgani) - shu server o'qining rasmi bo'lib qoladi.
+                    // Avval bashorat o'chirilib, server o'qi (tarmoq kechikishi sababli orqaroqda) chizilardi - o'q orqaga sakrab, "ikkita" bo'lib ko'rinardi
+                    if (predicted && !isMeleeType && bData.bulletType !== 'knife') {
+                        let best = null, bd = 1e9;
+                        ATK_PREDICT.sprites.forEach((p) => { if (!p || !p.active || !p.ex || Math.sign(p.ex.vx || 1) !== Math.sign(bData.vx || 1)) return; const dd = Math.abs(p.y - posY) + Math.abs(Math.atan2(p.ex.vy, p.ex.vx) - Math.atan2(bData.vy || 0, bData.vx || 1)) * 200; if (dd < bd) { bd = dd; best = p; } });
+                        if (best && bd < 60) {
+                            ATK_PREDICT.sprites = ATK_PREDICT.sprites.filter(p => p !== best);
+                            best.adopted = true; best.setAlpha(1); bSprite.destroy();
+                            bulletSprites[bData.id] = best;
+                            return;
                         }
                     }
                     if (predicted && (isMeleeType || bData.bulletType === 'knife')) bSprite.setVisible(false);   // zarba izi allaqachon chizilgan
@@ -12692,6 +12716,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     bulletSprites[bData.id] = bSprite;
                 } else {
                     const bs = bulletSprites[bData.id];
+                    if (bs.adopted) return;   // biriktirilgan bashorat o'qi - o'z yo'lida
                     bs.x = posX;
                     bs.y = posY;
                     if (bs.slash) slashGhost(bs);
@@ -12709,6 +12734,7 @@ function launchGame(socket, roomId, mapData, continued) {
                     }
                 }
             });
+            if (ATK_PREDICT.batch === this.game.loop.frame && ATK_PREDICT.sprites.length) { ATK_PREDICT.sprites.forEach(p => p && p.active && p.destroy()); ATK_PREDICT.sprites = []; }   // server o'qi yo'q bashoratlar
         });
     }
 
@@ -12901,7 +12927,8 @@ function launchGame(socket, roomId, mapData, continued) {
             if (bs && bs.active && bs.spin) bs.angle += bs.spin;
             if (bs && bs.active && bs.trailFx && bs.visible && nowB - (bs.trailAt || 0) > 35) { bs.trailAt = nowB; weaponTrail(this, bs.x, bs.y, bs.trailFx, false); }
             if (!bs || !bs.ex || !bs.active) return;
-            const dt = Math.min(0.12, (nowB - bs.ex.t) / 1000);
+            if (bs.slash && bs.adopted) slashGhost(bs);
+            const dt = bs.adopted ? (nowB - bs.ex.t) / 1000 : Math.min(0.12, (nowB - bs.ex.t) / 1000);   // biriktirilgan - otilgan paytdan beri (server bilan bir xil tezlik)
             bs.x = bs.ex.x + bs.ex.vx * dt;
             bs.y = bs.ex.y + bs.ex.vy * dt;
         });

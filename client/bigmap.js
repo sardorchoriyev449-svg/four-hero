@@ -2182,7 +2182,9 @@ window.BigMap = (function () {
         clampV();
         const toS = (x, y) => [(x - V.cx) * V.s + 380, (y - V.cy) * V.s + 200];
         const toW = (sx, sy) => [(sx - 380) / V.s + V.cx, (sy - 200) / V.s + V.cy];
-        let hover = null;
+        let hover = null, hoverCp = -1;
+        // xaritadagi checkpoint (bayroqcha) - kursor ostidami
+        const cpAt = (sx, sy) => { let best = -1, bd = 16; W.cps.forEach((c, i) => { const [x, y] = toS(c.x, c.y), dd = Math.hypot(x - sx, y - 6 - sy); if (dd < bd) { bd = dd; best = i; } }); return best; };
         const bosses = () => (W.zones || []).filter(z => z.boss).map(z => ({ z, x: (z.x0 + z.x1) / 2, y: z.y1 - 60, dead: (O.paidZones || []).includes(z.id) }));
         const draw = () => {
             if (!cv.isConnected) return;
@@ -2201,6 +2203,7 @@ window.BigMap = (function () {
             // qishloq do'konlari, checkpointlar, portallar
             (W.shops || []).forEach(s => { const [x, y] = toS(s.x, s.y); g.fillStyle = '#ffd54f'; g.fillRect(x - 3, y - 9, 6, 6); });
             W.cps.forEach((c, i) => { const [x, y] = toS(c.x, c.y); if (x < -10 || x > 770) return; const on = O.got.has(i); g.fillStyle = '#000'; g.fillRect(x - 1, y - 12, 2, 12); g.fillStyle = on ? '#69f0ae' : '#9e9e9e'; g.fillRect(x + 1, y - 12, 5, 4); });
+            if (hoverCp >= 0 && W.cps[hoverCp]) { const [x, y] = toS(W.cps[hoverCp].x, W.cps[hoverCp].y), on = O.got.has(hoverCp); g.strokeStyle = on ? '#69f0ae' : '#9e9e9e'; g.lineWidth = 2; g.strokeRect(x - 8, y - 18, 16, 20); }   // teleport uchun tanlangan checkpoint
             (W.portals || []).forEach(p => { const [x, y] = toS(p.x, p.y); const open = portalOpen(p); g.strokeStyle = open ? '#b388ff' : '#555'; g.lineWidth = 2; g.beginPath(); g.ellipse(x, y - 9, 5, 8, 0, 0, Math.PI * 2); g.stroke(); });
             // BOSSLAR: tirik - qizil bosh suyak, o'ldirilgan - kulrang belgi, maxfiy - binafsha "?"
             bosses().forEach((b) => {
@@ -2256,10 +2259,20 @@ window.BigMap = (function () {
             if (drag) { const dx = (e.clientX - drag.x) * k, dy = (e.clientY - drag.y) * k; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true; V.cx = drag.cx - dx / V.s; V.cy = drag.cy - dy / V.s; clampV(); }
             const sx = (e.clientX - r.left) * k, sy = (e.clientY - r.top) * k;
             hover = bosses().find(q => { const [x, y] = toS(q.x, q.y); return Math.hypot(x - sx, y - 10 - sy) < 12; }) || null;
+            const was = hoverCp; hoverCp = hover ? -1 : cpAt(sx, sy);
+            cv.style.cursor = hoverCp >= 0 && O.got.has(hoverCp) ? 'pointer' : 'crosshair';
+            if (hoverCp !== was) info.textContent = hoverCp >= 0 ? t(O.got.has(hoverCp) ? 'big_map_tp_hint' : 'big_map_tp_locked') : t('big_map_hint');
         });
         cv.addEventListener('pointerup', (e) => {
             const r = cv.getBoundingClientRect(), k = 760 / r.width, d = drag; drag = null;
             if (!d || d.moved) return;
+            // CHECKPOINT bosildi: faollashgan bo'lsa - darhol o'sha joyga teleport, aks holda - "hali ochilmagan"
+            const ci = bosses().some(q => { const [x, y] = toS(q.x, q.y); return Math.hypot(x - (e.clientX - r.left) * k, y - 10 - (e.clientY - r.top) * k) < 12; }) ? -1 : cpAt((e.clientX - r.left) * k, (e.clientY - r.top) * k);
+            if (ci >= 0) {
+                if (!O.got.has(ci)) { info.textContent = t('big_map_tp_locked'); X.sfx('thud', 0.4); return; }
+                const h = X.hero(); if (h && h.isDead) { info.textContent = t('big_tp_dead'); return; }
+                X.socket.emit('bigAct', { roomId: X.roomId(), act: 'cptp', arg: ci }); X.sfx('whoosh', 0.7); closeMap(); return;
+            }
             const w = pick((e.clientX - r.left) * k, (e.clientY - r.top) * k);
             if (!w) { info.textContent = t('big_map_hint'); return; }
             O.wp = w; O.wpArrived = false; saveWp(); X.sfx('pop', 0.6);

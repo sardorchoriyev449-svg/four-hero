@@ -1583,7 +1583,8 @@ export interface BigState {
     areas: BigArea[];                    // boss hujum maydonlari
     dots: { [pid: string]: { until: number, dps: number, next: number, k: string } };   // kuyish / zahar
     pv: { [pid: string]: { x: number, y: number, vx: number, vy: number } };   // o'yinchi tezligi (bosslar oldindan mo'ljal oladi - S1/S2 dagidek)
-    pcp: { [pid: string]: number };      // har o'yinchining tirilish joyi - oxirgi tekkan checkpointi (bo'lmasa - umumiy cp)
+    pcp: { [pid: string]: number };
+    cpTp?: { [pid: string]: number };    // xaritadan teleport: keyingisi shu tikdan keyin      // har o'yinchining tirilish joyi - oxirgi tekkan checkpointi (bo'lmasa - umumiy cp)
     got: { [cp: number]: boolean };
     trigOn: { [zone: number]: boolean };                 // E bilan chaqirilgan bosslar (robot ilon)
     gifts: { [zone: number]: { at: number, ids: { [pid: string]: boolean } } };   // Alter Qor Bobo: archa oldida sovg'a olganlar (hamma olsa - jang)
@@ -2352,6 +2353,22 @@ export function bigPortal(S: BigState, p: PlayerState, loc: string, ctx: BigCtx)
     delete S.dots[p.id];
     ctx.emitTo(p.id, 'teleport', { x: p.x, y: p.y });
     ctx.emit('bigPortalFx', { id: p.id, x0: from.x, y0: from.y, x1: to.x, y1: to.y });
+    return true;
+}
+// XARITADAN TELEPORT: xaritada faollashgan checkpoint bosilsa - o'yinchi o'sha checkpointga ko'chadi (tirilish joyi ham o'sha bo'ladi).
+// O'lik, boss jangida (maydon ichida) - yo'q; har 3 s da bir martadan ko'p emas
+const CP_TP_TICKS = 100;
+export function bigCpTravel(S: BigState, p: PlayerState, i: number, ctx: BigCtx): boolean {
+    const c = S.w.cps[i], tp = S.cpTp || (S.cpTp = {});
+    if (p.isDead || !c || !S.got[i] || (tp[p.id] || 0) > S.tick) return false;
+    if (bigArenas(S).some(a => p.x > a.x0 && p.x < a.x1 && p.y + 24 >= a.y0 + 200 && p.y + 24 <= a.y1 + 120)) { ctx.emitTo(p.id, 'bigMage', { err: 'big_tp_arena' }); return false; }
+    tp[p.id] = S.tick + CP_TP_TICKS;
+    const x0 = p.x, y0 = p.y + 24;
+    p.x = c.x; p.y = c.y - 26;
+    S.pcp[p.id] = i; ctx.saveCp(p, i); ctx.emitTo(p.id, 'bigCpMine', { i });
+    delete S.dots[p.id];
+    ctx.emitTo(p.id, 'teleport', { x: p.x, y: p.y });
+    ctx.emit('bigPortalFx', { id: p.id, x0, y0, x1: c.x, y1: c.y });
     return true;
 }
 // ===== TOPSHIRIQLAR (Elf qirolligi): keksa elf - robot ilonning tishi; ona elf - semiz elf o'tlog'idagi ikki bolasi =====
