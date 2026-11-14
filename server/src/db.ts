@@ -1,5 +1,7 @@
 import type { RandQuest } from './types';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
+import { ACHIEVEMENTS, ACH_COUNTERS, achById } from './achievements';
 import bcrypt from 'bcryptjs';
 import { config } from 'dotenv';
 import { WEAPON_UPGRADES, WEAPON_UPGRADE_LEVEL, UPGRADE_COSTS, BASE_UPGRADES } from './perks';
@@ -144,7 +146,15 @@ const userSchema = new mongoose.Schema({
     // XP KUCHAYTIRISH darajasi - har personajga alohida: { knight: 2, ... }
     xpBoost: { type: Object, default: () => ({}) },
     petTrust: { type: Number, default: 0 },   // Pushistik bilan do'stlik (necha marta boqilgan)
-    pet: { type: Object, default: () => ({}) }   // hamroh Pushistik: { lvl, xp, hp, up: { dmg, hp, spd }, resting, restAt }
+    pet: { type: Object, default: () => ({}) },   // hamroh Pushistik: { lvl, xp, hp, up: { dmg, hp, spd }, resting, restAt }
+    // DO'STLAR: friends - do'stlar (userId), friendIn - kelgan so'rovlar (userId)
+    friends: { type: [String], default: () => [] },
+    friendIn: { type: [String], default: () => [] },
+    // YUTUQLAR: ach - ochilganlar { id: vaqt }, achStats - sanagichlar { kills, bosses, ... }, title - tanlangan unvon (yutuq id)
+    ach: { type: Object, default: () => ({}) },
+    achStats: { type: Object, default: () => ({}) },
+    title: { type: String, default: '' },
+    customOutfit: { type: String, default: '' }   // kiyim konstruktorida yig'ilgan kiyim kodi (cosmetics.ts validCustomOutfit)
 }, { timestamps: true });
 
 const UserModel = mongoose.model('User', userSchema);
@@ -183,6 +193,8 @@ export interface UserRecord {
     bigCp: number;
     bigSeed: number; bigVer: number; bigDoneM: number; bigCpV: number; bigOpened: number[]; bigKilled: number[]; bigGot: number[]; bigRQ: RandQuest | null; bigQuests: { [q: string]: number }; bigKillAt: { [z: string]: number };
     bigMapItem: boolean;
+    title: string;   // yutuqdan olingan unvon (yutuq id, bo'sh - yo'q)
+    customOutfit: string;   // konstruktorda yig'ilgan kiyim kodi
     adm?: { worldPct: number, bosses: number, farmXp: number, furniture: number, homeOwned: { [id: string]: number }, lastDay: string };   // admin panel uchun
 }
 
@@ -247,6 +259,8 @@ function docToUser(doc: any): UserRecord {
         xpBoost: doc.xpBoost || {},
         petTrust: Math.max(0, Number(doc.petTrust) || 0),
         pet: petOf(doc),
+        title: typeof doc.title === 'string' ? doc.title : '',
+        customOutfit: typeof doc.customOutfit === 'string' ? doc.customOutfit : '',
         ownedHeroes: Array.isArray(doc.ownedHeroes) ? doc.ownedHeroes.filter((h: any) => PREMIUM_HEROES.includes(h)) : [],
         supporter: !!doc.supporter,
         bigCp: Math.max(0, Math.floor(Number(doc.bigCp) || 0)),
@@ -1978,3 +1992,152 @@ export async function setSetting(key: string, value: any): Promise<void> {
 }
 
 export default UserModel;
+
+// KIYIM KONSTRUKTORI: kodni saqlash (konstruktor sotib olingan bo'lishi shart) va kiyimni kiyish (shu qahramonga)
+export async function setCustomOutfit(userId: string, code: string, characterType: string): Promise<{ success: boolean, message?: string, user?: UserRecord }> {
+    if (!mongoose.isValidObjectId(userId)) return { success: false, message: 'err_user_not_found' };
+    const doc: any = await UserModel.findById(userId, { ownedCosmetics: 1 }).lean();
+    if (!doc) return { success: false, message: 'err_user_not_found' };
+    if (!(doc.ownedCosmetics || []).includes('body:custom')) return { success: false, message: 'err_om_locked' };
+    const set: any = { customOutfit: code };
+    if (HERO_TYPES.includes(characterType as any)) set['equippedCosmetics.' + characterType + '.body'] = 'custom';
+    const upd = await UserModel.findByIdAndUpdate(userId, { $set: set }, { returnDocument: 'after' });
+    return upd ? { success: true, user: docToUser(upd) } : { success: false, message: 'err_user_not_found' };
+}
+
+// ===================== YUTUQLAR =====================
+const ACH_PROJ = { achStats: 1, ach: 1, charXp: 1, pet: 1, petTrust: 1, bigLbVer: 1, bigBestPct: 1, ownedCosmetics: 1, friends: 1, daily: 1, title: 1 };
+// ko'rsatkichlar: sanagichlar + hisobdan (eng yuqori qahramon darajasi, ajdarcha, dunyo %, kiyim-kechak soni, do'stlar, kunlik zanjir)
+function achValues(doc: any): { [k: string]: number } {
+    const v: { [k: string]: number } = {};
+    ACH_COUNTERS.forEach(k => { v[k] = Math.max(0, Number((doc.achStats || {})[k]) || 0); });
+    v.level = Math.max(0, ...HERO_TYPES.map(c => xpLevel((doc.charXp || {})[c] || 0)));
+    v.pet = (Number(doc.petTrust) || 0) >= CRITTER.trustMax ? Math.max(0, Number(doc.pet && doc.pet.lvl) || 0) : 0;
+    v.world = doc.bigLbVer === BIG_GEN ? Math.max(0, Number(doc.bigBestPct) || 0) : 0;
+    v.cos = Array.isArray(doc.ownedCosmetics) ? doc.ownedCosmetics.length : 0;
+    v.friends = Array.isArray(doc.friends) ? doc.friends.length : 0;
+    v.streak = Math.max(0, Number(doc.daily && doc.daily.streak) || 0);
+    return v;
+}
+// sanagichlarni oshiradi va yangi bajarilgan yutuqlarni ochadi (tanga darhol hisobga). unlocked - yangi ochilganlar
+export async function achUpdate(userId: string, inc?: { [k: string]: number }): Promise<{ unlocked: { id: string, coins: number, title: boolean }[], coins: number | null }> {
+    const none = { unlocked: [], coins: null };
+    if (!mongoose.isValidObjectId(userId)) return none;
+    const set: { [k: string]: number } = {};
+    if (inc) Object.keys(inc).forEach((k) => { const n = Math.round(Number(inc[k]) || 0); if (ACH_COUNTERS.includes(k) && n > 0) set['achStats.' + k] = n; });
+    const doc: any = Object.keys(set).length
+        ? await UserModel.findByIdAndUpdate(userId, { $inc: set }, { returnDocument: 'after', projection: ACH_PROJ }).lean()
+        : await UserModel.findById(userId, ACH_PROJ).lean();
+    if (!doc) return none;
+    const v = achValues(doc), have = doc.ach || {};
+    const fresh = ACHIEVEMENTS.filter(a => !have[a.id] && v[a.stat] >= a.need);
+    if (!fresh.length) return none;
+    // atomik: faqat hali ochilmagan bo'lsa (bir vaqtdagi ikki so'rov tangani ikki marta bermasin)
+    const cond: any = { _id: userId }, upd: any = {};
+    fresh.forEach((a) => { cond['ach.' + a.id] = { $exists: false }; upd['ach.' + a.id] = Date.now(); });
+    const total = fresh.reduce((s, a) => s + a.coins, 0);
+    const res: any = await UserModel.findOneAndUpdate(cond, { $set: upd, $inc: { coins: total } }, { returnDocument: 'after', projection: { coins: 1 } }).lean();
+    if (!res) return none;
+    return { unlocked: fresh.map(a => ({ id: a.id, coins: a.coins, title: !!a.title })), coins: res.coins };
+}
+export async function achView(userId: string): Promise<any | null> {
+    if (!mongoose.isValidObjectId(userId)) return null;
+    const doc: any = await UserModel.findById(userId, ACH_PROJ).lean();
+    if (!doc) return null;
+    const v = achValues(doc), have = doc.ach || {};
+    return { title: doc.title || '', list: ACHIEVEMENTS.map(a => ({ id: a.id, stat: a.stat, need: a.need, coins: a.coins, title: !!a.title, have: Math.min(a.need, Math.floor(v[a.stat] || 0)), done: !!have[a.id], at: have[a.id] || 0 })) };
+}
+// unvon tanlash: '' - olib tashlash; aks holda ochilgan va unvon beradigan yutuq bo'lishi shart
+export async function setTitle(userId: string, id: string): Promise<{ success: boolean, message?: string, title?: string }> {
+    if (!mongoose.isValidObjectId(userId) || typeof id !== 'string') return { success: false, message: 'err_not_found' };
+    if (id) {
+        const a = achById(id);
+        if (!a || !a.title) return { success: false, message: 'err_not_found' };
+        const doc: any = await UserModel.findById(userId, { ach: 1 }).lean();
+        if (!doc || !(doc.ach || {})[id]) return { success: false, message: 'err_ach_locked' };
+    }
+    await UserModel.updateOne({ _id: userId }, { $set: { title: id } });
+    return { success: true, title: id };
+}
+
+// ===================== DO'STLAR =====================
+export const FR_MAX = 100, FR_REQ_MAX = 50;
+export async function friendsView(userId: string): Promise<{ friends: any[], incoming: any[] } | null> {
+    if (!mongoose.isValidObjectId(userId)) return null;
+    const me: any = await UserModel.findById(userId, { friends: 1, friendIn: 1 }).lean();
+    if (!me) return null;
+    const ids = [...(me.friends || []), ...(me.friendIn || [])].filter((id: string) => mongoose.isValidObjectId(id));
+    const docs: any[] = ids.length ? await UserModel.find({ _id: { $in: ids } }, { nickname: 1, title: 1, defaultCharacter: 1 }).lean() : [];
+    const byId = new Map(docs.map(d => [String(d._id), d]));
+    const row = (id: string) => { const d = byId.get(id); return d ? { id, nickname: d.nickname, title: d.title || '', hero: d.defaultCharacter || 'knight' } : null; };
+    return { friends: (me.friends || []).map(row).filter(Boolean), incoming: (me.friendIn || []).map(row).filter(Boolean) };
+}
+// nik bo'yicha so'rov; u menga allaqachon so'rov yuborgan bo'lsa - darhol do'st bo'lamiz
+export async function friendRequest(userId: string, nickname: string): Promise<{ success: boolean, message?: string, targetId?: string, nickname?: string, fromNick?: string, accepted?: boolean }> {
+    const nick = String(nickname || '').trim();
+    if (!mongoose.isValidObjectId(userId) || !nick || nick.length > 40) return { success: false, message: 'err_fr_not_found' };
+    const esc = nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const target: any = await UserModel.findOne({ nickname: new RegExp('^' + esc + '$', 'i') }, { nickname: 1, friendIn: 1, friends: 1 }).lean();
+    if (!target) return { success: false, message: 'err_fr_not_found' };
+    const tid = String(target._id);
+    if (tid === userId) return { success: false, message: 'err_fr_self' };
+    const me: any = await UserModel.findById(userId, { friends: 1, friendIn: 1, nickname: 1 }).lean();
+    if (!me) return { success: false, message: 'err_fr_not_found' };
+    if ((me.friends || []).includes(tid)) return { success: false, message: 'err_fr_already' };
+    if ((me.friendIn || []).includes(tid)) { const r = await friendAccept(userId, tid); return { ...r, targetId: tid, nickname: target.nickname, fromNick: me.nickname, accepted: r.success }; }
+    if ((target.friendIn || []).includes(userId)) return { success: false, message: 'err_fr_sent' };
+    if ((me.friends || []).length >= FR_MAX || (target.friends || []).length >= FR_MAX) return { success: false, message: 'err_fr_limit' };
+    if ((target.friendIn || []).length >= FR_REQ_MAX) return { success: false, message: 'err_fr_full' };
+    await UserModel.updateOne({ _id: tid }, { $addToSet: { friendIn: userId } });
+    return { success: true, targetId: tid, nickname: target.nickname, fromNick: me.nickname };
+}
+export async function friendAccept(userId: string, fromId: string): Promise<{ success: boolean, message?: string }> {
+    if (!mongoose.isValidObjectId(userId) || !mongoose.isValidObjectId(fromId)) return { success: false, message: 'err_fr_no_req' };
+    const me: any = await UserModel.findById(userId, { friendIn: 1, friends: 1 }).lean();
+    if (!me || !(me.friendIn || []).includes(fromId)) return { success: false, message: 'err_fr_no_req' };
+    if ((me.friends || []).length >= FR_MAX) return { success: false, message: 'err_fr_limit' };
+    await UserModel.updateOne({ _id: userId }, { $pull: { friendIn: fromId }, $addToSet: { friends: fromId } });
+    await UserModel.updateOne({ _id: fromId }, { $pull: { friendIn: userId }, $addToSet: { friends: userId } });
+    return { success: true };
+}
+export async function friendDecline(userId: string, fromId: string): Promise<{ success: boolean }> {
+    if (!mongoose.isValidObjectId(userId) || typeof fromId !== 'string') return { success: false };
+    await UserModel.updateOne({ _id: userId }, { $pull: { friendIn: fromId } });
+    return { success: true };
+}
+export async function friendRemove(userId: string, friendId: string): Promise<{ success: boolean }> {
+    if (!mongoose.isValidObjectId(userId) || !mongoose.isValidObjectId(friendId)) return { success: false };
+    await UserModel.updateOne({ _id: userId }, { $pull: { friends: friendId } });
+    await UserModel.updateOne({ _id: friendId }, { $pull: { friends: userId } });
+    return { success: true };
+}
+export async function areFriends(a: string, b: string): Promise<boolean> {
+    if (!mongoose.isValidObjectId(a) || typeof b !== 'string') return false;
+    return !!(await UserModel.exists({ _id: a, friends: b }));
+}
+
+// ===================== O'YINCHILAR BRAUZERIDAGI XATOLAR (admin panel) =====================
+// Bir xil xato (matn + fayl + qator) bitta yozuvga yig'iladi: necha marta, birinchi / oxirgi marta, oxirgi o'yinchilar, xaritalar
+const clientErrorSchema = new mongoose.Schema({
+    sig: { type: String, required: true, unique: true }, msg: String, src: String, line: Number, col: Number, stack: String,
+    count: { type: Number, default: 0 }, first: Date, last: Date, users: { type: [String], default: () => [] }, maps: { type: [String], default: () => [] }, ua: String
+});
+const ClientErrorModel = mongoose.model('ClientError', clientErrorSchema);
+let clientErrWrites = 0;
+export async function recordClientError(e: { msg: string, src: string, line: number, col: number, stack: string, ua: string, user: string, map: string }): Promise<void> {
+    const sig = crypto.createHash('sha1').update(e.msg + '|' + e.src + '|' + e.line).digest('hex').slice(0, 16), now = new Date();
+    const upd: any = { $setOnInsert: { msg: e.msg, src: e.src, line: e.line, col: e.col, stack: e.stack, first: now, ua: e.ua }, $set: { last: now }, $inc: { count: 1 } };
+    if (e.user) upd.$push = { users: { $each: [e.user], $slice: -8 } };
+    if (e.map) upd.$addToSet = { maps: e.map };
+    await ClientErrorModel.updateOne({ sig }, upd, { upsert: true });
+    if (++clientErrWrites % 50 === 0) {   // ko'pi bilan 500 ta xil xato saqlanadi (eskilari o'chadi)
+        const old = await ClientErrorModel.find({}, { _id: 1 }).sort({ last: -1 }).skip(500).lean();
+        if (old.length) await ClientErrorModel.deleteMany({ _id: { $in: old.map((d: any) => d._id) } });
+    }
+}
+export async function listClientErrors(): Promise<any[]> {
+    const rows: any[] = await ClientErrorModel.find({}).sort({ last: -1 }).limit(300).lean();
+    return rows.map(r => ({ id: String(r._id), msg: r.msg, src: r.src, line: r.line, col: r.col, stack: r.stack, count: r.count, first: r.first, last: r.last, users: r.users || [], maps: r.maps || [], ua: r.ua }));
+}
+export async function deleteClientError(id: string): Promise<void> { if (mongoose.isValidObjectId(id)) await ClientErrorModel.deleteOne({ _id: id }); }
+export async function clearClientErrors(): Promise<void> { await ClientErrorModel.deleteMany({}); }

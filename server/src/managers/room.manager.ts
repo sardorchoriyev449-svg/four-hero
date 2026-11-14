@@ -1,5 +1,6 @@
 import { bigLocAt } from '../bigmap';
 import { Server, Socket } from 'socket.io';
+import { ACH_COUNTERS } from '../achievements';
 import { RoomState, PlayerState } from '../types';
 import { getCharacterLogic } from '../characters';
 import { BaseCharacter } from '../characters/base.character';
@@ -125,6 +126,7 @@ export class RoomManager {
         let xpBoost: { [c: string]: number } = {};
         let petTrust = 0;
         let bigRQ: any = null;
+        let title = '', customOutfit = '';
         let ownedHeroes: string[] = [], supporter = false, bigCp = 0, bigCpV = 0, bigSeed = 0, bigVer = 0, bigDoneM = 0, bigOpened: number[] = [], bigKilled: number[] = [], bigGot: number[] = [], bigMapItem = false, bigQuests: { [q: string]: number } = {}, bigKillAt: { [z: string]: number } = {};
         let pet: db.PetData | undefined;
         if (userId !== null) {
@@ -149,6 +151,7 @@ export class RoomManager {
                 characterType = user.defaultCharacter || 'knight';
                 ownedHeroes = user.ownedHeroes || [];
                 supporter = !!user.supporter;
+                title = user.title || ''; customOutfit = user.customOutfit || '';
                 bigCp = user.bigCp || 0; bigCpV = user.bigCpV || 0; bigSeed = user.bigSeed || 0; bigVer = user.bigVer || 0; bigDoneM = user.bigDoneM || 0; bigOpened = user.bigOpened || []; bigKilled = user.bigKilled || []; bigGot = user.bigGot || []; bigMapItem = !!user.bigMapItem; bigQuests = { ...(user.bigQuests || {}) }; bigRQ = user.bigRQ || null; bigKillAt = { ...(user.bigKillAt || {}) };
                 // pullik qahramon sotib olinmagan bo'lsa (masalan, qaytarib olingan to'lov) - ritsar
                 if (db.PREMIUM_HEROES.includes(characterType) && !ownedHeroes.includes(characterType)) characterType = 'knight';
@@ -190,7 +193,7 @@ export class RoomManager {
             clientId: typeof clientId === 'string' ? clientId.slice(0, 64) : null,
             isAdmin: !!(socket.data && (socket.data as any).isAdmin),
             acidCurse, boltCurse, mutedUntil, xpBoost, petTrust, pet, ownedHeroes, supporter, bigCp, bigCpV, bigSeed, bigVer, bigDoneM, bigOpened, bigKilled, bigGot, bigMapItem, bigQuests, bigRQ, bigKillAt, localTest: isLocalTest(socket.handshake?.address),
-            nickname: nickname,
+            nickname: nickname, title,
             kills: 0,
             skinId: equippedSkins[characterType] || 'default',
             equippedSkins: equippedSkins,
@@ -198,7 +201,7 @@ export class RoomManager {
             weaponFx: getWeaponSkinFx(characterType, equippedWeaponSkins[characterType] || 'default'),
             equippedWeaponSkins: equippedWeaponSkins,
             equippedCosmetics: equippedCosmetics,
-            look: lookString(equippedCosmetics[characterType], characterType),
+            look: lookString(equippedCosmetics[characterType], characterType, customOutfit), customOutfit,
             isDead: false,
             respawnTimer: 0,
             isReady: false,
@@ -438,7 +441,7 @@ export class RoomManager {
             player.skinId = skinId;
             player.color = getSkinColor(characterType, skinId) ?? CHARACTER_COLORS[characterType];
             player.skinFx = getSkinFx(characterType, skinId);
-            player.look = lookString((player.equippedCosmetics || {})[characterType], characterType);
+            player.look = lookString((player.equippedCosmetics || {})[characterType], characterType, player.customOutfit || '');
             // MUHIM: yaxshilashlar HAR BIR PERSONAJGA ALOHIDA tegishli - shu personajga
             // almashganda, uning o'z damage/stamina darajasini keshdan olamiz
             const charUpgrades = player.accountUpgrades[characterType] || { damage: 0, stamina: 0 };
@@ -483,7 +486,8 @@ export class RoomManager {
         player.weaponColor = getWeaponSkinColor(player.characterType, weaponSkinId);
         player.weaponFx = getWeaponSkinFx(player.characterType, weaponSkinId);
         player.equippedCosmetics = user.equippedCosmetics;
-        player.look = lookString(user.equippedCosmetics[player.characterType], player.characterType);
+        player.customOutfit = user.customOutfit || '';
+        player.look = lookString(user.equippedCosmetics[player.characterType], player.characterType, player.customOutfit);
         const charUpgrades = user.upgrades[player.characterType] || { damage: 0, stamina: 0 };
         player.damageLevel = charUpgrades.damage || 0;
         player.staminaLevel = charUpgrades.stamina || 0;
@@ -2228,6 +2232,17 @@ export class RoomManager {
         db.dailyProgress(p.userId, type, n).then((done) => {
             done.forEach(q => this.io.to(playerId).emit('dailyQuestDone', { type: q.type, need: q.need }));
         }).catch(err => console.error('dailyProgress xatosi:', err));
+        if (ACH_COUNTERS.includes(type)) this.achProgress(roomId, playerId, { [type]: n });
+    }
+    // YUTUQLAR: sanagich oshdi (yoki faqat tekshirish - inc bo'sh) - yangi ochilganlar o'yinchiga xabar va tanga
+    public achProgress(roomId: string, playerId: string, inc: { [k: string]: number }): void {
+        const p = this.activeRooms[roomId]?.players[playerId];
+        if (!p || !p.userId) return;
+        db.achUpdate(p.userId, inc).then((r) => {
+            if (!r.unlocked.length) return;
+            this.io.to(playerId).emit('achUnlocked', { list: r.unlocked });
+            if (r.coins !== null) this.io.to(playerId).emit('coinsUpdated', { amount: r.unlocked.reduce((s, a) => s + a.coins, 0), totalCoins: r.coins });
+        }).catch(err => console.error('achUpdate xatosi:', err));
     }
     public async awardReward(roomId: string, playerId: string, coins: number, xp: number, boost: boolean = false): Promise<void> {
         if (coins > 0) this.dailyProgress(roomId, playerId, 'coins', coins);
@@ -2302,7 +2317,8 @@ export class RoomManager {
             look: p.look || '',
             level: p.level || 0,
             isAdmin: !!p.isAdmin,
-            supporter: !!p.supporter
+            supporter: !!p.supporter,
+            title: p.title || ''   // yutuq unvoni
         }));
 
         this.io.to(roomId).emit('updateLobbyPlayers', {

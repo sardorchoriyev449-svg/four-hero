@@ -1018,7 +1018,7 @@ window.Cosmetics = (() => {
         cache[key] = res;
         return res;
     }
-    const has = (slot, id) => !!(id && (slot === 'body' ? CLOTHES[id] : art(slot, id)));
+    const has = (slot, id) => !!(id && (slot === 'body' ? clothesOf(id) : art(slot, id)));
 
     // "cowboy|hockey|bat||..." -> { head: 'cowboy', face: 'hockey', sword: 'bat' } (obyekt bo'lsa o'zi)
     function parseLook(look) {
@@ -1088,6 +1088,22 @@ window.Cosmetics = (() => {
         const L = foot - neck, g = { neck, foot, cx: hd[0], waist: Math.round(neck + L * 0.42), knee: Math.round(neck + L * 0.74), ext,
             hands: [HERO.hands[f] || [0, 0], HERO.lhands[f] || [0, 0]] };
         g.mid = Math.round(g.waist + (g.knee - g.waist) * 0.55); g.long = foot - 2;
+        // TORSO MARKAZI: bo'yin va bel orasidagi qatorlarda bosh markaziga eng yaqin uzluksiz bo'lak (tor - qo'lsiz) markazlarining medianasi.
+        // Galstuk, zamok, tugmalar, yubka shu tik chiziq bo'ylab - yon ko'rinishda ham qiyshaymaydi
+        const run = (y, x0) => { const op = (x) => x >= 0 && x < W && p[(y * W + x) * 4 + 3]; let x = Math.round(x0); if (!op(x)) { let k = 1; while (k < 8 && !op(x - k) && !op(x + k)) k++; x = op(x - k) ? x - k : x + k; if (!op(x)) return null; } let a = x, b = x; while (op(a - 1)) a--; while (op(b + 1)) b++; return [a, b]; };
+        const cs = [];
+        for (let y = neck + 1; y < g.waist; y++) { const r = run(y, hd[0]); if (r && r[1] - r[0] <= 15) cs.push((r[0] + r[1]) / 2); }
+        cs.sort((a, b) => a - b);
+        g.tcx = cs.length ? cs[Math.floor(cs.length / 2)] : hd[0];
+        // YON KADR (bosh tor - profil): detallar (galstuk, yoqa, zamok) ko'krakda - torsoning oldingi (o'ng) chetidan 2 px ichkarida
+        g.side = hd[3] <= 16;
+        const fr = {};
+        for (let y = neck; y <= g.waist + 1; y++) { const r = run(y, cs.length ? cs[Math.floor(cs.length / 2)] : hd[0]); fr[y] = r && r[1] - r[0] <= 15 ? r[1] - 2 : null; }
+        const frs = Object.values(fr).filter(v => v !== null).sort((a, b) => a - b), frMed = frs.length ? frs[Math.floor(frs.length / 2)] : g.tcx + 3;
+        g.tc = () => g.side ? frMed : g.tcx;   // tekis tik chiziq (zinapoya bo'lmasin)
+        g.elbow = Math.round(neck + (g.waist - neck) * 0.5);
+        const wr = run(g.waist, g.tcx);
+        g.wHalf = wr && wr[1] - wr[0] <= 15 ? Math.max(3.5, Math.min(6.5, (wr[1] - wr[0]) / 2)) : 5;
         geomCache.set(f, g);
         return g;
     }
@@ -1102,66 +1118,184 @@ window.Cosmetics = (() => {
         sweater: { top: (x, y, g) => (y - g.neck) % 3 === 0 ? 0xffffff : 0x80cbc4, skirt: { hem: 'mid', flare: 2, col: (x) => x % 3 === 0 ? 0xc2185b : 0xec407a }, shoe: 0x5d4037 },
         tutu: { top: 0xce93d8, skirt: { hem: 'mid', flare: 5, col: (x, y) => (x + y) % 5 === 0 ? 0xffffff : y % 2 ? 0xf48fb1 : 0xf8bbd0 }, leg: 0xfce4ec, shoe: 0xec407a },
         gown: { top: (x, y, g) => y === g.waist - 1 ? 0xffca28 : 0x7e57c2, skirt: { hem: 'long', flare: 4, col: (x, y) => (x * 13 + y * 7) % 17 === 0 ? 0xfff59d : 0x673ab7 }, shoe: 0x4527a0 },
-        pinktee: { top: (x, y, g) => (y >= g.neck + 3 && y <= g.neck + 4 && Math.abs(x - g.cx) <= 1 && !(y === g.neck + 4 && Math.abs(x - g.cx) === 1)) ? 0xfafafa : 0xf48fb1, leg: 0x64b5f6, shoe: 0xfafafa },
+        pinktee: { top: (x, y, g) => (y >= g.neck + 3 && y <= g.neck + 4 && Math.abs(x - g.tc(y)) <= 1 && !(y === g.neck + 4 && Math.abs(x - g.tc(y)) === 1)) ? 0xfafafa : 0xf48fb1, leg: 0x64b5f6, shoe: 0xfafafa },
         // ---- O'G'IL BOLALAR UCHUN ----
-        suit: { top: (x, y, g) => { const d = Math.abs(x - g.cx); if (d < 0.6 && y > g.neck + 1) return 0x1e88e5; if (d <= 1.6 && y <= g.neck + 4) return 0xfafafa; return 0x283593; }, leg: 0x283593, shoe: 0x111111 },
-        school: { top: (x, y, g) => (Math.abs(x - g.cx) < 0.6 && y > g.neck + 1) ? 0x0d47a1 : 0xf5f5f5, leg: 0x212121, shoe: 0x111111 },
+        suit: { top: (x, y, g) => { const d = Math.abs(x - g.tc(y)); if (d < 0.6 && y > g.neck + 1) return 0x1e88e5; if (d <= 1.6 && y <= g.neck + 4) return 0xfafafa; return 0x283593; }, leg: 0x283593, shoe: 0x111111 },
+        school: { top: (x, y, g) => (Math.abs(x - g.tc(y)) < 0.6 && y > g.neck + 1) ? 0x0d47a1 : 0xf5f5f5, leg: 0x212121, shoe: 0x111111 },
         tracksuit: { top: (x, y, g) => (x <= g.ext[y][0] + 1 || x >= g.ext[y][1] - 1) ? 0xfafafa : y <= g.neck + 1 ? 0x37474f : 0x212121, leg: (x, y, g) => (x <= g.ext[y][0] + 1 || x >= g.ext[y][1] - 1) ? 0xfafafa : 0x212121, shoe: 0xfafafa },
         plaid: { top: (x, y) => (x % 4 === 0 || y % 4 === 0) ? 0x212121 : (Math.floor(x / 2) + Math.floor(y / 2)) % 2 ? 0xc62828 : 0x8e0000, leg: 0x1565c0, shoe: 0xfafafa },
-        hoodie: { top: (x, y, g) => (y === g.neck + 1 && Math.abs(x - g.cx) === 1) ? 0xfafafa : (y >= g.waist - 3 && Math.abs(x - g.cx) <= 2) ? 0x1565c0 : 0x1e88e5, leg: 0x37474f, shoe: 0xfafafa },
-        football: { top: (x, y, g) => (y <= g.neck + 1 || Math.round(x - g.cx) === 0) ? 0xfafafa : 0xd32f2f, leg: (x, y, g) => y <= g.mid ? 0xfafafa : y >= g.foot - 6 ? 0xd32f2f : null, shoe: 0x212121 },
-        leather: { top: (x, y, g) => Math.round(x - g.cx) === 0 ? 0xbdbdbd : y <= g.neck + 1 ? 0x3e2723 : 0x4e342e, leg: 0x1565c0, shoe: 0x3e2723 },
+        hoodie: { top: (x, y, g) => (y === g.neck + 1 && Math.abs(x - g.tc(y)) === 1) ? 0xfafafa : (y >= g.waist - 3 && Math.abs(x - g.tc(y)) <= 2) ? 0x1565c0 : 0x1e88e5, leg: 0x37474f, shoe: 0xfafafa },
+        football: { top: (x, y, g) => (y <= g.neck + 1 || Math.round(x - g.tc(y)) === 0) ? 0xfafafa : 0xd32f2f, leg: (x, y, g) => y <= g.mid ? 0xfafafa : y >= g.foot - 6 ? 0xd32f2f : null, shoe: 0x212121 },
+        leather: { top: (x, y, g) => Math.round(x - g.tc(y)) === 0 ? 0xbdbdbd : y <= g.neck + 1 ? 0x3e2723 : 0x4e342e, leg: 0x1565c0, shoe: 0x3e2723 },
         camo: { top: (x, y) => CAMO[hsh(x, y) % 4], leg: (x, y, g) => y === g.waist ? 0x3e2723 : CAMO[hsh(x, y + 1) % 4], shoe: 0x212121 },
-        tuxedo: { top: (x, y, g) => { const d = Math.abs(x - g.cx); if (y >= g.neck + 1 && y <= g.neck + 2 && d <= 2) return 0xd32f2f; if (d <= 1) return 0xfafafa; return 0x212121; }, leg: 0x212121, shoe: 0x111111 }
+        tuxedo: { top: (x, y, g) => { const d = Math.abs(x - g.tc(y)); if (y >= g.neck + 1 && y <= g.neck + 2 && d <= 2) return 0xd32f2f; if (d <= 1) return 0xfafafa; return 0x212121; }, leg: 0x212121, shoe: 0x111111 }
     };
+    // ===== KIYIM KONSTRUKTORI =====
+    // Kod: "y" + 10 ta 36-lik raqam [ustki rang, naqsh, naqsh rangi, pasti, pastki rang, oyoq kiyim rangi, yoqa, yeng, kamar, oyoq kiyim turi]
+    // (eski "x" + 7 ta 16-lik raqam ham o'qiladi). Server: cosmetics.ts validCustomOutfit
+    const OM_PAL = [0xfafafa, 0x212121, 0x9e9e9e, 0xe53935, 0xf06292, 0xff9800, 0xfdd835, 0x43a047, 0x80cbc4, 0x1e88e5, 0x283593, 0x8e24aa, 0x6d4c41, 0xd7ccc8, 0x64b5f6, 0x556b2f,
+        0xfce4ec, 0xce93d8, 0xb71c1c, 0xffd54f, 0x00897b, 0x1b5e20, 0xffccbc, 0x4fc3f7, 0xff7043, 0x3e2723, 0xc0ca33, 0x37474f, 0x880e4f, 0xfff8e1, 0x5c6bc0, 0xa1887f];
+    const OM = { pal: OM_PAL, patterns: 10, bottoms: 7, necks: 6, sleeves: 2, belts: 4, shoes: 2, def: 'y9100a110003' };
+    const customRe = /^(x[0-9a-f]{7}|y[0-9a-z]{10,11})$/, customCache = new Map();
+    let myCustom = '';
+    function omParse(code) {
+        if (!customRe.test(code || '')) return null;
+        if (code[0] === 'x') {   // eski format -> yangi
+            const [t, p, a, b, c, s, n] = code.slice(1).split('').map(h => parseInt(h, 16));
+            if (p > 4 || b > 3 || n > 3) return null;
+            return [t, [0, 1, 3, 4, 9][p], a, [0, 1, 3, 4][b], c, s, n, 0, 0, 0, a];
+        }
+        const d = code.slice(1).split('').map(h => parseInt(h, 36));
+        if (d.length === 10) d.push(d[2]);   // yoqa buyumi rangi yo'q - naqsh rangi
+        const max = [32, OM.patterns, 32, OM.bottoms, 32, 32, OM.necks, OM.sleeves, OM.belts, OM.shoes, 32];
+        return d.every((v, i) => v < max[i]) ? d : null;
+    }
+    const omCode = (d) => 'y' + d.map(v => v.toString(36)).join('');
+    function customClothes(code) {
+        if (customCache.has(code)) return customCache.get(code);
+        const d = omParse(code);
+        if (!d) { customCache.set(code, null); return null; }
+        const [ti, pi, ai, bi, ci, si, ni, sli, bti, boi, nci] = d;
+        const T = OM_PAL[ti], A = OM_PAL[ai], Bc = OM_PAL[ci], Sc = OM_PAL[si], N = OM_PAL[nci];
+        const dark = (c) => mix(c, 0x000000, 0.4), acc = N === T ? dark(N) : N;
+        const edge = mix(T, 0x000000, 0.55);   // galstuk / kapalak atrofidagi kontur - ko'ylakdan ajralib tursin
+        // NAQSHLAR - yirik (2 px), o'yin o'lchamida aniq ko'rinsin; torso markazi va bo'yinga nisbatan (yurganda "suzmaydi")
+        const md = (v, n) => ((v % n) + n) % n;
+        const pat = (x, y, g, base) => {
+            const tx = Math.round(g.tcx), ry = y - g.neck;
+            switch (pi) {
+                case 1: return md(ry, 4) >= 2 ? A : base;                                            // yo'l-yo'l (2 px)
+                case 2: return md(x - tx, 4) < 2 ? A : base;                                         // tik chiziqlar (2 px)
+                case 3: return (Math.floor((x - tx) / 2) + Math.floor(ry / 2)) % 2 ? A : base;      // katak (shaxmat, 2 px)
+                case 4: { const row = Math.floor(ry / 4); return md(ry, 4) < 2 && md(x - tx + (row % 2) * 2, 4) < 2 && ry > 0 ? A : base; }   // no'xat (2x2)
+                case 5: return md(x + y, 5) < 2 ? A : base;                                          // qiya chiziqlar
+                case 6: return x < g.tcx ? A : base;                                                  // ikki rang
+                case 7: { const k = Math.max(0, Math.min(1, ry / Math.max(1, g.waist - g.neck))); return mix(base, A, Math.round(k * 2) / 2); }   // o'tish (3 pog'ona)
+                case 8: { const mx = md(x - tx, 7), my = md(ry, 7); return (mx === 3 && my >= 2 && my <= 4) || (my === 3 && mx >= 2 && mx <= 4) ? A : base; }   // yulduzchalar
+                case 9: return [base, A, mix(base, 0x000000, 0.35), mix(A, 0xffffff, 0.2)][hsh(x, y) % 4];   // kamuflyaj
+                default: return base;
+            }
+        };
+        const BELT = [0, 0x111111, 0x5d4037, 0x111111][bti];
+        const top = (x, y, g) => {
+            const fx = g.tc(y), d0 = Math.abs(x - fx);
+            const ry = y - g.neck, sd = g.side;
+            if (bti && (y === g.waist - 1 || y === g.waist - 2)) return bti === 3 && d0 <= 1.5 ? 0xffd54f : bti === 2 && d0 <= 1.5 && y === g.waist - 1 ? 0xbdbdbd : BELT;   // kamar (2 px; oltin / kumush to'qa)
+            if (bi === 6 && ry >= 2) {   // kombinezon: ikki bog'ich va ko'krakcha
+                const strap = sd ? Math.abs(x - (fx - 3)) < 1 : Math.abs(d0 - 3) < 1;
+                if (strap || (y >= g.waist - 4 && (sd ? x >= fx - 4 : d0 <= 3.5))) return Bc;
+            }
+            if (ni === 1 && ry >= 1 && ry <= 3) { const lo = sd ? 0 : [0, 1.5, 0.5, 0][ry], hi = sd ? 2.5 : [0, 4, 3, 1.5][ry]; if (d0 >= lo && d0 <= hi && !(sd && ry === 3)) return 0xfafafa; }   // oq V-yoqa
+            if (ni === 2 || ni === 3) {   // galstuk / kapalak: oq yoqa uchlari bilan
+                if (!sd && ry === 1 && d0 >= 2.5 && d0 <= 4.5) return 0xfafafa;
+                if (sd && ry === 1 && x >= fx - 3 && x <= fx - 1) return 0xfafafa;
+            }
+            if (ni === 2) {   // GALSTUK: 3 px tugun, 3 px tanasi (o'rtasi yorug'), pastida uchli; atrofida to'q kontur
+                const end = g.waist - 2, w = sd ? 1 : (ry <= 2 ? 1.5 : y >= end - 1 ? (y === end ? 0.5 : 1) : 1.5);
+                if (ry >= 1 && y <= end) {
+                    if (d0 <= w) return ry <= 2 ? mix(acc, 0x000000, 0.25) : d0 < 0.6 ? mix(acc, 0xffffff, 0.18) : acc;
+                    if (d0 <= w + 1 && ry >= 3) return edge;
+                }
+            }
+            if (ni === 3 && ry >= 2 && ry <= 4) {   // KAPALAK: ikki uchburchak qanot (9 px), o'rtada to'q tugun; atrofida kontur
+                if (sd) { if (x >= fx - 2 && x <= fx + 1) return x >= fx - 0.5 && x <= fx + 0.5 ? mix(acc, 0x000000, 0.35) : acc; }
+                else {
+                    const wing = 4.5, inner = ry === 3 ? 0 : 1.5;
+                    if (d0 < 1) return mix(acc, 0x000000, 0.35);
+                    if (d0 >= inner && d0 <= wing) return acc;
+                    if (d0 <= wing + 1) return edge;
+                }
+            }
+            if (ni === 4 && (ry <= 2 || (ry <= 7 && (sd ? Math.abs(x - fx) < 1.5 : (x >= g.tcx - 3 && x <= g.tcx - 1))))) return ry === 2 || ry > 2 ? dark(N) : N;   // sharf (bo'yinda + osilgan uchi)
+            if (ni === 5 && ry === 3 && d0 <= (sd ? 2 : 4)) return md(x, 2) ? 0xffd54f : 0xfff59d;   // oltin marjon
+            return pat(x, y, g, T);
+        };
+        const shoeH = boi ? 7 : 4;
+        let def;
+        if (bi === 0 || bi === 6) def = { top, leg: Bc, shoe: Sc };                                                        // shim / kombinezon
+        else if (bi === 1) def = { top, leg: (x, y, g) => y <= g.mid ? Bc : null, shoe: Sc };                            // shorti
+        else def = { top, skirt: { hem: bi === 2 ? 'mini' : bi === 3 ? 'knee' : bi === 4 ? 'long' : 'mid', flare: bi === 5 ? 7 : bi === 4 ? 5 : 3, puffy: bi === 5,
+            col: (x, y, g, hem) => bi === 5 ? ((y - g.waist) % 2 ? mix(Bc, 0xffffff, 0.35) : Bc) : Bc }, shoe: Sc };
+        def.short = sli === 1; def.shoeH = shoeH; def.boots = !!boi; def.sneaker = !boi;
+        customCache.set(code, def);
+        return def;
+    }
+    // kiyim id -> chizish qoidasi: katalogdagi kiyim, o'yinchi kodi yoki "custom" (o'zimning kiyimim)
+    function clothesOf(id) {
+        if (!id) return null;
+        if (id === 'custom') return clothesOf(myCustom || OM.def);
+        if (CLOTHES[id]) return CLOTHES[id];
+        return customRe.test(id) ? customClothes(id) : null;
+    }
+    const bodyKey = (id) => id === 'custom' ? (myCustom || OM.def) : id;
     // kiyim rangini tananing kulrang soyasi bilan bo'yaydi (konturlar qora qoladi)
     function clothPx(p, i, col, t) {
         const cr = (col >> 16) & 255, cg = (col >> 8) & 255, cb = col & 255, k = Math.min(1, t), hi = Math.max(0, Math.min(1, (t - 1) * 2.2)) * 0.4;
         p[i] = Math.round(cr * k + (255 - cr * k) * hi); p[i + 1] = Math.round(cg * k + (255 - cg * k) * hi); p[i + 2] = Math.round(cb * k + (255 - cb * k) * hi); p[i + 3] = 254;
     }
     function applyClothes(p, f, id) {
-        const C = CLOTHES[id]; if (!C) return;
+        const C = clothesOf(id); if (!C) return;
         const W = HERO.w, g = heroGeom(p, f), [h1, h2] = g.hands;
         const near = (x, y, h, r) => (x - h[0]) * (x - h[0]) + (y - h[1]) * (y - h[1]) <= r * r;
         const isHand = (x, y) => near(x, y, h1, 2.6) || near(x, y, h2, 2.6);
         const isArm = (x, y) => [h1, h2].some(h => Math.abs(x - h[0]) <= 3 && y >= h[1] - 12 && y <= h[1] + 2);
         const val = (c, x, y, ...a) => typeof c === 'function' ? c(x, y, g, ...a) : c;
         const grey = (i) => p[i] / HERO.mid;
-        // yubka chegarasi
+        // YUBKA: torso markazi atrofida SIMMETRIK qo'ng'iroq (yoki balerina - tez kengayadi); oyoqlarni yopadigan kenglik (qo'llar hisobga olinmaydi)
         let sk = null;
         if (C.skirt) {
-            const hemY = C.skirt.hem === 'long' ? g.long : C.skirt.hem === 'mid' ? g.mid : g.knee;
+            const S = C.skirt, hemY = S.hem === 'long' ? g.long : S.hem === 'mini' ? Math.round(g.waist + (g.knee - g.waist) * 0.45) : S.hem === 'mid' ? g.mid : g.knee;
+            const c0 = g.tcx, w0 = g.wHalf;
             let hl = 1e9, hr = -1;
-            for (let x = 0; x < W; x++) { const i = (hemY * W + x) * 4; if (p[i + 3] && !isHand(x, hemY)) { hl = Math.min(hl, x); hr = Math.max(hr, x); } }
-            if (hr < 0) { hl = g.cx - 5; hr = g.cx + 5; }
-            const cxr = Math.round(g.cx); let wl = cxr, wr = cxr;
-            const op = (x, y) => x >= 0 && x < W && p[(y * W + x) * 4 + 3];
-            if (op(cxr, g.waist)) { while (op(wl - 1, g.waist) && cxr - wl < 6) wl--; while (op(wr + 1, g.waist) && wr - cxr < 6) wr++; } else { wl = cxr - 4; wr = cxr + 4; }
-            sk = { hemY, rows: {} };
+            for (let x = Math.max(0, Math.round(c0 - 14)); x <= Math.min(W - 1, Math.round(c0 + 14)); x++) { const i = (hemY * W + x) * 4; if (p[i + 3] && !isHand(x, hemY) && !isArm(x, hemY)) { hl = Math.min(hl, x); hr = Math.max(hr, x); } }
+            const need = hr < 0 ? w0 + S.flare : Math.max(c0 - hl + 1, hr - c0 + 1);
+            const H = Math.max(w0 + 1, Math.min(w0 + S.flare + 3, Math.max(w0 + S.flare, need)));
+            sk = { hemY, c0, rows: {} };
             for (let y = g.waist; y <= hemY; y++) {
-                const t = (y - g.waist) / Math.max(1, hemY - g.waist), c = (wl + wr) / 2 * (1 - t) + (hl + hr) / 2 * t;
-                const half = Math.max((wr - wl) / 2, (wr - wl) / 2 * (1 - t) + ((hr - hl) / 2 + C.skirt.flare) * t);
-                sk.rows[y] = [Math.round(c - half), Math.round(c + half)];
+                const t = (y - g.waist) / Math.max(1, hemY - g.waist), k = S.puffy ? Math.min(1, t * 1.8) : Math.pow(t, 0.85);
+                const half = w0 + (H - w0) * k;
+                let L = Math.round(c0 - half), R = Math.round(c0 + half);
+                // yubka qatorida tananing (qo'llardan tashqari) HAMMA joyi yopiladi - yon ko'rinishda orqa tomon (dumba) ham
+                for (let x = Math.max(0, Math.round(c0 - 14)); x <= Math.min(W - 1, Math.round(c0 + 14)); x++) { const i = (y * W + x) * 4; if (p[i + 3] && !isHand(x, y) && !isArm(x, y)) { if (x < L) L = x; if (x > R) R = x; } }
+                sk.rows[y] = [L, R];
             }
+            // kalta yubka (mini, balerina, tizzagacha bo'lmagan): ostida to'q shortik - oyoqlar ochilganda ham hech narsa ko'rinmaydi
+            sk.under = hemY < g.knee ? Math.min(g.knee - 1, hemY + 3) : 0;
         }
+        const shoeH = C.shoeH || 4;
         for (let y = g.neck; y <= g.foot; y++) for (let x = 0; x < W; x++) {
             const i = (y * W + x) * 4, a = p[i + 3];
             const r = sk && sk.rows[y];
-            if (r && x >= r[0] && x <= r[1]) {   // YUBKA: siluetdan tashqarisi ham to'ldiriladi (chetlari - kontur)
-                if (isHand(x, y) && a) continue;
-                const edge = x === r[0] || x === r[1];
+            if (r && x >= r[0] && x <= r[1]) {
+                if (a && isHand(x, y)) continue;
+                if (a && isArm(x, y) && Math.abs(x - sk.c0) > g.wHalf - 1) { const c = val(C.top, x, y); if (c != null) clothPx(p, i, c, grey(i)); continue; }   // qo'l yubka OLDIDA (yeng)
+                const edge = x === r[0] || x === r[1], hem = y === sk.hemY;
+                const pleat = ((x - Math.round(sk.c0)) % 3 + 3) % 3 === 0 && y > g.waist + 1;
                 const col = val(C.skirt.col, x, y, sk.hemY);
-                if (!a) clothPx(p, i, col, edge ? 0.12 : 0.9); else clothPx(p, i, col, edge ? Math.min(grey(i), 0.5) : Math.max(grey(i), 0.55));
+                const tv = edge ? 0.14 : hem ? 0.62 : pleat ? 0.78 : (a ? Math.max(0.8, Math.min(1.05, grey(i))) : 0.92);
+                clothPx(p, i, col, tv);
                 continue;
             }
             if (!a || a === 254 || isHand(x, y)) continue;
             let c;
-            if (y < g.waist || isArm(x, y)) c = val(C.top, x, y);
-            else if (y >= g.foot - 1) c = C.shoe !== undefined ? val(C.shoe, x, y) : null;
+            if (y < g.waist || isArm(x, y)) {
+                if (C.short && y > g.elbow && (Math.abs(x - g.tcx) > g.wHalf + 0.5 || isArm(x, y))) continue;   // qisqa yeng: tirsakdan pasti - tana rangida (ikkala qo'lda bir xil)
+                c = val(C.top, x, y);
+            }
+            else if (sk && y > sk.hemY && y <= sk.under && !isArm(x, y)) c = mix(val(C.skirt.col, x, sk.hemY, sk.hemY), 0x000000, 0.45);   // yubka ostidagi shortik
+            else if (y > g.foot - shoeH && C.shoe !== undefined && !isArm(x, y)) {
+                // OYOQ KIYIM: krossovka - oq tag, tepasida bog'ich chizig'i; etik - to'q tag, tepasida qaytarma. Kontur qora qoladi, ichi yorug'
+                const sc = val(C.shoe, x, y), gv = grey(i), r0 = y - (g.foot - shoeH + 1);
+                let sh = sc;
+                if (y === g.foot) sh = C.boots ? 0x3e2723 : !C.sneaker ? mix(sc, 0x000000, 0.45) : (sc === 0xfafafa || sc === 0xfff8e1 ? 0x9e9e9e : 0xfafafa);   // oq tag - faqat konstruktor krossovkasida
+                else if (r0 === 0) sh = C.boots ? mix(sc, 0xffffff, 0.35) : mix(sc, 0x000000, 0.3);
+                if (sh !== null && sh !== undefined) clothPx(p, i, sh, gv < 0.32 ? gv : Math.max(0.85, Math.min(1.05, gv)));
+                continue;
+            }
             else c = C.leg !== undefined ? val(C.leg, x, y) : null;
             if (c !== null && c !== undefined) clothPx(p, i, c, grey(i));
         }
-        if (sk) { const y = sk.hemY + 1, r = sk.rows[sk.hemY]; if (r && y < HERO.h) for (let x = r[0]; x <= r[1]; x++) { const i = (y * W + x) * 4; if (x >= 0 && x < W && !p[i + 3]) clothPx(p, i, 0x000000, 0); } }   // yubka etagi ostida kontur
+        if (sk) { const y = sk.hemY + 1, r = sk.rows[sk.hemY]; if (r && y < HERO.h) for (let x = r[0]; x <= r[1]; x++) { const i = (y * W + x) * 4; if (x >= 0 && x < W && !p[i + 3]) clothPx(p, i, 0x000000, 0); } }   // etak ostida kontur
     }
     function loadHero() {
         if (heroImg || typeof Image === 'undefined') return;
@@ -1186,14 +1320,15 @@ window.Cosmetics = (() => {
     }
     // kadr kanvasi qahramon rangida: kulrang yorqinligi - rang ulushi (yorug' joylar oqqa yaqin, kontur - qora qoladi)
     function heroCanvas(packed, f, body) {
-        const key = packed + ':' + f + (body && CLOTHES[body] ? ':' + body : '');
+        body = body ? bodyKey(body) : body;
+        const key = packed + ':' + f + (body && clothesOf(body) ? ':' + body : '');
         if (heroCache.has(key)) return heroCache.get(key);
         const col = toInt(packed) % 0x1000000, cr = (col >> 16) & 255, cg = (col >> 8) & 255, cb = col & 255;
         const cv = document.createElement('canvas'); cv.width = HERO.w; cv.height = HERO.h;
         const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
         c.drawImage(heroImg, f * HERO.w, 0, HERO.w, HERO.h, 0, 0, HERO.w, HERO.h);
         const id = c.getImageData(0, 0, HERO.w, HERO.h), p = id.data;
-        if (body && CLOTHES[body]) { heroGeom(p, f); applyClothes(p, f, body); }   // KIYIM (bo'yalgan piksellar - 254, tana rangi ularga tegmaydi)
+        if (body && clothesOf(body)) { heroGeom(p, f); applyClothes(p, f, body); }   // KIYIM (bo'yalgan piksellar - 254, tana rangi ularga tegmaydi)
         // ikkinchi rang (kombinatsiyali skin) - VISOR (ko'zoynak tasmasi) shu rangda, qorong'i joyi to'qroq
         const acc = Math.floor(toInt(packed) / 0x1000000), hv = acc && HERO.heads && HERO.heads[f];
         if (hv) {
@@ -1282,7 +1417,7 @@ window.Cosmetics = (() => {
     function drawIcon(canvas, slot, id) {
         if (slot === 'body') {   // KIYIM: kulrang qahramon shu kiyimda (turish kadri, tananing o'rtasi)
             const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (!heroOk || !CLOTHES[id]) return;
+            if (!heroOk || !clothesOf(id)) return;
             const g = heroGeom(heroCanvas(0xbdbdbd, 0).getContext('2d').getImageData(0, 0, HERO.w, HERO.h).data, 0), y0 = Math.max(0, g.neck - 6), hh = HERO.h - y0;
             const s = Math.min((canvas.height - 2) / hh, (canvas.width - 2) / 34), w = 34 * s;
             ctx.imageSmoothingEnabled = false;
@@ -1298,5 +1433,5 @@ window.Cosmetics = (() => {
         paint(ctx, a.grid, Math.floor((canvas.width - W * s) / 2), Math.floor((canvas.height - H * s) / 2), s);
     }
 
-    return { SLOTS, POSE, bodyGrid, defaultWeapon, art, has, parseLook, drawHero, drawIcon, HERO, heroRest, heroHeadPlace, heroCanvas, heroFistCanvas, heroReady: () => heroOk };
+    return { OM, omParse, omCode, setCustomOutfit: (code) => { myCustom = customRe.test(code || '') ? code : ''; }, getCustomOutfit: () => myCustom, SLOTS, POSE, bodyGrid, defaultWeapon, art, has, parseLook, drawHero, drawIcon, HERO, heroRest, heroHeadPlace, heroCanvas, heroFistCanvas, heroReady: () => heroOk };
 })();

@@ -6,7 +6,7 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
-import { bigNearestEnemy, bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
+import { bigNearestEnemy, bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigQuestCancel, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
 import { KNIGHT_FLY, hasPerk, SKILLS, TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
 
@@ -5579,7 +5579,7 @@ if (p) {
             saveCp: (p, cp) => { if (!this.bigOwner(roomId, p)) return; p.bigCp = cp; if (p.userId) db.setBigCp(p.userId, cp).catch(err => console.error('setBigCp xatosi:', err)); },
             saveQuest: (p, q, st) => { if (p.userId) db.setBigQuest(p.userId, q, st).catch(err => console.error('setBigQuest xatosi:', err)); },
             saveRQ: (p, q) => { if (p.userId) db.setBigRQ(p.userId, q).catch(err => console.error('setBigRQ xatosi:', err)); },
-            questDone: (coins) => db.bumpStat({ quests: 1, questCoins: coins }),
+            questDone: (coins, p) => { db.bumpStat({ quests: 1, questCoins: coins }); if (p) this.roomManager.achProgress(roomId, p.id, { quests: 1 }); },
             takeItem: (p, item, cb) => { if (!p.userId) { cb(-1); return; } db.farmTakeOne(p.userId, item).then(cb).catch((err) => { console.error('farmTakeOne xatosi:', err); cb(-1); }); },
             mageHome: (p) => { if (p.userId) db.mageMoveIn(p.userId).catch(err => console.error('mageMoveIn xatosi:', err)); },
             curse: (p) => this.curse(p, 'acid'),
@@ -5627,6 +5627,7 @@ if (p) {
         if (act === 'quest') bigQuestTalk(S, p, arg, ctx);
         else if (act === 'rq') bigRqTalk(S, p, arg, ctx);
         else if (act === 'rqsync') bigRqSync(S, p, ctx);
+        else if (act === 'qcancel') bigQuestCancel(S, p, item, ctx);   // o'yinchi questni bekor qildi
         else if (act === 'fishcast') this.bigFishCast(room, S, p, arg, ctx).catch(err => console.error('bigFishCast xatosi:', err));
         else if (act === 'fishreel') this.bigFishReel(room, S, p, item, ctx).catch(err => console.error('bigFishReel xatosi:', err));
         else if (act === 'cage') bigCage(S, p, ctx);

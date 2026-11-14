@@ -29,6 +29,8 @@ export interface PlayerState {
     mutedUntil?: number;          // admin chat taqiqi (ms; -1 - doimiy)
     xpBoost?: { [character: string]: number };   // XP kuchaytirish darajalari (hisobdan)
     supporter?: boolean;          // "Supporter Pack" olgan - lobbida belgi
+    title?: string;               // yutuqdan olingan unvon (yutuq id) - lobbida nik ostida
+    customOutfit?: string;        // konstruktorda yig'ilgan kiyim kodi (look satriga "custom" o'rniga qo'yiladi)
     isAdmin?: boolean;            // admin panel orqali kirgan - lobbida va o'yinda "ADMIN" belgisi
     x: number;
     y: number;

@@ -67,6 +67,7 @@ export const BODY_ITEMS: CosmeticItem[] = [
     { id: 'suit', name: 'Business Suit', price: 1800 },
     { id: 'tutu', name: 'Ballerina Tutu', price: 1900 },
     { id: 'camo', name: 'Camo Suit', price: 1900 },
+    { id: 'custom', name: 'Outfit Maker', price: 2000 },   // KIYIM KONSTRUKTORI: bir marta ochiladi, o'yinchi o'z kiyimini yig'adi (hisobda customOutfit kodi)
     { id: 'gown', name: 'Princess Gown', price: 3000 },
     { id: 'tuxedo', name: 'Tuxedo', price: 3000 }
 ];
@@ -171,8 +172,23 @@ export function cosmeticKey(characterType: string, slot: string, itemId: string)
     return (slot === 'head' || slot === 'face' || slot === 'body') ? slot + ':' + itemId : characterType + '.' + slot + ':' + itemId;
 }
 
-// Personajning kiyilgan detallari -> "cowboy|hockey|bat|..." (LOOK_SLOTS tartibida, bo'shi - "")
-export function lookString(equipped: { [slot: string]: string } | undefined, characterType: string): string {
+// O'YINCHI YIGG'AN KIYIM KODI: "x" + 7 ta 16-lik raqam - ustki rang, naqsh (0-4), naqsh rangi, pasti (0-3: shim, shorti, yubka, uzun ko'ylak),
+// pastki rang, oyoq kiyim rangi, yoqa (0-3: yo'q, yoqa, galstuk, kapalak). Ranglar - 16 ta palitradan (client/cosmetics.js OM_PAL)
+// Yangi format: "y" + 10 ta 36-lik raqam - [ustki rang (32), naqsh (10), naqsh rangi, pasti (7), pastki rang, oyoq kiyim rangi, yoqa (6), yeng (2), kamar (4), oyoq kiyim turi (2)]
+export function validCustomOutfit(code: unknown): code is string {
+    if (typeof code !== 'string') return false;
+    if (/^x[0-9a-f]{7}$/.test(code)) { const d = code.slice(1).split('').map(h => parseInt(h, 16)); return d[1] <= 4 && d[3] <= 3 && d[6] <= 3; }
+    if (!/^y[0-9a-z]{10,11}$/.test(code)) return false;
+    const d = code.slice(1).split('').map(h => parseInt(h, 36)), max = [32, 10, 32, 7, 32, 32, 6, 2, 4, 2, 32];   // 11-belgi - galstuk / sharf rangi
+    return d.every((v, i) => v < max[i]);
+}
+// Personajning kiyilgan detallari -> "cowboy|hockey|bat|..." (LOOK_SLOTS tartibida, bo'shi - "").
+// Kiyim "custom" (konstruktor) - o'yinchining o'z kodi bilan almashtiriladi (boshqalar ham shu kiyimni ko'radi)
+export function lookString(equipped: { [slot: string]: string } | undefined, characterType: string, custom: string = ''): string {
     const e = SKINS_OFF ? {} as { [slot: string]: string } : (equipped || {});   // skinlar o'chiq - detallarsiz
-    return LOOK_SLOTS.map(slot => (e[slot] && findCosmetic(characterType, slot, e[slot])) ? e[slot] : '').join('|');
+    return LOOK_SLOTS.map(slot => {
+        if (!e[slot] || !findCosmetic(characterType, slot, e[slot])) return '';
+        if (slot === 'body' && e[slot] === 'custom') return validCustomOutfit(custom) ? custom : '';
+        return e[slot];
+    }).join('|');
 }

@@ -215,6 +215,8 @@ window.BigMap = (function () {
         buildMapHud(scene);
         // TOPSHIRIQLAR: chapda kuzatuv paneli, NPC ustida "!" / "?"; qafaslar
         O.qTxt = scene.add.text(16, 150, '', { fontFamily: FONT, fontSize: '7px', color: '#fff59d', stroke: '#000', strokeThickness: 3, lineSpacing: 4 }).setScrollFactor(0).setDepth(1002).setVisible(false);
+        O.qTxt.uiButton = true;   // bosilganda qahramon hujum qilmaydi (game.js pointerdown)
+        O.qTxt.setInteractive({ useHandCursor: true }).on('pointerdown', () => openQuestPanel());
         O.propGlows = []; O.platImg = new Map(); O.crush = new Map();
         O.qMarkG = pixelize(scene.add.graphics()).setDepth(3.6); O.qMarks = new Map(); O.cageImgs = []; O.held = null; O.talkZone = null;
         O.buffHud = ['battery', 'armor', 'strength', 'feather', 'phoenix'].map((k, i) => ({ k,
@@ -472,7 +474,7 @@ window.BigMap = (function () {
     // tirilish / teleport: ildiz, siyoh, tortish, sovuq, kuyish rangi - qolib ketmasin
     function clearStatus() { if (!O) return; O.rootUntil = 0; O.blindUntil = 0; O.pull = null; O.chillUntil = 0; O.burnUntil = 0; }
     function destroy() {
-        closePortalMenu(); closeMap();
+        closePortalMenu(); closeQuestPanel(); closeMap();
         if (O && O.fruits) O.fruits.forEach((o) => { o.bush.destroy(); o.berries.forEach(b => { if (b !== o.bush) b.destroy(); }); });
         if (O && X) O.handlers.forEach(([ev, fn]) => X.socket.off(ev, fn));
         if (O && X && O.rodResult) X.socket.off('shopResult', O.rodResult);
@@ -2027,6 +2029,44 @@ window.BigMap = (function () {
         if (!hero || hero.isDead || !W.portals) return null;
         return W.portals.find(q => Math.abs(hero.x - q.x) < 100 && Math.abs(hero.y + 24 - q.y) < 100) || null;
     }
+    // ===== QUESTLAR PANELI: qabul qilingan questlar va "Bekor qilish" (tasdiq bilan) =====
+    function activeQuests() {
+        const qs = (O.myBuffs && O.myBuffs.q) || {}, out = [];
+        ['tooth', 'kids'].forEach((q) => { const st = qs[q] || 0; if (st === 1 || st === 2) out.push({ key: q, title: t('bq_title_' + q), goal: t('bq_track_' + q + '_' + st) }); });
+        if (O.rq) out.push({ key: 'rq', title: t('rq_name') + ': ' + t('rq_title'), goal: rqTrack(O.rq).replace(/^[•✔] /, '') });
+        return out;
+    }
+    function closeQuestPanel() { const el = document.getElementById('bm-quests'); if (el && el.parentNode) el.parentNode.remove(); }
+    function openQuestPanel() {
+        const host = document.getElementById('game-container');
+        if (!host) return;
+        closeQuestPanel(); closePortalMenu(); closeShop();
+        const list = activeQuests();
+        const el = document.createElement('div');
+        el.id = 'shop-panel'; el.classList.add('bm-shop-panel');
+        const inner = document.createElement('div'); inner.id = 'bm-quests';
+        const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+        const cards = list.length ? list.map(q => `<div class="shop-card shop-tool">
+                <div class="shop-name">${esc(q.title)}</div>
+                <div class="shop-desc">${esc(q.goal)}</div>
+                <button class="shop-buy" data-q="${q.key}" style="background:#c62828;color:#fff">${t('q_cancel_btn')}</button></div>`).join('') : `<div class="shop-sec">${t('q_none')}</div>`;
+        el.innerHTML = `<div class="shop-box"><div class="shop-title">${t('bq_quests')}</div>
+            <div class="shop-sec">${t('q_panel_sub')}</div><div class="shop-cards">${cards}</div>
+            <button class="shop-close">${t('big_portal_close')}</button></div>`;
+        el.appendChild(inner);
+        el.onpointerdown = (e) => e.stopPropagation();
+        el.querySelector('.shop-close').onclick = () => el.remove();
+        el.querySelectorAll('.shop-buy[data-q]').forEach((b) => {
+            b.onclick = () => {
+                const q = list.find(x => x.key === b.dataset.q);
+                const ask = t('q_cancel_confirm').replace('{q}', q ? q.title : '');
+                const go = () => { X.socket.emit('bigAct', { roomId: X.roomId(), act: 'qcancel', arg: 0, item: b.dataset.q }); el.remove(); };
+                if (typeof pxConfirm === 'function') pxConfirm(ask, go, () => {}); else if (window.confirm(ask)) go();
+            };
+        });
+        host.appendChild(el);
+        X.sfx('pop', 0.5);
+    }
     const portalMenuOpen = () => !!document.getElementById('bm-portal');
     function closePortalMenu() { const el = document.getElementById('bm-portal'); if (el && el.parentNode) el.parentNode.remove(); }
     function openPortalMenu(here) {
@@ -2499,6 +2539,7 @@ window.BigMap = (function () {
     function onRq(scene, d) {
         O.rq = d.q || null;
         rqRefresh(scene);
+        if (d.ev === 'cancel') { if (O.wp && O.wp.label === t('rq_title')) { O.wp = null; saveWp(); } showToast(t('q_cancelled')); return; }
         const talk = (lines) => { if (X.dialog) X.dialog(lines.map(text => ({ who: 'elf', text })), null, { elfName: t('rq_name'), elfFace: 'px_elf_face' }); };
         if (d.ev === 'accept') { talk([line('rq_intro_' + d.q.loc), rqGoal(d.q) + ' ' + t('rq_reward').replace('{c}', d.q.coins) + (d.q.t === 'fish' ? ' ' + t('rq_need_rod') : '')]); showToast(t('rq_toast_accept')); rqSetWp(d.q); }
         else if (d.ev === 'wait') { const q = d.q; talk([q.got >= q.n ? t('rq_other').replace('{l}', t('big_loc_' + q.loc)) : line('rq_wait') + ' ' + rqGoal(q) + ' ' + q.got + '/' + q.n + (d.skip ? ' ' + t('rq_skip_hint') : '')]); }
@@ -2530,6 +2571,7 @@ window.BigMap = (function () {
         const c = (W.cages || [])[0]; return c && { x: c.x, y: c.y };
     }
     function onQuest(scene, d) {
+        if (d.ev === 'cancel') { if (O.wp && O.wp.label === t('bq_title_' + d.q)) { O.wp = null; saveWp(); } showToast(t('q_cancelled')); return; }
         const lines = questLines(d.q, d.ev), npcFace = d.q === 'tooth' ? 'questelf' : 'motherelf';
         if (X.dialog) X.dialog(lines, null, { elfName: t('bq_name_' + npcFace), elfFace: 'px_elf_face' });
         if (d.ev === 'accept' || d.ev === 'have' || d.ev === 'got' || d.ev === 'found') {
@@ -2594,7 +2636,7 @@ window.BigMap = (function () {
         const qs = (O.myBuffs && O.myBuffs.q) || {}, lines = [];
         ['tooth', 'kids'].forEach((q) => { const st = qs[q] || 0; if (st === 1 || st === 2) lines.push((st === 2 ? '✔ ' : '• ') + t('bq_track_' + q + '_' + st)); });
         if (O.rq) lines.push(rqTrack(O.rq));
-        O.qTxt.setText(lines.length ? t('bq_quests') + '\n' + lines.join('\n') : '').setVisible(lines.length > 0);
+        O.qTxt.setText(lines.length ? t('bq_quests_btn') + '\n' + lines.join('\n') : '').setVisible(lines.length > 0);
         const g = O.qMarkG; g.clear();
         W.npcs.forEach((n) => {
             if ((!n.q && !n.rq) || Math.abs(n.x - (scene.cameras.main.scrollX + 400)) > 700 || Math.abs(n.y - (scene.cameras.main.scrollY + 300)) > 500) return;

@@ -121,16 +121,73 @@
         cosItems(cat).forEach((it) => {
             const cv = document.createElement('canvas'); cv.width = 44; cv.height = 36; cv.className = 'cos-icon';
             Cosmetics.drawIcon(cv, cat, it.id);
-            grid.appendChild(card({
+            const isMaker = cat === 'body' && it.id === 'custom', mine = owned.includes(cosKey(type, cat, it.id));
+            const cEl = card({
                 icon: cv, name: cosName(cat, it), equipped: eqId === it.id, canRemove: true, owned: owned.includes(cosKey(type, cat, it.id)), price: it.price,
                 locked: it.secret && !owned.includes(cosKey(type, cat, it.id)) ? t('cos_secret_lock') : '',   // o'yinda topiladi (sotilmaydi)
                 trying: tryOn && tryOn.cat === cat && tryOn.id === it.id, tryKey: { cat, id: it.id },
                 equip: () => equipCosmetic(type, cat, it.id), remove: () => equipCosmetic(type, cat, null), buy: () => buyCosmetic(type, cat, it)
-            }));
+            });
+            if (isMaker && mine) {   // KIYIM KONSTRUKTORI: o'z kiyimini yig'ish
+                const eb = document.createElement('button'); eb.className = 'skin-equip-btn om-edit'; eb.innerHTML = '<i class="fa-solid fa-palette"></i> ' + t('om_edit');
+                eb.onclick = (e) => { e.stopPropagation(); openMaker(); };
+                cEl.appendChild(eb);
+            }
+            grid.appendChild(cEl);
         });
     }
+    // ===== KIYIM KONSTRUKTORI =====
+    function openMaker() {
+        const OM = Cosmetics.OM, type = hero(), skin = equippedSkin(type), packed = parseInt((skin ? skinPacked(skin) : '#1e88e5').slice(1), 16);
+        let d = (Cosmetics.omParse(currentUser.customOutfit) || Cosmetics.omParse(OM.def)).slice();
+        const code = () => Cosmetics.omCode(d);
+        const box = document.createElement('div'); box.id = 'om-panel';
+        const sw = (k) => `<div class="om-sw" data-k="${k}">${OM.pal.map((c, i) => `<button class="om-c" data-v="${i}" style="background:#${c.toString(16).padStart(6, '0')}"></button>`).join('')}</div>`;
+        const opts = (k, n, pre) => `<div class="om-opts" data-k="${k}">${Array.from({ length: n }, (_, i) => `<button class="om-o" data-v="${i}">${t(pre + i)}</button>`).join('')}</div>`;
+        const sec = (label, html) => `<div class="om-l">${t(label)}</div>${html}`;
+        box.innerHTML = `<div class="om-box">
+            <div class="om-head"><span class="om-title"><i class="fa-solid fa-palette"></i> ${t('om_title')}</span><button class="om-x"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="om-body"><div class="om-left"><canvas id="om-front" width="64" height="58"></canvas><canvas id="om-walk" width="64" height="58"></canvas></div>
+            <div class="om-right">
+                <div class="om-tabs"><button class="om-tab on" data-tab="top">${t('om_tab_top')}</button><button class="om-tab" data-tab="bottom">${t('om_tab_bottom')}</button><button class="om-tab" data-tab="extra">${t('om_tab_extra')}</button></div>
+                <div class="om-page" data-page="top">${sec('om_top', sw(0))}${sec('om_pattern', opts(1, OM.patterns, 'om_pat_'))}${sec('om_pcolor', sw(2))}${sec('om_sleeves', opts(7, OM.sleeves, 'om_sl_'))}</div>
+                <div class="om-page hidden" data-page="bottom">${sec('om_bottom', opts(3, OM.bottoms, 'om_bot_'))}${sec('om_bcolor', sw(4))}</div>
+                <div class="om-page hidden" data-page="extra">${sec('om_neck', opts(6, OM.necks, 'om_neck_'))}${sec('om_ncolor', sw(10))}${sec('om_belt', opts(8, OM.belts, 'om_belt_'))}${sec('om_shoe_t', opts(9, OM.shoes, 'om_sh_'))}${sec('om_shoes', sw(5))}</div>
+            </div></div>
+            <div class="om-foot"><button class="om-rand"><i class="fa-solid fa-dice"></i> ${t('om_random')}</button><button class="om-cancel">${t('om_cancel')}</button><button class="om-save"><i class="fa-solid fa-check"></i> ${t('om_save')}</button></div>
+        </div>`;
+        document.body.appendChild(box);
+        const cf = box.querySelector('#om-front').getContext('2d'), cw = box.querySelector('#om-walk').getContext('2d'), FR = [2, 3, 4, 5];
+        let fi = 0;
+        const draw = (ctx, f) => { ctx.clearRect(0, 0, 64, 58); ctx.imageSmoothingEnabled = false; ctx.drawImage(Cosmetics.heroCanvas(packed, f, code()), 0, 0); };
+        const paint = () => { box.querySelectorAll('[data-k]').forEach((row) => { const k = +row.dataset.k; row.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === d[k])); }); draw(cf, 0); };
+        const tick = () => { if (!box.isConnected) return; draw(cw, FR[fi % FR.length]); fi++; };
+        const timer = setInterval(tick, 200);
+        box.querySelectorAll('[data-k] button').forEach(b => b.onclick = () => { d[+b.parentNode.dataset.k] = +b.dataset.v; paint(); tick(); });
+        box.querySelectorAll('.om-tab').forEach(b => b.onclick = () => { box.querySelectorAll('.om-tab').forEach(x => x.classList.toggle('on', x === b)); box.querySelectorAll('.om-page').forEach(pg => pg.classList.toggle('hidden', pg.dataset.page !== b.dataset.tab)); });
+        const closeM = () => { clearInterval(timer); box.remove(); };
+        box.querySelector('.om-x').onclick = box.querySelector('.om-cancel').onclick = closeM;
+        box.onclick = (e) => { if (e.target === box) closeM(); };
+        box.querySelector('.om-rand').onclick = () => { const r = (n) => Math.floor(Math.random() * n); d = [r(32), r(OM.patterns), r(32), r(OM.bottoms), r(32), r(32), r(OM.necks), r(OM.sleeves), r(OM.belts), r(OM.shoes), r(32)]; paint(); tick(); };
+        box.querySelector('.om-save').onclick = async () => {
+            const btn = box.querySelector('.om-save'); btn.disabled = true;
+            try {
+                const r = await fetch('/api/outfit/' + currentUser.id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code(), characterType: type }) }).then(x => x.json());
+                if (r && r.success && r.user) {
+                    Object.assign(currentUser, r.user);
+                    Cosmetics.setCustomOutfit(currentUser.customOutfit);
+                    try { localStorage.setItem('gameUser', JSON.stringify(currentUser)); } catch (e) { }
+                    if (typeof showTopToast === 'function') showTopToast(t('om_saved'));
+                    closeM(); tryOn = null; render();
+                } else { btn.disabled = false; if (typeof pxAlert === 'function') pxAlert(tMsg(r && r.message ? r.message : 'generic_error')); }
+            } catch (e) { btn.disabled = false; }
+        };
+        paint(); tick();
+    }
+    window.openOutfitMaker = openMaker;
     function render() {
         if (!el || !currentUser) return;
+        Cosmetics.setCustomOutfit(currentUser.customOutfit || '');
         if (!skinCatalog || !weaponSkinCatalog || !cosCatalog) { el.querySelector('.wd-grid').innerHTML = loaderHtml(); return; }
         if (!cats().includes(cat)) cat = 'skin';
         el.querySelector('.wd-coins').innerText = currentUser.coins;
@@ -198,6 +255,6 @@
         // Kataloglar va hisob ma'lumoti (birinchi ochilishda yoki bosh menyudan) - kelgach qayta chiziladi
         if (!skinCatalog || !weaponSkinCatalog || !cosCatalog || (opts && opts.fromMenu)) { await loadCharacterScreen(); render(); }
     }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el) { e.stopPropagation(); close(); } }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && el) { const om = document.getElementById('om-panel'); e.stopPropagation(); if (om) { om.querySelector('.om-x').click(); return; } close(); } }, true);
     window.Wardrobe = { open, close, refresh: () => { if (el && !busy) render(); }, isOpen: () => !!el };
 })();

@@ -176,6 +176,7 @@
         <button data-tab="stats2"><i class="fa-solid fa-chart-column"></i> Statistika</button>
         <button data-tab="control"><i class="fa-solid fa-bullhorn"></i> E'lon / Texnik</button>
         <button data-tab="log"><i class="fa-solid fa-scroll"></i> Jurnal</button>
+        <button data-tab="errors"><i class="fa-solid fa-bug"></i> Xatolar <span id="err-badge" style="color:#ff5252"></span></button>
     </div>
 
     <section id="tab-users">
@@ -273,6 +274,19 @@
             <div class="pager"><span id="log-info"></span><button id="log-prev"><i class="fa-solid fa-chevron-left"></i></button><button id="log-next"><i class="fa-solid fa-chevron-right"></i></button></div>
         </div>
     </section>
+
+    <section id="tab-errors" class="hidden">
+        <div class="card">
+            <div class="sub" style="margin-bottom:8px">O'yinchilar brauzerida chiqqan JS xatolar (o'yin fayllaridagi). Bir xil xato bitta qatorga yig'iladi. Tuzatilgach - "Hal qilindi".</div>
+            <div class="row" style="margin-bottom:8px"><button id="err-refresh"><i class="fa-solid fa-rotate"></i> Yangilash</button><button class="danger" id="err-clear"><i class="fa-solid fa-trash"></i> Hammasini tozalash</button></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Oxirgi</th><th>Soni</th><th>Xato</th><th>Joyi</th><th>O'yinchilar / xarita</th><th></th></tr></thead>
+                    <tbody id="err-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
 </div>
 
 <!-- TASDIQ OYNASI -->
@@ -364,7 +378,7 @@
     };
     const ACTIONS = { ban: 'Blokladi', unban: 'Blokdan chiqardi', coins: 'Tanga', maps: 'Xaritalar', level: 'Daraja', password: 'Parol almashtirdi',
         rename: 'Nickname', curses: "La'nat olib tashladi", gift: "Sovg'a", mute: 'Chat taqig\'i', unmute: 'Taqiq olib tashlandi',
-        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", quest_clear: 'Questni bekor qildi', announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi", season: 'Ferma fasli' };
+        room_kick: 'Xonadan chiqardi', room_close: 'Xonani yopdi', room_stop: "Raundni to'xtatdi", errors_clear: 'Xatolarni tozaladi', quest_clear: 'Questni bekor qildi', announce: "E'lon", maint_on: 'Texnik rejim: yoqdi', maint_off: "Texnik rejim: o'chirdi", season: 'Ferma fasli' };
     let logPage = 0, catalogLoaded = false;
     const LOC = { elf: 'Elf Kingdom', forest: 'Forest', snow: 'Snow Base', swamp: 'Swamp', lava: 'Underworld' };
     const ITEM = { apple: 'sariq olma', fish: 'baliq', crystal: 'muz kristali', lily: 'nilufar' };
@@ -668,13 +682,37 @@
     document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
         document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
         const tab = b.dataset.tab;
-        ['users', 'rooms', 'stats2', 'control', 'log'].forEach(n => $('tab-' + n).classList.toggle('hidden', n !== tab));
+        ['users', 'rooms', 'stats2', 'control', 'log', 'errors'].forEach(n => $('tab-' + n).classList.toggle('hidden', n !== tab));
         clearInterval(roomsTimer);
         if (tab === 'rooms') { loadRooms(); roomsTimer = setInterval(loadRooms, 5000); }
         if (tab === 'stats2') loadStats2();
         if (tab === 'control') { loadMaint(); loadSeason(); loadStatus(); }
         if (tab === 'log') { logPage = 0; loadLog(); }
+        if (tab === 'errors') loadErrors();
     });
+    // ===== O'yinchilar brauzeridagi xatolar =====
+    async function loadErrors() {
+        const d = await api('/errors');
+        if (!d.success) return;
+        const body = $('err-body'); body.innerHTML = '';
+        $('err-badge').textContent = d.rows.length ? '(' + d.rows.length + ')' : '';
+        if (!d.rows.length) { const tr = el('tr'); const td = el('td', 'empty', "Xato yo'q"); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); return; }
+        d.rows.forEach((r) => {
+            const tr = el('tr');
+            tr.appendChild(el('td', '', new Date(r.last).toLocaleString()));
+            tr.appendChild(el('td', 'nick', String(r.count)));
+            const msg = el('td', ''); msg.style.maxWidth = '420px'; msg.style.wordBreak = 'break-word';
+            msg.appendChild(el('div', '', r.msg));
+            if (r.stack) { const det = document.createElement('details'); const sm = document.createElement('summary'); sm.textContent = 'stack'; det.appendChild(sm); const pre = document.createElement('pre'); pre.style.whiteSpace = 'pre-wrap'; pre.style.fontSize = '10px'; pre.textContent = r.stack; det.appendChild(pre); msg.appendChild(det); }
+            tr.appendChild(msg);
+            tr.appendChild(el('td', '', (r.src || '-') + ':' + r.line + ':' + r.col));
+            tr.appendChild(el('td', '', [...new Set(r.users)].join(', ') + (r.maps.length ? '  [' + r.maps.join(', ') + ']' : '') + '  · birinchi: ' + new Date(r.first).toLocaleDateString()));
+            const td = el('td', ''); const b = el('button', '', 'Hal qilindi'); b.onclick = async () => { await api('/errors/' + r.id + '/resolve', { method: 'POST' }); loadErrors(); }; td.appendChild(b); tr.appendChild(td);
+            body.appendChild(tr);
+        });
+    }
+    $('err-refresh').onclick = loadErrors;
+    $('err-clear').onclick = () => pxConfirm("Hamma xatolar o'chirilsinmi?", async () => { await api('/errors/clear', { method: 'POST' }); loadErrors(); });
     $('search-btn').onclick = () => { query = $('search').value.trim(); page = 0; loadUsers(); };
     $('search').onkeydown = (e) => { if (e.key === 'Enter') $('search-btn').onclick(); };
     $('prev-btn').onclick = () => { page = Math.max(0, page - 1); loadUsers(); };

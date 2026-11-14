@@ -1222,6 +1222,7 @@ function renderLobbySlots(players) {
             <div class="slot-level">${t('slot_level')}: ${p.level || 0}</div>
             <div class="slot-status ${status[0]}">${status[1].toUpperCase()}</div>`;
         slot.querySelector('.slot-name').appendChild(document.createTextNode((p.nickname || t('guest_name')) + (me ? t('you_suffix') : '')));
+        if (p.title && typeof window.titleName === 'function') { const tt = document.createElement('span'); tt.className = 'title-tag'; tt.textContent = window.titleName(p.title); slot.querySelector('.slot-name').appendChild(tt); }   // yutuq unvoni
         if (p.isAdmin) { const tag = document.createElement('span'); tag.className = 'admin-tag'; tag.textContent = 'ADMIN'; slot.querySelector('.slot-name').appendChild(tag); }
         if (p.supporter) { const tag = document.createElement('span'); tag.className = 'sup-tag'; tag.title = t('supporter_title'); tag.innerHTML = '<i class="fa-solid fa-heart"></i>'; slot.querySelector('.slot-name').appendChild(tag); }
         // Xo'jayinga: boshqa o'yinchini xonadan chiqarish (KICK)

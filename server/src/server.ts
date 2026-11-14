@@ -12,7 +12,7 @@ import { RoomManager } from './managers/room.manager';
 import { GameEngine } from './managers/game.engine';
 import * as db from './db';
 import { SKIN_CATALOG, getSkinPrice, WEAPON_SKIN_CATALOG, getWeaponSkinPrice, isKnownSkin, isExclusiveSkin, SKINS_OFF } from './skins';
-import { HEAD_ITEMS, FACE_ITEMS, BODY_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey } from './cosmetics';
+import { HEAD_ITEMS, FACE_ITEMS, BODY_ITEMS, WEAPON_ITEMS, findCosmetic, cosmeticKey, validCustomOutfit } from './cosmetics';
 import { MAPS, SEASON_MAP_COUNT, WORLD_MAP, dailyOffer, farmLevel, farmCapacity, farmLevelXp, setFarmSeasonSetting, getFarmSeasonSetting, currentFarmSeason, HOME_ITEMS, homeMax, homeSellPrice } from './maps';
 import { BIG_GEN, BIG_CLOSED } from './bigmap';
 import { config } from 'dotenv';
@@ -615,6 +615,75 @@ app.post('/api/ads/:userId/reward', async (req, res) => {
 
 // REYTING: hamma ko'ra oladi; hisobi bilan so'ralsa - o'zining o'rni ham (token bilan, app.param('userId'))
 const lbHero = (q: unknown) => (typeof q === 'string' ? q : 'all');
+// ===== DO'STLAR =====
+const friendsOut = async (userId: string) => {
+    const v = await db.friendsView(userId);
+    if (!v) return null;
+    const st = (f: any) => { const w = roomManager.findOnline(f.id); return { ...f, online: isOnline(f.id), inRoom: !!w, roomName: w ? w.roomName : '' }; };
+    return { friends: v.friends.map(st), incoming: v.incoming };
+};
+// yutuqlar (do'stlar soni) - ikkala tomon uchun; ochilganlari onlayn bo'lsa xabar qilinadi
+const achCheckUser = (userId: string) => { db.achUpdate(userId).then((r) => { if (r.unlocked.length) { emitToUser(userId, 'achUnlocked', { list: r.unlocked }); if (r.coins !== null) emitToUser(userId, 'coinsUpdated', { amount: r.unlocked.reduce((s, a) => s + a.coins, 0), totalCoins: r.coins }); } }).catch(() => { }); };
+app.get('/api/friends/:userId', async (req, res) => {
+    try { const v = await friendsOut(req.params.userId); res.json(v ? { success: true, ...v } : { success: false, message: 'err_user_not_found' }); }
+    catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+app.post('/api/friends/:userId/request', async (req, res) => {
+    try {
+        const r = await db.friendRequest(req.params.userId, String((req.body || {}).nickname || ''));
+        if (r.success && r.targetId) {
+            if (r.accepted) { emitToUser(r.targetId, 'friendAccepted', { nickname: r.fromNick }); achCheckUser(r.targetId); achCheckUser(req.params.userId); }
+            else emitToUser(r.targetId, 'friendReq', { from: r.fromNick });
+        }
+        res.json({ success: r.success, message: r.message, accepted: !!r.accepted, nickname: r.nickname });
+    } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+app.post('/api/friends/:userId/accept', async (req, res) => {
+    try {
+        const fromId = String((req.body || {}).fromId || ''), r = await db.friendAccept(req.params.userId, fromId);
+        if (r.success) { const me = await db.getUserById(req.params.userId); emitToUser(fromId, 'friendAccepted', { nickname: me ? me.nickname : '' }); achCheckUser(fromId); achCheckUser(req.params.userId); }
+        res.json(r);
+    } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+app.post('/api/friends/:userId/decline', async (req, res) => {
+    try { res.json(await db.friendDecline(req.params.userId, String((req.body || {}).fromId || ''))); } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+app.post('/api/friends/:userId/remove', async (req, res) => {
+    try { res.json(await db.friendRemove(req.params.userId, String((req.body || {}).friendId || ''))); } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+// ===== YUTUQLAR =====
+app.get('/api/achievements/:userId', async (req, res) => {
+    try {
+        const r = await db.achUpdate(req.params.userId);   // hisobdan olinadigan ko'rsatkichlar (daraja, ajdarcha, dunyo...) - shu yerda ochiladi
+        const v = await db.achView(req.params.userId);
+        res.json(v ? { success: true, ...v, unlocked: r.unlocked, coins: r.coins } : { success: false, message: 'err_user_not_found' });
+    } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+app.post('/api/achievements/:userId/title', async (req, res) => {
+    try {
+        const r = await db.setTitle(req.params.userId, String((req.body || {}).id || ''));
+        if (r.success) Object.values(activeRooms).forEach(room => { const p = Object.values(room.players).find(pl => pl.userId === req.params.userId); if (p) { p.title = r.title || ''; roomManager.refreshCharacterInRoom(p.id, room.id).catch(() => { }); } });
+        res.json(r);
+    } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+// ===== O'YINCHILAR BRAUZERIDAGI XATOLAR: klient yuboradi (IP bo'yicha cheklangan), admin ko'radi =====
+const errRate = new Map<string, { n: number, t: number }>();
+app.post('/api/client-error', (req, res) => {
+    const ip = String(req.ip || '?'), now = Date.now(), r = errRate.get(ip) || { n: 0, t: now };
+    if (now - r.t > 600000) { r.n = 0; r.t = now; }
+    r.n++; errRate.set(ip, r); if (errRate.size > 20000) errRate.clear();
+    res.status(204).end();
+    if (r.n > 30) return;   // 10 daqiqada 30 tadan ko'p - e'tiborsiz
+    const b = req.body || {}, s = (v: unknown, n: number) => String(v == null ? '' : v).slice(0, n);
+    const msg = s(b.msg, 300).trim();
+    if (!msg) return;
+    db.recordClientError({ msg, src: s(b.src, 200), line: Math.max(0, Math.min(1e7, Number(b.line) || 0)), col: Math.max(0, Math.min(1e7, Number(b.col) || 0)),
+        stack: s(b.stack, 1500), ua: s(req.get('user-agent'), 200), user: s(b.user, 40), map: s(b.map, 40) }).catch(err => console.error('recordClientError xatosi:', err));
+});
+app.get('/api/admin/errors', requireAdmin, adminRoute(async (req, res) => { res.json({ success: true, rows: await db.listClientErrors() }); }));
+app.post('/api/admin/errors/:eid/resolve', requireAdmin, adminRoute(async (req, res) => { await db.deleteClientError(String(req.params.eid)); res.json({ success: true }); }));
+app.post('/api/admin/errors/clear', requireAdmin, adminRoute(async (req, res) => { await db.clearClientErrors(); logAdmin(req, 'errors_clear', '-'); res.json({ success: true }); }));
+
 app.get('/api/leaderboard', async (req, res) => {
     try {
         const r = await db.getLeaderboard(lbHero(req.query.hero), null);
@@ -932,6 +1001,17 @@ app.post('/api/cosmetics/:userId/buy', async (req, res) => {
     }
 });
 
+// KIYIM KONSTRUKTORI: yig'ilgan kiyimni saqlash va shu qahramonga kiyish
+app.post('/api/outfit/:userId', async (req, res) => {
+    const { code, characterType } = req.body || {};
+    if (!validCustomOutfit(code)) { res.status(400).json({ success: false, message: 'err_om_bad' }); return; }
+    try {
+        const r = await db.setCustomOutfit(req.params.userId, code, String(characterType || ''));
+        if (r.success) refreshUserInRooms(req.params.userId);
+        res.json(r);
+    } catch (err) { res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+
 app.post('/api/cosmetics/:userId/equip', async (req, res) => {
     const { characterType, slot, itemId } = req.body || {};
     if (typeof characterType !== 'string' || !WEAPON_ITEMS[characterType]) {
@@ -1018,8 +1098,36 @@ setInterval(() => {
         ` | HTTP (polling) da: ${r.filter(x => x.tr === 'polling').length} | telefon: ${r.filter(x => x.mobile).length}`);
 }, 5 * 60 * 1000).unref();
 
+// ONLAYN O'YINCHILAR (bosh menyuda ham): hisob -> ulangan socketlar. Do'stlar ro'yxati, so'rov va taklif xabarlari uchun
+const presence = new Map<string, Set<string>>();
+const emitToUser = (userId: string, ev: string, data: unknown) => { const s = presence.get(userId); if (s) s.forEach(id => io.to(id).emit(ev, data)); };
+const isOnline = (userId: string) => { const s = presence.get(userId); return (!!s && s.size > 0) || !!roomManager.findOnline(userId); };
+const inviteAt = new Map<string, number>();   // taklif spami: bir do'stga 5 s da bir marta
 io.on('connection', (socket) => {
     console.log(`Foydalanuvchi ulandi: ${socket.id}`);
+    // "men onlaynman" (login / sahifa ochilganda): hisob tokeni bilan
+    const dropPresence = () => { const uid = (socket.data as any).uid; if (!uid) return; const s = presence.get(uid); if (s) { s.delete(socket.id); if (!s.size) presence.delete(uid); } (socket.data as any).uid = null; };
+    socket.on('hello', (d: { userId?: string, token?: string }) => {
+        dropPresence();
+        if (d && typeof d.userId === 'string' && verifyUser(d.userId, d.token)) { (socket.data as any).uid = d.userId; if (!presence.has(d.userId)) presence.set(d.userId, new Set()); presence.get(d.userId)!.add(socket.id); }
+    });
+    socket.on('disconnect', dropPresence);
+    // DO'STNI XONAGA TAKLIF QILISH: taklif qiluvchi xonada bo'lishi shart; do'stga xona kodi bilan xabar
+    socket.on('friendInvite', async (d: { userId?: string, token?: string, to?: string }) => {
+        try {
+            if (!d || typeof d.userId !== 'string' || typeof d.to !== 'string' || !verifyUser(d.userId, d.token)) return;
+            const where = roomManager.findOnline(d.userId);
+            if (!where) { socket.emit('friendInviteSent', { ok: false, message: 'err_fr_not_in_room' }); return; }
+            if (!(await db.areFriends(d.userId, d.to))) return;
+            if (!isOnline(d.to)) { socket.emit('friendInviteSent', { ok: false, message: 'err_fr_offline' }); return; }
+            const key = d.userId + '>' + d.to, now = Date.now();
+            if (now - (inviteAt.get(key) || 0) < 5000) return;
+            inviteAt.set(key, now); if (inviteAt.size > 5000) inviteAt.clear();
+            const room = activeRooms[where.roomId], me = room && room.players[where.socketId];
+            emitToUser(d.to, 'friendInvite', { fromId: d.userId, from: me ? me.nickname : '?', code: where.roomId, roomName: where.roomName });
+            socket.emit('friendInviteSent', { ok: true, to: d.to });
+        } catch (err) { console.error('friendInvite xatosi:', err); }
+    });
     // Ping o'lchash (klientdagi tarmoq ko'rsatkichi uchun) va daqiqalik unumdorlik hisoboti
     socket.on('pingCheck', (cb: unknown) => { if (typeof cb === 'function') cb(); });
     socket.on('clientStats', (d: any) => {
@@ -1297,7 +1405,7 @@ io.on('connection', (socket) => {
     });
     socket.on('bigAct', (d: { roomId: string, act: string, arg?: number, item?: string }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
-        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'fishcast', 'fishreel', 'cage', 'fruit', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
+        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'qcancel', 'fishcast', 'fishreel', 'cage', 'fruit', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
     });
     socket.on('petRide', (d: { roomId: string, on: boolean }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;

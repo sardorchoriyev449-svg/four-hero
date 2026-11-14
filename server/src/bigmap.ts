@@ -1517,7 +1517,7 @@ export interface BigCtx {
     saveGot(cp: number): void;                     // dunyo egasiga: checkpoint ochildi
     saveQuest(p: PlayerState, q: string, st: number): void;   // topshiriq holati (hisobda)
     saveRQ?(p: PlayerState, q: RandQuest | null): void;       // lager topshirig'i (hisobda)
-    questDone?(coins: number): void;                          // statistika: topshiriq bajarildi
+    questDone?(coins: number, p?: PlayerState): void;          // statistika: topshiriq bajarildi (p - kim: yutuqlar uchun)
     takeItem?(p: PlayerState, item: string, cb: (left: number) => void): void;   // sumkadan bitta narsa (-1 - yo'q)
     mageHome?(p: PlayerState): void;               // Balot Magi o'yinchining fermasiga ko'chadi
     curse(p: PlayerState): void;                   // semiz elf so'lagi: jon o'zi tiklanmaydi (do'kondagi Eliksir bilan tuzaladi)
@@ -2261,7 +2261,7 @@ export function bigQuestTalk(S: BigState, p: PlayerState, npcId: number, ctx: Bi
     const q = n.q!, qs = p.bigQuests || (p.bigQuests = {}), st = qs[q] || 0, Q = QUESTS[q];
     let ev = 'wait';
     if (st === 0) { qs[q] = q === 'tooth' && questPaid(S, q) ? 2 : 1; ev = qs[q] === 2 ? 'have' : 'accept'; ctx.saveQuest(p, q, qs[q]); }
-    else if (st === 2) { qs[q] = 3; ev = 'done'; ctx.saveQuest(p, q, 3); ctx.reward(p, Q.coins, Q.xp); }
+    else if (st === 2) { qs[q] = 3; ev = 'done'; ctx.saveQuest(p, q, 3); ctx.reward(p, Q.coins, Q.xp); if (ctx.questDone) ctx.questDone(Q.coins, p); }
     else if (st === 3) ev = 'thanks';
     ctx.emitTo(p.id, 'bigQuest', { q, st: qs[q], ev, npc: n.id });
 }
@@ -2323,6 +2323,21 @@ function rqMake(S: BigState, n: { id: number, x: number, loc: string }): RandQue
 }
 const rqOf = (S: BigState, p: PlayerState) => (p.bigRQ && p.bigRQ.seed === S.w.seed ? p.bigRQ : null);   // boshqa dunyodagi topshiriq hisobga olinmaydi
 export function bigRqSync(S: BigState, p: PlayerState, ctx: BigCtx): void { ctx.emitTo(p.id, 'bigRQ', { ev: 'sync', q: rqOf(S, p) }); }
+// QUESTNI BEKOR QILISH (o'yinchi o'zi): 'rq' - lager topshirig'i (istalgan razvedkachidan yangisini olish mumkin);
+// 'tooth' / 'kids' - hikoya questi boshiga qaytadi (NPC dan qayta olinadi). Faqat bajarilayotgan (1) yoki topshirilmagan (2) quest
+export function bigQuestCancel(S: BigState, p: PlayerState, key: string, ctx: BigCtx): void {
+    if (key === 'rq') {
+        if (!rqOf(S, p)) return;
+        p.bigRQ = null; if (ctx.saveRQ) ctx.saveRQ(p, null);
+        ctx.emitTo(p.id, 'bigRQ', { ev: 'cancel', q: null });
+        return;
+    }
+    if (!QUESTS[key]) return;
+    const qs = p.bigQuests || (p.bigQuests = {}), st = qs[key] || 0;
+    if (st !== 1 && st !== 2) return;
+    qs[key] = 0; ctx.saveQuest(p, key, 0);
+    ctx.emitTo(p.id, 'bigQuest', { q: key, st: 0, ev: 'cancel' });
+}
 export function bigRqTalk(S: BigState, p: PlayerState, npcId: number, ctx: BigCtx): void {
     const n = S.w.npcs.find(o => o.id === npcId && o.rq);
     if (!n || p.isDead || Math.abs(p.x - n.x) > 130 || Math.abs(p.y + 24 - n.y) > 90) return;
@@ -2337,7 +2352,7 @@ export function bigRqTalk(S: BigState, p: PlayerState, npcId: number, ctx: BigCt
         if (q.t === 'snow') p.snowballs = Math.max(0, (p.snowballs || 0) - q.n);
         p.bigRQ = null; if (ctx.saveRQ) ctx.saveRQ(p, null);
         ctx.reward(p, q.coins, q.xp);
-        if (ctx.questDone) ctx.questDone(q.coins);
+        if (ctx.questDone) ctx.questDone(q.coins, p);
         ctx.emitTo(p.id, 'bigRQ', { ev: 'done', q: null, coins: q.coins, xp: q.xp, npc: n.id });
         return;
     }

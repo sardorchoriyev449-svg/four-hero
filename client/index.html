@@ -7,6 +7,7 @@
     <title>4 Heroes - Free Co-op Pixel Action Game</title>
     <meta name="description" content="4 Heroes is a free co-op pixel action game in your browser. Team up with up to 4 friends as a Knight, Archer, Mage or Samurai, beat bosses and unlock new maps.">
     <link rel="canonical" href="https://4heroes.xyz/">
+    <script src="errlog.js"></script>
     <!-- Open Graph / Twitter: havola Telegram, Discord, Facebook, X da rasm va sarlavha bilan chiqadi -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="4 Heroes">
@@ -1097,6 +1098,75 @@
         #lb-panel .lb-me { margin-top: 10px; padding: 8px; border: 3px solid #4a3f7a; background: #120f22; color: #b9f6ca; text-align: center; line-height: 1.6; }
         #lb-panel .lb-empty { padding: 20px; text-align: center; color: #9e98c4; }
         @media (max-width: 520px) { #lb-panel .lb-row { grid-template-columns: 34px 1fr 52px 72px; } #lb-panel .lb-hero { display: none; } }
+        :is(#fr-panel, #ach-panel) { position: fixed; inset: 0; z-index: 2600; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.7); padding: 12px; }
+        :is(#fr-panel, #ach-panel) .lb-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(640px, 100%);
+            max-height: calc(100vh - 24px); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; font: 9px "Press Start 2P", monospace; color: #f3f0ff; }
+        :is(#fr-panel, #ach-panel) button { font: 9px "Press Start 2P", monospace; border: 3px solid #000; background: #302752; color: #f3f0ff; padding: 8px 10px; margin: 0; width: auto; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+        :is(#fr-panel, #ach-panel) .lb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        :is(#fr-panel, #ach-panel) .lb-title { flex: 1; font-size: 14px; color: #ffca28; text-shadow: 2px 2px 0 #000; }
+        :is(#fr-panel, #ach-panel) .lb-x { padding: 6px 9px; background: #e53935; }
+        :is(#fr-panel, #ach-panel) .lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+        :is(#fr-panel, #ach-panel) .lb-tab.active { background: #ffca28; color: #1a1a1a; }
+        :is(#fr-panel, #ach-panel) .lb-list { overflow-y: auto; flex: 1; min-height: 120px; border: 3px solid #000; background: #120f22; }
+        :is(#fr-panel, #ach-panel) .lb-row { display: grid; grid-template-columns: 44px 1fr 96px 64px 92px; align-items: center; gap: 6px; padding: 7px 8px; border-bottom: 2px dashed #2b2450; }
+        :is(#fr-panel, #ach-panel) .lb-row.lb-hdr { color: #9e98c4; font-size: 7px; position: sticky; top: 0; background: #120f22; }
+        :is(#fr-panel, #ach-panel) .lb-row.me { background: #2d3b1e; color: #b9f6ca; }
+        :is(#fr-panel, #ach-panel) .lb-rank { color: #ffca28; } :is(#fr-panel, #ach-panel) .lb-r1 { color: #ffd700; } :is(#fr-panel, #ach-panel) .lb-r2 { color: #e0e0e0; } :is(#fr-panel, #ach-panel) .lb-r3 { color: #ff8a50; }
+        :is(#fr-panel, #ach-panel) .lb-nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        :is(#fr-panel, #ach-panel) .lb-hero { font-size: 7px; } :is(#fr-panel, #ach-panel) .lb-hero i { margin-right: 4px; }
+        :is(#fr-panel, #ach-panel) .lb-xp { text-align: right; color: #80d8ff; }
+        :is(#fr-panel, #ach-panel) .lb-me { margin-top: 10px; padding: 8px; border: 3px solid #4a3f7a; background: #120f22; color: #b9f6ca; text-align: center; line-height: 1.6; }
+        :is(#fr-panel, #ach-panel) .lb-empty { padding: 20px; text-align: center; color: #9e98c4; }
+        @media (max-width: 520px) { :is(#fr-panel, #ach-panel) .lb-row { grid-template-columns: 34px 1fr 52px 72px; } :is(#fr-panel, #ach-panel) .lb-hero { display: none; } }
+        /* DO'STLAR / YUTUQLAR oynalari (:is(#fr-panel, #ach-panel) - reyting oynasi uslubida) */
+        :is(#fr-panel, #ach-panel) .fr-add { display: flex; gap: 6px; margin-bottom: 10px; }
+        :is(#fr-panel, #ach-panel) .fr-add input { flex: 1; min-width: 0; font: 9px 'Press Start 2P', monospace; padding: 8px; border: 3px solid #000; background: #0f0c1d; color: #fff; }
+        :is(#fr-panel, #ach-panel) .fr-sec { color: #ffca28; font-size: 8px; margin: 10px 0 6px; }
+        :is(#fr-panel, #ach-panel) .fr-row { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-bottom: 2px solid #2a2346; font-size: 8px; }
+        :is(#fr-panel, #ach-panel) .fr-row.off { opacity: .65; }
+        :is(#fr-panel, #ach-panel) .fr-dot { width: 9px; height: 9px; border: 2px solid #000; background: #555; flex: none; }
+        :is(#fr-panel, #ach-panel) .fr-dot.on { background: #69f0ae; }
+        :is(#fr-panel, #ach-panel) .fr-nick { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 1.7; }
+        :is(#fr-panel, #ach-panel) .fr-st { display: block; color: #9e98c4; font-size: 7px; }
+        :is(#fr-panel, #ach-panel) .fr-btns { display: flex; gap: 4px; flex: none; }
+        :is(#fr-panel, #ach-panel) .fr-btns button { padding: 6px 7px; font-size: 7px; }
+        :is(#fr-panel, #ach-panel) .fr-ok, :is(#fr-panel, #ach-panel) .fr-inv { background: #2e7d32 !important; }
+        :is(#fr-panel, #ach-panel) .fr-no, :is(#fr-panel, #ach-panel) .fr-del { background: #6d2230 !important; }
+        .title-tag { display: inline-block; font-size: 7px; color: #1b1630; background: #ffca28; border: 2px solid #000; padding: 2px 4px; margin-left: 6px; vertical-align: middle; letter-spacing: 0; }
+        :is(#fr-panel, #ach-panel) .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+        :is(#fr-panel, #ach-panel) .ach-card { display: flex; gap: 8px; padding: 8px; background: #241d40; border: 3px solid #000; opacity: .85; }
+        :is(#fr-panel, #ach-panel) .ach-card.done { background: #2d3b1e; opacity: 1; }
+        :is(#fr-panel, #ach-panel) .ach-ico { font-size: 18px; color: #6d6596; width: 26px; text-align: center; padding-top: 2px; }
+        :is(#fr-panel, #ach-panel) .ach-card.done .ach-ico { color: #ffca28; }
+        :is(#fr-panel, #ach-panel) .ach-body { flex: 1; min-width: 0; }
+        :is(#fr-panel, #ach-panel) .ach-name { font-size: 8px; color: #fff; margin-bottom: 4px; }
+        :is(#fr-panel, #ach-panel) .ach-desc, :is(#fr-panel, #ach-panel) .ach-prog { font-size: 7px; color: #b8b2dc; line-height: 1.6; }
+        :is(#fr-panel, #ach-panel) .ach-bar { height: 7px; background: #0f0c1d; border: 2px solid #000; margin: 4px 0 2px; }
+        :is(#fr-panel, #ach-panel) .ach-bar span { display: block; height: 100%; background: #69f0ae; }
+        :is(#fr-panel, #ach-panel) .ach-rew { font-size: 7px; color: #ffca28; margin-top: 4px; line-height: 2; }
+        :is(#fr-panel, #ach-panel) .ach-rew button, :is(#fr-panel, #ach-panel) .ach-clear { padding: 4px 6px; font-size: 7px; margin-left: 4px; }
+        :is(#fr-panel, #ach-panel) .ach-cur { color: #69f0ae; margin-left: 4px; } :is(#fr-panel, #ach-panel) .ach-tt { color: #9e98c4; margin-left: 4px; }
+        .slot-name .title-tag { display: block; width: max-content; margin: 3px auto 0; }
+        /* KIYIM KONSTRUKTORI */
+        #om-panel { position: fixed; inset: 0; z-index: 2700; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.75); padding: 12px; }
+        #om-panel .om-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(720px, 100%); max-height: calc(100vh - 24px); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; color: #f3f0ff; font: 8px/1.6 "Press Start 2P", monospace; }
+        #om-panel button { font: 8px "Press Start 2P", monospace; border: 3px solid #000; background: #302752; color: #f3f0ff; padding: 7px 9px; margin: 0; width: auto; cursor: pointer; box-shadow: 3px 3px 0 #000; }
+        #om-panel .om-head { display: flex; align-items: center; margin-bottom: 10px; } #om-panel .om-title { flex: 1; font-size: 13px; color: #ffca28; text-shadow: 2px 2px 0 #000; }
+        #om-panel .om-x { background: #e53935; padding: 6px 9px; }
+        #om-panel .om-body { display: flex; gap: 14px; overflow-y: auto; min-height: 0; }
+        #om-panel .om-left { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 200px; background: #120f22; border: 3px solid #000; padding: 6px 0; }
+        #om-panel .om-left canvas { width: 160px; height: 145px; image-rendering: pixelated; }
+        #om-panel .om-tabs { display: flex; gap: 6px; margin-bottom: 4px; } #om-panel .om-tab.on { background: #ffca28; color: #1a1a1a; }
+        #om-panel .om-page.hidden { display: none; }
+        #om-panel .om-right { flex: 1; min-width: 0; }
+        #om-panel .om-l { color: #9e98c4; margin: 8px 0 4px; }
+        #om-panel .om-sw, #om-panel .om-opts { display: flex; flex-wrap: wrap; gap: 5px; }
+        #om-panel .om-c { width: 20px; height: 20px; padding: 0; box-shadow: none; }
+        #om-panel .om-c.on { outline: 3px solid #ffca28; outline-offset: 1px; }
+        #om-panel .om-o.on { background: #ffca28; color: #1a1a1a; }
+        #om-panel .om-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; } #om-panel .om-save { background: #2e7d32; }
+        .om-edit { margin-top: 4px !important; background: #6a1b9a !important; }
+        @media (max-width: 560px) { #om-panel .om-body { flex-direction: column; } #om-panel .om-left { width: 100%; } }
         #inv-panel { position: fixed; inset: 0; z-index: 2600; display: flex; align-items: center; justify-content: center; background: rgba(8,6,16,.7); padding: 12px; }
         #inv-panel .inv-box { background: #1b1630; border: 4px solid #000; box-shadow: inset 0 0 0 3px #4a3f7a, 8px 8px 0 rgba(0,0,0,.55); width: min(720px, 100%);
             max-height: calc(100vh - 24px); display: flex; flex-direction: column; padding: 14px; box-sizing: border-box; color: #f3f0ff; font: 9px/1.6 "Press Start 2P", monospace; }
@@ -1470,6 +1540,8 @@
         <button id="nav-inventory-btn" class="hub-btn"><i class="fa-solid fa-bag-shopping"></i><span data-i18n="nav_inventory">Inventory</span></button>
         <button id="nav-daily-btn" class="hub-btn"><i class="fa-solid fa-calendar-check"></i><span data-i18n="nav_daily">Daily rewards</span><span class="daily-dot hidden"></span></button>
         <button id="nav-leaderboard-btn" class="hub-btn"><i class="fa-solid fa-trophy"></i><span data-i18n="nav_leaderboard">Leaderboard</span></button>
+        <button id="nav-friends-btn" class="hub-btn"><i class="fa-solid fa-user-group"></i><span data-i18n="nav_friends">Friends</span><span class="daily-dot fr-badge hidden"></span></button>
+        <button id="nav-ach-btn" class="hub-btn"><i class="fa-solid fa-medal"></i><span data-i18n="nav_ach">Achievements</span></button>
         <button id="nav-pet-btn" class="hub-btn"><i class="fa-solid fa-dragon"></i><span data-i18n="nav_pet">Dragonet</span></button>
         <button id="nav-settings-btn" class="hub-btn"><i class="fa-solid fa-gear"></i><span data-i18n="nav_settings">Settings</span></button>
         <button id="nav-ad-btn" class="hub-btn hidden"><i class="fa-solid fa-clapperboard"></i><span data-i18n="nav_watch_ad"></span><span class="ad-amount"></span></button>
@@ -1655,6 +1727,7 @@
             <div class="lobby-bottom-left">
                 <button class="lobby-toggle-btn" id="toggle-map-btn"><i class="fa-solid fa-map icon"></i><span data-i18n="toggle_map">Map</span></button>
                 <button class="lobby-toggle-btn" id="open-my-character-btn"><i class="fa-solid fa-shield-halved icon"></i><span data-i18n="nav_character">My Character</span></button>
+                <button class="lobby-toggle-btn" id="lobby-friends-btn"><i class="fa-solid fa-user-group icon"></i><span data-i18n="nav_friends">Friends</span></button>
                 <button class="lobby-toggle-btn" id="toggle-chat-btn"><i class="fa-solid fa-comments icon"></i><span data-i18n="toggle_chat">Chat</span></button>
                 <button class="lobby-toggle-btn" id="lobby-settings-btn"><i class="fa-solid fa-gear icon"></i><span data-i18n="nav_settings">Settings</span></button>
                 <button class="lobby-toggle-btn" id="voice-btn"><i class="fa-solid fa-headphones icon"></i><span data-i18n="voice_join">Voice chat</span></button>
@@ -1741,6 +1814,7 @@
     <script src="daily.js"></script>
     <script src="wardrobe.js"></script>
     <script src="petpanel.js"></script>
+    <script src="social.js"></script>
     <script src="game.js"></script>
     <script src="voice.js"></script>
     <script src="ads.js"></script>

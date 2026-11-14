@@ -10822,9 +10822,10 @@ function launchGame(socket, roomId, mapData, continued) {
         });
 
         // SICHQONCHA: bosib turilgancha avtomatik hujum qiladi
-        this.input.on('pointerdown', (pointer) => {
+        this.input.on('pointerdown', (pointer, over) => {
             // Dialog ochiq bo'lsa - ekranga teginish keyingi gapga o'tkazadi (telefonda E tugmasini qidirmasdan)
             if (dialog) { advanceDialog(pointer); return; }
+            if (over && over.some(o => o && o.uiButton)) return;   // o'yin ichidagi tugma (masalan, QUESTS) - hujum emas
             if (!currentCharacter || pauseMenuOpen || mfHouse) return;
             // PHONE boshqaruvi: ekranga (yoki joystick yoniga) teginish o'q otmasin - faqat "zarba" tugmasi
             if (typeof getControlScheme === 'function' && getControlScheme() === 'phone') return;
