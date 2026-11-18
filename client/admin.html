@@ -148,7 +148,55 @@
     .status-list b.on { color: var(--green); } .status-list b.off { color: var(--red); } .status-list b.warn { color: var(--gold); }
     .tag.hero { background: #5d7a3a; color: #fff; }
     .note a { color: var(--accent); }
+    /* Panellar: tarkibi uzun bo'lsa ham ekrandan chiqmasin; qo'shni panel balandligiga cho'zilmasin */
+    .panes { grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); align-items: start; }
+    .pane { min-width: 0; }
+    td.levels, td.nowrap { white-space: nowrap; }
+    /* "Xatolar" bo'limi tepasi */
+    .card > .sub { color: var(--muted); font-size: 8px; padding: 12px 12px 0; margin: 0 0 10px !important; }
+    .card > .row { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 12px 6px; margin-bottom: 10px; }
+    td.err-msg { max-width: 420px; word-break: break-word; }
+    td.err-msg pre { white-space: pre-wrap; font-size: 10px; }
     @media (max-width: 600px) { header h1 { font-size: 12px; } body { font-size: 9px; } .panes { grid-template-columns: 1fr; } }
+    /* ===== TELEFON ===== */
+    @media (max-width: 700px) {
+        .wrap { padding: 12px 10px 24px; }
+        header { gap: 8px; margin-bottom: 12px; }
+        header h1 { flex: 1 0 100%; font-size: 13px; }
+        header > button, header > a { flex: 1; }
+        header > a button, header > button { width: 100%; padding: 8px 6px; font-size: 8px; }
+        /* Ko'rsatkichlar: 3 ustun, ixcham */
+        .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+        .stat { padding: 8px; box-shadow: inset 0 0 0 3px var(--edge), 4px 4px 0 rgba(0,0,0,.55); }
+        .stat b { font-size: 13px; margin-bottom: 2px; }
+        .stat span { font-size: 7px; line-height: 1.6; display: block; overflow-wrap: anywhere; }
+        /* Bo'limlar: bitta qator, yonga suriladi */
+        .tabs { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 0 2px 8px; margin-bottom: 10px; scrollbar-width: thin; }
+        .tabs button { flex-shrink: 0; padding: 8px 10px; font-size: 8px; }
+        .bar { gap: 8px; }
+        .bar input { flex: 1 0 100%; min-width: 0; }
+        .bar select { flex: 1; min-width: 0; }
+        /* Jadvallar - kartochkalar (har qator - alohida blok, ustun nomi chapda) */
+        table.cards { min-width: 0; }
+        table.cards thead { display: none; }
+        table.cards, table.cards tbody { display: block; }
+        table.cards tr { display: block; padding: 8px 10px; border-bottom: 3px solid var(--panel3); }
+        table.cards tr:hover td { background: none; }
+        table.cards td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 4px 0; border: 0; text-align: right; white-space: normal; max-width: none; }
+        table.cards td::before { content: attr(data-l); color: var(--gold); font-size: 7px; text-align: left; flex-shrink: 0; padding-top: 2px; }
+        table.cards td:not([data-l]), table.cards td[data-l=""] { justify-content: flex-end; }
+        table.cards td:not([data-l])::before, table.cards td[data-l=""]::before { display: none; }
+        table.cards td:first-child { justify-content: flex-start; flex-wrap: wrap; text-align: left; font-size: 10px; }
+        table.cards td:first-child::before { display: none; }
+        table.cards td.err-msg { display: block; text-align: left; }
+        table.cards td.err-msg::before { display: block; margin-bottom: 4px; }
+        table.cards td.empty { justify-content: center; }
+        table.cards td button { padding: 6px 10px; }
+        .pager { justify-content: center; }
+        .modal { padding: 14px; }
+        .act .row select { min-width: 110px; }
+        .rooms { grid-template-columns: 1fr; }
+    }
 </style>
 </head>
 <body>
@@ -194,7 +242,7 @@
         </div>
         <div class="card">
             <div class="table-wrap">
-                <table>
+                <table class="cards">
                     <thead><tr><th>Nickname</th><th>Ism</th><th>Tanga</th><th>The World</th><th>Ferma</th><th>Darajalar (K/A/M/S/H)</th><th>Ro'yxatdan</th><th></th></tr></thead>
                     <tbody id="users-body"></tbody>
                 </table>
@@ -266,7 +314,7 @@
     <section id="tab-log" class="hidden">
         <div class="card">
             <div class="table-wrap">
-                <table>
+                <table class="cards">
                     <thead><tr><th>Vaqt</th><th>Admin</th><th>Amal</th><th>Kimga</th><th>Tafsilot</th></tr></thead>
                     <tbody id="log-body"></tbody>
                 </table>
@@ -280,7 +328,7 @@
             <div class="sub" style="margin-bottom:8px">O'yinchilar brauzerida chiqqan JS xatolar (o'yin fayllaridagi). Bir xil xato bitta qatorga yig'iladi. Tuzatilgach - "Hal qilindi".</div>
             <div class="row" style="margin-bottom:8px"><button id="err-refresh"><i class="fa-solid fa-rotate"></i> Yangilash</button><button class="danger" id="err-clear"><i class="fa-solid fa-trash"></i> Hammasini tozalash</button></div>
             <div class="table-wrap">
-                <table>
+                <table class="cards">
                     <thead><tr><th>Oxirgi</th><th>Soni</th><th>Xato</th><th>Joyi</th><th>O'yinchilar / xarita</th><th></th></tr></thead>
                     <tbody id="err-body"></tbody>
                 </table>
@@ -385,6 +433,11 @@
     const msgOf = (m) => MSG[m] || m || 'Xato';
     // Matnni xavfsiz qo'shish (nickname'dagi HTML bajarilmasin)
     const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+    // Telefonda jadval qatori kartochka bo'ladi: har katakka ustun nomi yoziladi (CSS ::before ko'rsatadi)
+    const labelCells = (tbody) => {
+        const names = [...tbody.closest('table').querySelectorAll('thead th')].map(th => th.textContent.trim());
+        tbody.querySelectorAll('tr').forEach(tr => [...tr.children].forEach((td, i) => { if (td.colSpan === 1 && names[i]) td.dataset.l = names[i]; }));
+    };
 
     async function api(path, opts = {}) {
         const res = await fetch('/api/admin' + path, { ...opts, headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token, ...(opts.headers || {}) } });
@@ -436,12 +489,13 @@
             tr.appendChild(el('td', '', u.fullName));
             tr.appendChild(el('td', '', String(u.coins)));
             tr.appendChild(el('td', '', u.world.pct + '%  ·  ' + u.world.bosses + ' boss'));
-            tr.appendChild(el('td', '', u.farm.level + '-daraja'));
+            tr.appendChild(el('td', 'nowrap', u.farm.level + '-daraja'));
             tr.appendChild(el('td', 'levels', [u.levels.knight, u.levels.archer, u.levels.mage, u.levels.samurai, u.levels.hunter].join(' / ')));
-            tr.appendChild(el('td', '', u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '-'));
+            tr.appendChild(el('td', 'nowrap', u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '-'));
             const act = el('td'); const b = el('button', 'primary', 'Boshqarish'); b.onclick = () => openUser(u); act.appendChild(b); tr.appendChild(act);
             body.appendChild(tr);
         });
+        labelCells(body);
         const pages = Math.max(1, Math.ceil(d.total / d.pageSize));
         $('pager-info').textContent = `Jami: ${d.total}  ·  ${page + 1} / ${pages}`;
         $('prev-btn').disabled = page <= 0; $('next-btn').disabled = page + 1 >= pages;
@@ -669,6 +723,7 @@
             tr.appendChild(el('td', '', it.detail || ''));
             body.appendChild(tr);
         });
+        labelCells(body);
         const pages = Math.max(1, Math.ceil(d.total / d.pageSize));
         $('log-info').textContent = `Jami: ${d.total}  ·  ${logPage + 1} / ${pages}`;
         $('log-prev').disabled = logPage <= 0; $('log-next').disabled = logPage + 1 >= pages;
@@ -701,15 +756,16 @@
             const tr = el('tr');
             tr.appendChild(el('td', '', new Date(r.last).toLocaleString()));
             tr.appendChild(el('td', 'nick', String(r.count)));
-            const msg = el('td', ''); msg.style.maxWidth = '420px'; msg.style.wordBreak = 'break-word';
+            const msg = el('td', 'err-msg');
             msg.appendChild(el('div', '', r.msg));
-            if (r.stack) { const det = document.createElement('details'); const sm = document.createElement('summary'); sm.textContent = 'stack'; det.appendChild(sm); const pre = document.createElement('pre'); pre.style.whiteSpace = 'pre-wrap'; pre.style.fontSize = '10px'; pre.textContent = r.stack; det.appendChild(pre); msg.appendChild(det); }
+            if (r.stack) { const det = document.createElement('details'); const sm = document.createElement('summary'); sm.textContent = 'stack'; det.appendChild(sm); const pre = document.createElement('pre'); pre.textContent = r.stack; det.appendChild(pre); msg.appendChild(det); }
             tr.appendChild(msg);
             tr.appendChild(el('td', '', (r.src || '-') + ':' + r.line + ':' + r.col));
             tr.appendChild(el('td', '', [...new Set(r.users)].join(', ') + (r.maps.length ? '  [' + r.maps.join(', ') + ']' : '') + '  · birinchi: ' + new Date(r.first).toLocaleDateString()));
             const td = el('td', ''); const b = el('button', '', 'Hal qilindi'); b.onclick = async () => { await api('/errors/' + r.id + '/resolve', { method: 'POST' }); loadErrors(); }; td.appendChild(b); tr.appendChild(td);
             body.appendChild(tr);
         });
+        labelCells(body);
     }
     $('err-refresh').onclick = loadErrors;
     $('err-clear').onclick = () => pxConfirm("Hamma xatolar o'chirilsinmi?", async () => { await api('/errors/clear', { method: 'POST' }); loadErrors(); });
