@@ -8,6 +8,8 @@
     <meta name="description" content="4 Heroes is a free co-op pixel action game in your browser. Team up with up to 4 friends as a Knight, Archer, Mage or Samurai, beat bosses and unlock new maps.">
     <link rel="canonical" href="https://4heroes.xyz/">
     <script src="errlog.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="telegram.js"></script>
     <!-- Open Graph / Twitter: havola Telegram, Discord, Facebook, X da rasm va sarlavha bilan chiqadi -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="4 Heroes">
@@ -759,6 +761,13 @@
         }
 
         .link-text { color: var(--px-accent); font-size: 9px; text-decoration: none; border-bottom: 2px dashed var(--px-accent); }
+        /* Telegram Mini App: Telegram bilan kirish tugmasi (faqat Telegram ichida ko'rinadi) */
+        #tg-auth { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 10px; }
+        #tg-auth.hidden { display: none; }
+        #tg-play-btn { background: #2aabee; color: #fff; border-color: #1b7fb5; min-width: 220px; }
+        #tg-play-btn:disabled { opacity: .6; }
+        #tg-auth-error:empty { display: none; }
+        #tg-auth .tg-or { font-size: 9px; opacity: .75; margin: 2px 0 0; }
         .link-text:hover { color: #fff; border-color: #fff; }
         .error-text { color: var(--px-red); font-size: 9px; text-shadow: 1px 1px 0 var(--px-ink); }
         .settings-note { color: var(--px-muted); font-size: 8px; line-height: 1.8; }
@@ -1475,6 +1484,11 @@
     <div id="auth-panel" class="panel">
         <div class="pixel-logo"><span class="logo-main">4 HEROES</span><span class="logo-sub">CO-OP ACTION</span></div>
         <h2 id="auth-title" data-i18n="reg_title">CREATE ACCOUNT</h2>
+        <div id="tg-auth" class="hidden">
+            <button id="tg-play-btn" data-i18n="tg_play">Play with Telegram</button>
+            <p id="tg-auth-error" class="error-text"></p>
+            <p class="tg-or" data-i18n="tg_or">or sign in with a nickname</p>
+        </div>
         <div id="login-form" class="hidden">
             <input type="text" id="login-nickname" maxlength="20" data-i18n-ph="nickname_ph" placeholder="Nickname">
             <input type="password" id="login-password" data-i18n-ph="password_ph" placeholder="Password">

@@ -17,7 +17,7 @@ export class HunterCharacter extends BaseCharacter {
         if (player.weaponMode === 'alt') {
             // DROTIK: tez va uzoqqa; 10-darajadan - zaharli
             room.bulletIdCounter++;
-            room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + dir * 18, y: player.y - 6,
+            room.bullets.push({ id: 'bullet_' + room.bulletIdCounter, playerId: player.id, x: player.x + dir * 40, y: player.y - 10,   // naycha uchidan (og'izga tutilgan)
                 vx: Math.cos(angle) * HUNTER.dartSpeed, vy: Math.sin(angle) * HUNTER.dartSpeed, color: player.color, lifetime: HUNTER.dartLife,
                 bulletType: 'dart', justSpawned: true, poison: hasPerk(player, 'poison') });
             return;

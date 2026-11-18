@@ -136,7 +136,32 @@ export const WEAPON_ITEMS: { [characterType: string]: { [slot: string]: Cosmetic
             { id: 'golden', name: 'Golden Bow', price: 2100 }
         ]
     },
-    hunter: {},
+    hunter: {   // OVCHI: uzun pichoq va puflama naycha
+        hknife: [
+            { id: 'bone', name: 'Bone Knife', price: 250 },
+            { id: 'machete', name: 'Jungle Machete', price: 400 },
+            { id: 'carrot', name: 'Carrot Knife', price: 550 },
+            { id: 'crystal', name: 'Crystal Dagger', price: 700 },
+            { id: 'fang', name: 'Wolf Fang', price: 900 },
+            { id: 'pirate', name: 'Pirate Cutlass', price: 1100 },
+            { id: 'candy', name: 'Candy Knife', price: 1400 },
+            { id: 'obsidian', name: 'Obsidian Blade', price: 1700 },
+            { id: 'golden', name: 'Golden Knife', price: 2100 },
+            { id: 'flame', name: 'Flame Knife', price: 2600 }
+        ],
+        blowpipe: [
+            { id: 'bamboo', name: 'Bamboo Pipe', price: 250 },
+            { id: 'pink', name: 'Pink Pipe', price: 400 },
+            { id: 'straw', name: 'Party Straw', price: 550 },
+            { id: 'bone', name: 'Bone Pipe', price: 700 },
+            { id: 'spyglass', name: 'Spyglass Pipe', price: 900 },
+            { id: 'jungle', name: 'Jungle Vine Pipe', price: 1100 },
+            { id: 'ice', name: 'Ice Pipe', price: 1400 },
+            { id: 'dragon', name: 'Dragon Pipe', price: 1700 },
+            { id: 'laser', name: 'Laser Pipe', price: 2100 },
+            { id: 'golden', name: 'Golden Pipe', price: 2600 }
+        ]
+    },
     samurai: {
         katana: [
             { id: 'shinai', name: 'Shinai', price: 250 },
@@ -154,7 +179,7 @@ export const WEAPON_ITEMS: { [characterType: string]: { [slot: string]: Cosmetic
 };
 
 // Kiyilgan detallarni bitta qisqa satrda yuborish tartibi (o'yin holati har 30ms da ketadi)
-export const LOOK_SLOTS = ['head', 'face', 'sword', 'shield', 'shotgun', 'staff', 'bow', 'katana', 'kunai', 'body'];   // body - oxirida (eski satrlar buzilmaydi)
+export const LOOK_SLOTS = ['head', 'face', 'sword', 'shield', 'shotgun', 'staff', 'bow', 'katana', 'kunai', 'body', 'hknife', 'blowpipe'];   // body - oxirida (eski satrlar buzilmaydi)
 
 // Shu personaj uchun shu slotda bor buyum (yo'q bo'lsa - null)
 export function findCosmetic(characterType: string, slot: string, itemId: string): CosmeticItem | null {

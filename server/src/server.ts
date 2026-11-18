@@ -18,6 +18,7 @@ import { BIG_GEN, BIG_CLOSED } from './bigmap';
 import { config } from 'dotenv';
 import { startAdminBot } from './admin.bot';
 import { signUser, verifyUser } from './auth';
+import { tgEnabled, verifyTgInitData } from './telegram';
 import { isLocalTest } from './testmode';
 import { adminLogin, verifyAdmin, isAdminLoginName } from './adminAuth';
 config({quiet:true})
@@ -189,6 +190,23 @@ app.post('/api/login', async (req, res) => {
         if (a.message === 'err_admin_locked') { res.status(400).json({ success: false, message: 'err_admin_locked' }); return; }
     }
     res.status(400).json(result);
+});
+
+// TELEGRAM MINI APP: Telegram imzosi bilan kirish (create - bog'langan hisob bo'lmasa yangisini ochish) va eski hisobni bog'lash
+app.post('/api/tg-login', async (req, res) => {
+    if (!tgEnabled()) { res.status(400).json({ success: false, message: 'tg_off' }); return; }
+    const tg = verifyTgInitData((req.body || {}).initData);
+    if (!tg) { res.status(401).json({ success: false, message: 'tg_bad' }); return; }
+    try {
+        const r = await db.telegramLogin(tg, !!(req.body || {}).create);
+        if (r.success) res.json(withToken(r)); else res.status(r.message === 'tg_new' ? 200 : 400).json(r);
+    } catch (err) { console.error('tg-login xatosi:', err); res.status(500).json({ success: false, message: 'generic_error' }); }
+});
+app.post('/api/tg-link', async (req, res) => {
+    const { initData, userId, token } = req.body || {};
+    const tg = tgEnabled() ? verifyTgInitData(initData) : null;
+    if (!tg || !verifyUser(userId, token)) { res.status(401).json({ success: false }); return; }
+    res.json({ success: await db.telegramLink(String(userId), tg.id) });
 });
 
 // FOYDALANUVCHI MA'LUMOTINI YANGILASH UCHUN (masalan, do'kon ochilganda)
@@ -1405,7 +1423,7 @@ io.on('connection', (socket) => {
     });
     socket.on('bigAct', (d: { roomId: string, act: string, arg?: number, item?: string }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;
-        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'qcancel', 'cptp', 'fishcast', 'fishreel', 'cage', 'fruit', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
+        if (room && room.isStarted && typeof d.act === 'string' && ['quest', 'rq', 'rqsync', 'qcancel', 'cptp', 'pick', 'mine', 'mdoor', 'vopen', 'vclose', 'fishcast', 'fishreel', 'cage', 'fruit', 'trigger', 'talk', 'talkdone', 'mage', 'magegift', 'mageinvite'].includes(d.act)) gameEngine.bigAct(room, socket.id, d.act, Number(d.arg) || 0, typeof d.item === 'string' ? d.item.slice(0, 16) : '');
     });
     socket.on('petRide', (d: { roomId: string, on: boolean }) => {
         const room = d && typeof d.roomId === 'string' ? activeRooms[d.roomId] : undefined;

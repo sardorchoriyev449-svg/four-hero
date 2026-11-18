@@ -48,6 +48,7 @@ export function levelForUpgrade(current: number): number {
 const userSchema = new mongoose.Schema({
     fullName: { type: String, required: true },
     nickname: { type: String, required: true, unique: true },
+    tgId: { type: String, index: { unique: true, sparse: true } },   // TELEGRAM MINI APP: bog'langan Telegram hisobi (id)
     passwordHash: { type: String, required: true },
     coins: { type: Number, required: true, default: 0 },
     ownedSkins: { type: Object, required: true, default: DEFAULT_OWNED_SKINS },
@@ -361,6 +362,45 @@ export async function registerUser(fullNameRaw: unknown, nicknameRaw: unknown, p
         if (err && err.code === 11000) return { success: false, message: 'err_nickname_taken' };
         throw err;
     }
+}
+
+// TELEGRAM MINI APP: Telegram hisobi orqali kirish. Bog'langan o'yinchi bo'lsa - unga; bo'lmasa (create) - Telegram ismidan yangi hisob
+// (nik band bo'lsa - oxiriga raqam), tasodifiy parol bilan (keyinchalik o'yinchi xohlasa - shu Telegram orqali kiradi)
+export async function telegramLogin(tg: { id: number, first_name?: string, last_name?: string, username?: string }, create: boolean): Promise<{ success: boolean, message?: string, user?: UserRecord, created?: boolean }> {
+    const tgId = String(tg.id);
+    let doc: any = await UserModel.findOne({ tgId });
+    if (doc) {
+        if (doc.banned) return { success: false, message: 'err_banned' + (doc.banReason ? '|' + doc.banReason : '') };
+        await migrateRoomProgress(doc);
+        return { success: true, user: docToUser(doc) };
+    }
+    if (!create) return { success: false, message: 'tg_new' };
+    const clean = (s: string) => String(s || '').replace(/[^A-Za-z0-9_Ѐ-ӿ]/g, '');   // lotin, raqam, kirill
+    let base = clean(tg.username || '') || clean(tg.first_name || '') || 'Hero';
+    if (base.length < NICKNAME_MIN) base = ('Hero' + base).slice(0, NICKNAME_MAX);
+    base = base.slice(0, NICKNAME_MAX - 4);
+    const fullRaw = ((tg.first_name || '') + ' ' + (tg.last_name || '')).trim().slice(0, 40);
+    const fullName = fullRaw.length >= FULLNAME_MIN ? fullRaw : (fullRaw + ' ' + base).trim().slice(0, 40).padEnd(FULLNAME_MIN, '_');
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(18).toString('base64url'), 10);
+    for (let k = 0; k < 12; k++) {
+        const nickname = k === 0 ? base : base + Math.floor(100 + Math.random() * 9900);
+        if (await UserModel.exists({ nickname })) continue;
+        try {
+            doc = await UserModel.create({ fullName, nickname, passwordHash, tgId, coins: 0, ownedSkins: DEFAULT_OWNED_SKINS, equippedSkins: DEFAULT_EQUIPPED_SKINS });
+            return { success: true, user: docToUser(doc), created: true };
+        } catch (err: any) {
+            if (err && err.code === 11000) { const again: any = await UserModel.findOne({ tgId }); if (again) return { success: true, user: docToUser(again) }; continue; }
+            throw err;
+        }
+    }
+    return { success: false, message: 'err_nickname_taken' };
+}
+// eski hisobni Telegramga bog'lash (o'yinchi Telegram ichida nik / parol bilan kirganda): hisobda Telegram yo'q va bu Telegram bo'sh bo'lsa
+export async function telegramLink(userId: string, tgIdNum: number): Promise<boolean> {
+    if (!mongoose.isValidObjectId(userId)) return false;
+    const tgId = String(tgIdNum);
+    if (await UserModel.exists({ tgId })) return false;
+    try { const r = await UserModel.updateOne({ _id: userId, tgId: { $exists: false } }, { $set: { tgId } }); return r.modifiedCount === 1; } catch { return false; }
 }
 
 // TIZIMGA KIRISH: nickname va parol bilan
@@ -1009,6 +1049,16 @@ export async function claimMapCoins(userId: string, mapId: number, amount: numbe
     }
 }
 // Tanga sarflash (masalan ranets): yetsa - bitta atomik amalda ayiriladi; aks holda null
+// PUL O'G'RISI: hisobdagi tanganing ulushi (min..max oralig'ida, bor bo'lganidan ko'p emas) - olingan miqdor va qolgan tanga
+export async function takeCoinsPct(userId: string, pct: number, min: number, max: number): Promise<{ taken: number, coins: number }> {
+    try {
+        const doc: any = await UserModel.findById(userId, { coins: 1 }).lean();
+        const have = doc ? Math.floor(doc.coins || 0) : 0, amount = Math.min(have, Math.max(min, Math.min(max, Math.floor(have * pct))));
+        if (amount <= 0) return { taken: 0, coins: have };
+        const u = await spendCoins(userId, amount);
+        return u ? { taken: amount, coins: u.coins } : { taken: 0, coins: have };
+    } catch (err) { console.error('takeCoinsPct xatosi:', err); return { taken: 0, coins: 0 }; }
+}
 export async function spendCoins(userId: string, amount: number): Promise<UserRecord | null> {
     try {
         const doc = await UserModel.findOneAndUpdate({ _id: userId, coins: { $gte: amount } }, { $inc: { coins: -amount } }, { returnDocument: 'after' });

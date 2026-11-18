@@ -688,7 +688,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // AJDARDA: o'tirib boradi (o'zi - rideOn, boshqalar - hamrohi "ride" holatida)
         if ((sprite === currentCharacter && rideOn) || scene.time.now - (sprite.rideAt || -1e9) < 300) return 18;
         const now = scene.time.now, atk = now - (sprite.lastAtkAt || -1e9), cut = now - (sprite.cutAt || -1e9);
-        const type = sprite.characterType, gun = type === 'archer' || (type === 'knight' && sprite.weaponMode === 'alt');   // arbalet / drobovik - ikki qo'llab nishonga olish
+        const type = sprite.characterType, gun = type === 'archer' || ((type === 'knight' || type === 'hunter') && sprite.weaponMode === 'alt');   // ovchi naychasi ham - nishonga olish kadrlari   // arbalet / drobovik - ikki qo'llab nishonga olish
         let vx, vy, ground;
         if (sprite.body && sprite.body.velocity) { vx = sprite.body.velocity.x; vy = sprite.body.velocity.y; ground = sprite.body.blocked.down || sprite.body.touching.down; }
         else {
@@ -958,7 +958,7 @@ function launchGame(socket, roomId, mapData, continued) {
         const w = sprite.weaponSpr;
         const hidden = sprite.isDead || sprite.alpha <= 0.01;
         // Qo'l ishorasi ko'rsatilayotganda qurol qo'lda emas (qo'l - ishora)
-        w.setVisible(!hidden && !(scene.time.now < (sprite.gestureUntil || 0)));
+        w.setVisible(!hidden && !sprite.fishing && !(scene.time.now < (sprite.gestureUntil || 0)));   // baliq tutayotganda - qo'lda qarmoq (bigmap.js chizadi)
         if (!hidden) {
             const texKey = custom ? custom.key : 'w_' + pose.kind;
             if (w.texture.key !== texKey) w.setTexture(texKey);
@@ -973,6 +973,11 @@ function launchGame(socket, roomId, mapData, continued) {
             if (wa !== undefined) { w.angle = facingRight ? wa : -wa; w.setPosition(sprite.x + dir * hh[0], sprite.y + hh[1]); }
             else if (hh) w.setPosition(sprite.x + dir * (hh[0] + sprite.atk.dx * ws), sprite.y + hh[1] + sprite.atk.dy * ws);
             else w.setPosition(sprite.x + dir * (pose.hand[0] + sprite.atk.dx), sprite.y + pose.hand[1] + sprite.atk.dy);
+            // OVCHI NAYCHASI otishda: orqa uchi OG'IZDA (ko'z tasmasi oldi, ostida), oldinga - ikki qo'l ushlagan tomonga biroz egilib
+            if (hh && characterType === 'hunter' && sprite.weaponMode === 'alt' && (sprite.heroF === 10 || sprite.heroF === 11)) {
+                const H = Cosmetics.HERO, hd = H.heads && H.heads[sprite.heroF];
+                if (hd) { w.setOrigin(facingRight ? 0 : 1, 0.5); w.angle = facingRight ? 12 : -12; w.setPosition(sprite.x + dir * (hd[5] + 0.5 - H.w / 2), sprite.y + hd[7] + 2.5 - (H.h - 24)); }
+            }
             w.setAlpha(sprite.alpha);
             if (characterType === 'mage' && sprite.weaponMode === 'alt') w.setTint(0x80d8ff);
             else if (characterType === 'mage' && sprite.weaponMode === 'alt2') w.setTint(0xfff176);   // chaqmoq - sariq
@@ -1094,7 +1099,7 @@ function launchGame(socket, roomId, mapData, continued) {
         // Uchadigan o'qlar: server bilan bir xil tezlik va chiqish nuqtasi
         const spec = {
             arrow: [1000, 18, -8], fireball: [600, 20, -10], ice: [700, 20, -10], lightning: [1100, 20, -10],
-            kunai: [750, 18, -4], slash: [640, 24, -2], shield: [650, 20, -6], dart: [950, 18, -6]
+            kunai: [750, 18, -4], slash: [640, 24, -2], shield: [650, 20, -6], dart: [950, 40, -10]
         }[bt];
         if (!spec) return;
         const fan = (bt === 'arrow' && c.characterType === 'archer' && (c.weaponMode || 'main') === 'alt') ? [-0.12, 0, 0.12] : [0];
@@ -1223,6 +1228,8 @@ function launchGame(socket, roomId, mapData, continued) {
     // KO'ZGU BOSS (Big Map): o'yinchining egizagi - boshqa o'yinchilar chiziladigan kod bilan (tana, kiyim, qurol, zarba animatsiyalari).
     // bigmap.js chaqiradi: make (bir marta), update (har kadr), attack (zarba / o'q), destroy
     const PUP_PARTS = ['weaponSpr', 'shieldSpr', 'fistSpr', 'faceSpr', 'hatSpr', 'jetSpr'];
+    // qahramon qo'li (qurol ushlaydigan musht) dunyodagi joyi - baliq qarmog'i shu yerdan chiziladi
+    window.heroHandAt = (s) => { const h = s && heroHand(s); if (!h) return null; const dir = s.flipX ? -1 : 1; return [s.x + dir * h[0], s.y + h[1]]; };
     window.HeroPuppet = {
         make(scene, pl) {
             const key = 'char_' + pl.ct + '_' + pl.c;
@@ -11167,6 +11174,14 @@ function launchGame(socket, roomId, mapData, continued) {
                 this.tweens.add({ targets: h, y: d.y - 40 - Math.random() * 30, alpha: 0, duration: 900 + Math.random() * 400, delay: i * 60, onComplete: () => h.destroy() });
             }
             if (d.kind === 'pet' && crObj && crObj.pets[d.by]) crObj.pets[d.by].happyUntil = this.time.now + 1500;
+        });
+        // ajdarchaga zarar tegdi: qizil son va uchqun
+        socket.off('petHurt');
+        socket.on('petHurt', (d) => {
+            if (!d || !this.add) return;
+            const tx = this.add.text(d.x, d.y - 24, '-' + d.dmg, { fontFamily: PIXEL_FONT, fontSize: '11px', color: '#ff5252', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(5);
+            this.tweens.add({ targets: tx, y: tx.y - 26, alpha: 0, duration: 700, onComplete: () => tx.destroy() });
+            if (d.id === socket.id && d.hp > 0 && typeof showTopToast === 'function' && !this.petWarnAt) { this.petWarnAt = 1; showTopToast(t('pet_hurt_tip')); }
         });
         socket.on('petDown', (d) => {
             if (!d) return;

@@ -266,6 +266,7 @@ window.BigMap = (function () {
         on('bigQuest', (d) => { if (d) onQuest(scene, d); });
         // LAGER TOPSHIRIQLARI: buyum rasmlari, topshiriq holati serverdan
         rqTextures(scene); fruitTextures(scene); O.fruits = new Map(); O.fruitOff = new Set(); O.rq = null; O.rqImgs = new Map(); O.fish = null; O.reel = null; O.fishG = scene.add.graphics().setDepth(3.5);
+        O.pick = null; O.ores = W.mine && scene.textures.exists('bm_ore') ? W.mine.ores.map(x => scene.add.image(x, W.mine.y + 2, 'bm_ore').setOrigin(0.5, 1).setDepth(-0.55)) : [];   // shaxta: ruda toshlari
         on('bigRQ', (d) => { if (d) onRq(scene, d); });
         // KATTA O'RMON: meva yeyildi / terildi (hamma ko'radi); Yer osti: qizil tosh olindi
         on('bigFruit', (d) => {
@@ -382,6 +383,25 @@ window.BigMap = (function () {
             if (cue && cue.indexOf('big_mv_') !== 0) { O.cue.setText(cue).setAlpha(1); scene.tweens.killTweensOf(O.cue); scene.tweens.add({ targets: O.cue, alpha: 0, delay: 1300, duration: 500 }); }
             if (d.k === 'palundra') palMove(scene, d);
             if (d.k === 'mirror') mirMove(scene, d);
+            if (d.m === 'petzap') { puff(d.x, d.y, 0xff5252, 6); X.sfxAt('laser', d.x, 0.5); }   // boss ajdarchaga o'q uzdi
+            if (d.k === 'stoneman') {
+                const e = O.enemies.get(d.id);
+                if (d.m === 'groar') { X.sfxAt('roar', d.x, 0.9); scene.cameras.main.shake(300, 0.008); }
+                else if (d.m === 'gpunch') { if (e) { e.hitK = 'p'; e.hitAt = scene.time.now; } X.sfxAt('thud', d.x, 0.9); }
+                else if (d.m === 'gslam') { if (e) { e.hitK = 's'; e.hitAt = scene.time.now; } puff(d.x, d.y - 6, 0x8d8d96, 18); scene.cameras.main.shake(300, 0.012); X.sfxAt('rumble', d.x, 1); }
+                else if (d.m === 'gcrumble') puff(d.x, d.y - 30, 0x8d8d96, 20);
+            }
+            if (d.k === 'vendmimic') {
+                if (d.m === 'vroar') X.sfxAt('roar', d.x, 0.8);
+                else if (d.m === 'vfire') X.sfxAt('fireball', d.x, 0.8);
+                else if (d.m === 'vjump') X.sfxAt('whoosh', d.x, 0.8);
+                else if (d.m === 'vslam') { puff(d.x, d.y - 6, 0xb0bec5, 16); scene.cameras.main.shake(260, 0.01); X.sfxAt('thud', d.x, 1); }
+            }
+            if (d.k === 'cointhief') {   // tutun bombasi / tanga olish / pichoq
+                if (d.m === 'tpuff') { puff(d.x, d.y - 24, 0x9e9e9e, 14); puff(d.x, d.y - 24, 0x616161, 8); X.sfxAt('whoosh', d.x, 0.7); }
+                else if (d.m === 'tsteal') { for (let k = 0; k < 8; k++) { const c = scene.add.rectangle(d.x, d.y - 30, 5, 5, 0xffd54f).setDepth(4); scene.tweens.add({ targets: c, x: d.x + (Math.random() - 0.5) * 60, y: d.y - 60 - Math.random() * 40, alpha: 0, duration: 600, onComplete: () => c.destroy() }); } X.sfxAt('coin', d.x, 1); }
+                else if (d.m === 'tthrow') { const e = O.enemies.get(d.id); if (e) e.windAt = scene.time.now; X.sfxAt('arrow', d.x, 0.5); }
+            }
             if (d.m === 'blinkout') puff(d.x, d.y - 40, d.k === 'icequeen' ? 0xb3e5fc : 0x7c4dff, 16);
             else if (d.m === 'burrow') { puff(d.x, d.y - 6, 0x6d4c41, 18); X.sfxAt('rumble', d.x, 0.8); }
             else if (d.m === 'emerge') { puff(d.x, d.y - 20, 0x8d6e63, 26); scene.cameras.main.shake(220, 0.01); X.sfxAt('roar', d.x, 0.9); }
@@ -473,6 +493,51 @@ window.BigMap = (function () {
         on('bigChill', (d) => { if (!d) return; O.chillUntil = scene.time.now + (d.ms || 1400); O.chillCol = d.gas ? 0xc5e1a5 : 0xb3e5fc; const h = X.hero(); if (h) puff(h.x, h.y, d.gas ? 0x9ccc65 : 0xb3e5fc, 10); if (d.gas) showToast(t('big_gas')); });
         on('bigArmorHit', (d) => { if (!d) return; puff(d.x, d.y - 10, 0x90caf9, 8); X.sfx('block', 0.5); if (d.left <= 0) showToast(t('big_armor_broken')); });
         on('bigPhoenix', (d) => { if (!d) return; puff(d.x, d.y, 0xff7a1a, 30); puff(d.x, d.y - 30, 0xffc35a, 20); X.sfx('win'); if (d.id === X.socket.id) { O.fall.y = null; clearStatus(); showToast(t('big_phoenix_rise')); } });
+        // YER OSTI SHAXTASI: kirka olindi, zarba, tanga, kirka sindi (Tosh Odam), kutish
+        on('bigMine', (d) => {
+            if (!d) return;
+            const me = d.by === undefined || d.by === X.socket.id, mn = W.mine;
+            if (d.st === 'take') { O.pick = { found: 0, max: d.max || 100 }; showToast(t('big_mine_took')); X.sfx('pop', 0.7); }
+            else if (d.st === 'hit') { const x = mn && mn.ores[d.i]; if (x !== undefined) { puff(x, mn.y - 20, 0x9e9e9e, 5); const im = O.ores[d.i]; if (im && im.active) { scene.tweens.killTweensOf(im); im.setX(x + 3); scene.tweens.add({ targets: im, x, duration: 120 }); } } if (d.by === X.socket.id) O.pickSwing = scene.time.now; X.sfxAt('thud', x || 0, 0.5); }
+            else if (d.st === 'coin') { if (O.pick) O.pick.found = d.found; const x = mn && mn.ores[d.i]; if (x !== undefined) for (let k = 0; k < 5; k++) { const c = scene.add.rectangle(x, mn.y - 30, 5, 5, 0xffd54f).setDepth(4); scene.tweens.add({ targets: c, x: x + (Math.random() - 0.5) * 50, y: mn.y - 70 - Math.random() * 30, alpha: 0, duration: 500, onComplete: () => c.destroy() }); } X.sfx('coin', 0.5); }
+            else if (d.st === 'break') { if (me) { O.pick = null; banner(t('big_mine_broke'), '#ff8a65'); } puff(d.x, d.y - 30, 0x8d8d96, 22); scene.cameras.main.shake(400, 0.01); X.sfxAt('rumble', d.x, 1); }
+            else if (d.st === 'door') { puff(d.x0, d.y0 - 40, 0x8d6e63, 10); puff(d.x1, d.y1 - 40, 0x8d6e63, 10); if (d.by === X.socket.id) { X.sfx('whoosh', 0.6); if (d.inside) showToast(t('big_mine_inside')); } }
+            else if (d.st === 'wait') showToast(t('big_mine_wait').replace('{s}', d.s));
+            else if (d.st === 'golem') showToast(t('big_mine_golem'));
+            else if (d.st === 'golemdown') { showToast(t('big_mine_golemdown')); X.sfx('win', 0.5); }
+        });
+        // SAVDO AVTOMATI: rahmat / jahli chiqdi (rasm yashirinadi - o'rnida maxluq) / buzuq / tinchlandi
+        on('bigVend', (d) => {
+            if (!d) return;
+            if (d.st === 'thanks') { showToast(t('big_vend_thanks')); return; }
+            if (d.st === 'angry') { vendShow(d.i, false); if (d.by === X.socket.id) { banner(t('big_vend_angry'), '#ff5252'); showToast(t('big_vend_angry_tip')); } scene.cameras.main.shake(300, 0.008); X.sfxAt('roar', d.x, 0.9); return; }
+            if (d.st === 'broken') { vendShow(d.i, true); O.vendOff = O.vendOff || {}; O.vendOff[d.i] = Date.now() + (d.ms || 90000); showToast(t('big_vend_broken')); return; }
+            if (d.st === 'calm') { vendShow(d.i, true); }
+        });
+        // PUL O'G'RISI: keldi, o'g'irladi (uyasiga nishon), topolmadi, qochib ketdi, vaqt tugadi, yengildi
+        on('bigThief', (d) => {
+            if (!d) return;
+            if (d.st === 'vanish') { puff(d.x, d.y - 24, 0x9e9e9e, 16); return; }
+            if (d.st === 'come') { showToast(t('big_thief_come')); X.sfx('whoosh', 0.6); return; }
+            if (d.st === 'stole') {
+                banner(t('big_thief_stole').replace('{n}', d.amount), '#ffd54f'); showToast(t('big_thief_follow')); X.sfx('lose', 0.6);
+                if (d.lair) { O.wp = { x: d.lair.x, y: d.lair.y, label: t('big_thief_den') }; O.wpArrived = false; saveWp(); }
+                return;
+            }
+            const clearWp = () => { if (O.wp && O.wp.label === t('big_thief_den')) { O.wp = null; saveWp(); } };
+            if (d.st === 'nocoins') showToast(t('big_thief_nocoins'));
+            else if (d.st === 'escaped') { showToast(t('big_thief_escaped')); clearWp(); }
+            else if (d.st === 'scared') { showToast(t('big_thief_scared')); clearWp(); }
+            else if (d.st === 'lost') { showToast(t('big_thief_lost')); clearWp(); }
+            else if (d.st === 'down') { banner(t('big_thief_down'), '#69f0ae'); X.sfx('win', 0.7); puff(d.x, d.y - 24, 0xffd54f, 18); clearWp(); }
+        });
+        // DUNYO HODISASI: meteorit yomg'iri - ogohlantirish, osmonda uchayotgan meteoritlar, tugadi
+        on('bigEvent', (d) => {
+            if (!d || d.k !== 'meteor') return;
+            if (d.st === 'warn') { banner(t('big_ev_meteor_warn'), '#ff8a65'); showToast(t('big_ev_meteor_tip')); X.sfx('rumble', 1); scene.cameras.main.shake(600, 0.004); O.meteorUntil = scene.time.now + (d.ms || 0) + 25000; }
+            else if (d.st === 'on') { O.meteorUntil = scene.time.now + (d.ms || 25000); X.sfx('roar', 0.4); }
+            else if (d.st === 'end') { O.meteorUntil = 0; showToast(t('big_ev_meteor_end')); }
+        });
         on('bigBossReset', (d) => { if (!d) return; O.gifts = {}; showToast(t('big_boss_reset').replace('{b}', t('big_e_' + d.k))); });
         on('bigBuyResult', (d) => {
             if (!d) return;
@@ -621,6 +686,7 @@ window.BigMap = (function () {
             if (!scene.textures.exists(key)) return;
             const front = FRONT_PROPS[p.k];
             const im = scene.add.image(p.x, p.y + 2, key).setOrigin(0.5, 1).setDepth(front ? 3.6 : p.k === 'castle' ? -0.9 : -0.6);
+            if (p.k === 'vending') { im.vendXY = p.x + ',' + p.y; O.vendImgs = (O.vendImgs || []).filter(q => q.active); O.vendImgs.push(im); im.setVisible(!(O.vendHide && O.vendHide.has(im.vendXY))); }
             if (p.k === 'snakeden') { O.coverProps = (O.coverProps || []).filter(q => q.active); O.coverProps.push(im); }
             if (p.k === 'chessqueen') O.chessQ = im; if (p.k === 'chessking') O.chessK = im;   // Qora Ritsar zali: Farzin (ritsarga aylanadi), Shoh (toji olinadi)   // g'or ichida - qopqoq yopiq paytda ko'rinmaydi
             if (p.k === 'kidcage') { const c = (W.cages || []).find(q => q.x === p.x && q.y === p.y); im.cageZone = c ? c.zone : -1; O.cageImgs = O.cageImgs.filter(q => q.active); O.cageImgs.push(im); }
@@ -824,6 +890,20 @@ window.BigMap = (function () {
         O.scene.tweens.killTweensOf(O.toast);
         O.scene.tweens.add({ targets: O.toast, alpha: 0, delay: 1800, duration: 600 });
     }
+    // METEORIT YOMG'IRI: ekran bo'ylab uzoqdagi qiya meteorit izlari va biroz qizg'ish osmon
+    function drawMeteorSky(scene, now) {
+        const on = (O.meteorUntil || 0) > now;
+        if (!O.metG) { if (!on) return; O.metG = scene.add.graphics().setScrollFactor(0).setDepth(2.45); O.metS = []; }
+        const g = O.metG; g.clear();
+        if (!on) { O.metS.length = 0; return; }
+        g.fillStyle(0xff3d00, 0.07); g.fillRect(0, 0, 800, 600);
+        if (O.metS.length < 7 && Math.random() < 0.12) O.metS.push({ x: 120 + Math.random() * 780, y: -20, v: 5 + Math.random() * 4, s: 2 + Math.floor(Math.random() * 3) });
+        O.metS = O.metS.filter((m) => {
+            m.x -= m.v * 0.55; m.y += m.v;
+            for (let k = 0; k < 6; k++) { g.fillStyle(k < 2 ? 0xfff3b0 : k < 4 ? 0xff9100 : 0xbf360c, 1 - k * 0.15); g.fillRect(Math.round(m.x + k * m.s * 1.6), Math.round(m.y - k * m.s * 2.8), m.s * 2, m.s * 2); }
+            return m.y < 620 && m.x > -40;
+        });
+    }
     function banner(msg, col) {
         O.hudLoc.setText(msg).setColor(col || '#ffe082').setAlpha(1).setScale(0.6);
         O.scene.tweens.killTweensOf(O.hudLoc);
@@ -934,7 +1014,7 @@ window.BigMap = (function () {
         drawQuests(scene, now);
         drawFruits(scene);
         drawFishing(scene, now);
-        if (shopOpen() && !sh) closeShop();
+        if (shopOpen() && !sh && !(O.vendOpen !== undefined && nearVendAny(X.hero()) === O.vendOpen)) closeShop();
         if (portalMenuOpen() && !po) closePortalMenu();
     }
     // ===== BALANDDAN YIQILISH (o'z qahramonimiz - pozitsiyani klient boshqaradi): 30 m - yarim jon, 60 m - o'lim =====
@@ -1413,6 +1493,9 @@ window.BigMap = (function () {
                 const back = moving && (o.tx - o.x) * (o.f || 1) < 0, k = Math.floor(now / 150) % 4;
                 fr = o.bs === 'cwind' || o.bs === 'cannon' ? 4 : o.bs === 'awind' ? 5 : o.m === 'anchor' ? 6 : o.bs === 'gwind' ? (o.m === 'geyser' || Math.floor(now / 120) % 2 ? 7 : 0) : moving ? (back ? 3 - k : k) : 0;
             }
+            if (o.k === 'stoneman') fr = o.bs === 'rise' ? 5 : o.bs === 'pwind' || o.bs === 'swind' ? 3 : o.hitK && now - o.hitAt < 420 ? (o.hitK === 'p' ? 4 : 5) : moving ? 1 + Math.floor(now / 220) % 2 : 0;   // TOSH ODAM
+            if (o.k === 'vendmimic') fr = o.bs === 'rise' ? 5 : o.bs === 'fwind' ? 3 : o.bs === 'jwind' ? 5 : o.bs === 'jump' ? 4 : moving ? 1 + Math.floor(now / 120) % 2 : 0;   // AVTOMAT-MAXLUQ
+            if (o.k === 'cointhief') fr = o.bs === 'steal' || o.bs === 'laugh' ? 4 : o.windAt && now - o.windAt < 300 ? 3 : moving ? 1 + Math.floor(now / 90) % 2 : 0;   // PUL O'G'RISI
             if (o.k === 'mrhol') fr = o.bs === 'aim' ? (now - (o.windAt || 0) < 160 ? 3 : 2) : o.bs === 'dig' ? 4 : o.bs === 'emerge' ? 5 : moving ? Math.floor(now / 160) % 2 : 0;
             if (o.k === 'fieryhooves') fr = o.bs === 'stomp' ? (o.m === 'stomp1' && Math.floor(now / 120) % 2 ? 0 : 3) : o.bs === 'cwind' || o.bs === 'charge' ? (o.bs === 'charge' && Math.floor(now / 90) % 2 ? 1 : 4) : o.bs === 'kick' ? 5 : o.bs === 'kwind' ? 3 : o.bs === 'swind' || o.bs === 'shoot' ? 6 : moving ? 1 + Math.floor(now / 110) % 2 : 0;
             // BOTQOQ: yovvoyi qul (tishlash), qora kapishon (sehr), mimik to'nka (yashiringanda - oddiy to'nka)
@@ -1486,6 +1569,7 @@ window.BigMap = (function () {
             O.bossName.setText(boss.k === 'mirror' && boss.pl ? boss.pl.n : t('big_e_' + boss.k));
             window.bossBarFx(O.bossBar, O.bossName, O.bossIntro, now, Math.max(0, Math.min(1, boss.hp / boss.mx)), { y: 562, col: boss.sd ? 0x90a4ae : boss.v ? 0xffeb3b : 0xe8202a });
         }
+        drawMeteorSky(scene, now);
         drawShots(scene, now);
         drawAreas(scene, now);
         drawSinks(scene, now);
@@ -2588,9 +2672,27 @@ window.BigMap = (function () {
     function drawFishing(scene, now) {
         const g = O.fishG; g.clear();
         const h = X.hero(), f = O.fish, l = f && (W.ponds || []).find(o => o.id === f.pond);
+        if (h) h.fishing = !!(f && l) || !!O.pick;   // baliq qarmog'i yoki kirka qo'lda - qurol yashiriladi
+        if (O.pick && h && !h.isDead) {   // KIRKA: dasta qo'ldan tepaga, temir boshi; urishda pastga siltanadi; boshida progress (topilgan / 100)
+            const dir = h.flipX ? -1 : 1, hand = (window.heroHandAt && window.heroHandAt(h)) || [h.x + dir * 10, h.y + 4];
+            const sw = Math.max(0, 1 - (now - (O.pickSwing || 0)) / 220), ang = -1.25 + sw * 1.9, L = 30;
+            const tx = hand[0] + dir * Math.cos(ang) * L, ty = hand[1] + Math.sin(ang) * L, nx = -Math.sin(ang) * dir, ny = Math.cos(ang) * 0 + Math.cos(ang);
+            g.lineStyle(5, 0x2b1a0e, 1); g.lineBetween(hand[0], hand[1], tx, ty); g.lineStyle(3, 0x8d5a2b, 1); g.lineBetween(hand[0], hand[1], tx, ty);
+            const hx = Math.sin(ang) * 11 * dir, hy = -Math.cos(ang) * 11;
+            g.lineStyle(5, 0x263238, 1); g.lineBetween(tx - hx, ty - hy, tx + hx, ty + hy); g.lineStyle(3, 0x90a4ae, 1); g.lineBetween(tx - hx, ty - hy, tx + hx, ty + hy);
+            const k = Math.min(1, O.pick.found / (O.pick.max || 100)), bx = h.x - 22, by = h.y - 62;
+            g.fillStyle(0x000000, 0.8); g.fillRect(bx - 1, by - 1, 46, 7); g.fillStyle(0x5d4037, 1); g.fillRect(bx, by, 44, 5); g.fillStyle(k > 0.8 ? 0xff7043 : 0xffd54f, 1); g.fillRect(bx, by, 44 * k, 5);
+        }
         if (f && l && h) {
             const tx = Math.max(l.x + 12, Math.min(l.x + l.w - 12, h.x + (h.flipX ? -90 : 90))), ty = l.y + 2 + (f.bite ? Math.sin(now / 40) * 3 : Math.sin(now / 300) * 1.5);
-            g.lineStyle(1, 0xffffff, 0.8); g.lineBetween(h.x + (h.flipX ? -14 : 14), h.y - 22, tx, ty);
+            // QARMOQ qo'lda: dasta (to'q yog'och) qo'ldan oldinga-tepaga, g'altak, ingichka uchi; baliq tishlasa - uchi egiladi
+            const dir = h.flipX ? -1 : 1, hand = (window.heroHandAt && window.heroHandAt(h)) || [h.x + dir * 10, h.y + 4];
+            const bend = f.bite ? 6 + Math.sin(now / 40) * 3 : Math.sin(now / 500) * 1.5, mx = hand[0] + dir * 24, my = hand[1] - 22, rx = hand[0] + dir * 42, ry = hand[1] - 38 + bend;
+            g.lineStyle(4, 0x2b1a0e, 1); g.lineBetween(hand[0] - dir * 6, hand[1] + 5, mx, my);     // kontur
+            g.lineStyle(2, 0x8d5a2b, 1); g.lineBetween(hand[0] - dir * 6, hand[1] + 5, mx, my);     // dasta
+            g.lineStyle(2, 0x2b1a0e, 1); g.lineBetween(mx, my, rx, ry); g.lineStyle(1, 0xd7b98a, 1); g.lineBetween(mx, my, rx, ry);   // ingichka uchi
+            g.fillStyle(0x2b1a0e, 1); g.fillRect(hand[0] - dir * 2 - 3, hand[1] - 1, 6, 6); g.fillStyle(0xb0bec5, 1); g.fillRect(hand[0] - dir * 2 - 2, hand[1], 4, 4);   // g'altak
+            g.lineStyle(1, 0xffffff, 0.8); g.lineBetween(rx, ry, tx, ty);
             g.fillStyle(0x000000, 1); g.fillRect(tx - 3, ty - 4, 6, 8); g.fillStyle(0xff5252, 1); g.fillRect(tx - 2, ty - 3, 4, 3); g.fillStyle(0xffffff, 1); g.fillRect(tx - 2, ty, 4, 3);
         }
         const r = O.reel;
@@ -2682,6 +2784,17 @@ window.BigMap = (function () {
         // MEVA: topshiriq bo'lsa - teriladi, bo'lmasa - yeyiladi (jon to'ladi)
         const fr = (W.fruits || []).find(o => !O.fruitOff.has(o.id) && Math.abs(hero.x - o.x) < 50 && Math.abs(feet - o.y) < 70);
         if (fr) { const q = O.rq, forQ = q && q.t === 'item' && q.fr && q.loc === fr.loc && q.got < q.n; const stone = fr.k === 'redstone'; return { act: 'fruit', arg: fr.id, x: fr.x, y: fr.y - (stone ? 54 : 84), hint: t(stone ? (forQ ? 'big_stone_pick' : 'big_stone_take') : forQ ? 'big_fruit_pick' : 'big_fruit_eat') }; }
+        // YER OSTI SHAXTASI: stend - kirka olish; kirka bilan ruda toshi - urish
+        const mn = W.mine;
+        if (mn && mn.door && Math.abs(hero.x - mn.door.x) < 70 && Math.abs(feet - mn.door.y) < 70) return { act: 'mdoor', arg: 0, x: mn.door.x, y: mn.door.y - 110, hint: t('big_mine_enter') };
+        if (mn && mn.exit && Math.abs(hero.x - mn.exit.x) < 70 && Math.abs(feet - mn.exit.y) < 70) return { act: 'mdoor', arg: 1, x: mn.exit.x, y: mn.exit.y - 110, hint: t('big_mine_exit') };
+        if (mn && Math.abs(feet - mn.y) < 70) {
+            if (!O.pick && Math.abs(hero.x - mn.stand) < 80) return { act: 'pick', arg: 0, x: mn.stand, y: mn.y - 80, hint: t('big_mine_take') };
+            if (O.pick) { const oi = mn.ores.findIndex(x => Math.abs(hero.x - x) < 65); if (oi >= 0) return { act: 'mine', arg: oi, x: mn.ores[oi], y: mn.y - 70, hint: t('big_mine_hit') }; }
+        }
+        // SKYLAND SAVDO AVTOMATI: oyna (qimmatroq); hech narsa olmasdan yopilsa - jahli chiqadi
+        const vi = nearVend(hero);
+        if (vi >= 0 && !shopOpen()) { const v = vendList()[vi]; return { act: 'vopen', arg: vi, x: v.x, y: v.y - 80, hint: t('big_vend_hint'), local: () => { X.socket.emit('bigAct', { roomId: X.roomId(), act: 'vopen', arg: vi }); openShop({ vend: vi }); } }; }
         // BALIQ KO'LI: E - qarmoq tashlash (qarmoq suvda bo'lsa - qayta tashlanmaydi)
         const pd = (W.ponds || []).find(o => hero.x > o.x - 70 && hero.x < o.x + o.w + 70 && Math.abs(feet - o.y) < 70);
         if (pd && !O.fish) return { act: 'fishcast', arg: pd.id, x: Math.max(pd.x, Math.min(pd.x + pd.w, hero.x)), y: pd.y - 90, hint: t('big_fish_hint') };
@@ -2733,11 +2846,11 @@ window.BigMap = (function () {
     const PSHOT = { p_arrow: ['projectile_arrow'], p_fireball: ['projectile_fireball'], p_ice: ['projectile_fireball', 0x80d8ff], p_lightning: ['projectile_lightning'], p_slash: ['projectile_slash'],
         p_dart: ['projectile_dart', 0x76ff03], p_knife: ['melee_hunter'], p_pellet: ['projectile_normal', 0xffe082, 0.7], p_shield: ['w_shield'], p_tornado: ['px_tornado0'] };
     const ROT_SHOTS = { anchor: 1, drill: 1, antler: 1, ore: 1, spear: 1, thorn: 1, arrow: 1, fire: 1, fish: 1, sqfish: 1, crescent: 1, missile: 1, cannon: 0 };
-    const GLOW_SHOTS = { antler: 0xff7a1a, ore: 0xffb04a, dark: 0x9a4aff, orb: 0xb388ff, fire: 0xff7a1a, lava: 0xff7a1a, spore: 0x9cff6e, acid: 0x9cff6e, skull: 0x9a6aff, crescent: 0x9a6aff, missile: 0xff9100, flame: 0xff7a1a, ink: 0x311b92 };
+    const GLOW_SHOTS = { petbolt: 0xff1744, antler: 0xff7a1a, ore: 0xffb04a, dark: 0x9a4aff, orb: 0xb388ff, fire: 0xff7a1a, lava: 0xff7a1a, spore: 0x9cff6e, acid: 0x9cff6e, skull: 0x9a6aff, crescent: 0x9a6aff, missile: 0xff9100, flame: 0xff7a1a, ink: 0x311b92 };
     // O'Q HAQIQIY JOYIDA: server holati ~60 ms da bir keladi va tarmoqda kechikadi - tez o'q ekranda orqada qolib, "tegmasa ham" urardi.
     // Tezligi bo'yicha kelgan paytidan beri (+ taxminiy kechikish) oldinga suriladi
     const SHOT_R = { antler: 20, hrock: 12, drill: 16 };   // tegish radiusi serverdagi bilan bir xil (oddiysi - 9)
-    const NOHIDE_SHOTS = { p_tornado: 1, p_slash: 1, p_knife: 1, shock: 1, flame: 1, mudwave: 1, boulder: 1, snowboulder: 1, gboulder: 1, brock: 1, gift: 1, mine: 1, fugu: 1, puck: 1 };   // to'lqinlar va katta toshlar - o'zgacha
+    const NOHIDE_SHOTS = { petbolt: 1, p_tornado: 1, p_slash: 1, p_knife: 1, shock: 1, flame: 1, mudwave: 1, boulder: 1, snowboulder: 1, gboulder: 1, brock: 1, gift: 1, mine: 1, fugu: 1, puck: 1 };   // to'lqinlar va katta toshlar - o'zgacha
     function leadShot(s, now) {
         if (s.st || !(s.vx || s.vy)) return s;
         const t = Math.max(0, Math.min(0.12, (now - (O.shotAt || now)) / 1000 + 0.01));   // kelganidan beri o'tgan vaqt (ortiqcha oldinga surilmasin)
@@ -2924,6 +3037,7 @@ window.BigMap = (function () {
                 // aylantirilmaydi, 4 px to'rga tekislanadi (o'yindagi boshqa piksel rasmlardek)
                 const L = Math.hypot(o.x2 - o.x, o.y2 - o.y) || 1, ux = (o.x2 - o.x) / L, uy = (o.y2 - o.y) / L, nx = -uy, ny = ux, SPC = 10;
                 const n = Math.ceil(L / SPC) + 1, flow = (now * 0.8) % SPC, tick = Math.floor(now / 90);
+                if (warn && sub === 'vend') { lo.lineStyle(2, 0xff5252, 0.35 + 0.5 * pulse); for (let d = 0; d < L; d += 22) lo.lineBetween(o.x + ux * d, o.y + uy * d, o.x + ux * Math.min(L, d + 12), o.y + uy * Math.min(L, d + 12)); }   // avtomat olovi: qayerga purkashi
                 if (!o.imgs) o.imgs = [];
                 while (o.imgs.length < n) o.imgs.push(scene.add.image(o.x, o.y, 'bm_fx_rexfire0a').setDepth(2.7));
                 o.imgs.forEach((im, i) => {
@@ -3088,16 +3202,34 @@ window.BigMap = (function () {
     }
     // ===== DO'KON OYNASI: sarguzasht buyumlari (sotib olinganda darhol ishlaydi) =====
     const shopOpen = () => !!document.getElementById('bm-shop');
-    function closeShop() { const el = document.getElementById('bm-shop'); if (el) (el.parentNode || el).remove(); }
+    function closeShop() {
+        const el = document.getElementById('bm-shop'); if (el) (el.parentNode || el).remove();
+        if (O && O.vendOpen !== undefined) { X.socket.emit('bigAct', { roomId: X.roomId(), act: 'vclose', arg: O.vendOpen }); O.vendOpen = undefined; }   // avtomat oynasi yopildi
+    }
+    // SKYLAND SAVDO AVTOMATLARI (serverdagi tartib bilan bir xil: Skylanddagi "vending" bezaklari)
+    const VEND_K = 1.6;
+    function vendList() { if (!O.vends) { const L = W.locs.find(l => l.id === 'sky'); O.vends = W.props.filter(p => p.k === 'vending' && (!L || (p.x >= L.x0 && p.x < L.x1))).map(p => ({ x: p.x, y: p.y })); } return O.vends; }
+    function nearVend(hero) {
+        if (!hero || hero.isDead || !W.props) return -1;
+        return vendList().findIndex((v, i) => Math.abs(hero.x - v.x) < 80 && Math.abs(hero.y + 24 - v.y) < 80 && !(O.vendHide && O.vendHide.has(v.x + ',' + v.y)) && !(O.vendOff && O.vendOff[i] > Date.now()));
+    }
+    function nearVendAny(hero) { if (!hero) return -1; return vendList().findIndex(v => Math.abs(hero.x - v.x) < 110 && Math.abs(hero.y + 24 - v.y) < 90); }
+    function vendShow(i, show) {
+        const v = vendList()[i]; if (!v) return;
+        const key = v.x + ',' + v.y; O.vendHide = O.vendHide || new Set();
+        if (show) O.vendHide.delete(key); else O.vendHide.add(key);
+        (O.vendImgs || []).forEach(im => { if (im.active && im.vendXY === key) im.setVisible(show); });
+    }
     function renderShopWallet(coins) {
         const w = document.querySelector('#shop-panel .mf-wallet b');
         const me = typeof currentUser !== 'undefined' && currentUser ? currentUser : null;
         if (w) w.textContent = coins !== undefined ? coins : me ? me.coins || 0 : 0;
     }
-    function openShop() {
+    function openShop(opt) {
         const host = document.getElementById('game-container');
         if (!host || !W.bigShop) return;
         closeShop();
+        if (opt && opt.vend !== undefined) { openVendShop(opt.vend); return; }
         const sc = O.scene, coin = window.FarmArt ? `<img class="px-coin" src="${window.FarmArt.icon('coin')}" alt="">` : '';
         const me = typeof currentUser !== 'undefined' && currentUser ? currentUser : null;
         const el = document.createElement('div');
@@ -3132,6 +3264,30 @@ window.BigMap = (function () {
         const ex = el.querySelector('.shop-elixir'); if (ex) { ex.className = 'shop-buy'; ex.onclick = () => { X.socket.off('shopResult', O.rodResult); X.socket.on('shopResult', O.rodResult); X.socket.emit('shopBuy', { roomId: X.roomId(), item: 'elixir' }); }; }   // la'natni (jon tiklanmasligini) tuzatadi
         el.querySelectorAll('.shop-buy[data-item]').forEach((b) => { if (b.dataset.own) b.disabled = true; b.onclick = () => { el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; }); X.socket.emit('bigBuy', { roomId: X.roomId(), item: b.dataset.item }); }; });
         host.appendChild(el);
+        X.sfx('coin', 0.4);
+    }
+    // SAVDO AVTOMATI oynasi: do'kon buyumlari, 1.6x narx; "Yopish" (yoki uzoqlashish) - serverga xabar
+    function openVendShop(i) {
+        const host = document.getElementById('game-container'), sc = O.scene, coin = window.FarmArt ? `<img class="px-coin" src="${window.FarmArt.icon('coin')}" alt="">` : '';
+        const me = typeof currentUser !== 'undefined' && currentUser ? currentUser : null;
+        const el = document.createElement('div');
+        el.id = 'shop-panel'; el.classList.add('bm-shop-panel');
+        const inner = document.createElement('div'); inner.id = 'bm-shop';
+        const cards = W.bigShop.map(it => `<div class="shop-card shop-tool">
+                <div class="shop-icon"><img class="shop-pxicon" src="${sc.textures.getBase64('bm_i_' + it.id)}" alt="" style="image-rendering:pixelated"></div>
+                <div class="shop-name">${t('bigshop_' + it.id)}</div>
+                <div class="shop-desc">${t('bigshop_' + it.id + '_desc')}</div>
+                <button class="shop-buy" data-item="${it.id}">${coin} ${Math.ceil(it.price * VEND_K)}</button></div>`).join('');
+        el.innerHTML = `<div class="shop-box"><div class="shop-title">${t('big_vend_title')}</div>
+            <div class="mf-wallet">${t('shop_have').replace('{n}', '')}${coin} <b>${me ? me.coins || 0 : 0}</b></div>
+            <div class="shop-sec">${t('big_vend_sec')}</div><div class="shop-cards">${cards}</div>
+            <div class="shop-msg" id="bm-shop-msg"></div><button class="shop-close">${t('shop_close')}</button></div>`;
+        el.appendChild(inner);
+        el.onpointerdown = (e) => e.stopPropagation();
+        el.querySelector('.shop-close').onclick = () => closeShop();
+        el.querySelectorAll('.shop-buy[data-item]').forEach((b) => { b.onclick = () => { el.querySelectorAll('.shop-buy').forEach(x => { x.disabled = true; }); X.socket.emit('bigBuy', { roomId: X.roomId(), item: b.dataset.item }); }; });
+        host.appendChild(el);
+        O.vendOpen = i;
         X.sfx('coin', 0.4);
     }
     function nearShop(hero) {

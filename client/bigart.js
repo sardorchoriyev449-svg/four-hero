@@ -460,6 +460,15 @@ window.BigArt = (function () {
         pylon: [10, 40, 3, (a) => { a.s(3, 8, 4, 32, STL, 0.1); a.r(2, 36, 6, 4, STL[1]); a.r(2, 10, 6, 1, NEON); a.r(2, 20, 6, 1, NEON); a.r(2, 30, 6, 1, NEON); a.e(5, 4, 3, 3, [0x0a6a8a, 0x10a8d0, 0x40e0ff, 0xd8fbff], 0.1); }],
         // KO'ZGU ZALI: kumush romli baland ko'zgu, oynasida qiya yaltiroq chiziqlar
         mirrorpane: [16, 40, 3, (a) => { a.s(0, 0, 16, 38, [0x5a6070, 0x8a92a4, 0xc0c8d8, 0xeef2f8], 0.1); a.r(2, 2, 12, 34, 0x24304a); for (let y = 3; y < 36; y++) for (let x = 3; x < 13; x++) { const k = (x + y) % 11; a.p(x, y, k < 2 ? 0xb8d8ff : k < 3 ? 0x6a88b8 : y < 18 ? 0x2e4468 : 0x283a5a); } a.r(6, 0, 4, 2, 0xd8b84a); a.r(3, 38, 10, 2, 0x5a6070); }],
+        // YER OSTI SHAXTASI bezaklari: kirish yozuvi, yog'och ustun (to'sinli), kirkalar stendi, vagonetka
+        // shaxta kirish eshigi (qishloqda): yog'och ramka, ichi qop-qorong'i tuynuk, ichkariga ketgan relslar, tepasida chiroq va pastga o'q
+        mineshaft: [30, 40, 3, (a) => { a.r(3, 8, 24, 32, 0x0b0705); a.s(1, 6, 4, 34, [0x3e2723, 0x5d4037, 0x795548], 0.05); a.s(25, 6, 4, 34, [0x3e2723, 0x5d4037, 0x795548], 0.05); a.s(0, 3, 30, 4, [0x3e2723, 0x5d4037, 0x8d6e63], 0.05); for (let y = 39; y > 22; y -= 4) { const w = Math.round((y - 18) * 0.9); a.r(15 - w, y, w * 2, 1, 0x4e342e); } a.line(8, 39, 13, 24, 0x78909c); a.line(22, 39, 17, 24, 0x78909c); a.e(15, 1.5, 2, 1.5, [0xff8f00, 0xffca28, 0xfff59d]); a.r(13, 12, 4, 6, 0xffd54f); a.r(12, 16, 6, 1, 0xffd54f); a.r(13, 17, 4, 1, 0xffd54f); a.p(14, 18, 0xffd54f); a.p(15, 18, 0xffd54f); }],
+        // zaldan chiqish eshigi: o'sha ramka, ichida yorug'lik va tepaga o'q
+        minedoor: [30, 40, 3, (a) => { a.r(3, 8, 24, 32, 0x2a1d10); a.r(6, 10, 18, 30, 0x5d4a2a); a.s(1, 6, 4, 34, [0x3e2723, 0x5d4037, 0x795548], 0.05); a.s(25, 6, 4, 34, [0x3e2723, 0x5d4037, 0x795548], 0.05); a.s(0, 3, 30, 4, [0x3e2723, 0x5d4037, 0x8d6e63], 0.05); a.r(13, 20, 4, 10, 0x9ccc65); a.r(10, 20, 10, 1, 0x9ccc65); a.r(11, 19, 8, 1, 0x9ccc65); a.r(12, 18, 6, 1, 0x9ccc65); a.r(13, 17, 4, 1, 0x9ccc65); a.e(15, 1.5, 2, 1.5, [0xff8f00, 0xffca28, 0xfff59d]); }],
+        minesign: [16, 22, 3, (a) => { a.r(2, 8, 2, 14, 0x5d4037); a.r(12, 8, 2, 14, 0x5d4037); a.s(0, 1, 16, 8, [0x4e342e, 0x6d4c41, 0x8d6e63, 0xa1887f], 0.05); a.r(0, 1, 16, 1, 0x3e2723); a.r(3, 4, 2, 2, 0xffd54f); a.r(6, 3, 1, 4, 0x263238); a.line(7, 3, 9, 5, 0x90a4ae); a.line(9, 3, 7, 5, 0x90a4ae); a.r(11, 4, 2, 2, 0xffd54f); }],
+        minebeam: [22, 44, 3, (a) => { a.s(2, 4, 3, 40, [0x3e2723, 0x5d4037, 0x795548], 0.05); a.s(17, 4, 3, 40, [0x3e2723, 0x5d4037, 0x795548], 0.05); a.s(0, 1, 22, 4, [0x3e2723, 0x5d4037, 0x8d6e63], 0.05); a.line(5, 6, 9, 3, 0x4e342e); a.line(16, 6, 12, 3, 0x4e342e); a.r(10, 5, 2, 3, 0x263238); a.e(11, 9, 2, 2, [0xff8f00, 0xffca28, 0xfff59d]); }],
+        pickstand: [16, 20, 3, (a) => { a.s(1, 14, 14, 6, [0x3e2723, 0x5d4037, 0x795548], 0.05); [3, 8, 13].forEach((x, i) => { a.r(x, 3 + i % 2, 1, 11 - i % 2, 0x8d6e63); a.r(x - 2, 2 + i % 2, 5, 1, 0x90a4ae); a.p(x - 2, 3 + i % 2, 0x607d8b); a.p(x + 2, 3 + i % 2, 0x607d8b); }); }],
+        minecart: [22, 14, 3, (a) => { a.s(1, 2, 20, 8, [0x37474f, 0x546e7a, 0x78909c, 0x90a4ae], 0.05); a.r(1, 2, 20, 1, 0x263238); for (let x = 3; x < 20; x += 3) a.p(x, 1, [0xffd54f, 0x8d6e63, 0xb0bec5][x % 3]); a.e(5, 11, 2.4, 2.4, [0x212121, 0x424242, 0x757575]); a.e(17, 11, 2.4, 2.4, [0x212121, 0x424242, 0x757575]); a.r(0, 13, 22, 1, 0x5d4037); }],
         neonlamp: [8, 20, 3, (a) => { a.r(3, 7, 2, 12, STL[1]); a.r(1, 18, 6, 2, STL[1]); a.r(2, 0, 4, 7, NEON); a.r(3, 1, 2, 5, 0xd8fbff); }],
         server: [12, 22, 3, (a) => { a.s(0, 0, 12, 22, [0x0e1014, 0x181b22, 0x23272f, 0x2f343e], 0.05); for (let y = 2; y < 20; y += 3) { a.r(1, y, 10, 2, 0x0a0c10); a.p(2, y, (y % 2) ? 0x40ff80 : NEON); a.p(4, y, AMB); a.r(6, y + 1, 4, 1, 0x2f343e); } }],
         heater: [10, 22, 3, (a) => { a.s(4, 8, 2, 12, STL); a.e(5, 20, 4, 2, STL, 0.1); a.r(1, 2, 8, 2, STL[2]); a.r(1, 2, 8, 1, STL[3]); a.e(5, 6, 3, 2, [0x7a1a00, 0xd84300, 0xff8a00, 0xffd23f], 0.2); a.p(5, 5, 0xfff2b0); }],
@@ -1768,6 +1777,83 @@ window.BigArt = (function () {
     // PALUNDRA (96x68, x3): o'rgimchak oyoqli qaroqchi kemasi. Ko'zi yo'q - tumshug'ida tishli yovuz og'iz. Kadrlar:
     // 0-3 yurish (o'rgimchak yurishi: A guruh - yaqin 1,3 + uzoq 2,4 oyoqlar; B guruh - qolganlari; B A dan yarim sikl keyin),
     // 4 to'p otish (tuynuklar yonadi), 5 langarni silkitadi, 6 langar otilgan, 7 og'iz ochiq (geyzer), 8 o'lim
+    // PUL O'G'RISI (18x24, x3): kapishonli plash, yuzi ko'rinmaydi - qorong'i, sariq yonib turgan ko'zlar, qizil bandana, orqasida tanga xaltasi.
+    // Kadrlar: 0 turish, 1-2 yugurish, 3 pichoq otish, 4 kulish (xaltani silkitadi)
+    // TOSH ODAM (26x28, x3): bahaybat tosh tana, mox va yoriqlar, ko'kragida yonib turgan ruda yadrosi, tosh mushtlar.
+    // Kadrlar: 0 turish, 1-2 qadam, 3 mushtlarni ko'tardi, 4 musht oldinga, 5 ikki musht bilan yerga / uyg'onish
+    function stonemanArt(f) {
+        return art(26, 28, (a) => {
+            const ST = [0x2b2b31, 0x45454e, 0x62626d, 0x84848f], MOSS = 0x4e7a3a, CORE = [0xff6f00, 0xffb300, 0xffe082], by = f === 1 || f === 2 ? 1 : f === 5 ? 3 : 0;
+            // oyoqlar
+            const lf = f === 1 ? [8, 2] : f === 2 ? [10, 0] : [9, 1], rf = f === 1 ? [16, 0] : f === 2 ? [14, 2] : [15, 1];
+            a.s(lf[0], 20 + by - lf[1], 5, 8 - by + lf[1], ST, 0.05); a.s(rf[0], 20 + by - rf[1], 5, 8 - by + rf[1], ST, 0.05);
+            // tana
+            a.e(13, 14 + by, 8, 8, ST, 0.08); a.r(7, 8 + by, 12, 2, ST[2]);
+            a.line(9, 11 + by, 12, 16 + by, ST[0]); a.line(16, 17 + by, 18, 20 + by, ST[0]);   // yoriqlar
+            a.p(6, 12 + by, MOSS); a.p(7, 11 + by, MOSS); a.p(18, 9 + by, MOSS); a.p(19, 10 + by, MOSS);
+            a.e(13, 14 + by, 2.5, 2.5, CORE); a.p(13, 14 + by, 0xfffde7);   // ruda yadrosi (yonadi)
+            // bosh: kichik, tosh qoshlar ostida ikki to'q sariq ko'z
+            a.e(13, 5 + by, 4.5, 4, ST, 0.1); a.r(10, 4 + by, 7, 1, ST[0]); a.p(11, 5 + by, CORE[1]); a.p(15, 5 + by, CORE[1]);
+            // qo'llar / mushtlar
+            const fist = (x, y) => { a.e(x, y, 3.2, 3, ST, 0.1); a.p(x - 1, y - 1, ST[3]); };
+            if (f === 3) { a.r(4, 2 + by, 3, 9, ST[1]); a.r(20, 2 + by, 3, 9, ST[1]); fist(5, 2 + by); fist(21, 2 + by); }
+            else if (f === 4) { a.r(17, 12 + by, 7, 3, ST[1]); fist(24, 13 + by); a.r(4, 10 + by, 3, 8, ST[1]); fist(5, 19 + by); }
+            else if (f === 5) { a.r(3, 12 + by, 3, 9, ST[1]); a.r(21, 12 + by, 3, 9, ST[1]); fist(4, 23); fist(22, 23); }
+            else { a.r(4, 10 + by, 3, 8, ST[1]); a.r(20, 10 + by, 3, 8, ST[1]); fist(5, 19 + by); fist(21, 19 + by); }
+        });
+    }
+    // SAVDO AVTOMATI-MAXLUQ (34x44, x3): tepada - o'sha qizil avtomat (oynasida jahldor qizil ko'zlar, tishli og'iz - pul tuynugi),
+    // tagidan 4 ta uzun o'rgimchak oyoq, yonlaridan uzun qo'llar (uchida olov naychasi). Kadrlar: 0 turish, 1-2 yurish, 3 olov, 4 havoda, 5 o'sib chiqish / cho'kish
+    function vendmimicArt(f) {
+        return art(34, 44, (a) => {
+            const RED = [0x7a0a1a, 0xb0102a, 0xe0283c, 0xff7a8a], STL = [0x263238, 0x455a64, 0x78909c, 0xb0bec5], LEG = [0x37474f, 0x546e7a], bx = 11;
+            const air = f === 4, low = f === 5, by = air ? -2 : low ? 14 : f === 1 || f === 2 ? 1 : 0;
+            // OYOQLAR: tizza tashqariga-tepaga, uchida o'tkir tirnoq
+            const legs = air ? [[13, -8, 3], [15, -4, 4], [19, 4, 4], [21, 8, 3]] : low ? [[13, -6, 40], [15, -3, 40], [19, 3, 40], [21, 6, 40]]
+                : [[13, -11, f === 1 ? 2 : 0], [15, -6, f === 2 ? 2 : 0], [19, 6, f === 1 ? 2 : 0], [21, 11, f === 2 ? 2 : 0]];
+            legs.forEach(([hx, dx, lift], i) => {
+                const hy = 22 + by, kx = hx + dx, ky = Math.min(hy, 16 + by) - (air ? 2 : 0), fx = hx + dx * 1.45, fy = air ? hy + 8 : Math.min(43, 43 - (low ? 0 : lift));
+                if (low) { a.line(hx, hy, hx + dx * 0.6, Math.min(43, hy + 4), LEG[1]); return; }
+                a.line(hx, hy, kx, ky, i % 3 ? LEG[1] : LEG[0]); a.line(hx, hy + 1, kx, ky + 1, LEG[0]);
+                a.line(kx, ky, fx, fy, LEG[1]); a.p(kx, ky, STL[3]); a.p(fx, fy, 0xeceff1);
+            });
+            // AVTOMAT (o'sha bezakdagidek)
+            a.s(bx, 2 + by, 12, 20, RED, 0.05); a.r(bx + 1, 2 + by, 10, 1, 0xfff2b0); a.s(bx + 2, 4 + by, 6, 9, [0x0d1b2a, 0x1b3a5a, 0x2e5d8a], 0.1);
+            // oynada jahldor ko'zlar va qoshlar, pul tuynugi - tishli og'iz
+            a.r(bx + 3, 7 + by, 2, 2, 0xff1744); a.r(bx + 6, 7 + by, 2, 2, 0xff1744); a.line(bx + 2, 5 + by, bx + 4, 6 + by, 0xffffff); a.line(bx + 8, 5 + by, bx + 6, 6 + by, 0xffffff);
+            a.r(bx + 2, 15 + by, 7, 3, 0x0a0a0a); for (let x = bx + 2; x < bx + 9; x += 2) { a.p(x, 15 + by, 0xeceff1); a.p(x + 1, 17 + by, 0xeceff1); }
+            a.r(bx + 9, 5 + by, 2, 6, STL[3]); a.p(bx + 9, 6 + by, 0x00e5ff);
+            // QO'LLAR: uzun, bo'g'imli; olovda - o'yinchi tomonga (o'ngga) cho'zilgan, naychasidan olov
+            if (f === 3) { a.line(bx + 12, 8 + by, 30, 6 + by, STL[1]); a.line(bx + 12, 9 + by, 30, 7 + by, STL[0]); a.r(30, 5 + by, 3, 3, STL[2]); a.p(33, 6 + by, 0xffd54f); a.p(33, 5 + by, 0xff6d00); a.line(bx, 9 + by, 3, 15 + by, STL[1]); a.r(2, 15 + by, 2, 2, STL[2]); }
+            else if (!low) { a.line(bx + 12, 9 + by, 29, 16 + by, STL[1]); a.line(29, 16 + by, 31, 24 + by, STL[1]); a.r(30, 24 + by, 3, 2, STL[2]); a.line(bx, 9 + by, 4, 16 + by, STL[1]); a.line(4, 16 + by, 2, 24 + by, STL[1]); a.r(1, 24 + by, 3, 2, STL[2]); }
+        });
+    }
+    function thiefArt(f) {
+        return art(18, 24, (a) => {
+            const CL = [0x18121f, 0x2b2238, 0x433656, 0x5e4c78], PT = [0x15151c, 0x26263a], BT = [0x2a1a10, 0x4a2e1a], BAND = [0x7f1010, 0xc62828, 0xef5350];
+            const SK = [0x4e342e, 0x795548, 0xa1887f], GOLD = [0xffb300, 0xffe082], by = f === 1 || f === 2 ? 1 : 0, lg = f === 4 ? -1 : 0;
+            // oyoqlar (yugurishda navbatma-navbat)
+            const leg = (x, y, h, c) => { a.r(x, y, 3, h, c); a.r(x - (x < 9 ? 1 : 0), y + h, 4, 2, BT[0]); a.p(x + 2, y + h, BT[1]); };
+            if (f === 1) { leg(5, 16, 4, PT[0]); leg(10, 15, 4, PT[1]); } else if (f === 2) { leg(7, 15, 4, PT[1]); leg(10, 17, 3, PT[0]); } else { leg(6, 17, 4, PT[0]); leg(10, 17, 4, PT[1]); }
+            // tanga xaltasi (orqada) - og'zidan tangalar ko'rinib turadi
+            const sx = 4, sy = 11 + by + (f === 4 ? -3 : 0);
+            a.e(sx, sy, 3.6, 4, SK, 0.05); a.r(sx - 2, sy - 4, 4, 1, SK[0]); a.p(sx - 1, sy - 5, GOLD[1]); a.p(sx + 1, sy - 5, GOLD[0]); a.p(sx, sy - 6, GOLD[1]);
+            // plash (tana) va pastki cheti
+            a.s(6, 9 + by, 7, 9, CL, 0.05); a.r(5, 16 + by, 9, 1, CL[1]); a.p(5, 15 + by, CL[0]); a.r(9, 10 + by, 1, 6, CL[0]);
+            // qo'l: otishda oldinga cho'zilgan + pichoq; kulishda xaltani ko'targan
+            if (f === 3) { a.r(12, 10 + by, 5, 2, CL[3]); a.r(16, 9 + by, 2, 1, 0xcfd8dc); a.p(17, 10 + by, 0xeceff1); }
+            else if (f === 4) { a.r(6, 7, 2, 4, CL[3]); }
+            else a.r(12, 10 + by, 2, 5, CL[2]);
+            // KAPISHON: yuz qismi qop-qorong'i, ichida ikki sariq ko'z; pastida qizil bandana (orqada tugun uchlari)
+            a.e(9.5, 5 + by + lg, 4.6, 4.6, CL, 0.08); a.p(5, 2 + by + lg, CL[1]); a.p(4, 1 + by + lg, CL[0]);
+            a.r(9, 4 + by + lg, 5, 4, 0x060409);
+            const ey = 5 + by + lg;
+            if (f === 4) { a.r(10, ey, 1, 1, 0xffd600); a.r(12, ey, 1, 1, 0xffd600); a.p(10, ey + 1, 0x060409); }
+            else { a.p(10, ey, 0xfff59d); a.p(12, ey, 0xfff59d); a.p(11, ey, 0x3a2e00); }
+            a.r(9, 7 + by + lg, 5, 2, BAND[1]); a.r(9, 7 + by + lg, 5, 1, BAND[2]); a.p(13, 8 + by + lg, BAND[0]);
+            a.p(6, 7 + by + lg, BAND[1]); a.p(5, 8 + by + lg, BAND[0]); a.p(4, 9 + by + lg + (f === 1 || f === 2 ? f - 1 : 0), BAND[0]);   // tugun uchlari (yugurganda hilpiraydi)
+        });
+    }
     function palundraArt(f) {
         return art(96, 80, (a) => {
             const WD = [0x24130a, 0x3e2412, 0x5e3a1e, 0x7f522a, 0xa47240], IR = [0x1a1d22, 0x2f343b, 0x4b525b, 0x737b86], SL = [0x0c0c10, 0x18181e, 0x26262e, 0x363640];
@@ -2066,6 +2152,9 @@ window.BigArt = (function () {
         mirror: [1, () => art(2, 2, () => {}, null), 1],   // KO'ZGU - qahramon qo'g'irchog'i bilan chiziladi
         drone: [3, (f) => droneArt(f), 5],
         guardbot: [3, (f) => guardbotArt(f), 6],
+        cointhief: [3, (f) => thiefArt(f), 5],
+        stoneman: [3, (f) => stonemanArt(f), 6],
+        vendmimic: [3, (f) => vendmimicArt(f), 6],
         // BOTQOQ: yovvoyi qul (3), qora kapishon (3), mimik to'nka (4)
         wildslave: [2, (f) => wildSlave(f), 3],
         hoodroot: [2, (f) => hoodRoot(f), 3],
@@ -2503,6 +2592,8 @@ window.BigArt = (function () {
         tex(scene, 'bm_sh_fugu', art(13, 11, (a) => { a.e(6, 5.5, 5, 4, [0x8a6a1a, 0xc8a02a, 0xf2d050, 0xfff0a0], 0.1); for (let k = 0; k < 6; k++) { const ang = k / 6 * Math.PI * 2; a.p(6 + Math.cos(ang) * 5.6, 5.5 + Math.sin(ang) * 4.6, 0x5a4a1a); } a.p(9, 4, OUT); a.r(0, 4, 2, 3, 0xc8a02a); a.p(11, 6, 0xd84a4a); }), 3);
         tex(scene, 'bm_sh_fugu_big', art(18, 18, (a) => { a.e(9, 9, 8, 8, [0x8a6a1a, 0xc8a02a, 0xf2d050, 0xfff0a0], 0.15); for (let k = 0; k < 12; k++) { const ang = k / 12 * Math.PI * 2; a.line(9 + Math.cos(ang) * 7, 9 + Math.sin(ang) * 7, 9 + Math.cos(ang) * 9, 9 + Math.sin(ang) * 9, 0x5a4a1a); } a.r(11, 6, 2, 2, OUT); a.r(5, 6, 2, 2, OUT); a.r(7, 12, 4, 1, 0xd84a4a); }), 3);
         tex(scene, 'bm_sh_missile', art(16, 6, (a) => { a.s(3, 1, 10, 4, C.iron, 0.1); a.roof(14, 1, 2, 4, 1, [0xc62f2f]); a.r(13, 2, 2, 2, C.red[2]); a.r(4, 0, 3, 1, C.iron[1]); a.r(4, 5, 3, 1, C.iron[1]); a.r(0, 2, 3, 2, 0xffc35a); a.p(0, 1, 0xff7a1a); }), 2);
+        // ruda toshi (shaxta): kulrang tosh, ichida oltin va ko'k uchqunlar
+        tex(scene, 'bm_ore', art(18, 14, (a) => { a.e(9, 8, 8.5, 6, [0x37373f, 0x4a4a55, 0x63636f, 0x80808c], 0.08); a.e(6, 6, 3, 2, [0x55555f, 0x6f6f7b]); [[5, 8], [11, 6], [13, 10], [8, 11]].forEach(([x, y], i) => { a.p(x, y, i % 2 ? 0xffd54f : 0x80deea); a.p(x + 1, y, i % 2 ? 0xffb300 : 0x26c6da); }); a.r(1, 13, 16, 1, 0x26262c); }), 3);
         tex(scene, 'bm_sh_anchor', art(15, 11, (a) => {   // PALUNDRA langari (o'ngga qaragan - aylantiriladi)
             const I = [0x2f343b, 0x4b525b, 0x737b86, 0xa0a8b2];
             a.r(0, 4, 3, 3, I[1]); a.p(1, 5, null); a.r(3, 5, 9, 1, I[2]); a.r(3, 4, 9, 1, I[3]); a.r(5, 2, 1, 7, I[2]);

@@ -1,4 +1,4 @@
-import { bigLocAt } from '../bigmap';
+import { bigLocAt, bigVendNear, VEND } from '../bigmap';
 import { Server, Socket } from 'socket.io';
 import { ACH_COUNTERS } from '../achievements';
 import { RoomState, PlayerState } from '../types';
@@ -1444,14 +1444,16 @@ export class RoomManager {
         const it = BIG_SHOP.find(x => x.id === item);
         if (!room || !room.big || !p || !it || !room.isStarted) return;
         if (p.isDead) { reply({ success: false, item, message: 'big_err_dead' }); return; }
-        if (!bigShopNear(room.big, p)) { reply({ success: false, item, message: 'shop_too_far' }); return; }
+        const vi = bigShopNear(room.big, p) ? -1 : bigVendNear(room.big, p), price = vi >= 0 ? Math.ceil(it.price * VEND.k) : it.price;   // savdo avtomati - qimmatroq
+        if (!bigShopNear(room.big, p) && vi < 0) { reply({ success: false, item, message: 'shop_too_far' }); return; }
         if (p.userId === null) { reply({ success: false, item, message: 'shop_need_account' }); return; }
         if (it.id === 'phoenix' && p.buffs && p.buffs.phoenix) { reply({ success: false, item, message: 'big_have_phoenix' }); return; }
         if (it.id === 'armor' && p.buffs && (p.buffs.armorHp || 0) >= ARMOR.max) { reply({ success: false, item, message: 'big_armor_full' }); return; }
         if (it.id === 'potion' && p.hp >= (p.maxHp || 100)) { reply({ success: false, item, message: 'big_hp_full' }); return; }
         if (it.id === 'energy' && p.stamina >= (p.maxStamina || 100)) { reply({ success: false, item, message: 'big_energy_full' }); return; }
-        const u = await db.spendCoins(p.userId, it.price);
+        const u = await db.spendCoins(p.userId, price);
         if (!u) { reply({ success: false, item, message: 'err_not_enough_coins' }); return; }
+        if (vi >= 0 && room.big.vendS && room.big.vendS[p.id]) room.big.vendS[p.id].bought = true;   // avtomatdan olindi - jahli chiqmaydi
         const b = p.buffs = p.buffs || {}, now = Date.now();
         if (it.id === 'potion') p.hp = Math.min(p.maxHp || 100, p.hp + (p.maxHp || 100) * 0.5);
         else if (it.id === 'energy') p.stamina = p.maxStamina || 100;
@@ -1459,7 +1461,7 @@ export class RoomManager {
         else if (it.id === 'armor') b.armorHp = Math.min(ARMOR.max, (b.armorHp || 0) + ARMOR.add);   // zirh zaxirasi (o'q zararini oladi)
         else { const k = it.id as 'battery' | 'strength' | 'feather'; b[k] = Math.max(now, b[k] || 0) + it.ms!; }   // qayta olinsa - vaqt qo'shiladi
         reply({ success: true, item, coins: u.coins });
-        socket.emit('coinsUpdated', { amount: -it.price, totalCoins: u.coins });
+        socket.emit('coinsUpdated', { amount: -price, totalCoins: u.coins });
     }
     // BIG MAP XARITASI: bir marta sotib olinadi - hisobda butun umr saqlanadi
     private async sellBigMap(socket: Socket, p: PlayerState, reply: (d: object) => void): Promise<void> {

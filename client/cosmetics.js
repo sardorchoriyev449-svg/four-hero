@@ -5,7 +5,7 @@
 // staff, bow, katana, kunai). id lar server/src/cosmetics.ts dagi bilan bir xil
 window.Cosmetics = (() => {
     const INK = 0x111111;
-    const SLOTS = ['head', 'face', 'sword', 'shield', 'shotgun', 'staff', 'bow', 'katana', 'kunai', 'body'];   // body (kiyim) - oxirida
+    const SLOTS = ['head', 'face', 'sword', 'shield', 'shotgun', 'staff', 'bow', 'katana', 'kunai', 'body', 'hknife', 'blowpipe'];   // ovchi qurollari - eng oxirida   // body (kiyim) - oxirida
 
     // ===== YORDAMCHILAR =====
     const gridNew = (w, h) => Array.from({ length: h }, () => Array(w).fill(null));
@@ -505,7 +505,102 @@ window.Cosmetics = (() => {
 
     // ===== QUROL KO'RINISHLARI: { g, gx, gy } - gx/gy: qo'l ushlaydigan katak (o'ngga qaragan) =====
     const PINK = { d: 0xad1457, m: 0xec407a, l: 0xf48fb1, xl: 0xf8bbd0, w: 0xfce4ec };
+    // OVCHI PICHOG'I skinlari: dasta chapda (ushlash nuqtasi gx 3), tig' o'ngga. hk - umumiy shakl (uchi qiyshiq kesilgan uzun tig')
+    const hk = (o) => {
+        const W = o.w || 26, p = painter(W, 7);
+        for (let x = 0; x < 7; x++) for (let y = 2; y < 5; y++) p.px(x, y, o.handle[(x + (o.wrap ? y : 0)) % o.handle.length]);
+        if (o.pommel) for (let y = 2; y < 5; y++) p.px(0, y, o.pommel);
+        for (let y = 1; y < 6; y++) p.px(7, y, o.guard);
+        const L = W - 8;
+        for (let x = 8; x < W; x++) {
+            const k = x - 8, top = k < L * 0.6 ? 2 : 2 + Math.round((k - L * 0.6) / 3.5), bot = k < L * 0.78 ? 4 : 4 - Math.round((k - L * 0.78) / 2);
+            for (let y = top; y <= bot; y++) p.px(x, y, y === top ? o.blade[0] : y === bot ? o.blade[2] : o.blade[1]);
+        }
+        return p;
+    };
+    const HK = (p) => ({ g: p.g, gx: 3, gy: 3 });
+    // PUFLAMA NAYCHA skinlari: og'iz tomoni chapda (qalinroq), ushlash nuqtasi gx 7
+    const bp = (o) => {
+        const W = o.w || 28, p = painter(W, 4);
+        for (let x = 0; x < W; x++) { p.px(x, 1, typeof o.c[0] === 'function' ? o.c[0](x) : o.c[0]); p.px(x, 2, typeof o.c[1] === 'function' ? o.c[1](x) : o.c[1]); }
+        for (let y = 0; y < 4; y++) { p.px(0, y, o.mouth); p.px(1, y, o.mouth); }
+        (o.rings || []).forEach((x) => { p.px(x, 1, o.ring[0]); p.px(x, 2, o.ring[1]); });
+        p.px(W - 1, 1, o.tip || 0x212121); p.px(W - 1, 2, o.tip || 0x212121);
+        return p;
+    };
+    const BPR = (p) => ({ g: p.g, gx: 7, gy: 1.5 });
     const WEAPONS = {
+        hknife: {
+            bone() { const p = hk({ handle: [0x6d4c41, 0x8d6e63], wrap: true, guard: 0xd7ccc8, blade: [0xd7ccc8, 0xefebe9, 0xfafafa] }); [11, 15, 19].forEach(x => p.px(x, 3, 0xbcaaa4)); p.px(23, 3, 0xbcaaa4); return HK(p); },
+            machete() {   // keng, to'g'ri tig', yashil dasta
+                const p = painter(27, 8);
+                for (let x = 0; x < 7; x++) for (let y = 3; y < 6; y++) p.px(x, y, x % 2 ? 0x2e7d32 : 0x388e3c);
+                for (let y = 2; y < 7; y++) p.px(7, y, 0x37474f);
+                for (let x = 8; x < 27; x++) { const top = x < 24 ? 1 : 1 + (x - 23), bot = 6; for (let y = top; y <= bot; y++) p.px(x, y, y === top ? 0x78909c : y === bot ? 0xeceff1 : y < 4 ? 0x90a4ae : 0xb0bec5); }
+                p.px(12, 3, 0x546e7a); p.px(13, 3, 0x546e7a);
+                return { g: p.g, gx: 3, gy: 4 };
+            },
+            carrot() {   // sabzi: to'q sariq tig', yashil barg-dasta
+                const p = painter(26, 7);
+                [[0, 1], [1, 2], [2, 3], [0, 5], [1, 4], [3, 3], [4, 3], [5, 3], [6, 3], [2, 4], [3, 2]].forEach(([x, y]) => p.px(x, y, (x + y) % 2 ? 0x43a047 : 0x66bb6a));
+                for (let x = 7; x < 26; x++) { const hw = Math.max(0, Math.round((26 - x) / 6)); for (let y = 3 - hw; y <= 3 + hw; y++) p.px(x, y, y < 3 ? 0xffb74d : y > 3 ? 0xef6c00 : 0xff9800); }
+                [10, 14, 18].forEach(x => p.px(x, 2, 0xe65100));
+                return HK(p);
+            },
+            crystal() { const p = hk({ handle: [0x4527a0, 0x5e35b1], guard: 0xb388ff, blade: [0x80deea, 0xb2ebf2, 0xe0f7fa] }); [10, 14, 18, 21].forEach((x, i) => p.px(x, 3, i % 2 ? 0xffffff : 0x26c6da)); return HK(p); },
+            fang() {   // egilgan fil suyagi tishi
+                const p = painter(26, 8);
+                for (let x = 0; x < 7; x++) for (let y = 4; y < 7; y++) p.px(x, y, (x + y) % 2 ? 0x5d4037 : 0x795548);
+                p.rect(6, 3, 2, 4, 0x8d6e63);
+                for (let x = 8; x < 26; x++) { const k = (x - 8) / 18, cy = 5 - Math.round(k * k * 4), hw = Math.max(0, Math.round((1 - k) * 2)); for (let y = cy - hw; y <= cy + hw; y++) p.px(x, y, y === cy - hw ? 0xfffde7 : 0xfff8e1); p.px(x, cy + hw, 0xd7ccc8); }
+                return { g: p.g, gx: 3, gy: 5 };
+            },
+            pirate() {   // egri qilich, oltin qo'riqchi
+                const p = painter(27, 8);
+                for (let x = 0; x < 6; x++) for (let y = 3; y < 6; y++) p.px(x, y, x % 2 ? 0x3e2723 : 0x5d4037);
+                for (let y = 1; y < 7; y++) p.px(6, y, 0xffca28); p.px(5, 1, 0xffca28); p.px(5, 6, 0xffca28); p.px(7, 1, 0xffb300);
+                for (let x = 7; x < 27; x++) { const k = (x - 7) / 20, top = 3 - Math.round(Math.sin(k * Math.PI * 0.9) * 2), bot = top + (k > 0.85 ? 1 : 2); for (let y = top; y <= bot; y++) p.px(x, y, y === top ? 0x90a4ae : y === bot ? 0xeceff1 : 0xcfd8dc); }
+                return { g: p.g, gx: 3, gy: 4 };
+            },
+            candy() { const p = hk({ handle: [0xffffff, 0xe91e63], guard: 0xff80ab, blade: [0xf8bbd0, 0xffffff, 0xf48fb1] }); for (let x = 9; x < 24; x += 3) { p.px(x, 3, 0xe91e63); p.px(x + 1, 2, 0xe91e63); } return HK(p); },
+            obsidian() { const p = hk({ handle: [0x212121, 0x311b92], wrap: true, guard: 0x7c4dff, blade: [0x4a148c, 0x1a1a1a, 0x6a1b9a] }); [12, 17, 22].forEach(x => p.px(x, 3, 0xb388ff)); return HK(p); },
+            golden() { const p = hk({ handle: [0x6d4c41, 0x8d6e63], guard: 0xffca28, pommel: 0xffd54f, blade: [0xffb300, 0xffd54f, 0xfff8e1] }); p.px(4, 3, 0xe53935); p.px(14, 3, 0xfff59d); p.px(20, 3, 0xffffff); return HK(p); },
+            flame() { const p = hk({ handle: [0x3e2723, 0x212121], guard: 0xff6d00, blade: [0xd84315, 0xff9800, 0xffeb3b] }); [[11, 1], [16, 1], [21, 2], [13, 0], [19, 0]].forEach(([x, y], i) => p.px(x, y, i % 2 ? 0xffca28 : 0xff5722)); return HK(p); }
+        },
+        blowpipe: {
+            bamboo() { return BPR(bp({ c: [0x9ccc65, 0x689f38], mouth: 0x558b2f, rings: [7, 14, 21], ring: [0x33691e, 0x33691e] })); },
+            pink() { const p = bp({ c: [0xf48fb1, 0xec407a], mouth: 0xad1457, rings: [8, 18], ring: [0xffffff, 0xfce4ec] }); p.px(13, 1, 0xffffff); return BPR(p); },
+            straw() {   // bayram trubkasi: qizil-oq yo'l-yo'l, oldi egilgan
+                const p = painter(28, 6);
+                for (let x = 0; x < 24; x++) { const c = Math.floor(x / 2) % 2 ? 0xffffff : 0xe53935; p.px(x, 3, c); p.px(x, 4, c); }
+                for (let k = 0; k < 4; k++) { const c = k % 2 ? 0xffffff : 0xe53935; p.px(24 + k, 2 - Math.floor(k / 2), c); p.px(24 + k, 3 - Math.floor(k / 2), c); }
+                return { g: p.g, gx: 7, gy: 3.5 };
+            },
+            bone() { const p = bp({ c: [0xefebe9, 0xd7ccc8], mouth: 0xbcaaa4, rings: [9, 18], ring: [0xfafafa, 0xbcaaa4], tip: 0x8d6e63 }); p.px(5, 0, 0xefebe9); p.px(5, 3, 0xefebe9); return BPR(p); },
+            spyglass() {   // mis durbin: oldinga yo'g'onlashadi
+                const p = painter(28, 6);
+                for (let x = 0; x < 28; x++) { const hw = x < 10 ? 1 : x < 19 ? 1.5 : 2; for (let y = Math.round(3 - hw); y <= Math.round(2 + hw); y++) p.px(x, y, y <= 2 ? 0xffd54f : 0xc9975b); }
+                [10, 19].forEach(x => { for (let y = 0; y < 6; y++) p.px(x, y, 0x8d6e63); });
+                p.px(27, 2, 0x81d4fa); p.px(27, 3, 0x4fc3f7);
+                return { g: p.g, gx: 7, gy: 2.5 };
+            },
+            jungle() {
+                const p = bp({ c: [0x8d6e63, 0x6d4c41], mouth: 0x4e342e, rings: [], ring: [0, 0] });
+                for (let x = 4; x < 26; x += 2) p.px(x, (x / 2) % 2 ? 1 : 2, 0x43a047);
+                [[9, 0], [17, 3], [23, 0]].forEach(([x, y]) => { p.px(x, y, 0x66bb6a); p.px(x + 1, y, 0x2e7d32); });
+                return BPR(p);
+            },
+            ice() { const p = bp({ c: [0xe1f5fe, 0x81d4fa], mouth: 0x4fc3f7, rings: [8, 16, 24], ring: [0xffffff, 0xb3e5fc], tip: 0x0288d1 }); p.px(12, 0, 0xe1f5fe); p.px(20, 3, 0xb3e5fc); return BPR(p); },
+            dragon() {   // yashil tangachalar, uchida ajdar boshi
+                const p = painter(30, 6);
+                for (let x = 0; x < 24; x++) { p.px(x, 2, (x % 3) ? 0x66bb6a : 0x2e7d32); p.px(x, 3, (x % 3) ? 0x43a047 : 0x1b5e20); }
+                for (let y = 1; y < 5; y++) { p.px(0, y, 0x1b5e20); p.px(1, y, 0x1b5e20); }
+                p.rect(24, 1, 5, 4, 0x43a047); p.px(29, 2, 0x43a047); p.px(29, 3, 0x2e7d32); p.px(26, 1, 0xffeb3b); p.px(25, 0, 0x1b5e20); p.px(27, 0, 0x1b5e20); p.px(28, 4, 0xffffff); p.px(29, 4, 0xe53935);
+                return { g: p.g, gx: 7, gy: 2.5 };
+            },
+            laser() { const p = bp({ c: [0x546e7a, 0x37474f], mouth: 0x263238, rings: [9, 17], ring: [0x00e5ff, 0x00b8d4], tip: 0x00e5ff }); for (let x = 3; x < 26; x += 4) p.px(x, 1, 0x80deea); return BPR(p); },
+            golden() { const p = bp({ c: [0xffd54f, 0xffb300], mouth: 0xc79100, rings: [8, 15, 22], ring: [0xfff8e1, 0xffca28], tip: 0x6d4c41 }); p.px(12, 1, 0xffffff); p.px(19, 1, 0xffffff); return BPR(p); }
+        },
         sword: {
             bat() {
                 const p = painter(30, 6), Wd = [0x9c6b3c, 0xc8925a, 0xe0b079];

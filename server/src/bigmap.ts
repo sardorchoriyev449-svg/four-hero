@@ -7,7 +7,8 @@
 // 30 metrdan baland joydan yiqilsa - jonning yarmi ketadi, 60 metrdan - o'lim (klient qo'nishda o'lchaydi). Dushmanlar o'yinchini tepaga/pastga quvadi,
 // 15 m dan uzoqlashib ko'zdan yo'qolsa - izini yo'qotadi.
 import { PlayerState, RoomState, RandQuest } from './types';
-import { bossAI, updateAreas, updateShots, SETPIECE, CREATURE, CREATURE_IDLE, bossPre } from './bigboss';
+import { bossAI, updateAreas, updateShots, SETPIECE, CREATURE, CREATURE_IDLE, bossPre, petHunt } from './bigboss';
+import { bigEvents, BigEvent, BigDrop, bigVendDown } from './bigevents';
 
 export const BIG_GEN = 10;
 // VAQTINCHA YOPIQ LOKATSIYALAR (keyingi yangilanishda ochiladi): dunyo o'zgarmaydi (progress saqlanadi) - faqat kirish yopiladi:
@@ -246,6 +247,9 @@ export const ENEMIES: { [k: string]: EnemyDef } = {
     mrwho:     { hp: 2800, spd: 0, dmg: 28, w: 60, h: 150, jump: 0, reach: 0, atkMs: 9999, coins: 360, boss: true },
     mwheart:   { hp: 1, spd: 0, dmg: 0, w: 100, h: 140, jump: 0, reach: 0, atkMs: 9999, coins: 0 },
     blackknight: { hp: 3000, spd: 170, dmg: 37, w: 70, h: 150, jump: 0, reach: 0, atkMs: 9999, coins: 420, boss: true, secret: true },   // SKYLAND MAXFIY BOSSI: Qora Ritsar (shaxmat zali)
+    vendmimic: { hp: 1800, spd: 190, dmg: 32, w: 70, h: 120, jump: 0, reach: 0, atkMs: 9999, coins: 90 },   // SAVDO AVTOMATI-MAXLUQ: o'rgimchak oyoqlar, uzun qo'llar, olov
+    stoneman:  { hp: 1000, spd: 115, dmg: 30, w: 62, h: 84, jump: 0, reach: 0, atkMs: 9999, coins: 50 },   // TOSH ODAM: kirka singanda shaxtada uyg'onadi
+    cointhief: { hp: 400, spd: 340, dmg: 10, w: 28, h: 50, jump: 640, reach: 0, atkMs: 9999, coins: 60 },   // PUL O'G'RISI (dunyo hodisasi): kapishon, bandana, yonib turgan ko'zlar
     mirror:    { hp: 3000, spd: 235, dmg: 30, w: 32, h: 48, jump: 640, reach: 0, atkMs: 9999, coins: 560, boss: true },   // SKYLAND 4-BOSS: KO'ZGU - o'yinchining egizagi (har o'yinchiga bittadan)
     palundra:  { hp: 4000, spd: 80, dmg: 37, w: 250, h: 230, jump: 0, reach: 0, atkMs: 9999, coins: 520, boss: true },   // SKYLAND 3-BOSS: o'rgimchak oyoqli qaroqchi kemasi (ko'zsiz, og'zi bor)
     trex:      { hp: 3600, spd: 150, dmg: 37, w: 210, h: 200, jump: 0, reach: 0, atkMs: 9999, coins: 450, boss: true },   // SKYLAND 2-BOSS: robot T-Rex (ko'zi, burni yo'q - faqat og'iz)
@@ -314,7 +318,8 @@ export interface BigWorld {
     villages: { x0: number, x1: number, y: number, loc: string }[];
     npcs: { id: number, x: number, y: number, t: string, loc: string, v: number, fix?: number, q?: string, rq?: number }[];   // q - topshiriq beradi, rq - lager topshirig'i (tasodifiy)
     piles: { x: number, y: number }[];                       // qor uyumlari (qor bazasi): E - qor to'plari olinadi
-    shops: { x: number, y: number, loc: string }[];          // qishloqdagi do'kon (Shop xaritasidagi narsalar sotiladi)
+    shops: { x: number, y: number, loc: string }[];
+    mine?: { x0: number, x1: number, y: number, stand: number, ores: number[], door: { x: number, y: number }, exit: { x: number, y: number } };   // YER OSTI SHAXTASI: kirka stendi va ruda toshlari (x)          // qishloqdagi do'kon (Shop xaritasidagi narsalar sotiladi)
     crates: { x: number, y: number, s?: number }[];          // sindiriladigan qutilar (s - o'lchami; ba'zilaridan 1-10 tanga chiqadi)
     lavas: { x: number, y: number, w: number }[];            // lava ko'llari tubi (ichida turgan kuyadi)
     vents: { x: number, y: number, k?: string }[];           // olov favvoralari / zaharli gaz (botqoq) - navbat bilan otilib chiqadi
@@ -1514,6 +1519,37 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
                 const ls3 = W.locs.find(l => l.id === 'sky'); if (ls3) ls3.y0 = W.top;
             }
         }
+        // ===== YER OSTI SHAXTASI: qishloqda - shaxta KIRISH eshigi (NPC lardan eng uzoq joyda); E - yer ostidagi alohida SHAXTA ZALIga tushadi
+        // (dunyoning bo'sh joyida, boshqa narsalardan uzoqda): kirka stendi, ustunlar, vagonetka, 5 ta ruda toshi, chiqish eshigi.
+        // ENG OXIRIDA (o'z tasodifi): eski narsalar siljimaydi
+        {
+            R = rng((seed ^ 0x313E0000) >>> 0);
+            const L = W.locs.find(l => l.id === 'lava'), shop = W.shops.find(s => s.loc === 'lava');
+            const vp = shop && W.plats.find(p => p.x <= shop.x && p.x + p.w >= shop.x && Math.abs(p.y - shop.y) < 6);
+            if (L && shop && vp) {
+                const OLD: number[][] = [];
+                W.plats.forEach(p => OLD.push([p.x, p.y - 60, p.w, p.h + 60])); W.isles.forEach(I => { OLD.push([I.x, I.y - 30, I.w, 70]); I.r.forEach(q => OLD.push([q[0], q[1], q[2], q[3]])); });
+                const hit = (a: number[]) => OLD.some(o => a[0] < o[0] + o[2] && a[0] + a[2] > o[0] && a[1] < o[1] + o[3] && a[1] + a[3] > o[1]);
+                const HW = 1000;
+                let best: number[] | null = null, bd = 1e12;
+                for (let x = L.x0 + 300; x < L.x1 - HW - 300; x += 200) for (let y = L.y0 + 700; y < Math.min(L.y1, W.bottom - 300); y += 100) {
+                    if (hit([x - 300, y - 700, HW + 600, 1050])) continue;   // atrofida 300 px bo'sh - alohida xona (tashqaridan ko'rinmaydi / kirib bo'lmaydi)
+                    const d = Math.abs(x + HW / 2 - shop.x) + Math.abs(y - shop.y);
+                    if (d < bd) { bd = d; best = [x, y]; }
+                }
+                if (best) {
+                    const [hx, hy] = best, K = kit('lava');
+                    isle(hx, hy, HW, K.groundK, 'lava', 'mid', 160);
+                    // kirish eshigi: qishloq sirtida NPC lardan eng uzoq nuqta (do'kon va portaldan uzoqda)
+                    let dx = vp.x + 60, dd = -1;
+                    for (let x = vp.x + 50; x <= vp.x + vp.w - 50; x += 20) { if (Math.abs(x - shop.x) < 200 || W.portals.some(q => Math.abs(q.x - x) < 280 && Math.abs(q.y - vp.y) < 200)) continue;   /* E - do'kon / portal bilan aralashmasin */ const n = Math.min(400, ...W.npcs.filter(q => Math.abs(q.y - vp.y) < 40).map(q => Math.abs(q.x - x))); if (n > dd) { dd = n; dx = x; } }
+                    const m0 = hx + 120;
+                    W.mine = { x0: m0, x1: m0 + 760, y: hy, stand: m0 + 120, ores: [260, 370, 480, 590, 700].map(k => m0 + k), door: { x: Math.round(dx), y: vp.y }, exit: { x: hx + 60, y: hy } };
+                    prop(dx, vp.y, 'mineshaft');
+                    prop(hx + 60, hy, 'minedoor'); prop(m0 + 40, hy, 'minesign'); prop(m0 + 200, hy, 'minebeam'); prop(m0 + 420, hy, 'minebeam'); prop(m0 + 640, hy, 'minebeam'); prop(m0 + 120, hy, 'pickstand'); prop(hx + HW - 70, hy, 'minecart');
+                }
+            }
+        }
     }
     return W;
 }
@@ -1547,7 +1583,8 @@ export interface BigEnemy { np?: number; id: number; k: string; x: number; y: nu
     bh?: number[];   // Bullkan qo'llari: [x, y, ko'rinish, yo'nalish] x 2 (ko'rinish: 0 musht, 1 ochiq qo'l, 2 tosh ushlagan)
     gx?: number; pk?: number[]; gl?: { [pid: string]: number }; sv?: number; gHit?: boolean; }   // tk - suhbat bo'lib o'tgan (semiz elf)   // ccd - to'qnashuv zarbasi kutishi (tik)   // life - yordamchining umri; para - parashyutda; block / bcd - robot bot qalqoni   // stun - ovchi qopqonida                    // lvx - sakrash (uchish) tezligi, jcd - sakrash kutishi, mi - boss hujum navbati
 // k - o'q turi (klient rasmi): arrow, orb, fire, spore, web, rock, shock; gnd - yer bo'ylab yuguradigan to'lqin; home - nishonga burilish (kadr)
-export interface BigShot { id: number; x: number; y: number; vx: number; vy: number; dmg: number; t: number; arc: boolean; k: string; gnd?: boolean; home?: number;
+export interface BigShot { petOnly?: boolean; petDmg?: number;   // petOnly - faqat ajdarchaga (bossning "ajdar-o'qi", o'yinchidan o'tib ketadi)
+    id: number; x: number; y: number; vx: number; vy: number; dmg: number; t: number; arc: boolean; k: string; gnd?: boolean; home?: number;
     // blast - portlash radiusi; fuse/sit - yerga tushib, pilik; roll - dumalovchi (radius), rmax/grow - o'sadi, bounce - chetdan qaytish; pierce - teshib o'tadi;
     // ret - qaytish tiki; split - tushganda parchalar; area - tushgan joyda dog'; fx - ta'sir; water - suvga tushsa so'nadi; sc - rasm kattaligi
     wait?: number;  // shu tikkacha joyida turadi (ko'rinmaydi, tegmaydi) - gorilla xarsangi shiftda
@@ -1584,7 +1621,12 @@ export interface BigState {
     dots: { [pid: string]: { until: number, dps: number, next: number, k: string } };   // kuyish / zahar
     pv: { [pid: string]: { x: number, y: number, vx: number, vy: number } };   // o'yinchi tezligi (bosslar oldindan mo'ljal oladi - S1/S2 dagidek)
     pcp: { [pid: string]: number };
-    cpTp?: { [pid: string]: number };    // xaritadan teleport: keyingisi shu tikdan keyin      // har o'yinchining tirilish joyi - oxirgi tekkan checkpointi (bo'lmasa - umumiy cp)
+    cpTp?: { [pid: string]: number };
+    ev?: BigEvent; evDrops?: BigDrop[];
+    vends?: { x: number, y: number }[]; vendS?: { [pid: string]: { i: number, bought: boolean } }; vendMob?: { [i: number]: number }; vendOff?: { [i: number]: number };   // savdo avtomatlari: ro'yxat, ochiq oyna, jahli chiqqan (dushman id), buzilgan (shu tikkacha)
+    petCd?: { [eid: number]: number };   // boss - ajdarchaga navbatdagi o'q (tik)
+    picks?: { [pid: string]: { have: boolean, found: number, hits: number, last: number, cd: number, golem: number } };   // shaxta: har o'yinchining kirkasi
+    thief?: { id: number, pid: string, loot: number, lair: { x: number, y: number, x0: number, x1: number } | null, until: number, coins: string[] } | null;   // pul o'g'risi   // dunyo hodisasi (bigevents.ts) va undan qolgan tangalar    // xaritadan teleport: keyingisi shu tikdan keyin      // har o'yinchining tirilish joyi - oxirgi tekkan checkpointi (bo'lmasa - umumiy cp)
     got: { [cp: number]: boolean };
     trigOn: { [zone: number]: boolean };                 // E bilan chaqirilgan bosslar (robot ilon)
     gifts: { [zone: number]: { at: number, ids: { [pid: string]: boolean } } };   // Alter Qor Bobo: archa oldida sovg'a olganlar (hamma olsa - jang)
@@ -1606,7 +1648,11 @@ export interface BigCtx {
     saveQuest(p: PlayerState, q: string, st: number): void;   // topshiriq holati (hisobda)
     saveRQ?(p: PlayerState, q: RandQuest | null): void;       // lager topshirig'i (hisobda)
     questDone?(coins: number, p?: PlayerState): void;          // statistika: topshiriq bajarildi (p - kim: yutuqlar uchun)
-    takeItem?(p: PlayerState, item: string, cb: (left: number) => void): void;   // sumkadan bitta narsa (-1 - yo'q)
+    takeItem?(p: PlayerState, item: string, cb: (left: number) => void): void;
+    mineCoin?(p: PlayerState, coins: number): void;
+    pets?(): { id: string, x: number, y: number, r: number, mx: number }[];   // maydondagi ajdarchalar (egasi id, joyi, tana radiusi, maks. joni) - mingan payt yo'q
+    hurtPet?(id: string, dmg: number): void;                                  // ajdarchaga zarar (jon tugasa - fermaga dam olishga ketadi)   // shaxta: topilgan tanga (hisobga, tez)
+    takeCoins?(p: PlayerState, pct: number, min: number, max: number, cb: (taken: number) => void): void;   // pul o'g'risi: hisobdan ulush   // sumkadan bitta narsa (-1 - yo'q)
     mageHome?(p: PlayerState): void;               // Balot Magi o'yinchining fermasiga ko'chadi
     curse(p: PlayerState): void;                   // semiz elf so'lagi: jon o'zi tiklanmaydi (do'kondagi Eliksir bilan tuzaladi)
     saveChest(id: number): void;          // dunyo egasiga: sandiq ochildi
@@ -1671,6 +1717,15 @@ export function bigSurfaceY(S: BigState, x: number, y: number, maxDrop = 4000): 
     return p ? p.y : null;
 }
 // do'kon yonidami (qishloqdagi rasta)
+// SKYLAND SAVDO AVTOMATLARI: Skylanddagi "vending" bezaklari (tartib raqami - shu ro'yxatda). Narxlar qimmatroq
+export const VEND = { k: 1.6, r: 90 };
+export function bigVends(S: BigState): { x: number, y: number }[] {
+    if (!S.vends) { const L = S.w.locs.find(l => l.id === 'sky'); S.vends = S.w.props.filter(p => p.k === 'vending' && (!L || (p.x >= L.x0 && p.x < L.x1))).map(p => ({ x: p.x, y: p.y })); }
+    return S.vends;
+}
+export function bigVendNear(S: BigState, p: PlayerState): number {
+    return bigVends(S).findIndex((v, i) => Math.abs(p.x - v.x) <= VEND.r && Math.abs(p.y + 24 - v.y) < 90 && !(S.vendMob && S.vendMob[i]) && !(((S.vendOff && S.vendOff[i]) || 0) > S.tick));
+}
 export function bigShopNear(S: BigState, p: PlayerState, range = 150): boolean {
     return S.w.shops.some(s => Math.abs(p.x - s.x) <= range && Math.abs(p.y + 24 - s.y) < 120);
 }
@@ -1805,6 +1860,7 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
     });
     if (S.tick % 5 === 0) alive.forEach(p => rqPick(S, p, ctx));
     fishTick(S, room, ctx);
+    bigEvents(S, room, alive, ctx);   // tasodifiy dunyo hodisalari (meteorit yomg'iri)
     // O'YINCHI TEZLIGI (pozitsiyani klient yuboradi): bosslar yugurayotgan o'yinchiga oldindan mo'ljal oladi
     alive.forEach((p) => {
         const o = S.pv[p.id];
@@ -1918,7 +1974,7 @@ export function updateBig(room: RoomState, S: BigState, ctx: BigCtx, dt: number)
         if (e.jcd) e.jcd--;
         // hamma o'yinchidan juda uzoq - yo'qoladi (lager keyin qayta ishlashi mumkin). O'lgan (tirilishni kutayotgan) o'yinchi ham hisobga olinadi:
         // aks holda yolg'iz o'yinchi o'lgan zahoti atrofidagi dushmanlar ekrandan yo'qolib, tirilganda yana paydo bo'lardi
-        if (!d.boss && e.fz === undefined && !players.some(p => Math.abs(p.x - e.x) < 2600 && Math.abs(p.y - e.y) < 1500)) {
+        if (!d.boss && e.fz === undefined && e.k !== 'cointhief' && e.k !== 'vendmimic' && !players.some(p => Math.abs(p.x - e.x) < 2600 && Math.abs(p.y - e.y) < 1500)) {
             S.enemies.splice(i, 1);
             if (!S.enemies.some(o => o.zone === e.zone)) delete S.zoneState[e.zone];
             continue;
@@ -2061,6 +2117,7 @@ function enemyAI(S: BigState, e: BigEnemy, d: EnemyDef, alive: PlayerState[], ro
     // suhbatdan oldingi holat (semiz elf ovqatlanyapti / gapiryapti) - hujum yo'q
     if (d.boss && bossPre(S, e, alive, ctx)) { const q = nearest(alive, e); if (q) e.f = q.x < e.x ? -1 : 1; moveEnemy(S, e, d, 0, null, dt); return; }
     // S1/S2 dagi asl bosslar (kraken, gorilla, robot ilon) - o'z miyasi bilan
+    if (d.boss) petHunt(S, e, d, ctx);   // boss avval ajdarchani ovlaydi (qo'shimcha hujum)
     const sp = SETPIECE[e.k];
     if (sp) { sp({ S, e, d, alive, ctx, dt, room }); if (e.hp <= 0 && S.enemies.includes(e)) { e.hide = undefined; damageEnemy(S, room, e, 0, null, ctx); } return; }
     // NISHON: ko'rinish masofasida eng yaqin tirik o'yinchi
@@ -2239,6 +2296,9 @@ export function damageEnemy(S: BigState, room: RoomState, e: BigEnemy, damage: n
     const i = S.enemies.indexOf(e);
     if (i >= 0) S.enemies.splice(i, 1);
     ctx.emit('bigKill', { id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y), boss: !!d.boss });
+    if (e.k === 'vendmimic') bigVendDown(S, e, ctx);   // savdo avtomati-maxluq yengildi: 90 s buzuq, keyin joyiga
+    if (e.k === 'stoneman' && S.picks) Object.entries(S.picks).forEach(([pid, st]) => { if (st.golem === e.id) { st.golem = 0; st.cd = 0; ctx.emitTo(pid, 'bigMine', { st: 'golemdown' }); } });
+    if (e.k === 'cointhief' && S.thief && S.thief.id === e.id) { ctx.emit('bigThief', { st: 'down', x: Math.round(e.x), y: Math.round(e.y), by: owner ? owner.id : '' }); S.thief = null; }   // PUL O'G'RISI yengildi - sochilgan tangalar qoladi
     if (e.k === 'mirror' && S.enemies.some(o => o.k === 'mirror' && o.zone === e.zone)) { S.shots = S.shots.filter(s => s.owner !== e.id); return; }   // KO'ZGU: egizaklardan oxirgisi yiqilgandagina g'alaba
     if (e.fz !== undefined) { const ct = S.enemies.find(o => o.k === 'zvfarm' && o.zone === e.fz); if (ct) ct.fk = (ct.fk || 0) + 1; }   // ferma: o'ldirilgan zombi
     if (d.boss) {
@@ -2644,7 +2704,7 @@ export function bigPayload(S: BigState, room: RoomState) {
         cp: S.cp,
         en: S.enemies.filter(e => near(e.x, e.y)).map(e => ({ id: e.id, k: e.k, x: Math.round(e.x), y: Math.round(e.y), f: e.f, hp: Math.ceil(e.hp), mx: e.mx, ch: e.st === 'chase' ? 1 : 0,
             a: e.atk > 0 ? 1 : 0, fl: e.flash > 0 ? 1 : 0, m: e.move && e.move !== 'walk' ? e.move : '', l: e.st === 'lurk' ? 1 : 0, r: e.p2 ? 1 : 0, s: e.stun && e.stun > 0 ? 1 : 0, pz: e.poison && e.poison.delay <= 0 ? 1 : 0,
-            b: e.block && e.block > 0 ? 1 : 0, u: e.hide === 'under' ? 1 : e.hide === 'up' ? 2 : e.hide === 'blink' ? 3 : 0, sd: e.shield && e.shield > S.tick ? 1 : 0, v: (e.daze || 0) > 0 || (e.vuln || 0) > S.tick ? 1 : 0, sp: e.spin ? 1 : 0, pa: e.para ? 1 : 0, lf: e.life !== undefined ? 1 : 0, j: e.ground === false && !ENEMIES[e.k].fly ? 1 : 0, bh: e.bh ? e.bh.map(Math.round) : undefined, bs: ENEMIES[e.k].boss || e.k === 'lizard' || e.k === 'iceram' || e.k === 'mimicrock' || e.k === 'drone' || e.k === 'guardbot' ? e.bst || '' : undefined, iv: e.iv && e.iv > S.tick ? 1 : undefined, hx: e.k === 'rsnake' ? Math.round(e.hx) : undefined, tv: e.k === 'mrwho' ? e.tvs : undefined, pl: e.pl, ow: e.own })),
+            b: e.block && e.block > 0 ? 1 : 0, u: e.hide === 'under' ? 1 : e.hide === 'up' ? 2 : e.hide === 'blink' ? 3 : 0, sd: e.shield && e.shield > S.tick ? 1 : 0, v: (e.daze || 0) > 0 || (e.vuln || 0) > S.tick ? 1 : 0, sp: e.spin ? 1 : 0, pa: e.para ? 1 : 0, lf: e.life !== undefined ? 1 : 0, j: e.ground === false && !ENEMIES[e.k].fly ? 1 : 0, bh: e.bh ? e.bh.map(Math.round) : undefined, bs: ENEMIES[e.k].boss || e.k === 'stoneman' || e.k === 'vendmimic' || e.k === 'cointhief' || e.k === 'lizard' || e.k === 'iceram' || e.k === 'mimicrock' || e.k === 'drone' || e.k === 'guardbot' ? e.bst || '' : undefined, iv: e.iv && e.iv > S.tick ? 1 : undefined, hx: e.k === 'rsnake' ? Math.round(e.hx) : undefined, tv: e.k === 'mrwho' ? e.tvs : undefined, pl: e.pl, ow: e.own })),
         sh: S.shots.filter(s => near(s.x, s.y)).map(s => ({ id: s.id, x: Math.round(s.x), y: Math.round(s.y), k: s.k, d: Math.round(Math.atan2(s.vy, s.vx) * 10) / 10, sc: s.roll ? Math.round(s.roll / 13 * 10) / 10 : s.sc || 0, st: s.sit !== undefined || s.idle ? 1 : 0, ...(s.wait && s.t < s.wait ? { wt: 1 } : {}),
             ...(s.sit === undefined && !s.idle && !(s.wait && s.t < s.wait) && (s.vx || s.vy) ? { vx: Math.round(s.vx), vy: s.gnd || s.roll ? 0 : Math.round(s.vy), a: s.arc && !s.gnd && !s.roll ? 1 : 0 } : {}) })),   // klient o'qni haqiqiy joyiga oldinga suradi
         ar: S.areas.filter(a => near(a.x + a.w / 2, a.y + a.h / 2) || (a.x2 !== undefined && near(a.x2, a.y2!))).map(a => ({ id: a.id, k: a.k, x: Math.round(a.x), y: Math.round(a.y), w: Math.round(a.w), h: Math.round(a.h), x2: a.x2 !== undefined ? Math.round(a.x2) : undefined, y2: a.y2 !== undefined ? Math.round(a.y2) : undefined,

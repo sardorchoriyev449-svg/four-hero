@@ -6,6 +6,7 @@ import { RoomState, PlayerState, BotState } from '../types'
 import { BaseCharacter } from '../characters/base.character';
 import { getCharacterLogic } from '../characters';
 import { RoomManager } from './room.manager';
+import { bigPick, bigMineHit, bigMineDoor, bigVendOpen, bigVendClose } from '../bigevents';
 import { bigNearestEnemy, bigArenas, bigFruit, bigRqSnow, bigRqTalk, bigRqSync, bigQuestCancel, bigCpTravel, bigFishStart, bigRqFish, pondNear, BigState, updateBig, bigBulletHit, bigPayload, bigChest, bigSurfaceY, bigSurfaceAt, ENEMIES as BIG_ENEMIES, BigCtx, BIG, bigFindEnemy, bigEnemyById, bigBlast, bigTrap, bigPull, buffOn, bigSnowGrab, bigSnowThrow, bigInside, bigPortal, bigQuestTalk, bigCage, bigTrigger, bigMageTalk, bigMageGift, bigMageInvite, CRATE_DROP } from '../bigmap';
 import { KNIGHT_FLY, hasPerk, SKILLS, TORNADO, bonusDamageOf, shotgunMagOf, weaponUpgradeLevel, regenPerSecondOf, BASE_HP, SHOTGUN_DMG_PER_LEVEL, KUNAI_DMG_PER_LEVEL, HUNTER, BIG_SPIRIT } from '../perks';
 import { getMapById, generateBotSpawns, MapDef, CRATE_SIZE, CRATE_HP, CRATE_COINS, MINE_DAMAGE, STALL_ROOF_Y, STALL_ROOF_HALF_W, RED_BOX_SIZE, farmPlotX, farmGrown, FARM_DOG, CRITTER, GROUND_TOP, PET, petGrowth, petXpNeed, petMaxHp, petDamage, petSpitMs, petDashMs, FARM_ELF, farmNightK, farmCapacity, farmLevel, FARM_BEDS_BASE, surfaceBelow } from '../maps';
@@ -1458,8 +1459,9 @@ export class GameEngine {
                 const hit = room.bots.find(b => b.hp > 0 && this.checkOverlap({ x: m.x - 12, y: m.y - 12, w: 24, h: 24 }, this.botRect(b)));
                 const gy = m.vy > 0 ? (room.big ? bigSurfaceY(room.big, m.x, y0) : surfaceBelow(map, m.x, y0)) : null;   // chuqur ustida - tushib ketadi
                 const bhit = !hit && room.big ? bigFindEnemy(room.big, { x: m.x - 12, y: m.y - 12, w: 24, h: 24 }) : null;
-                if (hit) { m.stuck = hit.id; m.ox = m.x - hit.x; m.oy = m.y - hit.y; m.fuse = H.mineFuseTicks; this.io.to(room.id).emit('mineStick', { x: Math.round(m.x), y: Math.round(m.y) }); }
-                else if (bhit) { m.stuckBig = bhit.id; m.ox = m.x - bhit.x; m.oy = m.y - bhit.y; m.fuse = H.mineFuseTicks; this.io.to(room.id).emit('mineStick', { x: Math.round(m.x), y: Math.round(m.y) }); }
+                // YOPISHADI - nishonning o'rtasiga (tegan cheti emas): bot to'rtburchagi markazi / Big Map dushmani tanasi o'rtasi
+                if (hit) { const r = this.botRect(hit); m.stuck = hit.id; m.ox = r.x + r.w / 2 - hit.x; m.oy = r.y + r.h / 2 - hit.y; m.x = hit.x + m.ox; m.y = hit.y + m.oy; m.fuse = H.mineFuseTicks; this.io.to(room.id).emit('mineStick', { x: Math.round(m.x), y: Math.round(m.y) }); }
+                else if (bhit) { const bd = BIG_ENEMIES[bhit.k]; m.stuckBig = bhit.id; m.ox = 0; m.oy = -Math.round((bd ? bd.h : 40) * 0.5); m.x = bhit.x + m.ox; m.y = bhit.y + m.oy; m.fuse = H.mineFuseTicks; this.io.to(room.id).emit('mineStick', { x: Math.round(m.x), y: Math.round(m.y) }); }
                 else if (gy !== null && m.y >= gy - 6) {
                     m.ground = true; m.vx = 0; m.vy = 0; m.fuse = H.mineGroundFuseTicks; m.y = gy - 6;
                 }
@@ -5582,6 +5584,19 @@ if (p) {
             saveQuest: (p, q, st) => { if (p.userId) db.setBigQuest(p.userId, q, st).catch(err => console.error('setBigQuest xatosi:', err)); },
             saveRQ: (p, q) => { if (p.userId) db.setBigRQ(p.userId, q).catch(err => console.error('setBigRQ xatosi:', err)); },
             questDone: (coins, p) => { db.bumpStat({ quests: 1, questCoins: coins }); if (p) this.roomManager.achProgress(roomId, p.id, { quests: 1 }); },
+            pets: () => { const room = this.activeRooms[roomId]; if (!room || !room.pets) return []; return Object.entries(room.pets).filter(([, q]) => q.st !== 'ride').map(([id, q]) => { const P = room.players[id] && room.players[id].pet; return { id, x: q.x, y: q.y, r: 18 * petGrowth(P ? P.lvl : 1), mx: P ? petMaxHp(P.up || {}) : 100 }; }); },
+            hurtPet: (id, dmg) => {
+                const room = this.activeRooms[roomId]; if (!room) return;
+                const p = room.players[id], P = p && p.pet, q = room.pets && room.pets[id];
+                if (!P || !q || q.st === 'ride' || dmg <= 0) return;
+                P.hp = Math.max(0, P.hp - Math.round(dmg)); q.hitFlash = 6; p.petDirtyAt = p.petDirtyAt || Date.now();
+                this.io.to(room.id).emit('petHurt', { id, x: Math.round(q.x), y: Math.round(q.y), dmg: Math.round(dmg), hp: P.hp });
+            },
+            mineCoin: (p, coins) => { this.roomManager.awardCrateCoins(roomId, p.id, coins).catch(err => console.error('mineCoin xatosi:', err)); },
+            takeCoins: (p, pct, min, max, cb) => {
+                if (!p.userId) { cb(0); return; }
+                db.takeCoinsPct(p.userId, pct, min, max).then((r) => { if (r.taken > 0) this.io.to(p.id).emit('coinsUpdated', { amount: -r.taken, totalCoins: r.coins }); cb(r.taken); }).catch((err) => { console.error('takeCoins xatosi:', err); cb(0); });
+            },
             takeItem: (p, item, cb) => { if (!p.userId) { cb(-1); return; } db.farmTakeOne(p.userId, item).then(cb).catch((err) => { console.error('farmTakeOne xatosi:', err); cb(-1); }); },
             mageHome: (p) => { if (p.userId) db.mageMoveIn(p.userId).catch(err => console.error('mageMoveIn xatosi:', err)); },
             curse: (p) => this.curse(p, 'acid'),
@@ -5630,7 +5645,12 @@ if (p) {
         else if (act === 'rq') bigRqTalk(S, p, arg, ctx);
         else if (act === 'rqsync') bigRqSync(S, p, ctx);
         else if (act === 'qcancel') bigQuestCancel(S, p, item, ctx);   // o'yinchi questni bekor qildi
-        else if (act === 'cptp') bigCpTravel(S, p, arg, ctx);         // xaritada checkpoint bosildi - teleport
+        else if (act === 'cptp') bigCpTravel(S, p, arg, ctx);
+        else if (act === 'vopen') bigVendOpen(S, p, arg, ctx);         // savdo avtomati oynasi ochildi
+        else if (act === 'vclose') bigVendClose(S, p, arg, ctx);       // yopildi (hech narsa olinmagan bo'lsa - jahli chiqadi)
+        else if (act === 'mdoor') bigMineDoor(S, p, arg, ctx);        // shaxta eshigi (tushish / chiqish)
+        else if (act === 'pick') bigPick(S, p, ctx);                  // shaxta: kirka olish
+        else if (act === 'mine') bigMineHit(S, p, arg, ctx);          // shaxta: ruda toshini urish         // xaritada checkpoint bosildi - teleport
         else if (act === 'fishcast') this.bigFishCast(room, S, p, arg, ctx).catch(err => console.error('bigFishCast xatosi:', err));
         else if (act === 'fishreel') this.bigFishReel(room, S, p, item, ctx).catch(err => console.error('bigFishReel xatosi:', err));
         else if (act === 'cage') bigCage(S, p, ctx);

@@ -8,6 +8,7 @@
 // Ta'sirlar o'yinchiga: sekinlashish, ildiz (qimirlay olmaydi), kuyish / zahar (asta jon oladi), ko'r bo'lish (siyoh), tortish, uloqtirish
 import { PlayerState, RoomState } from './types';
 import * as BM from './bigmap';
+import { hasPerk, PerkId } from './perks';
 
 const T = (ms: number) => Math.round(ms / 30);
 type Ctx = { S: BM.BigState; e: BM.BigEnemy; d: BM.EnemyDef; p: PlayerState; alive: PlayerState[]; ctx: BM.BigCtx; z: BM.BigZone | undefined; rage: number; arg: string; dt: number };
@@ -602,6 +603,13 @@ export function updateAreas(S: BM.BigState, alive: PlayerState[], ctx: BM.BigCtx
             if (hitNow) {
                 if (a.every) a.next = S.tick + a.every;
                 const prog = a.grow ? Math.min(1, 1 - (a.t / (a.t0 || a.t))) * 2 : 1;   // til: asta cho'ziladi
+                if (ctx.hurtPet && ctx.pets) (ctx.pets() || []).forEach((pq) => {   // AJDARCHA ham maydon ichida bo'lsa - zarar oladi
+                    const key = 'pet:' + pq.id;
+                    if (!a.every && (a.hit || (a.hit = [])).includes(key)) return;
+                    if (!touches(a, { x: pq.x, y: pq.y } as PlayerState, prog)) return;
+                    if (!a.every) a.hit!.push(key);
+                    ctx.hurtPet!(pq.id, a.dmg * (S.dkm[a.owner!] || 1));
+                });
                 alive.forEach(q => {
                     if (!a.every && (a.hit || (a.hit = [])).includes(q.id)) return;
                     if (!touches(a, q, prog)) return;
@@ -653,10 +661,30 @@ function applyFx(S: BM.BigState, a: { fx?: string, owner?: number, x: number, w:
     else if (fx === 'pull') { const o = S.enemies.find(e => e.id === a.owner); if (o) { ctx.knock(q, Math.max(-780, Math.min(780, (o.x - q.x) * 2.4)), -240); ctx.emitTo(q.id, 'bigRoot', { ms: 500 }); } }
 }
 
+// ===== BOSS AJDARCHANI OVLAYDI: maydonda (yoki boss yaqinida) ajdarcha bo'lsa - har ~2.6 s unga tez o'q (jonining 25%); bu bossning
+// oddiy hujumlariga qo'shimcha (o'yinchiga hujumlari kamaymaydi). Ajdarcha ~10 s da yiqilib, fermaga dam olishga ketadi
+export const PET_HUNT = { everyMs: 2600, firstMs: 1500, v: 950, k: 0.25, range: 900 };
+export function petHunt(S: BM.BigState, e: BM.BigEnemy, d: BM.EnemyDef, ctx: BM.BigCtx): void {
+    if (!ctx.pets || e.hide) return;
+    const z = zoneOf(S, e), ps = (ctx.pets() || []).filter(q => (z ? q.x > z.x0 - 250 && q.x < z.x1 + 250 && q.y > z.y0 - 300 && q.y < z.y1 + 200 : Math.abs(q.x - e.x) < PET_HUNT.range && Math.abs(q.y - e.y) < 600));
+    const cd = S.petCd || (S.petCd = {});
+    if (!ps.length) { if (cd[e.id] !== undefined && cd[e.id] < S.tick) cd[e.id] = S.tick + T(PET_HUNT.firstMs); return; }
+    if (cd[e.id] === undefined) cd[e.id] = S.tick + T(PET_HUNT.firstMs);
+    if (cd[e.id] > S.tick) return;
+    cd[e.id] = S.tick + T(PET_HUNT.everyMs);
+    const q = ps.reduce((b, o) => Math.hypot(o.x - e.x, o.y - e.y) < Math.hypot(b.x - e.x, b.y - e.y) ? o : b);
+    const sx = e.x, sy = e.y - Math.min(d.h * 0.6, 140), a = Math.atan2(q.y - sy, q.x - sx);
+    S.shots.push({ id: ++S.seq, owner: e.id, x: sx, y: sy, vx: Math.cos(a) * PET_HUNT.v, vy: Math.sin(a) * PET_HUNT.v, arc: false, t: 0, k: 'petbolt', dmg: 0, petOnly: true, petDmg: Math.ceil(q.mx * PET_HUNT.k), hr: 14, nl: true, life: T(1600) });
+    ctx.emit('bigBossMove', { id: e.id, k: e.k, m: 'petzap', x: Math.round(sx), y: Math.round(sy) });
+}
+
 // ===== O'QLAR (har tik) =====
 export function updateShots(S: BM.BigState, alive: PlayerState[], ctx: BM.BigCtx, dt: number): void {
+    const pets = (ctx.pets && ctx.pets()) || [];
+    const petDmgOf = (s: BM.BigShot) => s.petDmg !== undefined ? s.petDmg : s.dmg * (S.dkm[s.owner!] || 1);
     const boom = (s: BM.BigShot, x: number, y: number) => {
         ctx.emit('bigBlast', { x: Math.round(x), y: Math.round(y), r: s.blast, k: s.k });
+        pets.forEach(q => { if (ctx.hurtPet && Math.hypot(q.x - x, q.y - y) <= s.blast! + q.r) ctx.hurtPet(q.id, petDmgOf(s)); });   // portlash ajdarchaga ham
         const oz = S.w.zones.find(z => z.id === S.enemies.find(e => e.id === s.owner)?.zone);
         alive.forEach(q => { if (Math.hypot(q.x - x, q.y - y) <= s.blast! + 12) { BM.hurtBig(q, s.dmg * (S.dkm[s.owner!] || 1), ctx, 'shot'); safeKnock(S, oz, q, Math.sign((q.x - x) || 1) * 300, -260, ctx); applyFx(S, { ...s, w: 0 }, q, ctx); } });
     };
@@ -696,7 +724,15 @@ export function updateShots(S: BM.BigState, alive: PlayerState[], ctx: BM.BigCtx
         let gone = s.t > (s.life || 150);
         const r = s.hr || s.roll || (s.sc ? 9 * s.sc : 9);
         const box = { x: s.x - r, y: s.y - r, w: r * 2, h: r * 2 };
-        for (const p of alive) {
+        // AJDARCHAGA tegdimi (dushman o'qi)
+        if (!gone && ctx.hurtPet && pets.length) for (const q of pets) {
+            if (Math.abs(q.x - s.x) > r + q.r || Math.abs(q.y - s.y) > r + q.r) continue;
+            if (s.pierce) { const key = 'pet:' + q.id; if ((s.hitIds || (s.hitIds = [])).includes(key)) continue; s.hitIds.push(key); }
+            if (s.blast) { boom(s, s.x, s.y); gone = true; break; }
+            ctx.hurtPet(q.id, petDmgOf(s));
+            if (!s.pierce) { gone = true; break; }
+        }
+        if (!gone && !s.petOnly) for (const p of alive) {
             if (!BM.overlap(box, { x: p.x - 9, y: p.y - 20, w: 18, h: 42 })) continue;   // tana chetidan biroz ichkarida - "tegmasa ham" urilmasin
             if (s.pierce) { if ((s.hitIds || (s.hitIds = [])).includes(p.id)) continue; s.hitIds.push(p.id); }
             if (s.blast) { boom(s, s.x, s.y); gone = true; break; }
@@ -2010,34 +2046,36 @@ function mirrorAI(c: SP): void {
     e.f = dir;
     // ---- QOBILIYATLAR: gorizontal o'qlar faqat o'yinchi bilan BIR SATHDA (o'yinchi tanasi balandligida) ----
     const lvl = Math.abs(qf - e.y) < 40, near = dist < 70 && lvl, gap = ready('g');
+    // FAQAT O'YINCHIDA OCHILGAN qobiliyatlar (uning qahramoni va darajasi bo'yicha - perks.ts): masalan 2-darajali ovchi egizagi drotik otmaydi
+    const has = (id: PerkId) => hasPerk({ characterType: ct, level: (e.pl && e.pl.lv) || 0 } as PlayerState, id);
     if (ct === 'knight') {
-        if (incoming && ready('d') && can('shield')) { e.shield = now + T(1100); wait('d', 3200); use('shield'); }   // SHIFT: QALQON
+        if (incoming && has('shift') && ready('d') && can('shield')) { e.shield = now + T(1100); wait('d', 3200); use('shield'); }   // SHIFT: QALQON
         else if (gap && near && ready('a') && can('melee')) { melee(78, 26, 300); wait('a', 950); use('melee'); }
-        else if (gap && lvl && dist > 110 && dist < 300 && ready('b') && can('pellet')) { for (let k = -2; k <= 2; k++) shoot('p_pellet', 700, 9, { life: T(420) }, k * 0.1); wait('b', 2600); use('pellet'); }   // DROBOVIK
-        else if (gap && lvl && dist > 260 && dist < 700 && ready('c') && can('shield_throw')) { shoot('p_shield', 680, 30, { hr: 16, life: T(1000) }); wait('c', 6500); use('shield_throw'); }   // QALQON OTISH
+        else if (gap && lvl && has('shotgun') && dist > 110 && dist < (has('shotgun2') ? 420 : 300) && ready('b') && can('pellet')) { for (let k = -2; k <= 2; k++) shoot('p_pellet', 700, 9, { life: T(has('shotgun2') ? 600 : 420) }, k * 0.12); wait('b', 2600); use('pellet'); }   // DROBOVIK
+        else if (gap && lvl && has('shieldthrow' as PerkId) && dist > 260 && dist < 700 && ready('c') && can('shield_throw')) { shoot('p_shield', 680, 30, { hr: 16, life: T(1000) }); wait('c', 6500); use('shield_throw'); }   // QALQON OTISH
     } else if (ct === 'samurai') {
-        if (gap && dist < 115 && lvl && ready('e') && can('ghost')) { melee(115, 20, 320, true); wait('e', 4000); use('ghost'); }   // SHIFT: ikki yonga sharpa zarba
+        if (gap && dist < 115 && lvl && has('shift') && ready('e') && can('ghost')) { melee(115, 20, 320, true); wait('e', 4000); use('ghost'); }   // SHIFT: ikki yonga sharpa zarba
         else if (gap && near && ready('a') && can('melee')) { melee(74, 22, 260); wait('a', 800); use('melee'); }
-        else if (gap && lvl && dist > 150 && dist < 460 && ready('c') && can('cut')) { e.bst = 'cwind'; e.ph = T(260 / sp); wait('c', 4800); e.move = 'cwind'; e.stam = e.stam! - MIR_ST.cost.cut; acted = true; wait('s', MIR_ST.delayMs); }   // OTILIB KESISH
-        else if (gap && lvl && dist > 120 && dist < 520 && ready('b') && can('slash')) { shoot('p_slash', 640, 22, { pierce: true, hr: 16, life: T(750) }); wait('b', 2100); use('slash'); }   // KATANA RUHI
+        else if (gap && lvl && has('cut') && dist > 150 && dist < 460 && ready('c') && can('cut')) { e.bst = 'cwind'; e.ph = T(260 / sp); wait('c', 4800); e.move = 'cwind'; e.stam = e.stam! - MIR_ST.cost.cut; acted = true; wait('s', MIR_ST.delayMs); }   // OTILIB KESISH
+        else if (gap && lvl && has('kunai') && dist > 120 && dist < 520 && ready('b') && can('slash')) { shoot('p_slash', 640, 22, { pierce: true, hr: has('bigspirit') ? 26 : 16, life: T(750), sc: has('bigspirit') ? 1.6 : undefined }); wait('b', 2100); use('slash'); }   // KATANA RUHI
     } else if (ct === 'archer') {
-        if (dist < 150 && lvl && ready('d') && e.ground && can('roll')) { e.bst = 'roll'; e.ph = T(260); e.vx = -dir * 640; e.vy = -360; e.ground = false; wait('d', 2400); use('roll'); }   // orqaga sakrash
-        else if (gap && dist > 200 && ready('e') && can('invis')) { e.iv = now + T(2200); wait('e', 10000); use('invis'); }   // SHIFT: KO'RINMAS
-        else if (gap && lvl && dist < 900 && ready('c') && can('arrow3')) { for (let k = -1; k <= 1; k++) shoot('p_arrow', 980, 16, { hr: 10 }, k * 0.12); wait('c', 4200); wait('a', 900); use('arrow3', 'arrow'); }   // UCHTALIK O'Q
+        if (dist < 150 && lvl && has('dash') && ready('d') && e.ground && can('roll')) { e.bst = 'roll'; e.ph = T(260); e.vx = -dir * 640; e.vy = -360; e.ground = false; wait('d', 2400); use('roll'); }   // orqaga sakrash
+        else if (gap && dist > 200 && has('shift') && ready('e') && can('invis')) { e.iv = now + T(has('invis2') ? 4000 : 2000); wait('e', 10000); use('invis'); }   // SHIFT: KO'RINMAS
+        else if (gap && lvl && has('triple') && dist < 900 && ready('c') && can('arrow3')) { for (let k = -1; k <= 1; k++) shoot('p_arrow', 980, 16, { hr: 10 }, k * 0.12); wait('c', 4200); wait('a', 900); use('arrow3', 'arrow'); }   // UCHTALIK O'Q
         else if (gap && lvl && dist < 900 && ready('a') && can('arrow')) { shoot('p_arrow', 980, 18, { hr: 10 }); wait('a', 1300); use('arrow'); }
     } else if (ct === 'mage') {
-        if (gap && lvl && dist < 520 && ready('e') && can('tornado')) { shoot('p_tornado', 200, 22, { hr: 52, pierce: true, kb: 1, life: T(3000), y: e.y - 40 } as Partial<BM.BigShot>); wait('e', 12000); use('tornado'); }   // SHIFT: TORNADO (qaragan tomonga sekin yuradi)
-        else if (gap && lvl && dist < 850 && ready('c') && can('lightning')) { shoot('p_lightning', 1100, 20, { hr: 10, life: T(900) }); wait('c', 2600); wait('a', 700); use('lightning'); }   // CHAQMOQ
-        else if (gap && lvl && dist < 750 && ready('b') && can('ice')) { shoot('p_ice', 700, 14, { hr: 12, fx: 'slow' }); wait('b', 3600); wait('a', 700); use('ice'); }   // MUZ SHARI
+        if (gap && lvl && has('shift') && dist < 520 && ready('e') && can('tornado')) { shoot('p_tornado', 200, 22, { hr: has('bigtornado') ? 70 : 52, sc: has('bigtornado') ? 1.3 : undefined, pierce: true, kb: 1, life: T(3000), y: e.y - 40 } as Partial<BM.BigShot>); wait('e', 12000); use('tornado'); }   // SHIFT: TORNADO (qaragan tomonga sekin yuradi)
+        else if (gap && lvl && has('lightning') && dist < 850 && ready('c') && can('lightning')) { shoot('p_lightning', 1100, 20, { hr: 10, life: T(900) }); wait('c', 2600); wait('a', 700); use('lightning'); }   // CHAQMOQ
+        else if (gap && lvl && has('ice') && dist < 750 && ready('b') && can('ice')) { shoot('p_ice', 700, 14, { hr: 12, fx: 'slow' }); wait('b', 3600); wait('a', 700); use('ice'); }   // MUZ SHARI
         else if (gap && lvl && dist < 800 && ready('a') && can('fireball')) { shoot('p_fireball', 620, 24, { hr: 13 }); wait('a', 1500); use('fireball'); }   // OLOV SHARI
     } else if (ct === 'hunter') {
         if (gap && lvl && dist < 230 && ready('a') && can('knife')) { shoot('p_knife', 520, 26, { hr: 14, life: T(320), pierce: true }); wait('a', 1100); use('knife'); }   // UZUN PICHOQ
-        else if (gap && dist < 520 && ready('c') && can('mine')) {   // SHIFT: YOPISHQOQ MINA - qaragan tomonga otiladi (o'yinchidagidek), yerga yopishib portlaydi
+        else if (gap && dist < 520 && has('shift') && ready('c') && can('mine')) {   // SHIFT: YOPISHQOQ MINA - qaragan tomonga otiladi (o'yinchidagidek), yerga yopishib portlaydi
             const sx = e.x + e.f * 18, sy = e.y - 32, tt = Math.max(0.35, Math.min(0.9, dist / 560));
-            S.shots.push({ id: ++S.seq, owner: e.id, x: sx, y: sy, vx: e.f * Math.min(560, dist / tt), vy: -150, arc: true, k: 'mine', t: 0, dmg: 26, blast: 60, fuse: T(1600), life: T(6000) });
+            (has('mine2') ? [1, 0.7] : [1]).forEach((k) => S.shots.push({ id: ++S.seq, owner: e.id, x: sx, y: sy, vx: e.f * Math.min(560, dist / tt) * k, vy: k < 1 ? -260 : -150, arc: true, k: 'mine', t: 0, dmg: 26, blast: 60, fuse: T(1600), life: T(6000) }));   // 4-darajadan - 2 ta
             wait('c', 6000); use('mine');
         }
-        else if (gap && lvl && dist > 180 && dist < 900 && ready('b') && can('dart')) { shoot('p_dart', 1100, 12, { hr: 9, fx: 'poison' }); wait('b', 2000); use('dart'); }   // ZAHARLI DROTIK
+        else if (gap && lvl && has('blowpipe') && dist > 180 && dist < 900 && ready('b') && can('dart')) { shoot('p_dart', 1100, 12, { hr: 9, fx: has('poison') ? 'poison' : undefined }); wait('b', 2000); use('dart'); }   // ZAHARLI DROTIK
     }
     if (acted) wait('g', 550 + Math.random() * 300);   // zarbalar orasida pauza
     else if (ready('s')) e.stam = Math.min(100, e.stam! + MIR_ST.regen);

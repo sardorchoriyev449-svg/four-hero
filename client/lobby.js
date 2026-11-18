@@ -426,6 +426,7 @@ function onAuthSuccess(user) {
     sessionExpiredShown = false;
     localStorage.setItem('gameUser', JSON.stringify(user));
     try { localStorage.setItem('hadAccount', '1'); } catch (e) { }
+    if (window.TGApp && TGApp.inTg) TGApp.link(user);   // Telegram ichida - hisob shu Telegramga bog'lanadi
     enterMainMenu();
     // Admin paneldan xonaga kirmoqchi edi - hisobga kirgach, o'sha xonaga kiradi
     if (typeof joinPendingAdminRoom === 'function') joinPendingAdminRoom();
@@ -505,6 +506,7 @@ async function loadMenuStats() {
         }
     } else {
         showPanel(authPanel);
+        if (window.TGApp && TGApp.inTg) TGApp.autoLogin();   // Telegram ichida - bog'langan hisob bilan avtomatik kirish
     }
 
     // Saqlangan ovoz balandligini yuklab olamiz
