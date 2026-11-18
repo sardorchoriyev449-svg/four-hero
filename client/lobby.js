@@ -544,7 +544,7 @@ controlPhoneBtn.onclick = () => { storeSet('controlScheme', 'phone'); updateCont
 function getScreenMode() {
     const saved = storeGet('screenMode');
     if (saved === 'full' || saved === 'standard') return saved;
-    return isTouchDevice() ? 'full' : 'standard';
+    return isTouchDevice() || (window.TGApp && TGApp.inTg) ? 'full' : 'standard';   // Telegram ichida - o'yin butun oynani egallaydi
 }
 function applyScreenMode() {
     const mode = getScreenMode();
@@ -558,6 +558,7 @@ function applyScreenMode() {
 // Tugma bosilganda (foydalanuvchi harakati - brauzer haqiqiy to'liq ekranga faqat shunda ruxsat beradi)
 window.setScreenMode = (mode) => {
     storeSet('screenMode', mode);
+    if (window.TGApp && TGApp.inTg && TGApp.setFull(mode === 'full')) { applyScreenMode(); return; }   // Telegram: o'zining to'liq ekrani
     try {
         if (mode === 'full' && !document.fullscreenElement && document.documentElement.requestFullscreen) {
             document.documentElement.requestFullscreen().catch(() => {});
@@ -577,7 +578,7 @@ document.getElementById('touch-layout-btn').onclick = () => { if (window.openTou
 // va iloji bo'lsa ekran yotiq holatga qotiriladi (Android). Brauzer buni faqat teginishda ruxsat beradi
 let fullscreenAsked = false;
 document.addEventListener('pointerdown', () => {
-    if (!isTouchDevice() || getScreenMode() !== 'full' || document.fullscreenElement || fullscreenAsked) return;
+    if (!isTouchDevice() || getScreenMode() !== 'full' || document.fullscreenElement || fullscreenAsked || (window.TGApp && TGApp.inTg)) return;
     // Ilova bosh ekrandan (o'rnatilgan holda) ochilgan bo'lsa - u allaqachon to'liq ekran, so'rov kerak emas
     if (window.matchMedia && (matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches)) return;
     if (gameWrapper.classList.contains('hidden') || !document.documentElement.requestFullscreen) return;

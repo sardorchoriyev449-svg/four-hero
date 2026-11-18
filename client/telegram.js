@@ -14,8 +14,22 @@
         if (TG.enableClosingConfirmation) TG.enableClosingConfirmation();  // tasodifan yopishdan oldin so'raydi
         if (TG.setHeaderColor) TG.setHeaderColor('#14101f');
         if (TG.setBackgroundColor) TG.setBackgroundColor('#14101f');
-        if (TG.requestFullscreen && /^(android|ios)$/.test(TG.platform)) TG.requestFullscreen();   // telefonda - butun ekran
     } catch (e) { /* eski Telegram versiyasi */ }
+    // TO'LIQ EKRAN (Telegram 8.0+): telefonda - doim; kompyuterda - sozlamada "Full screen" tanlangan bo'lsa.
+    // Tepadagi Telegram tugmalari (yopish, menyu) o'yinni yopmasin - ular egallagan joy --tg-top ga yoziladi
+    const canFull = !!(TG.requestFullscreen && TG.isVersionAtLeast && TG.isVersionAtLeast('8.0'));
+    const mobile = /^(android|android_x|ios)$/.test(TG.platform);
+    const refresh = () => requestAnimationFrame(() => { if (typeof phaserGame !== 'undefined' && phaserGame && phaserGame.scale) phaserGame.scale.refresh(); });
+    const syncFull = () => { document.documentElement.classList.toggle('tg-full', !!TG.isFullscreen); refresh(); };
+    window.TGApp.canFull = canFull;
+    window.TGApp.setFull = (on) => { if (!canFull) return false; try { if (on && !TG.isFullscreen) TG.requestFullscreen(); else if (!on && TG.isFullscreen) TG.exitFullscreen(); } catch (e) { } return true; };
+    if (canFull) {
+        TG.onEvent('fullscreenChanged', syncFull);
+        TG.onEvent('safeAreaChanged', refresh); TG.onEvent('contentSafeAreaChanged', refresh); TG.onEvent('viewportChanged', refresh);
+        let saved = null; try { saved = localStorage.getItem('screenMode'); } catch (e) { }
+        if (mobile ? saved !== 'standard' : saved === 'full') window.TGApp.setFull(true);
+        syncFull();
+    }
 
     const box = () => document.getElementById('tg-auth');
     const err = (m) => { const e = document.getElementById('tg-auth-error'); if (e) e.innerText = m ? (typeof tMsg === 'function' ? tMsg(m) : m) : ''; };

@@ -261,6 +261,11 @@
         /* TO'LIQ EKRAN: o'yin butun oynani egallaydi (qora chetlar - 4:3 ga sig'magan joy) */
         body.screen-full #game-wrapper { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; align-items: center; justify-content: center; }
         body.screen-full #game-container { width: min(100vw, calc(100vh * 4 / 3)); border: 0 !important; box-shadow: none !important; }
+        /* Telegram to'liq ekrani: tepadagi Telegram tugmalari (yopish, menyu) va telefon "kesigi" o'yin / menyu ustiga tushmasin */
+        html.tg-full { --tg-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); }
+        html.tg-full body { padding-top: calc(var(--tg-top) + 6px); }
+        html.tg-full body.screen-full #game-wrapper { top: var(--tg-top); }
+        html.tg-full body.screen-full #game-container { width: min(100vw, calc((100vh - var(--tg-top)) * 4 / 3)); }
         /* Telefonni tik ushlaganda - yon tomonga burish maslahati */
         #rotate-hint { display: none; }
         @media (orientation: portrait) and (pointer: coarse) {
@@ -872,17 +877,18 @@
             #play-hub-panel > .back-btn { justify-self: start; }
             #main-menu-panel .control-scheme-row { margin-top: 6px !important; margin-bottom: 0; }
         }
-        /* Tor va past oyna (Telegram kompyuterda ~440x600, kichik telefon yotiq emas): ikki ustun sig'sin - yozuv kichikroq, uzuni "..." */
+        /* Tor va past oyna (Telegram kompyuterda ~440x600): ikki ustun sig'sin - yozuv kichikroq, uzuni ikki qatorga o'tadi */
         @media (max-height: 600px) and (max-width: 560px) {
             body { padding: 6px; }
             .panel { padding: 12px 10px 12px; }
             #main-menu-panel, #play-hub-panel { width: calc(100vw - 12px); column-gap: 6px; }
-            .hub-btn { font-size: 9px; gap: 8px; padding: 6px 8px; min-width: 0; }
+            .hub-btn { font-size: 8px; gap: 6px; padding: 6px 6px; min-width: 0; min-height: 44px; }
             .hub-btn i { width: 24px; height: 24px; line-height: 24px; font-size: 11px; }
-            .hub-btn span:not(.daily-dot):not(.ad-amount) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.6; }
+            .hub-btn span:not(.daily-dot):not(.ad-amount) { min-width: 0; overflow: hidden; line-height: 1.6; }
             .user-bar { flex-wrap: wrap; gap: 4px 10px; justify-content: center; font-size: 9px; }
             .control-scheme-btn { font-size: 10px; padding: 8px; }
         }
+        @media (max-height: 600px) and (max-width: 400px) { .hub-btn { font-size: 7px; gap: 5px; padding: 6px 4px; } .hub-btn i { width: 20px; height: 20px; line-height: 20px; font-size: 10px; } }
         .mini-hero {
             width: 22px; height: 32px; background: var(--c); border: 3px solid var(--px-ink); position: relative;
             box-shadow: inset -4px 0 0 rgba(0,0,0,.25);
