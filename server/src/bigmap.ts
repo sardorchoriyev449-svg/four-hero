@@ -1177,10 +1177,28 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         type Spot = { w: number, x: number, y: number, c: number };
         type Node = { x: number, y: number, d: number, p: Node | null };
         // yo'l: pog'onalar (har biri oldingisidan 80 px gacha baland, sakrab yetiladi) - boshlang'ich sirtdan orol chetigacha eng qisqasi
-        const walk = (q: Spot, starts: { x: number, y: number }[], H: number[][]) => {
-            const seen = new Set<string>(), Q: Node[] = [], SX = 140, SY = 80, keep = [q.x - 10, q.y - 330, q.w + 20, 590];
-            const open = (nx: number, ny: number) => { const r = [nx - 60, ny - 150, 120, 172]; return !ov(r, keep) && !H.some(b => ov(r, b)); };
-            starts.forEach((s) => { seen.add(s.x + ':' + s.y); Q.push({ x: s.x, y: s.y, d: 0, p: null }); });
+        // to'siqlar x bo'yicha kataklarga (256 px) - har qadamda faqat yaqin to'siqlar tekshiriladi; panjara bitta qidiruv to'plami uchun
+        // bir marta quriladi (natija aynan avvalgidek - faqat tezroq: server dunyo yaratayotganda boshqa o'yinlar qotmasin)
+        const GC = 256;
+        type Grid = { G: Map<number, number[][]>, hit: Map<number, number[][]> };   // hit: shu nuqtaga tegadigan to'siqlar (bir marta hisoblanadi)
+        const gridOf = (H: number[][]): Grid => { const G = new Map<number, number[][]>(); H.forEach((b) => { for (let c = Math.floor(b[0] / GC); c <= Math.floor((b[0] + b[2]) / GC); c++) { let a = G.get(c); if (!a) G.set(c, a = []); a.push(b); } }); return { G, hit: new Map() }; };
+        const NONE: number[][] = [];
+        const walk = (q: Spot, starts: { x: number, y: number }[], { G, hit }: Grid) => {
+            const seen = new Set<number>(), Q: Node[] = [], SX = 140, SY = 80, keep = [q.x - 10, q.y - 330, q.w + 20, 590];
+            const hx0 = q.x - 3200, hx1 = q.x + q.w + 3200, key = (x: number, y: number) => (x + 1e6) * 4e6 + (y + 2e6);
+            const open = (nx: number, ny: number) => {
+                const r = [nx - 60, ny - 150, 120, 172];
+                if (ov(r, keep)) return false;
+                const k = key(nx, ny);
+                let bl = hit.get(k);
+                if (!bl) {
+                    bl = NONE;
+                    for (let c = Math.floor(r[0] / GC); c <= Math.floor((r[0] + r[2]) / GC); c++) { const a = G.get(c); if (a) a.forEach((b) => { if (ov(r, b) && !bl!.includes(b)) { if (bl === NONE) bl = []; bl!.push(b); } }); }
+                    hit.set(k, bl);
+                }
+                return !bl.some(b => b[0] + b[2] > hx0 && b[0] < hx1);
+            };
+            starts.forEach((s) => { seen.add(key(s.x, s.y)); Q.push({ x: s.x, y: s.y, d: 0, p: null }); });
             for (let i = 0; i < Q.length && i < 4000; i++) {
                 const n = Q[i];
                 if (n.d > 0 && n.y >= q.y && n.y - q.y <= 80) {
@@ -1189,7 +1207,7 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
                 }
                 if (n.d >= 28) continue;
                 for (const [dx, dy] of [[SX, -SY], [-SX, -SY], [SX + 40, 0], [-SX - 40, 0], [SX, SY], [-SX, SY]]) {
-                    const nx = n.x + dx, ny = n.y + dy, k = nx + ':' + ny;
+                    const nx = n.x + dx, ny = n.y + dy, k = key(nx, ny);
                     if (seen.has(k) || ny < W.top + 170 || nx < L.x0 || nx > L.x1 || !open(nx, ny)) continue;
                     seen.add(k); Q.push({ x: nx, y: ny, d: n.d + 1, p: n });
                 }
@@ -1200,14 +1218,14 @@ export function generateWorld(seed: number, locCount = BIG_LOCS.length): BigWorl
         const signOk = (sx: number, sy: number) => !fixedQ.some(q => Math.abs(q.x - sx) < 80 && Math.abs(q.y - sy) < 120) && !W.props.some(q => Math.abs(q.x - sx) < 40 && Math.abs(q.y - sy) < 4);
         const tryAll = (cand: Spot[], startsFor: (q: Spot) => { x: number, y: number }[], near: number[][], H: number[][]) => {
             cand.sort((a, b) => a.c - b.c);
-            let tried = 0;
+            let tried = 0; const G = gridOf(H);
             for (const q of cand) {
                 const box = [q.x - 60, q.y - 380, q.w + 120, 670];
                 if (near.some(b => ov(box, b))) continue;
                 if (++tried > 60) break;
                 const starts = startsFor(q);
                 if (!starts.length) continue;
-                const r = walk(q, starts, H.filter(b => b[0] + b[2] > q.x - 3200 && b[0] < q.x + q.w + 3200));
+                const r = walk(q, starts, G);
                 if (r) return { ...q, ...r };
             }
             return null;
@@ -1667,8 +1685,19 @@ export interface BigCtx {
 const CELL = 400, GRAV = 1300;
 const T = (ms: number) => Math.round(ms / 30);
 // startCp - xo'jayin oxirgi tekkan checkpoint (yo'q / noto'g'ri bo'lsa - Elf qishlog'i), got - ochilgan checkpointlar
+// DUNYO KESHI: dunyo yaratish 0.1-0.5 s (Render'da ko'proq) serverni to'xtatib turadi - shu payt hamma o'yinchida ping sakraydi.
+// O'yinchi Big Map'ga qayta kirganda (o'sha seed) - tayyor dunyoning nusxasi olinadi (~3 ms). Eng oxirgi 24 ta dunyo saqlanadi
+const WORLD_CACHE = new Map<number, BigWorld>(), WORLD_CACHE_MAX = 24;
+function worldOf(seed: number): BigWorld {
+    let w = WORLD_CACHE.get(seed);
+    if (w) WORLD_CACHE.delete(seed);   // oxiriga o'tkazamiz (yaqinda ishlatilgan)
+    else w = generateWorld(seed);
+    WORLD_CACHE.set(seed, w);
+    if (WORLD_CACHE.size > WORLD_CACHE_MAX) WORLD_CACHE.delete(WORLD_CACHE.keys().next().value!);
+    return structuredClone(w);   // o'yin davomida dunyo o'zgaradi - keshdagisi toza qoladi
+}
 export function createBigState(seed: number, startCp: number, opened: number[] = [], killed: number[] = [], doneM = 0, got: number[] = [], killAt: { [z: string]: number } = {}): BigState {
-    const w = generateWorld(seed);
+    const w = worldOf(seed);
     if (!(Number.isInteger(startCp) && startCp >= 0 && startCp < w.cps.length)) startCp = w.startCp;
     const grid = new Map<number, BigPlat[]>();
     w.plats.forEach((p) => {

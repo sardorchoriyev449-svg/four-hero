@@ -867,10 +867,21 @@
             .hub-btn i { width: 28px; height: 28px; line-height: 28px; font-size: 13px; }
             input, button { margin: 6px 0; }
             /* Bosh menyu va "Play": tugmalar ikki ustunda */
-            #main-menu-panel, #play-hub-panel { width: min(640px, calc(100vw - 20px)); display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; align-content: start; }
+            #main-menu-panel, #play-hub-panel { width: min(640px, calc(100vw - 20px)); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; align-content: start; }
             #main-menu-panel > :not(.hub-btn), #play-hub-panel > :not(.hub-btn) { grid-column: 1 / -1; }
             #play-hub-panel > .back-btn { justify-self: start; }
             #main-menu-panel .control-scheme-row { margin-top: 6px !important; margin-bottom: 0; }
+        }
+        /* Tor va past oyna (Telegram kompyuterda ~440x600, kichik telefon yotiq emas): ikki ustun sig'sin - yozuv kichikroq, uzuni "..." */
+        @media (max-height: 600px) and (max-width: 560px) {
+            body { padding: 6px; }
+            .panel { padding: 12px 10px 12px; }
+            #main-menu-panel, #play-hub-panel { width: calc(100vw - 12px); column-gap: 6px; }
+            .hub-btn { font-size: 9px; gap: 8px; padding: 6px 8px; min-width: 0; }
+            .hub-btn i { width: 24px; height: 24px; line-height: 24px; font-size: 11px; }
+            .hub-btn span:not(.daily-dot):not(.ad-amount) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.6; }
+            .user-bar { flex-wrap: wrap; gap: 4px 10px; justify-content: center; font-size: 9px; }
+            .control-scheme-btn { font-size: 10px; padding: 8px; }
         }
         .mini-hero {
             width: 22px; height: 32px; background: var(--c); border: 3px solid var(--px-ink); position: relative;
