@@ -3032,7 +3032,7 @@ window.BigMap = (function () {
                     hi.fillStyle(0xffffff, 0.9); hi.fillCircle(o.x, o.y, 10 + Math.random() * 4);
                     for (let k = 0; k < 4; k++) { const d = Math.random() * L; hi.fillStyle(col, 0.9); hi.fillRect(o.x + ux * d + (Math.random() - 0.5) * 20, o.y + uy * d + (Math.random() - 0.5) * 20, 3, 3); }
                 }
-            } else if (type === 'flame') {
+            } else if (type === 'flame' && o.x2 !== undefined) {   // nur bo'ylab olov (T-Rex, vending mashinasi); ilon olovi - pastda (drawSnakeFlame)
                 // T-REX1000 OLOVI (piksel uslubi): og'izdan nur bo'ylab oqib chiqadigan piksel olov sharlari - uzoqlashgan sari kattaroq, lipillaydi;
                 // aylantirilmaydi, 4 px to'rga tekislanadi (o'yindagi boshqa piksel rasmlardek)
                 const L = Math.hypot(o.x2 - o.x, o.y2 - o.y) || 1, ux = (o.x2 - o.x) / L, uy = (o.y2 - o.y) / L, nx = -uy, ny = ux, SPC = 10;
